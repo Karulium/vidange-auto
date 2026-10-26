@@ -1,0 +1,159 @@
+# Liste des entrées/sorties de la machine : chaque capteur, relais, bus, avec sa carte et sa broche.
+# Le code ne connaît que les NOMS (« reed_panneau_poste_fut »), jamais la carte ni la broche.
+#
+# ATTENTION : les cartes et les signaux marqués « exemple: true » sont des EXEMPLES pour montrer
+# le format. La vraie liste sera remplie depuis le projet « Vidange automatique » ;
+# enlever « exemple: true » sur chaque ligne devenue vraie.
+#
+# Vérifié par les tests et au démarrage du Pi (une erreur empêche de démarrer) :
+#   - une broche utilisée deux fois sur la même carte (sauf un bus partagé, voir plus bas) ;
+#   - deux appareils à la même adresse sur un même bus ;
+#   - une carte inconnue, un module inconnu ;
+#   - plus d'entrées (ou de sorties) branchées que la carte n'en a ;
+#   - une tension trop forte pour la carte, et surtout du 24 V sur une carte sans isolement ;
+#   - « repos » oublié sur un contact, un capteur PNP/NPN ou un relais ; « adresse » oubliée en I2C ;
+#   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit.
+
+# Au-dessus de cette tension (en volts), un signal doit arriver sur une carte isolée
+# (entrées optocouplées, relais) : les broches nues des cartes (Pi, ESP32) grilleraient.
+tension_max_sans_isolement: 5
+
+# Les modules de la machine (le champ « module » d'un signal doit être l'un d'eux).
+# « armoire » = ce qui est dans l'armoire électrique (écran, capteurs d'ambiance, voyant-buzzer).
+modules:
+  - armoire
+  - poste_fut
+  - griffe
+  - mycelium
+  - porte_bocal
+  - lavage
+  - remplissage
+  - stockage
+  - portique
+  - prehension
+  - nettoyage
+  - spray
+  - micropore
+  - fermeture_seaux
+  - air_comprime
+  - entonnoir
+
+# Les cartes où l'on branche les signaux.
+#   description : en clair, pour s'y retrouver.
+#   entrees, sorties : combien la carte en a. Ne rien mettre si ses broches servent
+#     aussi bien d'entrée que de sortie (GPIO du Pi) : seul le double emploi est alors vérifié.
+#   tension_max : la plus forte tension (V) que ses bornes acceptent.
+#   isolee : true si ses entrées sont optocouplées ou ses sorties sont des relais.
+cartes:
+  pi:
+    exemple: true
+    description: Raspberry Pi 5, broches GPIO (3,3 V, non isolées)
+    tension_max: 3.3
+    isolee: false
+  ads1115:
+    exemple: true
+    description: Convertisseur analogique ADS1115 (I2C 0x48), 4 voies
+    entrees: 4
+    tension_max: 3.3
+    isolee: false
+  entrees_24v_1:
+    exemple: true
+    description: Carte d'entrées 24 V optocouplées n° 1
+    entrees: 8
+    sorties: 0
+    tension_max: 24
+    isolee: true
+  relais_1:
+    exemple: true
+    description: Carte 8 relais n° 1
+    entrees: 0
+    sorties: 8
+    tension_max: 24
+    isolee: true
+
+# Les signaux. Le nom est celui que le code utilise.
+#   carte : un nom de la liste « cartes » ci-dessus.
+#   broche : le repère écrit sur la carte (E1, K1, gpio.36...), ou une liste pour un bus : [GPIO2, GPIO3].
+#   type :
+#     entrées : contact (contact sec, reed, microrupteur), pnp, npn (capteurs 3 fils),
+#               mesure (valeur analogique) ;
+#     sorties : relais, logique (sortie transistor ou GPIO direct) ;
+#     bus : i2c, serie (UART, RS485).
+#   tension : en volts (pour un relais : la tension qu'il commute).
+#   repos : pour contact, pnp, npn, relais seulement : « ouvert » ou « ferme »
+#     = l'état du contact quand rien ne se passe (capteur non actionné, relais non commandé).
+#   adresse : pour un bus. Obligatoire en I2C (exemple : 0x48). En série, seulement si
+#     plusieurs appareils partagent le même fil (RS485). Plusieurs appareils peuvent partager
+#     les mêmes broches seulement s'ils sont sur le même type de bus et ont chacun leur adresse.
+#   module : un nom de la liste « modules » ci-dessus.
+signaux:
+  reed_panneau_poste_fut:
+    exemple: true
+    description: Panneau du poste du fût (fermé = production, ouvert = lavage)
+    carte: entrees_24v_1
+    broche: E1
+    type: contact
+    tension: 24
+    repos: ouvert
+    module: poste_fut
+  porte_spray:
+    exemple: true
+    description: Porte de la boîte du spray (pour informer ; la sécurité est câblée)
+    carte: entrees_24v_1
+    broche: E2
+    type: contact
+    tension: 24
+    repos: ferme
+    module: spray
+  fdc_stockage_haut:
+    exemple: true
+    description: Fin de course stockage haut
+    carte: entrees_24v_1
+    broche: E3
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: stockage
+  voyant_buzzer:
+    exemple: true
+    description: Voyant + buzzer « attention » avant un mouvement lancé à distance
+    carte: relais_1
+    broche: K1
+    type: relais
+    tension: 24
+    repos: ouvert
+    module: armoire
+  sht31_armoire:
+    exemple: true
+    description: Température et humidité de l'armoire
+    carte: pi
+    broche: [GPIO2, GPIO3]
+    type: i2c
+    tension: 3.3
+    adresse: 0x44
+    module: armoire
+  ads1115_bus:
+    exemple: true
+    description: Liaison I2C vers le convertisseur ADS1115
+    carte: pi
+    broche: [GPIO2, GPIO3]
+    type: i2c
+    tension: 3.3
+    adresse: 0x48
+    module: armoire
+  vide_venturi:
+    exemple: true
+    description: Capteur de vide du venturi (module à confirmer)
+    carte: ads1115
+    broche: A0
+    type: mesure
+    tension: 3.3
+    module: prehension
+  ecran_nextion:
+    exemple: true
+    description: Écran Nextion de la porte de l'armoire
+    carte: pi
+    broche: [GPIO4, GPIO5]
+    type: serie
+    tension: 3.3
+    module: armoire

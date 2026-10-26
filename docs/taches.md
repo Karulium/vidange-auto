@@ -23,7 +23,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   Journal (logs) commun. Fichier de secrets hors Git (modèle `secrets.exemple.yaml`, le vrai dans `.gitignore`).
   Service qui démarre avec le Pi et redémarre seul s'il plante (systemd). Pas encore de logique de machine.
 
-- [ ] **2. Liste des entrées/sorties** — Modèle : Sonnet.
+- [x] **2. Liste des entrées/sorties** — Modèle : Sonnet.
   Format de `docs/entrees-sorties.yaml` (nom, carte, broche, type : contact / PNP / NPN / mesure / I2C / série,
   tension, sens au repos, module) et un vérificateur lancé par les tests : broche en double, carte inconnue,
   trop d'entrées sur une carte, tension 24 V sans isolement. Le contenu sera rempli depuis le projet :
