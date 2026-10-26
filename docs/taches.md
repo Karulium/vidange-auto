@@ -83,6 +83,20 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 - [ ] 18. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage
 - [ ] 19. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi
 
+## Partie 4 : fonctions en plus (après la base), voir `docs/fonctionnalites.md`
+
+- [ ] 20. Fiabilité : chien de garde Pi ↔ cartes (14), dérive de position (15), bilan et « quoi faire » des alarmes (17, 18),
+  check-list de démarrage (12), reprise après coupure et onduleur (3, 4), santé de l'informatique (45). — Sonnet.
+- [ ] 21. Entretien : compteurs par axe, calendrier, pièces d'usure, page maintenance (40, 41, 43, 44). — Sonnet.
+- [ ] 22. Notifications sur le téléphone (ntfy), résumé du soir, escalade (60 à 63). — Sonnet.
+- [ ] 23. Page web : vue 3D en direct et rejeu d'incident (54, 55), statistiques (57), appli installable (59),
+  réglages avec garde-fous (56), carnet de bord (86). — Sonnet.
+- [ ] 24. Écran : code pour les fonctions sensibles (50), voyant et buzzer (49). — Sonnet.
+- [ ] 25. Estimation de fin qui apprend (7), montée en vitesse réglable (69), essai d'un réglage dans le simulateur (68). — Sonnet.
+- [ ] 26. Plans d'expériences : application d'un plan d'essais accepté par Karulium, seau par seau (6, 76). — Opus.
+- [ ] 27. Assistant en français, écoute des bruits, résumé de la semaine (71, 73, 74). — plus tard.
+- [ ] 28. Mode guidé pour un employé et manuel tenu à jour (84, 85). — Sonnet.
+
 ## Partie 3 : les autres modules, au fil des gels
 
 Remplissage, Stockage, Portique, Préhension, Nettoyage, Spray (et son programme ESP32), Micropore,

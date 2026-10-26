@@ -9,7 +9,7 @@ si l'une pose problème, elle le dit dans sa PR.
 - Synchronisation entre cartes : attente d'état + zones réservées.
 - Chocs horizontaux : alarmes des pilotes boucle fermée vers l'ESP32 n° 1, et accéléromètre LIS3DH + RP2040 sur le chariot Z (signal « OK » en sécurité positive vers l'ESP32 n° 1, mesures vers le Pi en série 3,3 V 115 200). Le palier pesé ne sert qu'au vertical.
 - QR lus par les caméras (plus de lecteur GM65). Registre SQLite sur le Pi.
-- Apprentissage seulement dans un cadre fixé par Karulium : plafonds de vitesse, temps de nettoyage, poids cibles. La sécurité n'est jamais apprise. Chaque réglage changé est noté et annulable. Montée en vitesse par paliers (+5 % tous les 25 cycles, recul sur alerte).
+- Apprentissage seulement dans un cadre fixé par Karulium : plafonds de vitesse, temps de nettoyage, poids cibles. La sécurité n'est jamais apprise. Chaque réglage changé est noté et annulable. Montée en vitesse par paliers réglables (exemple : +5 % tous les 25 cycles), recul sur alerte.
 - PC de bureau : calculs lourds seulement quand Karulium les lance (rien d'automatique, pas de réveil par le réseau). Le Pi signale quand un calcul est conseillé.
 - Assistant vocal éventuel : jamais de commande des moteurs.
 - UV et ozone : modes verrouillés par le Pi (en plus des sécurités câblées).
@@ -38,6 +38,10 @@ si l'une pose problème, elle le dit dans sa PR.
   boîtier démonté. Câblage inchangé (4 conducteurs).
 - **Mise à jour du programme du Pi lui-même** : depuis GitHub (versions acceptées sur `main`), machine à l'arrêt,
   retour possible à la version d'avant.
+
+## Fonctionnalités
+
+La liste des fonctions retenues, déjà faites ailleurs ou refusées est dans `docs/fonctionnalites.md`.
 
 ## Règles validées (modules figés)
 
