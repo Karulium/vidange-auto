@@ -7,16 +7,27 @@ Vérifié par les tests et au démarrage : broche utilisée deux fois, adresse e
 sur un bus, carte ou module inconnu, trop d'entrées ou de sorties sur une carte,
 tension trop forte (surtout du 24 V sur une carte sans isolement). Toutes les erreurs
 sont listées d'un coup, comme pour les réglages.
+
+Chaque carte lue par le Pi dit aussi comment elle lui est reliée (« liaison ») :
+broches GPIO du Pi, puce sur le bus I2C, ou adaptateur USB-série (RS485).
+Ce sont ces liaisons que suit `vidange.materiel` pour lire et commander les signaux.
 """
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    Field,
+    StringConstraints,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from vidange.reglages import (
     ErreurReglages,
+    Intervalle,
     Modele,
     Nom,
     lire_yaml,
@@ -31,6 +42,111 @@ BUS = ("i2c", "serie")
 AVEC_REPOS = ("contact", "pnp", "npn", "relais")
 
 TypeSignal = Literal["contact", "pnp", "npn", "mesure", "relais", "logique", "i2c", "serie"]
+# Entrées et sorties tout-ou-rien (pas les mesures).
+TOUT_OU_RIEN = ("contact", "pnp", "npn", "relais", "logique")
+
+# Les puces que le Pi sait lire, et le nom de leurs broches (celui de leur fiche technique).
+BROCHES_DES_PUCES: dict[str, tuple[str, ...]] = {
+    "pcf8574": tuple(f"P{i}" for i in range(8)),
+    "mcp23017": (*(f"A{i}" for i in range(8)), *(f"B{i}" for i in range(8))),
+    "ads1115": tuple(f"A{i}" for i in range(4)),
+}
+# Puces qui donnent des entrées/sorties tout-ou-rien (les autres donnent des mesures).
+PUCES_TOUT_OU_RIEN = ("pcf8574", "mcp23017")
+Appareil = Literal["sht31", "ads1115", "pcf8574", "mcp23017", "transmetteur_modbus", "nextion"]
+Texte = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
+
+
+# ---------------------------------------------------- liaison d'une carte au Pi
+
+
+def _reperes_en_texte(valeur: Any) -> Any:
+    """Un repère en chiffres (3: GPIO22) est accepté, comme pour « broche »."""
+    if isinstance(valeur, dict):
+        return {str(cle).strip(): broche for cle, broche in valeur.items()}
+    return valeur
+
+
+class LiaisonGpio(Modele):
+    """Carte branchée directement sur des broches GPIO du Pi (ou le Pi lui-même)."""
+
+    type: Literal["gpio"]
+    # Fichier de Linux qui donne accès aux broches (sur le Pi 5 : /dev/gpiochip0).
+    fichier: Texte
+    # Repère sur la carte → broche du Pi (E1: GPIO17). Sans « broches », les repères des
+    # signaux sont déjà des broches du Pi (c'est le cas de la carte « pi » elle-même).
+    broches: dict[str, Texte] | None = None
+    # Niveau électrique qui veut dire « courant passe » (entrée) ou « relais commandé » (sortie).
+    # Beaucoup de cartes relais et d'entrées optocouplées marchent « à l'envers » : bas.
+    niveau_actif: Literal["haut", "bas"] = "haut"
+    # Résistance de tirage des entrées dans le Pi.
+    tirage: Literal["aucun", "haut", "bas"] = "aucun"
+
+    @field_validator("broches", mode="before")
+    @classmethod
+    def _reperes(cls, valeur: Any) -> Any:
+        return _reperes_en_texte(valeur)
+
+
+class LiaisonI2c(Modele):
+    """Carte reliée par une puce sur le bus I2C (extenseur de broches, convertisseur)."""
+
+    type: Literal["i2c"]
+    # Le signal de type i2c (dans « signaux ») qui mène à la puce de la carte.
+    signal: Nom
+    # Repère sur la carte → broche de la puce (K1: P0). Sans « broches », les repères
+    # des signaux sont déjà des broches de la puce (A0 pour l'ADS1115).
+    broches: dict[str, Texte] | None = None
+    niveau_actif: Literal["haut", "bas"] = "haut"
+    # Le PCF8574 a toujours un tirage haut ; le MCP23017 en a un qu'on peut mettre.
+    tirage: Literal["aucun", "haut"] = "aucun"
+
+    @field_validator("broches", mode="before")
+    @classmethod
+    def _reperes(cls, valeur: Any) -> Any:
+        return _reperes_en_texte(valeur)
+
+
+class LiaisonUsbSerie(Modele):
+    """Carte (adaptateur USB-RS485...) branchée sur un port USB du Pi."""
+
+    type: Literal["usb_serie"]
+    # Reconnue par le numéro de série de son USB, jamais par l'ordre des ports.
+    numero_serie_usb: Texte
+    vitesse_bauds: int = Field(gt=0)
+    parite: Literal["aucune", "paire", "impaire"] = "aucune"
+    # Attente maximale d'une réponse d'un appareil.
+    delai_reponse_s: float = Field(gt=0)
+
+
+Liaison = Annotated[LiaisonGpio | LiaisonI2c | LiaisonUsbSerie, Field(discriminator="type")]
+
+
+# ------------------------------------------- réglages des appareils d'un signal
+
+
+class Conversion(Modele):
+    """Mesure analogique : deux points (tension lue → valeur), une droite entre eux."""
+
+    volts: Intervalle
+    valeurs: Intervalle
+
+    @model_validator(mode="after")
+    def _deux_points_differents(self) -> "Conversion":
+        if self.volts[0] == self.volts[1]:
+            raise ValueError("les deux tensions de « volts » doivent être différentes")
+        return self
+
+
+class Modbus(Modele):
+    """Mesure lue dans un registre d'un appareil Modbus RTU (RS485)."""
+
+    registre: int = Field(ge=0, le=0xFFFF)
+    # 3 : registres de maintien (« holding »), 4 : registres d'entrée (« input »).
+    fonction: Literal[3, 4]
+    # Valeur = nombre lu dans le registre × échelle.
+    echelle: float
+    signe: bool = False
 
 
 class Carte(Modele):
@@ -43,6 +159,8 @@ class Carte(Modele):
     sorties: int | None = Field(default=None, ge=0)
     tension_max: float = Field(gt=0)
     isolee: bool
+    # Comment le Pi la lit ou la commande. Sans liaison : le Pi ne la lit pas (cartes FluidNC).
+    liaison: Liaison | None = None
 
 
 class Signal(Modele):
@@ -57,6 +175,15 @@ class Signal(Modele):
     repos: Literal["ouvert", "ferme"] | None = None
     adresse: int | None = Field(default=None, ge=0)
     module: Nom
+    # Pour un bus : l'appareil au bout (obligatoire en i2c).
+    appareil: Appareil | None = None
+    # Pour un bus sur les broches du Pi : le fichier de Linux qui y donne accès (/dev/i2c-1).
+    fichier: Texte | None = None
+    # Pour une mesure : son unité, et comment passer des volts à la valeur.
+    unite: str = ""
+    conversion: Conversion | None = None
+    # Pour un appareil Modbus : où lire sa mesure.
+    modbus: Modbus | None = None
 
     @field_validator("broche", mode="before")
     @classmethod
@@ -85,6 +212,22 @@ class Signal(Modele):
             erreurs.append("un signal i2c doit avoir son adresse (exemple : « adresse: 0x48 »)")
         if self.type not in BUS and self.adresse is not None:
             erreurs.append("« adresse » ne sert qu'aux bus (i2c, serie)")
+        if self.type == "i2c" and self.appareil is None:
+            erreurs.append(
+                "un signal i2c doit dire quel appareil est au bout (exemple : « appareil: sht31 »)"
+            )
+        for champ in ("appareil", "fichier"):
+            if self.type not in BUS and getattr(self, champ) is not None:
+                erreurs.append(f"« {champ} » ne sert qu'aux bus (i2c, serie)")
+        if self.conversion is not None and self.type != "mesure":
+            erreurs.append("« conversion » ne sert qu'aux signaux de type mesure")
+        if self.appareil == "transmetteur_modbus":
+            if self.modbus is None:
+                erreurs.append("un transmetteur Modbus doit dire où lire sa mesure (« modbus: »)")
+            if self.adresse is None:
+                erreurs.append("un transmetteur Modbus doit avoir son adresse (exemple : 1)")
+        elif self.modbus is not None:
+            erreurs.append("« modbus » ne sert qu'à un appareil transmetteur_modbus")
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self
@@ -125,6 +268,8 @@ class EntreesSorties(Modele):
         erreurs.extend(self._verifier_broches(connus))
         erreurs.extend(self._verifier_adresses(connus))
         erreurs.extend(self._verifier_nombres(connus))
+        erreurs.extend(self._verifier_fichiers(connus))
+        erreurs.extend(self._verifier_liaisons(connus))
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self
@@ -205,6 +350,148 @@ class EntreesSorties(Modele):
                         f"carte « {nom_carte} » : {branchees} {sorte} branchées "
                         f"pour {disponibles} disponibles"
                     )
+        return erreurs
+
+    @staticmethod
+    def _verifier_fichiers(signaux: dict[str, Signal]) -> list[str]:
+        """Les appareils d'un même bus passent par le même fichier de Linux."""
+        par_bus: dict[tuple[str, frozenset[str]], dict[str, str]] = defaultdict(dict)
+        for nom, signal in signaux.items():
+            if signal.fichier is not None:
+                broches = frozenset(broche.lower() for broche in signal.broche)
+                par_bus[(signal.carte, broches)][nom] = signal.fichier
+        return [
+            f"signaux {', '.join(fichiers)} : même bus mais pas le même « fichier »"
+            for fichiers in par_bus.values()
+            if len(set(fichiers.values())) > 1
+        ]
+
+    def _verifier_liaisons(self, signaux: dict[str, Signal]) -> list[str]:
+        """Cartes lues par le Pi : liaison complète, broches qui existent, pas de double emploi."""
+        erreurs: list[str] = []
+        # Broches du Pi prises, par fichier GPIO : (fichier, broche) → qui la prend.
+        prises: dict[tuple[str, str], list[str]] = defaultdict(list)
+        for nom_carte, carte in self.cartes.items():
+            sur_la_carte = {n: s for n, s in signaux.items() if s.carte == nom_carte}
+            liaison = carte.liaison
+            if liaison is None:
+                continue
+            if isinstance(liaison, LiaisonUsbSerie):
+                for nom, signal in sur_la_carte.items():
+                    if signal.type != "serie":
+                        erreurs.append(
+                            f"signal « {nom} » : la carte « {nom_carte} » est un port série, "
+                            f"elle ne porte que des signaux de type serie (pas {signal.type})"
+                        )
+                continue
+            puce = None
+            if isinstance(liaison, LiaisonI2c):
+                puce = self._puce_de(nom_carte, liaison, erreurs)
+                if puce is None:
+                    continue
+            erreurs.extend(self._verifier_broches_liaison(nom_carte, liaison, sur_la_carte, puce))
+            if isinstance(liaison, LiaisonGpio):
+                if liaison.broches is None:
+                    for nom, signal in sur_la_carte.items():
+                        for broche in signal.broche:
+                            prises[(liaison.fichier, broche.lower())].append(nom)
+                else:
+                    for repere, broche in liaison.broches.items():
+                        prises[(liaison.fichier, broche.lower())].append(f"{nom_carte}/{repere}")
+        for (fichier, broche), qui in prises.items():
+            # Un bus partagé est déjà vérifié par _verifier_broches.
+            directs = [q for q in qui if "/" not in q]
+            if len(qui) > 1 and len(directs) < len(qui):
+                erreurs.append(
+                    f"broche {broche.upper()} du Pi ({fichier}) : prise plusieurs fois "
+                    f"({', '.join(dict.fromkeys(qui))})"
+                )
+        return erreurs
+
+    def _puce_de(self, nom_carte: str, liaison: LiaisonI2c, erreurs: list[str]) -> str | None:
+        bus = self.signaux.get(liaison.signal)
+        if bus is None or bus.type != "i2c":
+            erreurs.append(
+                f"carte « {nom_carte} » : liaison → signal « {liaison.signal} » "
+                "doit être un signal de type i2c de la liste"
+            )
+            return None
+        if bus.appareil not in BROCHES_DES_PUCES:
+            erreurs.append(
+                f"carte « {nom_carte} » : l'appareil du signal « {liaison.signal} » "
+                f"({bus.appareil}) n'a pas de broches ; puces possibles : "
+                f"{', '.join(BROCHES_DES_PUCES)}"
+            )
+            return None
+        if bus.fichier is None:
+            erreurs.append(
+                f"carte « {nom_carte} » : le signal « {liaison.signal} » doit avoir son "
+                "« fichier » (exemple : /dev/i2c-1)"
+            )
+            return None
+        if bus.appareil == "ads1115" and (
+            liaison.niveau_actif != "haut" or liaison.tirage != "aucun"
+        ):
+            erreurs.append(
+                f"carte « {nom_carte} » : « niveau_actif » et « tirage » "
+                "ne servent pas à un ads1115"
+            )
+        return bus.appareil
+
+    @staticmethod
+    def _verifier_broches_liaison(
+        nom_carte: str,
+        liaison: LiaisonGpio | LiaisonI2c,
+        sur_la_carte: dict[str, Signal],
+        puce: str | None,
+    ) -> list[str]:
+        erreurs = []
+        directe = isinstance(liaison, LiaisonGpio) and liaison.broches is None
+        for nom, signal in sur_la_carte.items():
+            if puce == "ads1115":
+                permis = ("mesure",)
+            elif directe:
+                # Le Pi lui-même : pas d'entrée analogique, mais ses bus.
+                permis = (*TOUT_OU_RIEN, *BUS)
+            else:
+                permis = TOUT_OU_RIEN
+            if signal.type not in permis:
+                erreurs.append(
+                    f"signal « {nom} » : un signal de type {signal.type} ne peut pas être "
+                    f"sur la carte « {nom_carte} » (types possibles : {', '.join(permis)})"
+                )
+            if directe and signal.type in BUS and signal.fichier is None:
+                erreurs.append(
+                    f"signal « {nom} » : un bus sur les broches du Pi doit avoir son « fichier » "
+                    "(exemple : /dev/i2c-1)"
+                )
+            if liaison.broches is not None:
+                for broche in signal.broche:
+                    if broche not in liaison.broches:
+                        erreurs.append(
+                            f"signal « {nom} » : repère {broche} absent de la liaison de la carte "
+                            f"« {nom_carte} » (liaison → broches)"
+                        )
+        if puce is not None:
+            if liaison.broches is not None:
+                des_puces = [(f"liaison → broches → {r}", b) for r, b in liaison.broches.items()]
+            else:
+                des_puces = [
+                    (f"signal « {n} »", b) for n, s in sur_la_carte.items() for b in s.broche
+                ]
+            vues: dict[str, str] = {}
+            for ou, broche in des_puces:
+                if broche not in BROCHES_DES_PUCES[puce]:
+                    erreurs.append(
+                        f"carte « {nom_carte} », {ou} : la puce {puce} n'a pas de broche "
+                        f"{broche} (broches : {', '.join(BROCHES_DES_PUCES[puce])})"
+                    )
+                elif broche in vues:
+                    erreurs.append(
+                        f"carte « {nom_carte} » : broche {broche} de la puce prise deux fois "
+                        f"({vues[broche]}, {ou})"
+                    )
+                vues.setdefault(broche, ou)
         return erreurs
 
 

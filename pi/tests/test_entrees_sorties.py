@@ -172,6 +172,7 @@ def test_broche_vide(entrees_sorties):
 
 
 def test_broche_en_nombre_acceptee(entrees_sorties):
+    remplacer(entrees_sorties, "E3: GPIO22", "3: GPIO22")
     remplacer(entrees_sorties, "broche: E3", "broche: 3")
     liste = charger_entrees_sorties(entrees_sorties)
     assert liste.signaux["fdc_stockage_haut"].broche == ("3",)
@@ -185,3 +186,145 @@ def test_toutes_les_erreurs_sont_dites_d_un_coup(entrees_sorties):
     assert "broche E1 : utilisée par plusieurs signaux" in message
     assert "carte inconnue « relais_9 »" in message
     assert "module inconnu « stokage »" in message
+
+
+# ------------------------------------------------- liaison des cartes au Pi
+
+
+def test_liaisons_de_la_liste_du_depot():
+    liste = charger_entrees_sorties(DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml")
+    assert liste.cartes["entrees_24v_1"].liaison.broches["E1"] == "GPIO17"
+    assert liste.cartes["relais_1"].liaison.signal == "relais_1_bus"
+    assert liste.signaux["relais_1_bus"].appareil == "pcf8574"
+    assert liste.signaux["ozone_2"].modbus.echelle == 0.001
+
+
+def test_repere_absent_de_la_liaison(entrees_sorties):
+    remplacer(entrees_sorties, "        E3: GPIO22\n", "")
+    message = erreur_de(entrees_sorties)
+    assert (
+        "signal « fdc_stockage_haut » : repère E3 absent de la liaison de la carte "
+        "« entrees_24v_1 » (liaison → broches)"
+    ) in message
+
+
+def test_broche_du_pi_prise_deux_fois(entrees_sorties):
+    # Une entrée 24 V branchée sur la broche de l'écran.
+    remplacer(entrees_sorties, "E3: GPIO22", "E3: GPIO4")
+    message = erreur_de(entrees_sorties)
+    assert "broche GPIO4 du Pi (/dev/gpiochip0) : prise plusieurs fois" in message
+    assert "ecran_nextion, entrees_24v_1/E3" in message
+
+
+def test_broche_du_pi_donnee_a_deux_reperes(entrees_sorties):
+    remplacer(entrees_sorties, "E3: GPIO22", "E3: GPIO17")
+    message = erreur_de(entrees_sorties)
+    assert "prise plusieurs fois (entrees_24v_1/E1, entrees_24v_1/E3)" in message
+
+
+def test_broche_que_la_puce_n_a_pas(entrees_sorties):
+    remplacer(entrees_sorties, "K8: P7", "K8: P8")
+    message = erreur_de(entrees_sorties)
+    assert "carte « relais_1 », liaison → broches → K8 : la puce pcf8574 n'a pas de broche P8" in (
+        message
+    )
+
+
+def test_broche_de_puce_prise_deux_fois(entrees_sorties):
+    remplacer(entrees_sorties, "K8: P7", "K8: P0")
+    assert "broche P0 de la puce prise deux fois" in erreur_de(entrees_sorties)
+
+
+def test_voie_de_l_ads1115_inconnue(entrees_sorties):
+    remplacer(entrees_sorties, "broche: A0", "broche: A5")
+    message = erreur_de(entrees_sorties)
+    assert "signal « vide_venturi » : la puce ads1115 n'a pas de broche A5" in message
+
+
+def test_liaison_vers_un_signal_qui_n_est_pas_un_bus_i2c(entrees_sorties):
+    remplacer(entrees_sorties, "signal: relais_1_bus", "signal: voyant_buzzer")
+    message = erreur_de(entrees_sorties)
+    assert "carte « relais_1 » : liaison → signal « voyant_buzzer » doit être un signal" in message
+
+
+def test_liaison_vers_une_puce_sans_broches(entrees_sorties):
+    remplacer(entrees_sorties, "signal: relais_1_bus", "signal: sht31_armoire")
+    assert "(sht31) n'a pas de broches" in erreur_de(entrees_sorties)
+
+
+def test_signal_impossible_sur_cette_carte(entrees_sorties):
+    # Une mesure analogique sur une carte d'entrées tout-ou-rien.
+    remplacer(entrees_sorties, "type: pnp", "type: mesure")
+    remplacer(entrees_sorties, "    repos: ouvert\n    module: stockage", "    module: stockage")
+    message = erreur_de(entrees_sorties)
+    assert "signal « fdc_stockage_haut » : un signal de type mesure ne peut pas être" in message
+
+
+def test_que_des_signaux_serie_sur_un_adaptateur_usb(entrees_sorties):
+    remplacer(
+        entrees_sorties, "carte: relais_1\n    broche: K1", "carte: rs485_ozone\n    broche: K1"
+    )
+    message = erreur_de(entrees_sorties)
+    assert (
+        "signal « voyant_buzzer » : la carte « rs485_ozone » est un port série, "
+        "elle ne porte que des signaux de type serie (pas relais)"
+    ) in message
+
+
+def test_bus_du_pi_sans_fichier(entrees_sorties):
+    remplacer(entrees_sorties, "    fichier: /dev/ttyAMA2\n", "")
+    message = erreur_de(entrees_sorties)
+    assert "signal « ecran_nextion » : un bus sur les broches du Pi doit avoir son « fichier »" in (
+        message
+    )
+
+
+def test_bus_d_une_carte_sans_fichier(entrees_sorties):
+    # Le bus de la carte relais sur une carte que le Pi ne lit pas : pas de fichier exigé, mais
+    # alors la carte relais ne saurait pas par où passer.
+    texte = entrees_sorties.read_text(encoding="utf-8")
+    debut = texte.index("  relais_1_bus:")
+    bloc = texte[debut : texte.index("  ozone_1:")]
+    nouveau = bloc.replace("carte: pi", "carte: ads1115").replace("    fichier: /dev/i2c-1\n", "")
+    entrees_sorties.write_text(texte.replace(bloc, nouveau), encoding="utf-8")
+    message = erreur_de(entrees_sorties)
+    assert "carte « relais_1 » : le signal « relais_1_bus » doit avoir son « fichier »" in message
+
+
+def test_meme_bus_fichiers_differents(entrees_sorties):
+    remplacer(entrees_sorties, "fichier: /dev/i2c-1", "fichier: /dev/i2c-3")
+    message = erreur_de(entrees_sorties)
+    assert "signaux sht31_armoire, ads1115_bus, relais_1_bus : même bus" in message
+
+
+def test_appareil_i2c_oublie(entrees_sorties):
+    remplacer(entrees_sorties, "    appareil: sht31\n", "")
+    assert "un signal i2c doit dire quel appareil est au bout" in erreur_de(entrees_sorties)
+
+
+def test_transmetteur_modbus_incomplet(entrees_sorties):
+    remplacer(entrees_sorties, "    adresse: 2\n", "")
+    remplacer(
+        entrees_sorties,
+        "    modbus:\n      registre: 0\n      fonction: 3\n      echelle: 0.001\n",
+        "",
+    )
+    message = erreur_de(entrees_sorties)
+    assert "un transmetteur Modbus doit dire où lire sa mesure" in message
+    assert "un transmetteur Modbus doit avoir son adresse" in message
+
+
+def test_conversion_avec_deux_fois_la_meme_tension(entrees_sorties):
+    remplacer(entrees_sorties, "volts: [0.3, 3.0]", "volts: [0.3, 0.3]")
+    assert "les deux tensions de « volts » doivent être différentes" in erreur_de(entrees_sorties)
+
+
+def test_liaison_de_type_inconnu(entrees_sorties):
+    remplacer(entrees_sorties, "      type: usb_serie", "      type: wifi")
+    message = erreur_de(entrees_sorties)
+    assert "rs485_ozone → liaison : type: doit être l'un de : 'gpio', 'i2c', 'usb_serie'" in message
+
+
+def test_liaison_sans_type(entrees_sorties):
+    remplacer(entrees_sorties, "      type: usb_serie\n", "")
+    assert "cartes → rs485_ozone → liaison : « type » manque" in erreur_de(entrees_sorties)

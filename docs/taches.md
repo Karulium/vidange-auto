@@ -35,7 +35,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   de son USB** (jamais par l'ordre des ports), réglé dans les réglages. Un faux FluidNC pour les tests
   (positions qui avancent selon la vitesse, alarmes simulables).
 
-- [ ] **4. Entrées/sorties du Pi + faux capteurs** — Modèle : Sonnet.
+- [x] **4. Entrées/sorties du Pi + faux capteurs** — Modèle : Sonnet.
   Cartes relais, entrées 24 V optocouplées, I2C (ADS1115 0x48, SHT31 0x44), RS485 des transmetteurs d'ozone,
   sortie du voyant-buzzer. Tout par les noms de `docs/entrees-sorties.yaml`. La façon dont relais et entrées 24 V
   sont reliés au Pi (GPIO direct ou I2C) n'est pas encore décidée : prévoir les deux derrière la même interface.

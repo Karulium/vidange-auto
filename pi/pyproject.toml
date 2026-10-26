@@ -12,6 +12,10 @@ dependencies = [
     "PyYAML>=6.0,<7",
     # Liaison série avec les cartes FluidNC.
     "pyserial>=3.5,<4",
+    # Bus I2C du Pi (ADS1115, SHT31, extenseurs de broches). Écrit en Python seul.
+    "smbus2>=0.5,<1",
+    # Broches GPIO du Pi 5 (libgpiod, le moyen prévu par Linux). Seulement sous Linux.
+    "gpiod>=2.2,<3; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
@@ -24,6 +28,7 @@ dev = [
 [project.scripts]
 vidange = "vidange.demarrage:main"
 vidange-fluidnc = "vidange.fluidnc.outil:lancer"
+vidange-es = "vidange.materiel.outil:lancer"
 
 [tool.setuptools.packages.find]
 include = ["vidange*"]

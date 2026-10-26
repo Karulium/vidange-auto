@@ -12,6 +12,8 @@
 #   - plus d'entrées (ou de sorties) branchées que la carte n'en a ;
 #   - une tension trop forte pour la carte, et surtout du 24 V sur une carte sans isolement ;
 #   - « repos » oublié sur un contact, un capteur PNP/NPN ou un relais ; « adresse » oubliée en I2C ;
+#   - une liaison au Pi incomplète : repère sans broche, broche que la puce n'a pas,
+#     broche du Pi prise deux fois, signal qui ne peut pas être sur cette carte ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit.
 
 # Au-dessus de cette tension (en volts), un signal doit arriver sur une carte isolée
@@ -44,18 +46,43 @@ modules:
 #     aussi bien d'entrée que de sortie (GPIO du Pi) : seul le double emploi est alors vérifié.
 #   tension_max : la plus forte tension (V) que ses bornes acceptent.
 #   isolee : true si ses entrées sont optocouplées ou ses sorties sont des relais.
+#   liaison : comment le Pi la lit ou la commande (rien pour une carte que le Pi ne lit pas,
+#     comme les cartes FluidNC). Trois façons :
+#     - type: gpio      broches GPIO du Pi.
+#         fichier : le fichier de Linux des broches (Pi 5 : /dev/gpiochip0).
+#         broches : repère sur la carte → broche du Pi (E1: GPIO17). Sans « broches » :
+#           les repères des signaux sont déjà des broches du Pi (la carte « pi » elle-même).
+#         niveau_actif : haut ou bas = le niveau qui veut dire « courant passe » (entrée)
+#           ou « relais commandé » (sortie). Beaucoup de cartes marchent à l'envers : bas.
+#         tirage : aucun, haut ou bas (résistance de tirage des entrées dans le Pi).
+#     - type: i2c       une puce sur le bus I2C du Pi.
+#         signal : le signal i2c (plus bas) qui mène à la puce (pcf8574, mcp23017, ads1115).
+#         broches : repère sur la carte → broche de la puce (K1: P0 ; MCP23017 : A0 à B7).
+#         niveau_actif, tirage (aucun ou haut) : comme pour gpio.
+#     - type: usb_serie un adaptateur USB (RS485...), reconnu par son numéro de série USB.
+#         numero_serie_usb, vitesse_bauds, parite (aucune, paire, impaire),
+#         delai_reponse_s (attente maximale d'une réponse).
+#
+#   La façon dont les cartes de relais et d'entrées 24 V sont reliées au Pi (GPIO direct ou I2C)
+#   n'est PAS ENCORE DÉCIDÉE : les deux sont montrées en exemple, le programme sait faire les deux.
 cartes:
   pi:
     exemple: true
     description: Raspberry Pi 5, broches GPIO (3,3 V, non isolées)
     tension_max: 3.3
     isolee: false
+    liaison:
+      type: gpio
+      fichier: /dev/gpiochip0
   ads1115:
     exemple: true
     description: Convertisseur analogique ADS1115 (I2C 0x48), 4 voies
     entrees: 4
     tension_max: 3.3
     isolee: false
+    liaison:
+      type: i2c
+      signal: ads1115_bus
   entrees_24v_1:
     exemple: true
     description: Carte d'entrées 24 V optocouplées n° 1
@@ -63,6 +90,16 @@ cartes:
     sorties: 0
     tension_max: 24
     isolee: true
+    # Exemple de liaison par GPIO direct.
+    liaison:
+      type: gpio
+      fichier: /dev/gpiochip0
+      broches:
+        E1: GPIO17
+        E2: GPIO27
+        E3: GPIO22
+      niveau_actif: bas
+      tirage: haut
   relais_1:
     exemple: true
     description: Carte 8 relais n° 1
@@ -70,6 +107,31 @@ cartes:
     sorties: 8
     tension_max: 24
     isolee: true
+    # Exemple de liaison par une puce I2C PCF8574 (voir le signal relais_1_bus).
+    liaison:
+      type: i2c
+      signal: relais_1_bus
+      broches:
+        K1: P0
+        K2: P1
+        K3: P2
+        K4: P3
+        K5: P4
+        K6: P5
+        K7: P6
+        K8: P7
+      niveau_actif: bas
+  rs485_ozone:
+    exemple: true
+    description: Adaptateur USB-RS485 des 2 transmetteurs d'ozone
+    tension_max: 5
+    isolee: false
+    liaison:
+      type: usb_serie
+      numero_serie_usb: "EXEMPLE-RS485"
+      vitesse_bauds: 9600
+      parite: aucune
+      delai_reponse_s: 0.5
 
 # Les signaux. Le nom est celui que le code utilise.
 #   carte : un nom de la liste « cartes » ci-dessus.
@@ -86,6 +148,14 @@ cartes:
 #     plusieurs appareils partagent le même fil (RS485). Plusieurs appareils peuvent partager
 #     les mêmes broches seulement s'ils sont sur le même type de bus et ont chacun leur adresse.
 #   module : un nom de la liste « modules » ci-dessus.
+#   appareil : pour un bus, l'appareil au bout (obligatoire en i2c) :
+#     sht31, ads1115, pcf8574, mcp23017, transmetteur_modbus, nextion.
+#   fichier : pour un bus sur les broches du Pi, le fichier de Linux qui y donne accès
+#     (I2C des GPIO2/3 : /dev/i2c-1).
+#   unite, conversion : pour une mesure, son unité et deux points « tension lue → valeur »
+#     (volts: [0.5, 3.0], valeurs: [0, -90]) ; sans conversion, la mesure est en volts.
+#   modbus : pour un transmetteur_modbus, où lire sa mesure :
+#     registre, fonction (3 ou 4), echelle (valeur = nombre lu × échelle), signe (true/false).
 signaux:
   reed_panneau_poste_fut:
     exemple: true
@@ -132,6 +202,8 @@ signaux:
     tension: 3.3
     adresse: 0x44
     module: armoire
+    appareil: sht31
+    fichier: /dev/i2c-1
   ads1115_bus:
     exemple: true
     description: Liaison I2C vers le convertisseur ADS1115
@@ -141,12 +213,18 @@ signaux:
     tension: 3.3
     adresse: 0x48
     module: armoire
+    appareil: ads1115
+    fichier: /dev/i2c-1
   vide_venturi:
     exemple: true
     description: Capteur de vide du venturi (module à confirmer)
     carte: ads1115
     broche: A0
     type: mesure
+    unite: kPa
+    conversion:
+      volts: [0.3, 3.0]
+      valeurs: [0, -90]
     tension: 3.3
     module: prehension
   ecran_nextion:
@@ -157,3 +235,46 @@ signaux:
     type: serie
     tension: 3.3
     module: armoire
+    appareil: nextion
+    fichier: /dev/ttyAMA2
+  relais_1_bus:
+    exemple: true
+    description: Liaison I2C vers la puce PCF8574 de la carte relais n° 1
+    carte: pi
+    broche: [GPIO2, GPIO3]
+    type: i2c
+    tension: 3.3
+    adresse: 0x20
+    module: armoire
+    appareil: pcf8574
+    fichier: /dev/i2c-1
+  ozone_1:
+    exemple: true
+    description: Transmetteur d'ozone n° 1 (pour afficher ; la sécurité ozone est câblée)
+    carte: rs485_ozone
+    broche: [A, B]
+    type: serie
+    tension: 5
+    adresse: 1
+    module: armoire
+    appareil: transmetteur_modbus
+    unite: ppm
+    modbus:
+      registre: 0
+      fonction: 3
+      echelle: 0.001
+  ozone_2:
+    exemple: true
+    description: Transmetteur d'ozone n° 2 (pour afficher ; la sécurité ozone est câblée)
+    carte: rs485_ozone
+    broche: [A, B]
+    type: serie
+    tension: 5
+    adresse: 2
+    module: armoire
+    appareil: transmetteur_modbus
+    unite: ppm
+    modbus:
+      registre: 0
+      fonction: 3
+      echelle: 0.001

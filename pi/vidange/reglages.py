@@ -331,6 +331,10 @@ def _message(detail: dict[str, Any]) -> str:
         return f"doit valoir au plus {contexte['le']}"
     if sorte == "literal_error":
         return f"doit être l'un de : {contexte['expected']}"
+    if sorte == "union_tag_invalid":
+        return f"type: doit être l'un de : {contexte['expected_tags']}"
+    if sorte == "union_tag_not_found":
+        return f"« {contexte['discriminator'].strip(chr(39))} » manque"
     if sorte == "value_error":
         return str(contexte["error"])
     return detail["msg"]
