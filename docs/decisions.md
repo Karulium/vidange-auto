@@ -39,6 +39,15 @@ si l'une pose problème, elle le dit dans sa PR.
      la liste restent des exemples d'ici là. Le nombre de capteurs (1 ou 2) est à confirmer par le module Nettoyage.
   4. Capteur de vide du venturi : référence pas encore choisie (module Air comprimé). Si sa sortie dépasse 3,3 V
      (par exemple 0,5-4,5 V), **pont diviseur 10 kΩ / 20 kΩ** avant l'ADS1115, comme dans l'exemple de la liste.
+- **Alarme d'un module : toute la machine s'arrête** (choix de Karulium, 26/10/2026, PR n° 6) :
+  `alarme_pause_tout: true` dans `programme.yaml`. On pourra changer plus tard.
+- **Réponses aux questions de la PR n° 7** (registre) :
+  1. Copie quotidienne sur le même SSD pour l'instant ; la copie hors de la machine viendra avec la tâche 10.
+  2. **Un seau peut recevoir plusieurs doses de mycélium, de plusieurs bocaux** (table `doses_mycelium`, avec la
+     quantité si elle est pesée) : la machine verse par godets, un bocal peut finir en cours de seau, et les plans
+     d'essais feront varier la dose. Dans le logiciel de culture, un lot d'inoculation réunit plusieurs bocaux et
+     plusieurs seaux.
+  3. 30 copies gardées, réglable dans `programme.yaml`.
 
 ## Accès à distance et mises à jour (Karulium, 26/10/2026)
 

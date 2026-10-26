@@ -138,7 +138,8 @@ def test_objet_champ_inconnu_ou_code_vide(registre: Registre):
 
 def test_cycle_complet(registre: Registre, horloge: Horloge):
     cycle = registre.commencer_cycle("vidange", fut="F3")
-    registre.ajouter_seau(cycle, "S1293", bocal="B327")
+    seau_du_cycle = registre.ajouter_seau(cycle, "S1293", bocal="B327")
+    registre.ajouter_dose(seau_du_cycle, "B328", quantite_g=120.0)
     debut = horloge()
     horloge.moment += timedelta(seconds=40)
     registre.noter_etape(cycle, "verser", debut, duree_s=32.5)
@@ -158,10 +159,15 @@ def test_cycle_complet(registre: Registre, horloge: Horloge):
         "faite",
     )
     seaux = registre.lire(
-        "SELECT seaux.code AS seau, bocaux.code AS bocal FROM seaux_du_cycle "
-        "JOIN seaux ON seaux.id = seau_id JOIN bocaux ON bocaux.id = bocal_id"
+        "SELECT seaux.code AS seau, bocaux.code AS bocal, quantite_g FROM doses_mycelium "
+        "JOIN seaux_du_cycle ON seaux_du_cycle.id = seau_du_cycle_id "
+        "JOIN seaux ON seaux.id = seau_id JOIN bocaux ON bocaux.id = bocal_id "
+        "ORDER BY doses_mycelium.id"
     )
-    assert seaux == [{"seau": "S1293", "bocal": "B327"}]
+    assert seaux == [
+        {"seau": "S1293", "bocal": "B327", "quantite_g": None},
+        {"seau": "S1293", "bocal": "B328", "quantite_g": 120.0},
+    ]
     mesure = registre.lire("SELECT * FROM mesures")[0]
     assert (mesure["valeur"], mesure["unite"], mesure["cycle_id"]) == (6.2, "kg", cycle)
 

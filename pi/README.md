@@ -162,7 +162,7 @@ chef.demarrer()  # puis : chef.donner_go("griffe"), chef.pause(), chef.reprendre
 Dans le dossier des données (`/var/lib/vidange` sur le Pi, `pi/donnees` sur un PC) :
 
 - `registre.sqlite` : la base. Tables : `futs`, `seaux`, `bocaux`, `petris` (reconnus par le code de leur QR),
-  `cycles`, `seaux_du_cycle` (seaux remplis et bocal de mycélium utilisé), `etapes_faites` (avec durées),
+  `cycles`, `seaux_du_cycle` (seaux remplis), `doses_mycelium` (doses de chaque bocal versées dans un seau), `etapes_faites` (avec durées),
   `mesures`, `photos`, `alarmes`, `reglages_appliques` (ancien / nouveau / qui / quand).
 - `photos/` : les fichiers des photos. **La base ne garde que leur chemin** (relatif à ce dossier).
 - `sauvegardes/registre-AAAA-MM-JJ.sqlite` : une copie complète et vérifiée par jour, à partir de

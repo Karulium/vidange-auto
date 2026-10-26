@@ -61,15 +61,25 @@ _VERSION_1 = (
         remarque TEXT
     )
     """,
-    # Les seaux remplis pendant un cycle, et le bocal de mycélium utilisé pour chacun.
+    # Les seaux remplis pendant un cycle.
     """
     CREATE TABLE seaux_du_cycle (
         id INTEGER PRIMARY KEY,
         cycle_id INTEGER NOT NULL REFERENCES cycles (id),
         seau_id INTEGER NOT NULL REFERENCES seaux (id),
-        bocal_id INTEGER REFERENCES bocaux (id),
         quand TEXT NOT NULL,
         UNIQUE (cycle_id, seau_id)
+    )
+    """,
+    # Le mycélium versé dans chaque seau : plusieurs doses possibles, de plusieurs bocaux (un bocal
+    # fini en cours de seau, ou un plan d'essais) ; quantité vide si elle n'est pas mesurée.
+    """
+    CREATE TABLE doses_mycelium (
+        id INTEGER PRIMARY KEY,
+        seau_du_cycle_id INTEGER NOT NULL REFERENCES seaux_du_cycle (id),
+        bocal_id INTEGER NOT NULL REFERENCES bocaux (id),
+        quantite_g REAL CHECK (quantite_g IS NULL OR quantite_g >= 0),
+        quand TEXT NOT NULL
     )
     """,
     """

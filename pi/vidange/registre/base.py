@@ -269,17 +269,36 @@ class Registre:
         return self.lire("SELECT * FROM cycles WHERE fin IS NULL ORDER BY id")
 
     def ajouter_seau(self, cycle: int, seau: str, bocal: str | None = None) -> int:
-        """Un seau rempli pendant ce cycle, avec le bocal de mycélium utilisé s'il est connu."""
+        """Un seau rempli pendant ce cycle. Si `bocal` est donné, une dose de ce bocal
+        (quantité inconnue) est notée aussi ; sinon, utiliser ajouter_dose."""
         with self._ecriture() as cnx:
-            return self._inserer(
+            seau_du_cycle = self._inserer(
                 cnx,
                 "seaux_du_cycle",
-                {
-                    "cycle_id": cycle,
-                    "quand": self._quand(),
-                    **self._objets(cnx, {"seau": seau, "bocal": bocal}),
-                },
+                {"cycle_id": cycle, "quand": self._quand(), **self._objets(cnx, {"seau": seau})},
             )
+            if bocal is not None:
+                self._inserer_dose(cnx, seau_du_cycle, bocal, None)
+            return seau_du_cycle
+
+    def ajouter_dose(self, seau_du_cycle: int, bocal: str, quantite_g: float | None = None) -> int:
+        """Une dose de mycélium versée dans un seau (plusieurs doses et bocaux possibles)."""
+        with self._ecriture() as cnx:
+            return self._inserer_dose(cnx, seau_du_cycle, bocal, quantite_g)
+
+    def _inserer_dose(
+        self, cnx: sqlite3.Connection, seau_du_cycle: int, bocal: str, quantite_g: float | None
+    ) -> int:
+        return self._inserer(
+            cnx,
+            "doses_mycelium",
+            {
+                "seau_du_cycle_id": seau_du_cycle,
+                "quantite_g": quantite_g,
+                "quand": self._quand(),
+                **self._objets(cnx, {"bocal": bocal}),
+            },
+        )
 
     def noter_etape(
         self,
