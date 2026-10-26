@@ -1,7 +1,7 @@
 # Programme du Raspberry Pi 5 (le chef)
 
 Paquet Python `vidange` (Python 3.11, comme Raspberry Pi OS Bookworm).
-Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés, journal, secrets, liaison avec les cartes FluidNC (et faux FluidNC). Pas encore de logique de machine.
+Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés, journal, secrets, liaison avec les cartes FluidNC (et faux FluidNC), entrées/sorties du Pi par leur nom (et faux capteurs). Pas encore de logique de machine.
 
 ## Ce qu'il y a ici
 
@@ -17,12 +17,18 @@ Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés,
 | `vidange/fluidnc/protocole.py` | Lecture des messages de FluidNC (états, alarmes, erreurs en clair) |
 | `vidange/fluidnc/faux.py` | Faux FluidNC pour les tests et le simulateur |
 | `vidange/fluidnc/outil.py` | Commande `vidange-fluidnc` (lister les ports, console) pour les essais |
+| `vidange/materiel/materiel.py` | Entrées/sorties du Pi par leur nom : lire, commander, mesurer |
+| `vidange/materiel/puces.py` | GPIO du Pi, bus I2C, PCF8574, MCP23017, ADS1115, SHT31 |
+| `vidange/materiel/modbus.py` | Modbus RTU sur RS485 (transmetteurs d'ozone) |
+| `vidange/materiel/faux.py` | Faux capteurs et fausses cartes pour les tests et le simulateur |
+| `vidange/materiel/outil.py` | Commande `vidange-es` (lister, surveiller, commander) pour les essais |
 | `reglages/machine.yaml` | Axes, positions, zones (pour l'instant : un **exemple** inventé) |
 | `reglages/programme.yaml` | Réglages du programme lui-même (journal) |
 | `reglages/fluidnc.yaml` | Cartes FluidNC (numéro de série USB) et réglages de leur liaison |
 | `secrets.exemple.yaml` | Modèle **vide** du fichier de secrets |
 | `systeme/vidange.service` | Service qui démarre avec le Pi et se relance s'il plante |
 | `systeme/installation.md` | Installation sur le Pi, pas à pas |
+| `systeme/essai-entrees-sorties.md` | Essai des entrées/sorties sur le vrai matériel, pas à pas |
 | `tests/` | Tests (pytest) |
 
 ## Essayer sur un PC
@@ -69,3 +75,25 @@ with Liaison("portique", reglages.fluidnc) as portique:  # se connecte et se rec
 - `0` : arrêt normal.
 - `1` : plantage imprévu (systemd relance le programme 5 s après).
 - `2` : réglages faux (systemd ne relance pas : corriger les réglages, puis relancer le service).
+
+## Entrées/sorties du Pi, pour le chef d'orchestre
+
+```python
+from vidange.materiel import Materiel
+
+with Materiel(liste) as materiel:  # liste = charger_entrees_sorties(...)
+    materiel.lire("reed_panneau_poste_fut")  # True = capteur actionné
+    materiel.ecrire("voyant_buzzer", True)  # True = relais commandé
+    materiel.mesurer("vide_venturi")  # dans l'unité de la liste (kPa...)
+    materiel.ambiance("sht31_armoire")  # .temperature_c, .humidite_pct
+    materiel.mesurer("ozone_1")  # ppm, par RS485
+```
+
+- Le code ne pense jamais en niveaux électriques : « actionné » et « commandé » tiennent compte du sens
+  du contact (`repos`) et de la carte (`niveau_actif`), écrits dans `docs/entrees-sorties.yaml`.
+- Relais et entrées 24 V peuvent être reliés au Pi par GPIO direct ou par une puce I2C (PCF8574, MCP23017) :
+  seule la liste change, pas le code.
+- Au départ et à la fermeture, toutes les sorties sont **au repos**.
+- Une puce qui ne répond pas lève `ErreurMateriel` (avec le nom du signal) ; le reste continue.
+- Faux matériel : `Materiel(liste, FausseFabrique(liste))`, puis `faux.actionner(...)`, `faux.regler(...)`,
+  `faux.commande(...)`, `faux.debrancher(...)`. Essai rapide : `.venv/bin/vidange-es --faux lister`.

@@ -19,6 +19,10 @@ Chaque commande se tape dans un terminal du Pi (ou par SSH). Ce qui suit `#` est
    sudo useradd --system --create-home --shell /usr/sbin/nologin vidange
    sudo usermod -aG dialout,gpio,i2c vidange   # accès aux ports série, GPIO et I2C (tâches suivantes)
    ```
+4. Activer le bus I2C (capteurs de l'armoire) :
+   ```
+   sudo raspi-config nonint do_i2c 0
+   ```
 
 ## 2. Copier le programme
 
@@ -66,6 +70,8 @@ journalctl -u vidange -f
 Le journal est aussi gardé dans `/var/lib/vidange/journal/vidange.log`.
 
 ## 6. Essais à faire sur le vrai Pi
+
+Essai des capteurs et des relais : voir `essai-entrees-sorties.md`.
 
 Cocher chaque essai réussi.
 
