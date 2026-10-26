@@ -245,6 +245,7 @@ _MESSAGES = {
     "bool_type": "doit être « true » (oui) ou « false » (non)",
     "string_type": "doit être un texte",
     "dict_type": "doit être une liste de « nom: valeur »",
+    "list_type": "doit être une liste (une ligne « - nom » par élément)",
     "model_type": "doit être une liste de « nom: valeur »",
     "tuple_type": "doit être deux nombres entre crochets, par exemple [0.0, 1.0]",
     "string_pattern_mismatch": "nom à écrire en minuscules, sans accent ni espace (a-z, 0-9, _)",

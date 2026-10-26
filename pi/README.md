@@ -1,7 +1,7 @@
 # Programme du Raspberry Pi 5 (le chef)
 
 Paquet Python `vidange` (Python 3.11, comme Raspberry Pi OS Bookworm).
-Pour l'instant : démarrage, réglages vérifiés, journal, secrets. Pas encore de logique de machine.
+Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés, journal, secrets. Pas encore de logique de machine.
 
 ## Ce qu'il y a ici
 
@@ -9,6 +9,7 @@ Pour l'instant : démarrage, réglages vérifiés, journal, secrets. Pas encore 
 |---|---|
 | `vidange/demarrage.py` | Démarrage : lit les réglages, met le journal en place, attend l'arrêt |
 | `vidange/reglages.py` | Lecture et vérification des fichiers de `reglages/` |
+| `vidange/entrees_sorties.py` | Lecture et vérification de `docs/entrees-sorties.yaml` (cartes, broches, tensions) |
 | `vidange/journal.py` | Journal (logs) commun : `donner_journal("nom")` |
 | `vidange/fichier_secrets.py` | Lecture du fichier de secrets (hors Git) |
 | `reglages/machine.yaml` | Axes, positions, zones (pour l'instant : un **exemple** inventé) |

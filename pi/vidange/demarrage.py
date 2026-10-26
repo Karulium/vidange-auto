@@ -1,7 +1,8 @@
 """Démarrage du programme du Pi.
 
-1. Lit et vérifie les réglages : une erreur arrête tout, avec un message clair
-   (code de sortie 2 : systemd ne relance pas en boucle un programme mal réglé).
+1. Lit et vérifie les réglages et la liste des entrées/sorties : une erreur arrête
+   tout, avec un message clair (code de sortie 2 : systemd ne relance pas en boucle
+   un programme mal réglé).
 2. Met en place le journal et lit les secrets.
 3. Attend l'ordre d'arrêt (pas encore de logique de machine).
 
@@ -18,6 +19,7 @@ import threading
 from pathlib import Path
 
 from vidange import __version__
+from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.fichier_secrets import charger_secrets
 from vidange.journal import configurer_journal, donner_journal
 from vidange.reglages import ErreurReglages, charger_reglages
@@ -45,6 +47,10 @@ def lire_arguments(arguments: list[str] | None) -> argparse.Namespace:
         prog="vidange", description="Programme du Pi de la machine « Vidange automatique »."
     )
     lecteur.add_argument("--reglages", help="dossier des réglages (défaut : pi/reglages)")
+    lecteur.add_argument(
+        "--entrees-sorties",
+        help="liste des entrées/sorties (défaut : docs/entrees-sorties.yaml)",
+    )
     lecteur.add_argument("--secrets", help="fichier de secrets (défaut : pi/secrets.yaml)")
     lecteur.add_argument("--donnees", help="dossier des données : journal... (défaut : pi/donnees)")
     lecteur.add_argument(
@@ -57,6 +63,11 @@ def principal(arguments: list[str] | None = None, arret: threading.Event | None 
     """Lance le programme et rend le code de sortie. `arret` sert aux tests."""
     options = lire_arguments(arguments)
     dossier_reglages = _chemin(options.reglages, "VIDANGE_REGLAGES", DOSSIER_PI / "reglages")
+    chemin_entrees_sorties = _chemin(
+        options.entrees_sorties,
+        "VIDANGE_ENTREES_SORTIES",
+        DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml",
+    )
     chemin_secrets = _chemin(options.secrets, "VIDANGE_SECRETS", DOSSIER_PI / "secrets.yaml")
     dossier_donnees = _chemin(options.donnees, "VIDANGE_DONNEES", DOSSIER_PI / "donnees")
 
@@ -71,6 +82,7 @@ def principal(arguments: list[str] | None = None, arret: threading.Event | None 
             taille_fichier_mo=reglages_journal.taille_fichier_mo,
             nombre_fichiers=reglages_journal.nombre_fichiers,
         )
+        entrees_sorties = charger_entrees_sorties(chemin_entrees_sorties)
         charger_secrets(chemin_secrets)
     except ErreurReglages as erreur:
         journal.error("%s", erreur)
@@ -80,6 +92,13 @@ def principal(arguments: list[str] | None = None, arret: threading.Event | None 
         journal.warning(
             "machine.yaml contient des valeurs d'EXEMPLE (exemple: true) : "
             "ne pas faire bouger la vraie machine avec."
+        )
+    exemples = entrees_sorties.exemples()
+    if exemples:
+        journal.warning(
+            "entrees-sorties.yaml : %d lignes d'EXEMPLE (exemple: true) : ne pas brancher "
+            "la vraie machine d'après elles.",
+            len(exemples),
         )
     if options.verifier:
         journal.info("Réglages corrects (%s).", dossier_reglages)

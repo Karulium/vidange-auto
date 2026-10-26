@@ -14,3 +14,11 @@ def reglages(tmp_path: Path) -> Path:
     dossier = tmp_path / "reglages"
     shutil.copytree(DOSSIER_PI / "reglages", dossier)
     return dossier
+
+
+@pytest.fixture
+def entrees_sorties(tmp_path: Path) -> Path:
+    """Copie de la liste des entrées/sorties du dépôt, que chaque test peut abîmer."""
+    chemin = tmp_path / "entrees-sorties.yaml"
+    shutil.copy(DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml", chemin)
+    return chemin

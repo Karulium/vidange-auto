@@ -14,6 +14,7 @@ User=vidange
 Group=vidange
 WorkingDirectory=/opt/vidange-auto/pi
 Environment=VIDANGE_REGLAGES=/opt/vidange-auto/pi/reglages
+Environment=VIDANGE_ENTREES_SORTIES=/opt/vidange-auto/docs/entrees-sorties.yaml
 Environment=VIDANGE_SECRETS=/etc/vidange/secrets.yaml
 Environment=VIDANGE_DONNEES=/var/lib/vidange
 Environment=PYTHONUNBUFFERED=1

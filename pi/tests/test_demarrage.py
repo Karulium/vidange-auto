@@ -25,6 +25,7 @@ def test_verifier_des_reglages_corrects(reglages, tmp_path, capsys):
     sortie = capsys.readouterr().err
     assert "Réglages corrects" in sortie
     assert "valeurs d'EXEMPLE" in sortie
+    assert "entrees-sorties.yaml : 12 lignes d'EXEMPLE" in sortie
     # La simple vérification n'écrit pas de journal sur le disque.
     assert not (tmp_path / "donnees").exists()
 
@@ -35,6 +36,14 @@ def test_reglages_faux_empechent_de_demarrer(reglages, tmp_path, capsys):
     arret.set()
     assert principal(options(reglages, tmp_path), arret) == CODE_REGLAGES_FAUX
     assert "programme.yaml : fichier manquant" in capsys.readouterr().err
+
+
+def test_entrees_sorties_fausses_empechent_de_demarrer(reglages, entrees_sorties, tmp_path, capsys):
+    texte = entrees_sorties.read_text(encoding="utf-8")
+    entrees_sorties.write_text(texte.replace("broche: E2", "broche: E1"), encoding="utf-8")
+    arguments = [*options(reglages, tmp_path), "--entrees-sorties", str(entrees_sorties)]
+    assert principal([*arguments, "--verifier"]) == CODE_REGLAGES_FAUX
+    assert "broche E1 : utilisée par plusieurs signaux" in capsys.readouterr().err
 
 
 def test_demarrage_puis_arret_propre(reglages, tmp_path):
