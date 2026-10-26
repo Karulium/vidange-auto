@@ -194,12 +194,12 @@ signaux:
     module: stockage
   onduleur_sur_batterie:
     exemple: true
-    description: Onduleur du Pi « courant coupé » (exemple d'une carte UPS à sortie de perte secteur)
+    description: Secteur coupé (relais 230 V branché avant l'onduleur, voir docs/decisions.md)
     carte: pi
     broche: GPIO6
     type: contact
     tension: 3.3
-    # La carte tient la broche haute tant que le courant est là : « actionné » = coupé.
+    # Le contact du relais est fermé tant que le secteur est là : « actionné » = coupé.
     repos: ferme
     module: armoire
   battement_pi:
