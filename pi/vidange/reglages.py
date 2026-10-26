@@ -165,11 +165,23 @@ class ReglagesChef(Modele):
     alarme_pause_tout: bool
 
 
+class ReglagesRegistre(Modele):
+    """Réglages du registre (base SQLite) et de sa copie de secours quotidienne."""
+
+    # La copie du jour se fait à partir de cette heure (heure du Pi, de 0 à 23).
+    heure_sauvegarde: int = Field(ge=0, le=23)
+    # Nombre de copies quotidiennes gardées ; les plus vieilles sont effacées.
+    copies_gardees: int = Field(ge=1)
+    # Tous les combien (minutes) on regarde s'il faut faire la copie du jour.
+    periode_verification_min: float = Field(gt=0, le=60)
+
+
 class Programme(Modele):
     """programme.yaml : réglages du programme lui-même (pas de la machine)."""
 
     journal: Journal
     chef: ReglagesChef
+    registre: ReglagesRegistre
 
 
 # ---------------------------------------------------------------- fluidnc.yaml

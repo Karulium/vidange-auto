@@ -1,7 +1,7 @@
 # Programme du Raspberry Pi 5 (le chef)
 
 Paquet Python `vidange` (Python 3.11, comme Raspberry Pi OS Bookworm).
-Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés, journal, secrets, liaison avec les cartes FluidNC (et faux FluidNC), entrées/sorties du Pi par leur nom (et faux capteurs), chef d'orchestre (moteur d'étapes) avec un module d'exemple. Pas encore de vrai module de la machine.
+Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés, journal, secrets, liaison avec les cartes FluidNC (et faux FluidNC), entrées/sorties du Pi par leur nom (et faux capteurs), chef d'orchestre (moteur d'étapes) avec un module d'exemple, registre (base SQLite) avec copie de secours quotidienne. Pas encore de vrai module de la machine.
 
 ## Ce qu'il y a ici
 
@@ -28,8 +28,12 @@ Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés,
 | `vidange/chef/carnet.py` | Carnet de l'état du cycle (pour la reprise après coupure) |
 | `vidange/chef/axes.py` | Envoie les axes à des positions nommées de `machine.yaml` |
 | `vidange/chef/exemple.py` | Module d'**exemple** (montre comment écrire un module) |
+| `vidange/registre/base.py` | Registre : base SQLite (fûts, seaux, bocaux, Pétri, cycles, étapes, mesures, photos, alarmes, réglages) |
+| `vidange/registre/montees.py` | Tables de la base et leurs montées de version |
+| `vidange/registre/sauvegarde.py` | Copie de secours quotidienne de la base |
+| `vidange/registre/outil.py` | Commande `vidange-registre` (état de la base, copie à la main) |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) |
-| `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre) |
+| `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, copie de secours du registre) |
 | `reglages/fluidnc.yaml` | Cartes FluidNC (numéro de série USB) et réglages de leur liaison |
 | `secrets.exemple.yaml` | Modèle **vide** du fichier de secrets |
 | `systeme/vidange.service` | Service qui démarre avec le Pi et se relance s'il plante |
@@ -152,3 +156,38 @@ chef.demarrer()  # puis : chef.donner_go("griffe"), chef.pause(), chef.reprendre
 - L'état est noté dans `donnees/etat-cycle.json` à chaque changement (fichier jamais à moitié écrit).
   Après une coupure : `chef.reprendre_cycle([modules])` remet chaque module à son étape, en attente du Go.
 - Le zéro des axes de `machine.yaml` est le zéro machine de leur carte FluidNC (mètres × 1000 = mm).
+
+## Registre (base SQLite)
+
+Dans le dossier des données (`/var/lib/vidange` sur le Pi, `pi/donnees` sur un PC) :
+
+- `registre.sqlite` : la base. Tables : `futs`, `seaux`, `bocaux`, `petris` (reconnus par le code de leur QR),
+  `cycles`, `seaux_du_cycle` (seaux remplis et bocal de mycélium utilisé), `etapes_faites` (avec durées),
+  `mesures`, `photos`, `alarmes`, `reglages_appliques` (ancien / nouveau / qui / quand).
+- `photos/` : les fichiers des photos. **La base ne garde que leur chemin** (relatif à ce dossier).
+- `sauvegardes/registre-AAAA-MM-JJ.sqlite` : une copie complète et vérifiée par jour, à partir de
+  l'heure réglée dans `programme.yaml` (→ `registre`) ; on garde les dernières (nombre réglé).
+
+```python
+from vidange.registre import ouvrir_registre
+
+registre = ouvrir_registre(donnees)  # crée la base, ou la monte à la dernière version
+cycle = registre.commencer_cycle("vidange", fut="F3")
+registre.ajouter_seau(cycle, "S1293", bocal="B327")  # un code jamais vu est ajouté tout seul
+registre.noter_etape(cycle, "verser", debut, duree_s=32.5)
+registre.noter_mesure("poids_seau", 6.2, "kg", capteur="balance", cycle=cycle, seau="S1293")
+registre.noter_photo(donnees / "photos" / "2026-10-26" / "dose.jpg", camera="dosage", seau="S1293")
+registre.noter_alarme("griffe", "Délai dépassé", quoi_faire="...", cycle=cycle)
+registre.noter_reglage("karulium", "machine.yaml", "durees.vidange_max", 30, 35)
+registre.finir_cycle(cycle)
+registre.lire("SELECT * FROM cycles WHERE fin IS NULL")  # pour les écrans et l'API
+```
+
+- **Montées de version** : la base porte son numéro de version. Pour la changer, ajouter une montée à la fin
+  de `montees.py` (jamais modifier une montée déjà livrée). Avant une montée, une copie de l'ancienne base est
+  faite à côté (`registre-avant-version-N.sqlite`). Une montée ratée laisse la base comme avant.
+- **Base abîmée** : le programme ne démarre pas (code 3, systemd ne le relance pas) et le journal dit quoi faire :
+  arrêter le service, mettre `registre.sqlite` de côté, copier la dernière copie de `sauvegardes/` à sa place
+  sous le nom `registre.sqlite`, relancer.
+- `vidange-registre etat` : version et nombre de lignes de chaque table ; `vidange-registre sauvegarder` :
+  copie tout de suite (par exemple avant une mise à jour). Peut tourner pendant que le programme tourne.

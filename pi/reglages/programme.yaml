@@ -12,3 +12,11 @@ chef:
   periode_s: 0.05
   # Une alarme dans un module met toute la machine en pause (true), ou seulement ce module (false).
   alarme_pause_tout: true
+
+registre:
+  # Copie de secours de la base (donnees/sauvegardes), une fois par jour, à partir de cette heure (0 à 23).
+  heure_sauvegarde: 3
+  # Nombre de copies quotidiennes gardées (les plus vieilles sont effacées).
+  copies_gardees: 30
+  # Tous les combien de minutes on regarde s'il faut faire la copie du jour.
+  periode_verification_min: 10

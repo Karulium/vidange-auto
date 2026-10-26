@@ -46,7 +46,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   Zones réservées entre axes, pause, reprise, alarme avec message « quoi faire », attente du « Go » de Karulium.
   **L'état du cycle est noté en continu** (pour la reprise après coupure). Un module d'exemple sur le faux FluidNC.
 
-- [ ] **6. Registre SQLite** — Modèle : Sonnet.
+- [x] **6. Registre SQLite** — Modèle : Sonnet.
   Tables : fûts, seaux, bocaux, boîtes de Pétri, cycles, étapes faites (avec durées), mesures, photos, alarmes,
   réglages appliqués (ancien / nouveau / qui / quand). **Les photos restent en fichiers sur le SSD ; la base garde
   seulement leur chemin.** Montées de version de la base. Copie de secours quotidienne.
