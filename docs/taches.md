@@ -57,7 +57,8 @@ Opus pour poser les bases ; Sonnet pour le reste.
   et le temps total. Préparer la place pour le solveur OR-Tools (tâche plus tard).
 
 - [ ] **10. Programme de l'accéléromètre (RP2040 + LIS3DH)** — Modèle : Sonnet.
-  Seuil de choc réglable, sortie « OK » en sécurité positive (coupée sur choc ou panne), envoi des mesures en série.
+  Seuil de choc réglable, sortie « OK » en sécurité positive (coupée sur choc ou panne), envoi des mesures et réception des réglages
+  sur une liaison série half-duplex à un seul fil (PIO), chargeur série pour les mises à jour (voir `docs/decisions.md`).
   Côté Pi : lecture et enregistrement des chocs.
 
 - [ ] **11. Accès à distance : vidéos et pilotage manuel** — Modèle : Opus.
@@ -67,7 +68,7 @@ Opus pour poser les bases ; Sonnet pour le reste.
 
 - [ ] **12. Mises à jour des cartes et du Pi** — Modèle : Sonnet.
   Mise à jour des ESP32 par USB depuis le Pi (esptool), envoi des réglages FluidNC, retour à l'ancienne version,
-  vérification après mise à jour ; RP2040 par SWD ; mise à jour du programme du Pi depuis `main`.
+  vérification après mise à jour ; RP2040 par sa liaison série half-duplex (chargeur série) ; mise à jour du programme du Pi depuis `main`.
   Seulement machine à l'arrêt. Lancement depuis la page web.
 
 ## Partie 2 : les modules figés (après la partie 1)
