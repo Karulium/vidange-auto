@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vidange automatique</title>
+<!--
+  Page web locale de la machine (tâche 8). Une seule page, sans rien à télécharger d'Internet :
+  elle marche aussi sans réseau extérieur. Elle demande la clé de l'API une fois et la garde
+  dans le téléphone. Tout passe par l'API du Pi (/api/...).
+-->
+<style>
+  :root {
+    --fond: #f4f5f2; --carte: #ffffff; --texte: #1d2320; --doux: #5d6862; --bord: #d6dbd7;
+    --vert: #1f8a4c; --orange: #d27a00; --rouge: #c62828; --bleu: #1d5fa8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fond: #141816; --carte: #1f2522; --texte: #e8ece9; --doux: #a3ada7; --bord: #34403a;
+      --vert: #3cb371; --orange: #f0a030; --rouge: #ef5350; --bleu: #64a0e8;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; background: var(--fond); color: var(--texte);
+    font: 17px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 2; background: var(--carte);
+    border-bottom: 1px solid var(--bord); padding: 10px 16px;
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  #bandeau { margin-top: 6px; padding: 8px 12px; border-radius: 8px; font-weight: 700; color: #fff; }
+  .vert { background: var(--vert); } .orange { background: var(--orange); }
+  .rouge { background: var(--rouge); } .gris { background: var(--doux); }
+  nav { display: flex; gap: 6px; margin-top: 8px; overflow-x: auto; }
+  nav button {
+    flex: 1 0 auto; padding: 8px 10px; border: 1px solid var(--bord); border-radius: 8px;
+    background: var(--fond); color: var(--texte); font-size: 15px;
+  }
+  nav button.actif { background: var(--bleu); color: #fff; border-color: var(--bleu); }
+  main { max-width: 720px; margin: 0 auto; padding: 12px 16px 40px; }
+  section { display: none; } section.actif { display: block; }
+  h2 { font-size: 17px; margin: 18px 0 8px; }
+  .carte {
+    background: var(--carte); border: 1px solid var(--bord); border-radius: 10px;
+    padding: 12px; margin-bottom: 10px; overflow-wrap: anywhere;
+  }
+  .carte.alarme { border-left: 6px solid var(--rouge); }
+  .carte.attention { border-left: 6px solid var(--orange); }
+  .carte.ok { border-left: 6px solid var(--vert); }
+  .doux { color: var(--doux); font-size: 15px; }
+  .gros {
+    display: block; width: 100%; min-height: 64px; margin: 8px 0; border: 0; border-radius: 12px;
+    font-size: 22px; font-weight: 800; color: #fff; cursor: pointer;
+  }
+  .gros:disabled { opacity: .45; }
+  .petit {
+    padding: 8px 14px; border-radius: 8px; border: 1px solid var(--bord); background: var(--fond);
+    color: var(--texte); font-size: 16px; margin-top: 8px; cursor: pointer;
+  }
+  .quoi { margin-top: 6px; padding: 8px; border-radius: 6px; background: var(--fond); }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--bord); vertical-align: top; }
+  .photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .photos figure { margin: 0; }
+  .photos img { width: 100%; border-radius: 8px; display: block; background: var(--bord); min-height: 80px; }
+  .photos figcaption { font-size: 13px; color: var(--doux); }
+  #cle { max-width: 420px; margin: 40px auto; }
+  #cle input { width: 100%; padding: 12px; font-size: 18px; border-radius: 8px; border: 1px solid var(--bord); }
+  #erreur { color: var(--rouge); font-weight: 700; margin: 8px 0; }
+  #message { position: fixed; left: 16px; right: 16px; bottom: 16px; display: none; z-index: 3;
+    padding: 12px; border-radius: 10px; color: #fff; font-weight: 700; text-align: center; }
+</style>
+</head>
+<body>
+
+<div id="cle" hidden>
+  <div class="carte">
+    <h2>Clé de la machine</h2>
+    <p class="doux">La clé est dans le fichier de secrets du Pi (« cle_api »). Elle reste gardée
+      dans ce téléphone.</p>
+    <form id="formulaire-cle">
+      <input id="saisie-cle" type="password" autocomplete="current-password" placeholder="Clé de l'API">
+      <button class="gros vert" type="submit">Entrer</button>
+    </form>
+    <p id="erreur-cle" class="doux"></p>
+  </div>
+</div>
+
+<div id="appli" hidden>
+  <header>
+    <h1>Vidange automatique <span id="heure" class="doux"></span></h1>
+    <div id="bandeau" class="gris">Liaison avec le Pi…</div>
+    <nav>
+      <button data-vue="etat" class="actif">État</button>
+      <button data-vue="historique">Historique</button>
+      <button data-vue="photos">Photos</button>
+      <button data-vue="checklist">Check-list</button>
+    </nav>
+  </header>
+
+  <main>
+    <div id="erreur"></div>
+
+    <section id="vue-etat" class="actif">
+      <button id="bouton-pause" class="gros orange">PAUSE</button>
+      <button id="bouton-reprendre" class="gros vert" hidden>REPRENDRE</button>
+      <div id="gos"></div>
+      <div id="alarmes"></div>
+      <h2>Modules</h2>
+      <div id="modules"></div>
+      <button id="bouton-anciennes" class="petit">Voir les dernières alarmes (même acquittées)</button>
+      <div id="anciennes"></div>
+    </section>
+
+    <section id="vue-historique">
+      <div id="cycles"></div>
+      <button id="plus-cycles" class="petit" hidden>Plus ancien</button>
+      <div id="cycle"></div>
+    </section>
+
+    <section id="vue-photos">
+      <div id="grille" class="photos"></div>
+      <button id="plus-photos" class="petit" hidden>Plus ancien</button>
+    </section>
+
+    <section id="vue-checklist">
+      <button id="bouton-checklist" class="petit">Refaire la check-list</button>
+      <div id="constats"></div>
+    </section>
+
+    <p class="doux">Version <span id="version">?</span> ·
+      <a href="#" id="oublier-cle">changer de clé</a></p>
+  </main>
+</div>
+
+<div id="message"></div>
+
+<script>
+"use strict";
+// ------------------------------------------------------------ outils
+
+const $ = (id) => document.getElementById(id);
+let cle = "";
+try { cle = localStorage.getItem("cle_api") || ""; } catch (e) { cle = ""; }
+
+// Fabrique un élément ; le texte passe toujours par textContent (jamais de HTML venu du Pi).
+function el(balise, attributs, ...enfants) {
+  const e = document.createElement(balise);
+  for (const [nom, valeur] of Object.entries(attributs || {})) {
+    if (nom === "classe") e.className = valeur;
+    else if (nom.startsWith("sur")) e.addEventListener(nom.slice(3), valeur);
+    else e.setAttribute(nom, valeur);
+  }
+  for (const enfant of enfants) {
+    if (enfant === null || enfant === undefined || enfant === false) continue;
+    e.append(enfant instanceof Node ? enfant : String(enfant));
+  }
+  return e;
+}
+
+function remplir(id, ...enfants) { const e = $(id); e.replaceChildren(...enfants); return e; }
+
+function heure(texte) {
+  if (!texte) return "";
+  const d = new Date(texte);
+  return isNaN(d) ? texte : d.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "medium" });
+}
+
+function dire(texte, couleur) {
+  const m = $("message");
+  m.textContent = texte;
+  m.className = couleur;
+  m.style.display = "block";
+  clearTimeout(dire.minuterie);
+  dire.minuterie = setTimeout(() => { m.style.display = "none"; }, 4000);
+}
+
+class Refus extends Error {}
+
+async function api(chemin, options = {}) {
+  const reponse = await fetch(chemin, {
+    ...options,
+    headers: { Authorization: "Bearer " + cle, ...(options.headers || {}) },
+  });
+  if (reponse.status === 401) { demanderCle("Clé refusée par le Pi."); throw new Refus("clé refusée"); }
+  if (!reponse.ok) {
+    let detail = reponse.statusText;
+    try { detail = (await reponse.json()).detail || detail; } catch (e) { /* pas de JSON */ }
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return reponse;
+}
+
+async function lire(chemin) { return (await api(chemin)).json(); }
+
+async function ordre(chemin, texteOk) {
+  try {
+    await api(chemin, { method: "POST" });
+    dire(texteOk, "vert");
+  } catch (erreur) {
+    if (!(erreur instanceof Refus)) dire("Refusé : " + erreur.message, "rouge");
+  }
+  rafraichir();
+}
+
+// ------------------------------------------------------------ clé
+
+function demanderCle(texte) {
+  $("appli").hidden = true;
+  $("cle").hidden = false;
+  $("erreur-cle").textContent = texte || "";
+}
+
+$("formulaire-cle").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  cle = $("saisie-cle").value.trim();
+  try { localStorage.setItem("cle_api", cle); } catch (e) { /* téléphone sans mémoire : tant pis */ }
+  demarrer();
+});
+
+$("oublier-cle").addEventListener("click", (ev) => {
+  ev.preventDefault();
+  try { localStorage.removeItem("cle_api"); } catch (e) { /* rien */ }
+  cle = "";
+  demanderCle("");
+});
+
+// ------------------------------------------------------------ vues
+
+let vue = "etat";
+for (const bouton of document.querySelectorAll("nav button")) {
+  bouton.addEventListener("click", () => montrer(bouton.dataset.vue));
+}
+
+function montrer(nom) {
+  vue = nom;
+  for (const b of document.querySelectorAll("nav button")) b.classList.toggle("actif", b.dataset.vue === nom);
+  for (const s of document.querySelectorAll("main section")) s.classList.toggle("actif", s.id === "vue-" + nom);
+  if (nom === "historique") chargerCycles(true);
+  if (nom === "photos") chargerPhotos(true);
+  if (nom === "checklist") chargerChecklist();
+}
+
+// ------------------------------------------------------------ état
+
+const STATUTS = { en_cours: "en cours", alarme: "EN ALARME", fini: "fini", abandonne: "abandonné" };
+let minuterie = null;
+
+function bandeau(etat) {
+  const b = $("bandeau");
+  if (etat.alarmes_ouvertes.length || etat.modules.some((m) => m.statut === "alarme")) {
+    b.className = "rouge"; b.textContent = "ALARME : voir ci-dessous quoi faire";
+  } else if (etat.en_pause) {
+    b.className = "orange"; b.textContent = "Machine en PAUSE";
+  } else if (etat.attendent_go.length) {
+    b.className = "orange"; b.textContent = "La machine attend votre Go";
+  } else if (etat.modules.some((m) => m.statut === "en_cours")) {
+    b.className = "vert"; b.textContent = "En marche";
+  } else {
+    b.className = "gris"; b.textContent = "À l'arrêt (aucun cycle en cours)";
+  }
+}
+
+function afficherEtat(etat) {
+  $("heure").textContent = "· " + heure(etat.heure);
+  $("version").textContent = etat.version;
+  $("erreur").textContent = "";
+  bandeau(etat);
+  $("bouton-pause").hidden = etat.en_pause;
+  $("bouton-reprendre").hidden = !etat.en_pause;
+
+  remplir("gos", ...etat.attendent_go.map((module) =>
+    el("button", {
+      classe: "gros vert",
+      surclick: () => {
+        if (confirm("Donner le Go à « " + module + " » ? Vérifier d'abord que la machine est libre."))
+          ordre("/api/go/" + encodeURIComponent(module), "Go donné à « " + module + " ».");
+      },
+    }, "GO : " + module)));
+
+  remplir("alarmes", ...etat.alarmes_ouvertes.map((a) =>
+    el("div", { classe: "carte alarme" },
+      el("strong", {}, "Alarme n° " + a.id + " — " + a.module + (a.etape ? " (étape « " + a.etape + " »)" : "")),
+      el("div", { classe: "doux" }, heure(a.quand)),
+      el("div", {}, a.message),
+      a.quoi_faire && el("div", { classe: "quoi" }, el("strong", {}, "Quoi faire : "), a.quoi_faire),
+      el("button", {
+        classe: "petit",
+        surclick: () => {
+          if (confirm("Acquitter l'alarme n° " + a.id + " ? Le problème doit être corrigé : l'étape sera refaite après un Go."))
+            ordre("/api/alarmes/" + a.id + "/acquitter", "Alarme n° " + a.id + " acquittée.");
+        },
+      }, "J'ai corrigé : acquitter"))));
+
+  remplir("modules", ...(etat.modules.length ? etat.modules.map((m) =>
+    el("div", { classe: "carte " + (m.statut === "alarme" ? "alarme" : m.attend ? "attention" : "ok") },
+      el("strong", {}, m.module), " — " + (STATUTS[m.statut] || m.statut),
+      el("div", {}, "Étape " + m.numero + " sur " + m.nombre_etapes + " : " + m.etape),
+      m.attend && el("div", { classe: "doux" }, "Attend : " + m.attend),
+      m.zones.length ? el("div", { classe: "doux" }, "Zones tenues : " + m.zones.join(", ")) : null))
+    : [el("p", { classe: "doux" }, "Aucun module en route.")]));
+
+  clearTimeout(minuterie);
+  minuterie = setTimeout(rafraichir, (etat.rafraichir_s || 2) * 1000);
+}
+
+async function rafraichir() {
+  clearTimeout(minuterie);
+  try {
+    afficherEtat(await lire("/api/etat"));
+  } catch (erreur) {
+    if (erreur instanceof Refus) return;
+    $("bandeau").className = "gris";
+    $("bandeau").textContent = "Pas de liaison avec le Pi";
+    $("erreur").textContent = erreur.message;
+    minuterie = setTimeout(rafraichir, 5000);
+  }
+}
+
+$("bouton-pause").addEventListener("click", () => ordre("/api/pause", "Machine en pause."));
+$("bouton-reprendre").addEventListener("click", () => {
+  if (confirm("Reprendre la machine ? Vérifier d'abord que personne n'est dedans."))
+    ordre("/api/reprendre", "Machine reprise.");
+});
+
+$("bouton-anciennes").addEventListener("click", async () => {
+  try {
+    const alarmes = await lire("/api/alarmes?toutes=true&limite=30");
+    remplir("anciennes", el("h2", {}, "Dernières alarmes"), ...alarmes.map((a) =>
+      el("div", { classe: "carte " + (a.acquittee_le ? "" : "alarme") },
+        el("strong", {}, "N° " + a.id + " — " + a.module), " · " + heure(a.quand),
+        el("div", {}, a.message),
+        el("div", { classe: "doux" }, a.acquittee_le
+          ? "Acquittée le " + heure(a.acquittee_le) + " par " + a.acquittee_par : "Pas encore acquittée"))));
+  } catch (erreur) { if (!(erreur instanceof Refus)) dire(erreur.message, "rouge"); }
+});
+
+// ------------------------------------------------------------ historique
+
+let dernierCycle = null;
+
+async function chargerCycles(depuisLeDebut) {
+  if (depuisLeDebut) { dernierCycle = null; remplir("cycles"); remplir("cycle"); }
+  try {
+    const cycles = await lire("/api/historique?limite=30" + (dernierCycle ? "&avant=" + dernierCycle : ""));
+    for (const c of cycles) {
+      $("cycles").append(el("div", { classe: "carte " + (c.issue === "abandonne" ? "attention" : "ok") },
+        el("strong", {}, "Cycle n° " + c.id + " — " + c.module), c.fut ? " · fût " + c.fut : "",
+        el("div", { classe: "doux" }, heure(c.debut) + " → " + (c.fin ? heure(c.fin) : "en cours")
+          + " · " + c.nombre_seaux + " seau(x)" + (c.issue ? " · " + c.issue : "")),
+        el("button", { classe: "petit", surclick: () => montrerCycle(c.id) }, "Détail")));
+      dernierCycle = c.id;
+    }
+    $("plus-cycles").hidden = cycles.length < 30;
+    if (depuisLeDebut && !cycles.length) remplir("cycles", el("p", { classe: "doux" }, "Aucun cycle noté."));
+  } catch (erreur) { if (!(erreur instanceof Refus)) dire(erreur.message, "rouge"); }
+}
+$("plus-cycles").addEventListener("click", () => chargerCycles(false));
+
+function tableau(titres, lignes) {
+  return el("table", {}, el("tr", {}, ...titres.map((t) => el("th", {}, t))),
+    ...lignes.map((l) => el("tr", {}, ...l.map((v) => el("td", {}, v === null ? "" : v)))));
+}
+
+async function montrerCycle(numero) {
+  try {
+    const c = await lire("/api/historique/" + numero);
+    const grille = el("div", { classe: "photos" });
+    remplir("cycle",
+      el("h2", {}, "Cycle n° " + c.id + " — " + c.module),
+      el("div", { classe: "carte" },
+        el("div", {}, "Début : " + heure(c.debut)), el("div", {}, "Fin : " + (c.fin ? heure(c.fin) : "en cours")),
+        c.fut && el("div", {}, "Fût : " + c.fut), c.remarque && el("div", {}, "Remarque : " + c.remarque)),
+      el("h2", {}, "Seaux"),
+      tableau(["Seau", "Type", "Mycélium"], c.seaux.map((s) => [s.seau, s.type_seau,
+        s.doses.map((d) => d.bocal + (d.quantite_g !== null ? " (" + d.quantite_g + " g)" : "")).join(", ")])),
+      el("h2", {}, "Étapes"),
+      tableau(["Étape", "Début", "Durée (s)", "Issue"], c.etapes.map((e) => [e.etape, heure(e.debut), e.duree_s, e.issue])),
+      el("h2", {}, "Mesures"),
+      tableau(["Quand", "Mesure", "Valeur", "Seau"], c.mesures.map((m) => [heure(m.quand), m.nom, m.valeur + " " + m.unite, m.seau])),
+      el("h2", {}, "Alarmes"),
+      tableau(["N°", "Quand", "Message"], c.alarmes.map((a) => [a.id, heure(a.quand), a.message])),
+      el("h2", {}, "Photos"), grille);
+    for (const p of c.photos) grille.append(vignette(p));
+    $("cycle").scrollIntoView({ behavior: "smooth" });
+  } catch (erreur) { if (!(erreur instanceof Refus)) dire(erreur.message, "rouge"); }
+}
+
+// ------------------------------------------------------------ photos
+
+let dernierePhoto = null;
+
+// Les photos demandent la clé : on les lit avec fetch, puis on les montre.
+function vignette(p) {
+  const image = el("img", { alt: "photo n° " + p.id });
+  const lien = el("a", { href: "#" }, image);
+  api("/api/photos/" + p.id).then((r) => r.blob()).then((blob) => {
+    const adresse = URL.createObjectURL(blob);
+    image.src = adresse;
+    lien.addEventListener("click", (ev) => { ev.preventDefault(); window.open(adresse, "_blank"); });
+  }).catch(() => { image.alt = "photo n° " + p.id + " introuvable"; });
+  const legende = [heure(p.quand), p.camera, p.seau && "seau " + p.seau, p.bocal && "bocal " + p.bocal,
+    p.cycle_id && "cycle " + p.cycle_id].filter(Boolean).join(" · ");
+  return el("figure", {}, lien, el("figcaption", {}, legende));
+}
+
+async function chargerPhotos(depuisLeDebut) {
+  if (depuisLeDebut) { dernierePhoto = null; remplir("grille"); }
+  try {
+    const photos = await lire("/api/photos?limite=24" + (dernierePhoto ? "&avant=" + dernierePhoto : ""));
+    for (const p of photos) { $("grille").append(vignette(p)); dernierePhoto = p.id; }
+    $("plus-photos").hidden = photos.length < 24;
+    if (depuisLeDebut && !photos.length) remplir("grille", el("p", { classe: "doux" }, "Aucune photo."));
+  } catch (erreur) { if (!(erreur instanceof Refus)) dire(erreur.message, "rouge"); }
+}
+$("plus-photos").addEventListener("click", () => chargerPhotos(false));
+
+// ------------------------------------------------------------ check-list
+
+const NIVEAUX = { ok: "ok", inconnu: "", attention: "attention", bloquant: "alarme" };
+
+async function chargerChecklist() {
+  remplir("constats", el("p", { classe: "doux" }, "Vérification…"));
+  try {
+    const liste = await lire("/api/checklist");
+    remplir("constats",
+      el("div", { classe: "carte " + (liste.prete ? "ok" : "alarme") }, el("strong", {},
+        liste.prete ? "La production peut être lancée." : "La production NE PEUT PAS être lancée : corriger les lignes rouges.")),
+      ...liste.constats.map((c) => el("div", { classe: "carte " + NIVEAUX[c.niveau] },
+        el("strong", {}, c.sujet), " — " + c.niveau, el("div", {}, c.texte),
+        c.quoi_faire && el("div", { classe: "quoi" }, el("strong", {}, "Quoi faire : "), c.quoi_faire))));
+  } catch (erreur) { if (!(erreur instanceof Refus)) remplir("constats", el("div", { classe: "carte alarme" }, erreur.message)); }
+}
+$("bouton-checklist").addEventListener("click", chargerChecklist);
+
+// ------------------------------------------------------------ départ
+
+function demarrer() {
+  if (!cle) { demanderCle(""); return; }
+  $("cle").hidden = true;
+  $("appli").hidden = false;
+  montrer(vue);
+  rafraichir();
+}
+demarrer();
+</script>
+</body>
+</html>

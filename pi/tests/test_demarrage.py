@@ -2,7 +2,9 @@
 
 import configparser
 import json
+import socket
 import threading
+import urllib.request
 
 from vidange.demarrage import (
     CODE_OK,
@@ -172,3 +174,47 @@ def test_une_coupure_de_courant_est_notee(reglages, tmp_path):
     assert alarme["module"] == "alimentation"
     assert "s'est arrêté net" in alarme["message"]
     assert "prise d'origine" in alarme["quoi_faire"]
+
+
+def test_l_api_demarre_avec_la_cle_et_s_arrete_avec_le_programme(
+    reglages, entrees_sorties, tmp_path
+):
+    with socket.socket() as prise:
+        prise.bind(("127.0.0.1", 0))
+        port = prise.getsockname()[1]
+    remplacer(reglages / "programme.yaml", "adresse: 0.0.0.0", "adresse: 127.0.0.1")
+    remplacer(reglages / "programme.yaml", "port: 8080", f"port: {port}")
+    secrets = tmp_path / "secrets.yaml"
+    secrets.write_text("cle_api: une-cle-de-test-assez-longue\n", encoding="utf-8")
+    secrets.chmod(0o600)
+    raccords, messages, _ = raccords_faux(entrees_sorties)
+    arguments = [*options(reglages, tmp_path), "--entrees-sorties", str(entrees_sorties)]
+    arret = threading.Event()
+    fil = threading.Thread(target=lambda: principal(arguments, arret, raccords))
+    fil.start()
+    try:
+        attendre(lambda: "READY=1" in messages)
+        demande = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/etat",
+            headers={"Authorization": "Bearer une-cle-de-test-assez-longue"},
+        )
+        with urllib.request.urlopen(demande, timeout=5) as reponse:
+            etat = json.loads(reponse.read())
+        # Le retour en lieu sûr est proposé au démarrage : il attend le Go.
+        assert etat["attendent_go"] == ["lieu_sur"]
+    finally:
+        arret.set()
+        fil.join(10)
+    journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
+    assert f"API et page web à l'écoute : http://127.0.0.1:{port}" in journal
+    assert "API et page web : pas de clé" not in journal
+    assert "API arrêtée" in journal
+
+
+def test_sans_cle_la_machine_demarre_sans_api(reglages, tmp_path):
+    arret = threading.Event()
+    arret.set()
+    assert principal(options(reglages, tmp_path), arret) == CODE_OK
+    journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
+    assert "l'API et la page web ne démarrent pas" in journal
+    assert "[attention] API et page web : pas de clé" in journal

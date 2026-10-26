@@ -14,6 +14,9 @@ from vidange.reglages import ErreurReglages, Modele, lire_yaml, rediger, traduir
 
 journal = donner_journal("secrets")
 
+# Une clé plus courte se devine trop vite.
+LONGUEUR_MIN_CLE = 16
+
 
 class Secrets(Modele):
     """Les secrets connus. Chaque tâche qui a besoin d'un secret l'ajoute ici et dans le modèle."""
@@ -25,6 +28,16 @@ class Secrets(Modele):
     @classmethod
     def _vide_veut_dire_absent(cls, valeur: object) -> object:
         return None if valeur == "" else valeur
+
+    @field_validator("cle_api")
+    @classmethod
+    def _cle_assez_longue(cls, cle: SecretStr | None) -> SecretStr | None:
+        if cle is not None and len(cle.get_secret_value()) < LONGUEUR_MIN_CLE:
+            raise ValueError(
+                f"clé trop courte : au moins {LONGUEUR_MIN_CLE} caractères. En fabriquer une avec "
+                "« python3 -c 'import secrets; print(secrets.token_urlsafe(24))' »"
+            )
+        return cle
 
 
 def charger_secrets(chemin: Path) -> Secrets:

@@ -13,6 +13,8 @@
    et propose le retour en lieu sûr (il attend le Go de Karulium).
 7. Lance la surveillance : santé du Pi, onduleur, chien de garde (et dit à systemd « prêt »),
    bilan de chaque alarme. Écrit la check-list de démarrage au journal.
+   Lance l'API et la page web, si le fichier de secrets donne une clé (sinon la machine
+   tourne quand même, et la check-list le signale).
 8. Attend l'ordre d'arrêt, puis arrête tout proprement (machine en pause, état noté). Si l'ordre
    vient de l'onduleur, éteint le Pi à la fin.
 
@@ -32,6 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from vidange import __version__
+from vidange.api import ServeurApi, Services, constats_api, creer_app
 from vidange.chef import Carnet, Chef, ErreurChef, Module
 from vidange.entrees_sorties import EntreesSorties, charger_entrees_sorties
 from vidange.fiabilite import (
@@ -55,7 +58,7 @@ from vidange.fiabilite.chien_de_garde import notifier_systemd
 from vidange.fiabilite.lieu_sur import NOM as NOM_LIEU_SUR
 from vidange.fiabilite.onduleur import RAISON_ARRET
 from vidange.fiabilite.onduleur import SIGNAL as SIGNAL_ONDULEUR
-from vidange.fichier_secrets import charger_secrets
+from vidange.fichier_secrets import Secrets, charger_secrets
 from vidange.fluidnc import Liaison
 from vidange.fluidnc.ports import Port
 from vidange.journal import NOM_FICHIER, configurer_journal, donner_journal
@@ -69,7 +72,7 @@ from vidange.registre import (
     SauvegardeQuotidienne,
     ouvrir_registre,
 )
-from vidange.reglages import ErreurReglages, charger_reglages
+from vidange.reglages import ErreurReglages, Reglages, charger_reglages
 
 # Codes de sortie. Le service systemd (pi/systeme/vidange.service) utilise CODE_REGLAGES_FAUX.
 CODE_OK = 0
@@ -192,6 +195,18 @@ def preparer_chef(chef: Chef, lieu_sur: Module | None) -> tuple[list[str], str |
     return repris, None
 
 
+def preparer_api(secrets: Secrets, reglages: Reglages, services: Services) -> ServeurApi | None:
+    """Le serveur de l'API, ou None s'il n'y a pas de clé (l'API ne tourne jamais sans clé)."""
+    if secrets.cle_api is None:
+        journal.warning(
+            "Pas de clé « cle_api » dans le fichier de secrets : l'API et la page web "
+            "ne démarrent pas."
+        )
+        return None
+    app = creer_app(services, reglages.programme.api, secrets.cle_api.get_secret_value())
+    return ServeurApi(app, reglages.programme.api)
+
+
 def principal(
     arguments: list[str] | None = None,
     arret: threading.Event | None = None,
@@ -221,7 +236,7 @@ def principal(
             nombre_fichiers=reglages_journal.nombre_fichiers,
         )
         entrees_sorties = charger_entrees_sorties(chemin_entrees_sorties)
-        charger_secrets(chemin_secrets)
+        secrets = charger_secrets(chemin_secrets)
     except ErreurReglages as erreur:
         journal.error("%s", erreur)
         return CODE_REGLAGES_FAUX
@@ -302,6 +317,7 @@ def principal(
     # Le fil des bilans s'arrête après le chef : il finit les bilans des dernières alarmes.
     arret_bilans = threading.Event()
     fil_bilans = bilans.demarrer(arret_bilans)
+    serveur: ServeurApi | None = None
     try:
         for liaison in liaisons.values():
             liaison.demarrer()
@@ -321,8 +337,14 @@ def principal(
                 "registre": lambda: constats_registre(registre),
                 "santé du Pi": sante.constats,
                 "onduleur": onduleur.constats,
+                "API": lambda: constats_api(serveur),
             }
         )
+        serveur = preparer_api(
+            secrets, reglages, Services(chef, registre, bilans.acquitter, checklist.verifier)
+        )
+        if serveur is not None:
+            serveur.demarrer()
         gardien.pret()
         journal.info(
             "Programme du Pi version %s démarré, réglages : %s", __version__, dossier_reglages
@@ -331,6 +353,9 @@ def principal(
         arret.wait()
         journal.info("Arrêt (%s) : arrêt propre.", raison_arret[0])
     finally:
+        # Plus d'ordre de la page web pendant l'arrêt.
+        if serveur is not None:
+            serveur.arreter()
         gardien.arreter()
         # Un module en plein geste : les axes s'arrêtent sans perdre leur position, et l'état
         # est noté dans le carnet (reprise au prochain démarrage, après le Go).

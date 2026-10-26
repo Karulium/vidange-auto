@@ -46,3 +46,25 @@ fiabilite:
   # Bilan écrit à chaque alarme (dossier donnees/bilans) : nombre de lignes du journal recopiées.
   bilan:
     lignes_journal: 50
+
+# API du Pi et page web locale (téléphone, PC), protégées par la clé « cle_api » du fichier de secrets.
+# Sans clé, l'API ne démarre pas (la machine, elle, tourne quand même).
+api:
+  # 0.0.0.0 : l'API répond sur toutes les liaisons réseau du Pi (réseau local et Tailscale).
+  # Aucun port n'est ouvert sur la box : depuis Internet, on ne passe que par Tailscale.
+  adresse: 0.0.0.0
+  # Page web : http://<adresse du Pi>:8080
+  port: 8080
+  # Réseaux qui ont le droit de joindre l'API ; toute autre adresse est refusée.
+  reseaux_autorises:
+    - 127.0.0.0/8        # le Pi lui-même
+    - ::1/128
+    - 192.168.0.0/16     # réseaux locaux habituels (box)
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 100.64.0.0/10      # Tailscale
+    - fd7a:115c:a1e0::/48
+  # La page web redemande l'état de la machine tous les (s).
+  rafraichir_s: 2
+  # Nombre de lignes rendues au plus d'un coup (historique, alarmes, photos).
+  lignes_max: 200
