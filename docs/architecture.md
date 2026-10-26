@@ -10,6 +10,10 @@
 | RP2040 + LIS3DH | Détection des chocs sur le chariot Z | Petit programme (`accelerometre/`) |
 | Écran Nextion 4,3" (porte de l'armoire) | Tableau de bord sur place, relié au Pi par UART (GPIO 4/5) | Pages Nextion (`nextion/`) + côté Pi |
 | ADS1115 (I2C) | Capteur de vide du venturi (voie A0) | Côté Pi |
+| SHT31 (I2C 0x44, partagé avec l'ADS1115 en 0x48, GPIO 2/3) | Température et humidité de l'armoire | Côté Pi |
+| Micro USB | Écoute des bruits anormaux | Côté Pi |
+| Voyant + buzzer « attention » (sortie relais ou GPIO) | Prévenir sur place avant un mouvement lancé à distance ou une reprise | Côté Pi |
+| Pile de l'horloge du Pi 5 | Heure juste sans réseau | Rien |
 | Adaptateur USB-RS485 | 2 transmetteurs d'ozone | Côté Pi |
 | Cartes 8 relais, cartes d'entrées 24 V optocouplées | Sorties et entrées tout-ou-rien | Réglages + côté Pi |
 | Caméras : plafond (Camera Module 3 Wide), tête de griffe (USB 5 Mpx), dosage (sur servo) | Vision, QR, photos | Côté Pi |
