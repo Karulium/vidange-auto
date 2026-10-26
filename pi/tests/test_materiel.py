@@ -30,6 +30,7 @@ def test_au_depart_rien_n_est_actionne_et_tout_est_au_repos(faux_et_materiel):
         "reed_panneau_poste_fut": False,
         "porte_spray": False,
         "fdc_stockage_haut": False,
+        "onduleur_sur_batterie": False,
     }
     assert materiel.lire("voyant_buzzer") is False
     assert faux.commande("voyant_buzzer") is False
@@ -104,7 +105,8 @@ def test_carte_relais_en_gpio_direct(entrees_sorties):
     )
     faux, materiel = ouvrir(entrees_sorties)
     gpio = faux.gpios["/dev/gpiochip0"]
-    assert gpio.sorties == {"GPIO23": False}
+    # GPIO12 : le battement du Pi, sur la carte « pi » elle-même.
+    assert gpio.sorties == {"GPIO12": False, "GPIO23": False}
     materiel.ecrire("voyant_buzzer", True)
     assert gpio.niveau("GPIO23") is True
     assert faux.commande("voyant_buzzer") is True
@@ -240,4 +242,5 @@ def test_signaux_des_cartes_sans_liaison_ignores(entrees_sorties):
     entrees_sorties.write_text(texte, encoding="utf-8")
     _, materiel = ouvrir(entrees_sorties)
     assert "reed_panneau_poste_fut" not in materiel.branchements
-    assert materiel.lire_entrees() == {}
+    # Reste l'entrée branchée sur les broches du Pi lui-même.
+    assert materiel.lire_entrees() == {"onduleur_sur_batterie": False}

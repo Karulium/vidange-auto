@@ -20,3 +20,29 @@ registre:
   copies_gardees: 30
   # Tous les combien de minutes on regarde s'il faut faire la copie du jour.
   periode_verification_min: 10
+
+fiabilite:
+  # Santé de l'informatique du Pi : mesurée, notée dans le registre, et alerte au-delà des seuils.
+  sante:
+    periode_min: 5
+    temperature_pi_attention_c: 75
+    # Place libre sur le SSD : sous « attention » on prévient ; sous « minimum », la check-list
+    # refuse de lancer la production (photos et registre ne pourraient plus s'écrire).
+    disque_libre_attention_go: 50
+    disque_libre_minimum_go: 5
+    memoire_libre_attention_mo: 300
+    sauvegarde_age_max_h: 30
+  # Chien de garde : le Pi surveille les cartes et le chef, et dit « je vis » à systemd
+  # (qui relance le programme s'il se fige : WatchdogSec dans pi/systeme/vidange.service).
+  chien_de_garde:
+    periode_s: 2
+    chef_fige_s: 10
+  # Arrêt propre sur onduleur : quand le signal « onduleur_sur_batterie » dit que le courant
+  # est coupé depuis ce temps, la machine se met en pause, l'état est noté, le Pi s'éteint.
+  onduleur:
+    periode_s: 1
+    delai_avant_arret_s: 60
+    commande_arret: [sudo, -n, /usr/bin/systemctl, poweroff]
+  # Bilan écrit à chaque alarme (dossier donnees/bilans) : nombre de lignes du journal recopiées.
+  bilan:
+    lignes_journal: 50

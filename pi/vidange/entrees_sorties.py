@@ -184,6 +184,9 @@ class Signal(Modele):
     conversion: Conversion | None = None
     # Pour un appareil Modbus : où lire sa mesure.
     modbus: Modbus | None = None
+    # Pour une entrée tout-ou-rien : l'état attendu à la check-list de démarrage (porte fermée,
+    # sécurité en état...). Un autre état empêche de lancer la production, avec son nom.
+    au_demarrage: Literal["actionne", "repos"] | None = None
 
     @field_validator("broche", mode="before")
     @classmethod
@@ -219,6 +222,8 @@ class Signal(Modele):
         for champ in ("appareil", "fichier"):
             if self.type not in BUS and getattr(self, champ) is not None:
                 erreurs.append(f"« {champ} » ne sert qu'aux bus (i2c, serie)")
+        if self.au_demarrage is not None and self.type not in ("contact", "pnp", "npn"):
+            erreurs.append("« au_demarrage » ne sert qu'aux entrées contact, pnp ou npn")
         if self.conversion is not None and self.type != "mesure":
             erreurs.append("« conversion » ne sert qu'aux signaux de type mesure")
         if self.appareil == "transmetteur_modbus":

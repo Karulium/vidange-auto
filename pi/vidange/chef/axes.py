@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from vidange.chef.etapes import Condition, ErreurEtape
 from vidange.fluidnc import Commande, ErreurFluidnc, Liaison, protocole
 from vidange.journal import donner_journal
+from vidange.quoi_faire import CARTE_REDEMARREE, LIGNE_REFUSEE, pour_carte
 from vidange.reglages import Machine
 
 journal = donner_journal("chef.axes")
@@ -26,15 +27,15 @@ class Axes:
         self._machine = machine
         self._liaisons = dict(liaisons)
         self._commandes: list[tuple[str, Commande]] = []
+        # Redémarrages de chaque carte au moment du dernier envoi (une carte qui redémarre
+        # pendant le geste perd sa position).
+        self._redemarrages: dict[str, int] = {}
         noms = ", ".join(f"« {nom} »" for nom in self._liaisons)
         self.pretes = Condition(f"cartes {noms} connectées et sans alarme", self._cartes_pretes)
+        # Pendant un geste : une carte coupée ou en alarme lève l'alarme du module, avec le
+        # « quoi faire » de sa cause exacte (catalogue vidange/quoi_faire.py).
         self.surveillance = Condition(
-            f"cartes {noms} connectées et sans alarme",
-            self._cartes_pretes,
-            quoi_faire=(
-                "Lire l'alarme de la carte (journal ou vidange-fluidnc), en trouver la cause "
-                "sur la machine, débloquer la carte, puis acquitter et donner le Go."
-            ),
+            f"cartes {noms} connectées et sans alarme", self._surveiller_cartes
         )
         self.arrives = Condition("axes arrivés", self.arrive)
 
@@ -43,6 +44,14 @@ class Axes:
             etat.connectee and etat.etat is not None and not etat.en_alarme
             for etat in (liaison.etat for liaison in self._liaisons.values())
         )
+
+    def _surveiller_cartes(self) -> bool:
+        for nom, liaison in self._liaisons.items():
+            probleme = pour_carte(liaison.etat)
+            if probleme is not None:
+                texte, quoi_faire = probleme
+                raise ErreurEtape(f"carte « {nom} » : {texte}", quoi_faire)
+        return True
 
     def aller(self, position: str) -> None:
         """Envoie chaque carte concernée vers la position, sans attendre (voir `arrive`)."""
@@ -59,6 +68,7 @@ class Axes:
         self._commandes = []
         for carte, mots_carte in mots.items():
             liaison = self._liaisons[carte]
+            self._redemarrages[carte] = liaison.etat.redemarrages
             if (liaison.etat.etat or "").startswith("Hold"):
                 # Carte figée par une pause ou une alarme d'avant : on la relance d'abord.
                 # Le reste de l'ancien mouvement part avant le nouveau (positions absolues).
@@ -73,7 +83,18 @@ class Axes:
         """Vrai quand le dernier déplacement est fini ; lève ErreurEtape s'il a échoué."""
         for carte, commande in self._commandes:
             if commande.erreur is not None:
-                raise ErreurEtape(f"carte « {carte} », « {commande.ligne} » : {commande.erreur}")
+                # La cause exacte (alarme, câble coupé) dit quoi faire ; sinon, ligne refusée.
+                etat = self._liaisons[carte].etat
+                probleme = pour_carte(etat)
+                if etat.redemarrages != self._redemarrages.get(carte, etat.redemarrages):
+                    quoi_faire = CARTE_REDEMARREE
+                elif probleme is not None:
+                    quoi_faire = probleme[1]
+                else:
+                    quoi_faire = LIGNE_REFUSEE
+                raise ErreurEtape(
+                    f"carte « {carte} », « {commande.ligne} » : {commande.erreur}", quoi_faire
+                )
         return all(commande.finie for _, commande in self._commandes)
 
     def pauser(self) -> None:

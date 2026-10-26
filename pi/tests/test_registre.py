@@ -335,3 +335,35 @@ def test_outil_etat_et_sauvegarder(reglages: Path, tmp_path: Path, capsys):
     sortie = capsys.readouterr().out
     assert f"version {montees.VERSION}" in sortie
     assert "Copies de secours : 1" in sortie
+
+
+# ------------------------------------------------------------ tâche 7 : bilans d'alarme
+
+
+def test_alarme_avec_son_bilan_et_alarmes_ouvertes(registre: Registre):
+    premiere = registre.noter_alarme("exemple", "trop long", "Regarder.", bilan="bilans/a.json")
+    seconde = registre.noter_alarme("alimentation", "coupure")
+    registre.acquitter_alarme(seconde, "karulium")
+    ouvertes = registre.alarmes_ouvertes()
+    assert [ligne["id"] for ligne in ouvertes] == [premiere]
+    assert ouvertes[0]["bilan"] == "bilans/a.json"
+
+
+def test_montee_de_la_version_1_a_la_version_2(tmp_path: Path):
+    """Une base de la tâche 6 (version 1) reçoit la colonne « bilan » sans rien perdre."""
+    chemin = tmp_path / "registre.sqlite"
+    with sqlite3.connect(chemin) as cnx:
+        for requete in montees.MONTEES[0]:
+            cnx.execute(requete)
+        cnx.execute(
+            "INSERT INTO alarmes (quand, module, message) VALUES ('2026-10-01', 'vieux', 'avant')"
+        )
+        cnx.execute("PRAGMA user_version = 1")
+    cnx.close()
+    registre = Registre(chemin, tmp_path / "photos")
+    try:
+        assert registre.version == 2
+        assert registre.alarmes_ouvertes()[0]["message"] == "avant"
+        assert registre.alarmes_ouvertes()[0]["bilan"] is None
+    finally:
+        registre.fermer()

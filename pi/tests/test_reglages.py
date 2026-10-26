@@ -216,3 +216,49 @@ def test_duree_negative(reglages):
 def test_reglages_du_chef_manquants(reglages):
     remplacer(reglages / "programme.yaml", "  alarme_pause_tout: true\n", "")
     assert "programme.yaml, chef → alarme_pause_tout : manque" in erreur_de(reglages)
+
+
+# ---------------------------------------------------------------- tâche 7 : fiabilité
+
+
+def test_lieu_sur_du_depot():
+    reglages = charger_reglages(DOSSIER_PI / "reglages")
+    gestes = reglages.machine.lieu_sur
+    assert [(g.prise_origine, g.aller) for g in gestes] == [
+        ("portique", None),
+        (None, "exemple_repos"),
+    ]
+    assert reglages.programme.fiabilite.onduleur.commande_arret[0] == "sudo"
+
+
+def test_lieu_sur_verifie(reglages):
+    machine = reglages / "machine.yaml"
+    remplacer(machine, "  - prise_origine: portique\n", "  - prise_origine: inconnue\n")
+    remplacer(machine, "  - aller: exemple_repos\n", "  - aller: nulle_part\n")
+    ajouter(machine, "  - prise_origine: portique\n    delai: absent\n")
+    message = erreur_de(reglages)
+    assert "lieu_sur n° 2 : position inconnue « nulle_part »" in message
+    assert "lieu_sur n° 3 : délai « absent » absent de durees" in message
+
+
+def test_un_seul_geste_par_ligne_de_lieu_sur(reglages):
+    ajouter(reglages / "machine.yaml", "  - delai: exemple_deplacement_max\n")
+    message = erreur_de(reglages)
+    assert "machine.yaml, lieu_sur → n° 3 : écrire « prise_origine: carte » ou « aller" in message
+
+
+def test_lieu_sur_carte_inconnue(reglages):
+    remplacer(
+        reglages / "machine.yaml", "  - prise_origine: portique\n", "  - prise_origine: zut\n"
+    )
+    assert "lieu_sur n° 1 : carte « zut » absente de fluidnc.yaml" in erreur_de(reglages)
+
+
+def test_seuils_de_sante_verifies(reglages):
+    remplacer(
+        reglages / "programme.yaml", "disque_libre_minimum_go: 5", "disque_libre_minimum_go: 80"
+    )
+    remplacer(reglages / "programme.yaml", "chef_fige_s: 10", "chef_fige_s: 3")
+    message = erreur_de(reglages)
+    assert "disque_libre_minimum_go doit être plus petit que disque_libre_attention_go" in message
+    assert "chef_fige_s (3 s) doit valoir au moins 2 fois periode_s (2 s)" in message

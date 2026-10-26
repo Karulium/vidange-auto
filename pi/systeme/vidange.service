@@ -9,7 +9,12 @@ After=local-fs.target
 StartLimitIntervalSec=0
 
 [Service]
-Type=simple
+# Le programme dit à systemd quand il est prêt, puis « je vis » toutes les 2 s tant que le chef
+# d'orchestre tourne (programme.yaml → fiabilite → chien_de_garde). S'il se tait WatchdogSec
+# secondes (programme figé), systemd l'arrête et le relance comme après un plantage.
+Type=notify
+NotifyAccess=main
+WatchdogSec=20
 User=vidange
 Group=vidange
 WorkingDirectory=/opt/vidange-auto/pi

@@ -407,6 +407,7 @@ def test_l_etat_est_note_a_chaque_changement(horloge, banc, tmp_path):
         "go_recu": False,
         "zones": ["zone_a"],
         "alarme": None,
+        "memoire": {},
     }
     chef.pause()
     assert carnet.lire()["en_pause"] is True
@@ -470,3 +471,102 @@ def test_carnet_absent_ou_abime(tmp_path):
     carnet.chemin.write_text("{abîmé", encoding="utf-8")
     with pytest.raises(ErreurChef, match="illisible"):
         carnet.lire()
+
+
+# ---------------------------------------------------------------- tâche 7 : fiabilité
+
+
+def test_une_erreur_d_etape_peut_dire_quoi_faire(horloge, banc):
+    def geste():
+        raise ErreurEtape("carte « portique » : alarme 1", "Dégager l'axe.")
+
+    chef = nouveau_chef(horloge)
+    chef.lancer(Module("essai", (Etape("un", QUOI, action=geste),)))
+    tour(chef, horloge)
+    alarme = etat_de(chef).alarme
+    assert alarme.message == "carte « portique » : alarme 1"
+    assert alarme.quoi_faire == "Dégager l'axe."
+
+
+def test_capteur_muet_donne_son_quoi_faire(horloge):
+    from vidange.materiel import ErreurMateriel
+    from vidange.quoi_faire import CAPTEUR_MUET
+
+    def lire():
+        raise ErreurMateriel("signal « porte » : pas de réponse")
+
+    chef = nouveau_chef(horloge)
+    chef.lancer(Module("essai", (Etape("un", QUOI, entree=(Condition("porte", lire),)),)))
+    tour(chef, horloge)
+    assert etat_de(chef).alarme.quoi_faire == CAPTEUR_MUET
+
+
+def test_chaque_nouvelle_alarme_est_annoncee(horloge, banc):
+    chef = nouveau_chef(horloge)
+    recues = []
+    chef.sur_alarme.append(recues.append)
+    # Un écouteur qui plante ne gêne ni le chef ni les autres écouteurs.
+    chef.sur_alarme.insert(0, lambda alarme: 1 / 0)
+    banc.drapeaux["pret"] = True
+    chef.lancer(module_simple(banc))
+    tour(chef, horloge)
+    tour(chef, horloge, 11)  # délai « court » dépassé
+    assert [alarme.etape for alarme in recues] == ["un"]
+    assert etat_de(chef).statut == "alarme"
+
+
+def test_la_memoire_du_module_est_reprise_apres_coupure(horloge, banc, tmp_path):
+    carnet = Carnet(tmp_path / "etat-cycle.json")
+    chef = nouveau_chef(horloge, carnet)
+    chef.lancer(module_simple(banc))
+    chef.memoriser("essai", seau="S1293", cycle=12)
+    assert chef.memoire("essai") == {"seau": "S1293", "cycle": 12}
+    with pytest.raises(ErreurChef, match="textes et nombres"):
+        chef.memoriser("essai", objet=object())
+
+    apres = nouveau_chef(horloge, carnet)
+    assert apres.reprendre_cycle([module_simple(banc)]) == ["essai"]
+    assert apres.memoire("essai") == {"seau": "S1293", "cycle": 12}
+
+
+def test_un_module_exclusif_passe_avant_les_autres(horloge, banc):
+    chef = nouveau_chef(horloge)
+    banc.drapeaux["pret"] = True
+    chef.lancer(module_simple(banc, "essai"))
+    tour(chef, horloge)
+    # « essai » est en plein geste : pas de module exclusif maintenant.
+    exclusif = module_simple(banc, "lieu", exclusif=True)
+    with pytest.raises(ErreurChef, match="en plein geste"):
+        chef.lancer(exclusif)
+
+    banc.drapeaux["essai.un_fini"] = True
+    tour(chef, horloge)
+    assert chef.etat().attendent_go == ["essai"]
+    chef.lancer(exclusif)
+    tour(chef, horloge)
+    assert etat_de(chef, "essai").attend == "fin de « lieu »"
+    assert chef.etat().attendent_go == []
+    with pytest.raises(ErreurChef, match="attend la fin de « lieu »"):
+        chef.donner_go("essai")
+
+    # Le module exclusif fait tout son travail ; « essai » ne bouge pas.
+    banc.drapeaux["lieu.un_fini"] = True
+    tour(chef, horloge)
+    tour(chef, horloge)
+    chef.donner_go("lieu")
+    banc.drapeaux["lieu.deux_fini"] = True
+    tour(chef, horloge)
+    tour(chef, horloge)
+    assert etat_de(chef, "lieu").statut == "fini"
+    assert "essai.deux" not in banc.appels
+    assert chef.etat().attendent_go == ["essai"]
+    chef.donner_go("essai")
+    tour(chef, horloge)
+    assert banc.appels[-1] == "essai.deux"
+
+
+def test_dernier_tour_pour_le_chien_de_garde(horloge, banc):
+    chef = nouveau_chef(horloge)
+    assert chef.dernier_tour is None
+    tour(chef, horloge, 3)
+    assert chef.dernier_tour == 3

@@ -64,6 +64,23 @@ class Axe(Modele):
         return self
 
 
+class GesteLieuSur(Modele):
+    """Un geste du retour en lieu sûr : une prise d'origine d'une carte, ou aller à une position."""
+
+    # Carte FluidNC (nom dans fluidnc.yaml) dont on fait la prise d'origine ($H).
+    prise_origine: Nom | None = None
+    # Position nommée (plus haut dans « positions ») où envoyer les axes.
+    aller: Nom | None = None
+    # Délai maximal du geste (nom dans « durees »).
+    delai: Nom
+
+    @model_validator(mode="after")
+    def _un_seul_geste(self) -> "GesteLieuSur":
+        if (self.prise_origine is None) == (self.aller is None):
+            raise ValueError("écrire « prise_origine: carte » ou « aller: position » (un seul)")
+        return self
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -79,10 +96,26 @@ class Machine(Modele):
     )
     # Délais maximaux des étapes (s), par nom : le code des modules ne cite que ces noms.
     durees: dict[Nom, Annotated[float, Field(gt=0)]] = Field(default_factory=dict)
+    # Retour en lieu sûr (après une coupure, ou à la mise en route) : gestes faits dans l'ordre.
+    lieu_sur: list[GesteLieuSur] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
         erreurs: list[str] = []
+        for numero, geste in enumerate(self.lieu_sur, start=1):
+            if geste.delai not in self.durees:
+                erreurs.append(f"lieu_sur n° {numero} : délai « {geste.delai} » absent de durees")
+            if geste.aller is None:
+                continue
+            if geste.aller not in self.positions:
+                erreurs.append(f"lieu_sur n° {numero} : position inconnue « {geste.aller} »")
+                continue
+            for axe in self.positions[geste.aller]:
+                if axe in self.axes and self.axes[axe].carte is None:
+                    erreurs.append(
+                        f"lieu_sur n° {numero} : l'axe « {axe} » de la position "
+                        f"« {geste.aller} » n'a pas de carte FluidNC"
+                    )
         lettres_prises: dict[tuple[str, str], str] = {}
         for nom, axe in self.axes.items():
             if axe.carte is None or axe.lettre is None:
@@ -176,12 +209,80 @@ class ReglagesRegistre(Modele):
     periode_verification_min: float = Field(gt=0, le=60)
 
 
+class ReglagesSante(Modele):
+    """Santé de l'informatique du Pi (fonction 45) : seuils d'alerte."""
+
+    # Tous les combien (minutes) on mesure et on note dans le registre.
+    periode_min: float = Field(gt=0, le=60)
+    # Le Pi 5 ralentit vers 80-85 °C : on prévient avant.
+    temperature_pi_attention_c: float = Field(gt=0)
+    # Place libre sur le SSD (dossier des données), en Go : attention, puis démarrage refusé.
+    disque_libre_attention_go: float = Field(gt=0)
+    disque_libre_minimum_go: float = Field(gt=0)
+    # Mémoire vive disponible, en Mo.
+    memoire_libre_attention_mo: float = Field(gt=0)
+    # La dernière copie de secours du registre ne doit pas être plus vieille que (heures).
+    sauvegarde_age_max_h: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier_seuils(self) -> "ReglagesSante":
+        if self.disque_libre_minimum_go >= self.disque_libre_attention_go:
+            raise ValueError(
+                "disque_libre_minimum_go doit être plus petit que disque_libre_attention_go"
+            )
+        return self
+
+
+class ReglagesChienDeGarde(Modele):
+    """Chien de garde (fonction 14) : le Pi surveille les cartes, et se fait surveiller."""
+
+    # Tous les combien (s) il regarde les cartes et le chef, et dit « je vis » à systemd.
+    periode_s: float = Field(gt=0, le=10)
+    # Le chef qui n'a pas fait de tour depuis ce temps (s) est déclaré figé.
+    chef_fige_s: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier_delais(self) -> "ReglagesChienDeGarde":
+        if self.chef_fige_s < 2 * self.periode_s:
+            raise ValueError(
+                f"chef_fige_s ({self.chef_fige_s:g} s) doit valoir au moins 2 fois "
+                f"periode_s ({self.periode_s:g} s)"
+            )
+        return self
+
+
+class ReglagesOnduleur(Modele):
+    """Arrêt propre sur onduleur (fonction 4)."""
+
+    # Tous les combien (s) on regarde le signal de l'onduleur.
+    periode_s: float = Field(gt=0, le=10)
+    # Courant coupé depuis ce temps (s) : machine en pause, état noté, puis le Pi s'éteint.
+    delai_avant_arret_s: float = Field(ge=0)
+    # Commande qui éteint le Pi (le compte « vidange » doit avoir le droit de la lancer).
+    commande_arret: list[Annotated[str, StringConstraints(min_length=1)]] = Field(min_length=1)
+
+
+class ReglagesBilan(Modele):
+    """Bilan écrit à chaque alarme (fonction 17)."""
+
+    # Les dernières lignes du journal recopiées dans le bilan.
+    lignes_journal: int = Field(ge=0, le=1000)
+
+
+class ReglagesFiabilite(Modele):
+    sante: ReglagesSante
+    chien_de_garde: ReglagesChienDeGarde
+    onduleur: ReglagesOnduleur
+    bilan: ReglagesBilan
+
+
 class Programme(Modele):
     """programme.yaml : réglages du programme lui-même (pas de la machine)."""
 
     journal: Journal
     chef: ReglagesChef
     registre: ReglagesRegistre
+    fiabilite: ReglagesFiabilite
 
 
 # ---------------------------------------------------------------- fluidnc.yaml
@@ -290,12 +391,20 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
     """Ce qu'un fichier cite d'un autre fichier doit y exister."""
     machine, fluidnc = valeurs["machine"], valeurs["fluidnc"]
     assert isinstance(machine, Machine) and isinstance(fluidnc, Fluidnc)
-    return [
+    cartes = ", ".join(fluidnc.cartes)
+    erreurs = [
         f"machine.yaml, axes → {nom} : carte « {axe.carte} » absente de fluidnc.yaml "
-        f"(cartes : {', '.join(fluidnc.cartes)})"
+        f"(cartes : {cartes})"
         for nom, axe in machine.axes.items()
         if axe.carte is not None and axe.carte not in fluidnc.cartes
     ]
+    erreurs += [
+        f"machine.yaml, lieu_sur n° {numero} : carte « {geste.prise_origine} » absente de "
+        f"fluidnc.yaml (cartes : {cartes})"
+        for numero, geste in enumerate(machine.lieu_sur, start=1)
+        if geste.prise_origine is not None and geste.prise_origine not in fluidnc.cartes
+    ]
+    return erreurs
 
 
 def rediger(erreurs: list[str], dossier: Path) -> str:
@@ -400,7 +509,12 @@ def traduire_erreurs(erreur: ValidationError, nom_fichier: str) -> list[str]:
     lignes = []
     for detail in erreur.errors():
         # « [key] » : pydantic signale que l'erreur est dans le nom lui-même.
-        endroit = " → ".join(str(morceau) for morceau in detail["loc"] if morceau != "[key]")
+        # Un nombre : la place dans une liste, comptée à partir de 1 (pydantic part de 0).
+        endroit = " → ".join(
+            f"n° {morceau + 1}" if isinstance(morceau, int) else str(morceau)
+            for morceau in detail["loc"]
+            if morceau != "[key]"
+        )
         debut = f"{nom_fichier}, {endroit}" if endroit else nom_fichier
         for ligne in _message(detail).split("\n"):
             lignes.append(f"{debut} : {ligne}")

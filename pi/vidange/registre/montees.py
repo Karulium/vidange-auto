@@ -162,7 +162,11 @@ _VERSION_1 = (
     "CREATE INDEX alarmes_quand ON alarmes (quand)",
 )
 
+# Version 2 (tâche 7) : chaque alarme garde le chemin de son bilan (fichier JSON écrit au moment
+# de l'alarme : positions, capteurs, état des cartes...), relatif au dossier des données.
+_VERSION_2 = ("ALTER TABLE alarmes ADD COLUMN bilan TEXT",)
+
 # Montée n° i (en partant de 1) : ce qui fait passer la base de la version i - 1 à la version i.
-MONTEES: tuple[tuple[str, ...], ...] = (_VERSION_1,)
+MONTEES: tuple[tuple[str, ...], ...] = (_VERSION_1, _VERSION_2)
 
 VERSION = len(MONTEES)

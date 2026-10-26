@@ -27,7 +27,15 @@ class ErreurChef(Exception):
 
 
 class ErreurEtape(Exception):
-    """Un geste a échoué : le module part en alarme avec ce message."""
+    """Un geste a échoué : le module part en alarme avec ce message.
+
+    `quoi_faire` : quand on connaît la cause exacte (alarme d'une carte...), ce qu'il faut faire ;
+    sinon, c'est le « quoi faire » de l'étape qui est affiché.
+    """
+
+    def __init__(self, message: str, quoi_faire: str = "") -> None:
+        super().__init__(message)
+        self.quoi_faire = quoi_faire
 
 
 @dataclass(frozen=True)
@@ -81,6 +89,9 @@ class Module:
     pauser: Callable[[], object] | None = None
     reprendre: Callable[[], object] | None = None
     arreter: Callable[[], object] | None = None
+    # Module « exclusif » (exemple : lieu sûr, après une coupure) : tant qu'il est en route,
+    # les autres modules ne bougent pas et n'acceptent pas de Go.
+    exclusif: bool = False
 
     def __post_init__(self) -> None:
         erreurs = []

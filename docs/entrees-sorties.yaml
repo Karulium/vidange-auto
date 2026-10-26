@@ -156,6 +156,13 @@ cartes:
 #     (volts: [0.5, 3.0], valeurs: [0, -90]) ; sans conversion, la mesure est en volts.
 #   modbus : pour un transmetteur_modbus, où lire sa mesure :
 #     registre, fonction (3 ou 4), echelle (valeur = nombre lu × échelle), signe (true/false).
+#   au_demarrage : pour une entrée contact, pnp ou npn, l'état attendu à la check-list de
+#     démarrage : « actionne » ou « repos » (exemple : porte fermée). Sinon, pas de production.
+#
+# Noms que le programme connaît déjà (tâche 7, fiabilité) :
+#   onduleur_sur_batterie : entrée actionnée quand l'onduleur dit « courant coupé » ;
+#   battement_pi : sortie que le Pi fait battre tant qu'il va bien (pour un relais
+#     « chien de garde » qui mettrait les cartes FluidNC en pause si le Pi se fige).
 signaux:
   reed_panneau_poste_fut:
     exemple: true
@@ -175,6 +182,7 @@ signaux:
     tension: 24
     repos: ferme
     module: spray
+    au_demarrage: repos
   fdc_stockage_haut:
     exemple: true
     description: Fin de course stockage haut
@@ -184,6 +192,24 @@ signaux:
     tension: 24
     repos: ouvert
     module: stockage
+  onduleur_sur_batterie:
+    exemple: true
+    description: Onduleur du Pi « courant coupé » (exemple d'une carte UPS à sortie de perte secteur)
+    carte: pi
+    broche: GPIO6
+    type: contact
+    tension: 3.3
+    # La carte tient la broche haute tant que le courant est là : « actionné » = coupé.
+    repos: ferme
+    module: armoire
+  battement_pi:
+    exemple: true
+    description: Battement du Pi vers un relais chien de garde (s'il est ajouté)
+    carte: pi
+    broche: GPIO12
+    type: logique
+    tension: 3.3
+    module: armoire
   voyant_buzzer:
     exemple: true
     description: Voyant + buzzer « attention » avant un mouvement lancé à distance

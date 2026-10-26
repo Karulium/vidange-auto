@@ -328,3 +328,14 @@ def test_liaison_de_type_inconnu(entrees_sorties):
 def test_liaison_sans_type(entrees_sorties):
     remplacer(entrees_sorties, "      type: usb_serie\n", "")
     assert "cartes → rs485_ozone → liaison : « type » manque" in erreur_de(entrees_sorties)
+
+
+def test_au_demarrage_seulement_pour_les_entrees_tout_ou_rien(entrees_sorties):
+    # Sur le relais du voyant-buzzer : refusé.
+    remplacer(
+        entrees_sorties,
+        "    repos: ouvert\n    module: armoire\n",
+        "    repos: ouvert\n    module: armoire\n    au_demarrage: repos\n",
+    )
+    message = erreur_de(entrees_sorties)
+    assert "« au_demarrage » ne sert qu'aux entrées contact, pnp ou npn" in message
