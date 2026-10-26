@@ -50,7 +50,7 @@ La machine envoie seulement ses données au logiciel de culture, qui s'occupe de
 
 5 planning des fûts ; 9 vidange partielle ; 11 mode démo ; 20 mode cyclone ; 34 rappel de lot (un bocal = un seau
 en général) ; 36 refus de produire sans nettoyage ; 37 rappels de produits ; 38 attente de la valeur d'ozone avant
-d'ouvrir ; 64 compteur de consommables ; 65 prévision des besoins ; 72 détection de personne ; 77 étiquette imprimée.
+d'ouvrir (la porte est verrouillée par le câblage, voir `docs/decisions.md`) ; 64 compteur de consommables ; 65 prévision des besoins ; 72 détection de personne ; 77 étiquette imprimée.
 
 ## À préciser avec Karulium
 

@@ -1,3 +1,5 @@
+> **Copie du 26/10/2026.** La source de vérité est le dépôt du logiciel de culture (Django) : cette copie peut vieillir.
+
 # Domaine — La culture des champignons dans la base de données
 
 Ce document explique la partie « culture » de la base Karulium : **ce que chaque table représente dans le travail réel de la champignonnière**, comment elles sont reliées, et pourquoi elles ont été construites comme ça. Il couvre les apps `Especes`, `Semences`, `Recettes`, `Traitements`, `Blocs`, `Recoltes`, `Mesures`, `Objets`, `Contaminations`, `Problemes` et les briques transverses de `Features` (remarques, photos).

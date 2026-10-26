@@ -28,25 +28,40 @@ lave et range, en Guadeloupe. La mécanique est conçue ailleurs (projet Claude
 ## Façon de travailler sur GitHub
 
 - `main` = ce que Karulium a accepté. On ne pousse jamais directement sur `main`.
-- Une tâche = une branche = une PR. Nom de branche : `tache-<numéro>-<mot>`
-  (exemple : `tache-03-fluidnc`).
+- Une tâche = une branche = une PR. **Strictement une session à la fois.** Le nom de branche est
+  celui que donne la plateforme ; le **titre de la PR commence par le numéro de la tâche**
+  (exemple : « Tâche 3 — Liaison FluidNC »).
+- Pour corriger une PR (remarques, tests rouges), une nouvelle session travaille sur la même branche :
+  c'est la même tâche (phrase à copier dans `docs/taches.md`).
 - La description de la PR, en français simple, dit : ce que la tâche apporte,
   comment c'est testé, les choix faits, et ce qui reste à faire.
 - Une PR doit avoir ses tests au vert (GitHub Actions) avant d'être proposée.
+- Tâches qui touchent du vrai matériel (Nextion, accéléromètre, mises à jour des cartes...) : GitHub Actions ne
+  teste que des faux. La PR livre en plus une **procédure d'essai sur le vrai matériel**, écrite pas à pas pour
+  Karulium, et dit clairement « testé sur le vrai matériel : non ».
+- Quand Karulium répond à une « Question pour Karulium », sa réponse est **recopiée dans `docs/decisions.md`**
+  (par la session qui corrige la PR, dans la même PR) : les sessions suivantes ne lisent que les fichiers.
 - À la fin de la tâche, coche-la dans `docs/taches.md` dans la même PR.
 - Ne touche **jamais** au dépôt du logiciel de culture de Karulium (Django).
   Ici, on écrit seulement ce dont il aura besoin (`docs/django.md`).
 
 ## Règles du code
 
+0. **Jamais de secret dans le dépôt** (clé de l'API, Tailscale, mots de passe) : ils vont dans le fichier de
+   secrets hors Git, dont le dépôt ne contient qu'un modèle vide.
+
 1. **La sécurité n'est jamais dans le logiciel.** Arrêt d'urgence, portes,
    fins de course de sécurité, freins, choc : tout est câblé en dur (relais de
    sécurité). Le logiciel peut planter sans danger. Il lit ces signaux pour
    informer et pour attendre, jamais pour protéger.
+   Le signal « OK » de l'accéléromètre vient d'un programme : il protège la **machine** (les chocs),
+   jamais les personnes.
 2. **Aucun chiffre de la machine dans le code.** Positions, courses, vitesses,
    durées, zones, poids, broches : tout est dans les fichiers de réglages
    (`pi/reglages/`, `fluidnc/`, `docs/entrees-sorties.yaml`). Le code dit
    « fin de course stockage haut », jamais « broche 17 ».
+   Les chiffres écrits dans `docs/decisions.md` (zones, positions) vont dans
+   `pi/reglages/machine.yaml` ; le code ne lit que leurs noms.
 3. **Les réglages sont vérifiés au démarrage** : une erreur (course plus longue
    que le rail, zone qui se chevauche, broche en double) empêche de démarrer et
    dit clairement laquelle.
