@@ -39,6 +39,13 @@ sudo -u vidange .venv/bin/pip install -e .
 
 ## 3. Mettre le fichier de secrets
 
+D'abord, fabriquer une clé pour l'API et la page web (une suite de lettres au hasard) :
+```
+python3 -c 'import secrets; print(secrets.token_urlsafe(24))'
+```
+La recopier dans `cle_api` ci-dessous, et la garder dans un endroit sûr (gestionnaire de mots de passe) :
+c'est elle qu'on tape une fois dans la page web de chaque téléphone ou PC.
+
 ```
 sudo mkdir -p /etc/vidange
 sudo cp /opt/vidange-auto/pi/secrets.exemple.yaml /etc/vidange/secrets.yaml
@@ -93,10 +100,28 @@ systemctl show -p RuntimeWatchdogUSec        # doit dire RuntimeWatchdogUSec=14s
 Le chien de garde du programme lui-même est déjà dans `vidange.service` (`WatchdogSec`) : si le programme
 se fige, systemd le relance.
 
-## 8. Essais à faire sur le vrai Pi
+## 8. Page web : sur place et à distance (Tailscale)
+
+La page web est servie par le programme lui-même, sur le port réglé dans `programme.yaml` (→ `api`, 8080).
+- **Sur place** (même réseau que le Pi) : ouvrir `http://<adresse du Pi>:8080` (l'adresse du Pi se lit
+  avec `hostname -I`).
+- **À distance** : par Tailscale, comme pour le serveur de culture. Aucun port n'est ouvert sur la box.
+  Installer Tailscale sur le Pi (une seule fois), puis le relier au compte Tailscale de Karulium :
+  ```
+  curl -fsSL https://tailscale.com/install.sh | sh
+  sudo tailscale up            # ouvre un lien à copier dans le navigateur pour accepter le Pi
+  tailscale ip -4              # l'adresse Tailscale du Pi (100.x.y.z)
+  ```
+  Sur le téléphone (avec l'appli Tailscale allumée) : `http://<adresse Tailscale du Pi>:8080`.
+- La page demande la clé (`cle_api`) la première fois, puis la garde dans le téléphone.
+- Seuls le réseau local et Tailscale sont acceptés (`reseaux_autorises` dans `programme.yaml`) ; toute autre
+  adresse est refusée, même avec la clé.
+
+## 9. Essais à faire sur le vrai Pi
 
 Essai des capteurs et des relais : voir `essai-entrees-sorties.md`.
 Essai de la fiabilité (programme figé, coupure de courant, onduleur...) : voir `essai-fiabilite.md`.
+Essai de la page web (téléphone, Tailscale) : voir `essai-page-web.md`.
 
 Cocher chaque essai réussi.
 

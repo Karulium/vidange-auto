@@ -2,7 +2,8 @@
 
 Paquet Python `vidange` (Python 3.11, comme Raspberry Pi OS Bookworm).
 Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés, journal, secrets, liaison avec les cartes FluidNC (et faux FluidNC), entrées/sorties du Pi par leur nom (et faux capteurs), chef d'orchestre (moteur d'étapes) avec un module d'exemple, registre (base SQLite) avec copie de secours quotidienne, fiabilité (chien de garde, check-list de démarrage,
-reprise après coupure et retour en lieu sûr, arrêt propre sur onduleur, bilan de chaque alarme, santé du Pi).
+reprise après coupure et retour en lieu sûr, arrêt propre sur onduleur, bilan de chaque alarme, santé du Pi),
+API et page web locale (état, alarmes, Go, Pause, historique, photos).
 Pas encore de vrai module de la machine.
 
 ## Ce qu'il y a ici
@@ -42,14 +43,18 @@ Pas encore de vrai module de la machine.
 | `vidange/fiabilite/onduleur.py` | Arrêt propre sur onduleur |
 | `vidange/fiabilite/bilans.py` | Bilan de chaque alarme (fichier JSON) et alarme dans le registre ; acquittement |
 | `vidange/fiabilite/sante.py` | Santé du Pi : température, alimentation, disque, mémoire, heure, copie de secours |
+| `vidange/api/app.py` | API du Pi (FastAPI) : état, check-list, alarmes, Go, Pause, historique, photos ; clé, réseaux autorisés |
+| `vidange/api/serveur.py` | Serveur web de l'API (uvicorn) dans un fil à part |
+| `vidange/api/page/index.html` | La page web en français, lisible sur téléphone (une seule page, rien à télécharger d'Internet) |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) |
-| `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, copie de secours du registre) |
+| `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API) |
 | `reglages/fluidnc.yaml` | Cartes FluidNC (numéro de série USB) et réglages de leur liaison |
 | `secrets.exemple.yaml` | Modèle **vide** du fichier de secrets |
 | `systeme/vidange.service` | Service qui démarre avec le Pi et se relance s'il plante |
 | `systeme/installation.md` | Installation sur le Pi, pas à pas |
 | `systeme/essai-entrees-sorties.md` | Essai des entrées/sorties sur le vrai matériel, pas à pas |
 | `systeme/essai-fiabilite.md` | Essai de la fiabilité sur le vrai matériel (coupures, chien de garde...), pas à pas |
+| `systeme/essai-page-web.md` | Essai de la page web sur le vrai Pi (téléphone, Tailscale), pas à pas |
 | `tests/` | Tests (pytest) |
 
 ## Essayer sur un PC
@@ -233,3 +238,33 @@ registre.lire("SELECT * FROM cycles WHERE fin IS NULL")  # pour les écrans et l
   sous le nom `registre.sqlite`, relancer.
 - `vidange-registre etat` : version et nombre de lignes de chaque table ; `vidange-registre sauvegarder` :
   copie tout de suite (par exemple avant une mise à jour). Peut tourner pendant que le programme tourne.
+
+## API et page web (tâche 8)
+
+La page web s'ouvre sur `http://<adresse du Pi>:8080` (port dans `programme.yaml` → `api`), sur place ou par
+Tailscale (voir `systeme/installation.md`). Sur un PC : mettre une clé dans `pi/secrets.yaml`, lancer
+`.venv/bin/vidange`, puis ouvrir `http://127.0.0.1:8080`.
+
+- **Clé** : `cle_api` du fichier de secrets (au moins 16 caractères). Sans clé, l'API ne démarre pas (la machine,
+  elle, tourne : la check-list le signale). Chaque appel `/api/...` envoie `Authorization: Bearer <clé>`.
+- **Réseaux autorisés** : `reseaux_autorises` (réseau local, Tailscale) ; toute autre adresse est refusée (403),
+  même avec la clé, même pour la page.
+- Les ordres passent par le chef d'orchestre, comme ceux de l'écran ; un ordre impossible est refusé (409) avec
+  la raison en clair. Chaque ordre est noté au journal avec l'adresse d'où il vient.
+- Pas de pages de documentation automatiques (`/docs`) : elles montreraient l'API sans clé.
+
+| Adresse | Rôle |
+|---|---|
+| `GET /` | La page web (sans clé : elle demande la clé, puis la garde dans le téléphone) |
+| `GET /api/etat` | Pause ou pas, chaque module (étape, ce qu'il attend, zones, alarme), Go attendus, alarmes ouvertes |
+| `GET /api/checklist` | La check-list refaite maintenant : `prete`, constats et « quoi faire » |
+| `POST /api/pause`, `POST /api/reprendre` | Pause et reprise de toute la machine |
+| `POST /api/go/{module}` | Le Go de Karulium à un module qui l'attend |
+| `GET /api/alarmes` | Alarmes ouvertes ; `?toutes=true` : les dernières, même acquittées (`limite`, `avant`) |
+| `POST /api/alarmes/{n}/acquitter` | Acquitte l'alarme n (et le module, s'il est en alarme : il attend alors le Go) |
+| `GET /api/historique` | Derniers cycles (`limite`, `avant` pour la page suivante) |
+| `GET /api/historique/{cycle}` | Tout d'un cycle : seaux et doses de mycélium, étapes, mesures, photos, alarmes |
+| `GET /api/photos` | Dernières photos (`cycle`, `seau`, `limite`, `avant`) |
+| `GET /api/photos/{n}` | Le fichier de la photo n |
+
+Au plus `lignes_max` lignes par réponse ; `avant=<numéro>` donne la page suivante.

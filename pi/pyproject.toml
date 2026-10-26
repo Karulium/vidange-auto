@@ -16,6 +16,9 @@ dependencies = [
     "smbus2>=0.5,<1",
     # Broches GPIO du Pi 5 (libgpiod, le moyen prévu par Linux). Seulement sous Linux.
     "gpiod>=2.2,<3; sys_platform == 'linux'",
+    # API du Pi et page web locale (tâche 8). uvicorn seul, sans les options « standard ».
+    "fastapi>=0.110,<1",
+    "uvicorn>=0.30,<1",
 ]
 
 [project.optional-dependencies]
@@ -23,6 +26,8 @@ dependencies = [
 dev = [
     "pytest>=8",
     "ruff>=0.6",
+    # Pour essayer l'API dans les tests (TestClient de FastAPI).
+    "httpx>=0.27,<1",
 ]
 
 [project.scripts]
@@ -33,6 +38,10 @@ vidange-registre = "vidange.registre.outil:lancer"
 
 [tool.setuptools.packages.find]
 include = ["vidange*"]
+
+[tool.setuptools.package-data]
+# La page web est livrée avec le programme.
+vidange = ["api/page/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

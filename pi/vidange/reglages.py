@@ -13,6 +13,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    IPvAnyNetwork,
     StringConstraints,
     ValidationError,
     model_validator,
@@ -276,6 +277,20 @@ class ReglagesFiabilite(Modele):
     bilan: ReglagesBilan
 
 
+class ReglagesApi(Modele):
+    """API du Pi et page web locale (tâche 8)."""
+
+    # Adresse où l'API écoute : « 0.0.0.0 » = toutes les liaisons réseau du Pi (local et Tailscale).
+    adresse: str = Field(min_length=1)
+    port: int = Field(ge=1, le=65535)
+    # Seuls ces réseaux peuvent joindre l'API et la page : les autres sont refusés d'office.
+    reseaux_autorises: list[IPvAnyNetwork] = Field(min_length=1)
+    # La page web redemande l'état tous les (s).
+    rafraichir_s: float = Field(gt=0, le=60)
+    # Nombre de lignes rendues au plus d'un coup (historique, alarmes, photos).
+    lignes_max: int = Field(ge=1, le=10000)
+
+
 class Programme(Modele):
     """programme.yaml : réglages du programme lui-même (pas de la machine)."""
 
@@ -283,6 +298,7 @@ class Programme(Modele):
     chef: ReglagesChef
     registre: ReglagesRegistre
     fiabilite: ReglagesFiabilite
+    api: ReglagesApi
 
 
 # ---------------------------------------------------------------- fluidnc.yaml

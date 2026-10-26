@@ -56,7 +56,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   arrêt propre sur onduleur (4), bilan et « quoi faire » de chaque alarme (17, 18), santé de l'informatique (45).
   À faire avant que la vraie machine bouge.
 
-- [ ] **8. API du Pi et page web locale** — Modèle : Sonnet.
+- [x] **8. API du Pi et page web locale** — Modèle : Sonnet.
   API (FastAPI) sur le réseau local et Tailscale, protégée par une clé : état, alarmes, Go, Pause, historique, photos.
   Page web simple en français, lisible sur téléphone.
 

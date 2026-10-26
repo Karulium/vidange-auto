@@ -43,17 +43,17 @@ def test_fichier_absent_donne_des_secrets_vides(tmp_path, caplog):
 
 def test_secret_lu_mais_jamais_affiche(tmp_path):
     chemin = tmp_path / "secrets.yaml"
-    chemin.write_text("cle_api: tres-secret\n", encoding="utf-8")
+    chemin.write_text("cle_api: tres-secret-et-assez-long\n", encoding="utf-8")
     chemin.chmod(0o600)
     secrets = charger_secrets(chemin)
-    assert secrets.cle_api.get_secret_value() == "tres-secret"
-    assert "tres-secret" not in repr(secrets)
-    assert "tres-secret" not in str(secrets)
+    assert secrets.cle_api.get_secret_value() == "tres-secret-et-assez-long"
+    assert "tres-secret-et-assez-long" not in repr(secrets)
+    assert "tres-secret-et-assez-long" not in str(secrets)
 
 
 def test_fichier_lisible_par_tous_donne_un_avertissement(tmp_path, caplog):
     chemin = tmp_path / "secrets.yaml"
-    chemin.write_text("cle_api: x\n", encoding="utf-8")
+    chemin.write_text("cle_api: une-cle-assez-longue\n", encoding="utf-8")
     chemin.chmod(0o644)
     with caplog.at_level(logging.WARNING, logger="vidange.secrets"):
         charger_secrets(chemin)
@@ -65,4 +65,12 @@ def test_nom_inconnu_dans_les_secrets(tmp_path):
     chemin.write_text("cle_apii: x\n", encoding="utf-8")
     chemin.chmod(0o600)
     with pytest.raises(ErreurReglages, match="secrets.yaml, cle_apii : nom inconnu"):
+        charger_secrets(chemin)
+
+
+def test_cle_trop_courte_refusee(tmp_path):
+    chemin = tmp_path / "secrets.yaml"
+    chemin.write_text("cle_api: courte\n", encoding="utf-8")
+    chemin.chmod(0o600)
+    with pytest.raises(ErreurReglages, match="secrets.yaml, cle_api : clé trop courte"):
         charger_secrets(chemin)
