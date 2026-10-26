@@ -18,14 +18,15 @@ Environment=VIDANGE_ENTREES_SORTIES=/opt/vidange-auto/docs/entrees-sorties.yaml
 Environment=VIDANGE_SECRETS=/etc/vidange/secrets.yaml
 Environment=VIDANGE_DONNEES=/var/lib/vidange
 Environment=PYTHONUNBUFFERED=1
-# Crée /var/lib/vidange (journal, plus tard la base) pour le compte vidange.
+# Crée /var/lib/vidange (journal, registre, photos, copies de secours) pour le compte vidange.
 StateDirectory=vidange
 ExecStart=/opt/vidange-auto/pi/.venv/bin/vidange
 # Plantage : on relance après 5 s.
 Restart=on-failure
 RestartSec=5
-# Code 2 = réglages faux : relancer ne servirait à rien, on attend que Karulium corrige.
-RestartPreventExitStatus=2
+# Code 2 = réglages faux, code 3 = base du registre abîmée : relancer ne servirait à rien,
+# on attend que Karulium corrige (le journal dit quoi faire).
+RestartPreventExitStatus=2 3
 TimeoutStopSec=30
 
 [Install]

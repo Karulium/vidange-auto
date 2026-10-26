@@ -4,7 +4,9 @@
    tout, avec un message clair (code de sortie 2 : systemd ne relance pas en boucle
    un programme mal réglé).
 2. Met en place le journal et lit les secrets.
-3. Attend l'ordre d'arrêt (pas encore de logique de machine).
+3. Ouvre le registre (base SQLite, montée à la dernière version) : une base abîmée arrête
+   tout (code de sortie 3). Lance la copie de secours quotidienne.
+4. Attend l'ordre d'arrêt (pas encore de logique de machine).
 
 Où trouver les fichiers (du plus fort au plus faible) : option de la ligne de
 commande, puis variable d'environnement (posée par le service systemd), puis
@@ -22,12 +24,19 @@ from vidange import __version__
 from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.fichier_secrets import charger_secrets
 from vidange.journal import configurer_journal, donner_journal
+from vidange.registre import (
+    DOSSIER_SAUVEGARDES,
+    ErreurRegistre,
+    SauvegardeQuotidienne,
+    ouvrir_registre,
+)
 from vidange.reglages import ErreurReglages, charger_reglages
 
 # Codes de sortie. Le service systemd (pi/systeme/vidange.service) utilise CODE_REGLAGES_FAUX.
 CODE_OK = 0
 CODE_PLANTAGE = 1
 CODE_REGLAGES_FAUX = 2
+CODE_REGISTRE_ABIME = 3
 
 DOSSIER_PI = Path(__file__).resolve().parent.parent
 
@@ -109,13 +118,30 @@ def principal(arguments: list[str] | None = None, arret: threading.Event | None 
         journal.info("Réglages corrects (%s).", dossier_reglages)
         return CODE_OK
 
+    try:
+        registre = ouvrir_registre(dossier_donnees)
+    except ErreurRegistre as erreur:
+        journal.error("%s", erreur)
+        return CODE_REGISTRE_ABIME
+
     if arret is None:
         arret = threading.Event()
         for sorte in (signal.SIGTERM, signal.SIGINT):
             signal.signal(sorte, lambda *_: arret.set())
-    journal.info("Programme du Pi version %s démarré, réglages : %s", __version__, dossier_reglages)
-    arret.wait()
-    journal.info("Arrêt demandé : arrêt propre.")
+    sauvegarde = SauvegardeQuotidienne(
+        registre, dossier_donnees / DOSSIER_SAUVEGARDES, reglages.programme.registre
+    )
+    fil_sauvegarde = sauvegarde.demarrer(arret)
+    try:
+        journal.info(
+            "Programme du Pi version %s démarré, réglages : %s", __version__, dossier_reglages
+        )
+        arret.wait()
+        journal.info("Arrêt demandé : arrêt propre.")
+    finally:
+        # Une copie en cours se finit avant qu'on ferme la base.
+        fil_sauvegarde.join()
+        registre.fermer()
     return CODE_OK
 
 

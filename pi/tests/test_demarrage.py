@@ -3,7 +3,7 @@
 import configparser
 import threading
 
-from vidange.demarrage import CODE_OK, CODE_REGLAGES_FAUX, principal
+from vidange.demarrage import CODE_OK, CODE_REGISTRE_ABIME, CODE_REGLAGES_FAUX, principal
 from vidange.journal import NOM_FICHIER
 
 from .conftest import DOSSIER_PI
@@ -66,5 +66,23 @@ def test_le_service_systemd_ne_relance_pas_des_reglages_faux():
     service.optionxform = str
     service.read(DOSSIER_PI / "systeme" / "vidange.service", encoding="utf-8")
     assert service["Service"]["Restart"] == "on-failure"
-    assert service["Service"]["RestartPreventExitStatus"] == str(CODE_REGLAGES_FAUX)
+    codes = service["Service"]["RestartPreventExitStatus"].split()
+    assert codes == [str(CODE_REGLAGES_FAUX), str(CODE_REGISTRE_ABIME)]
     assert service["Install"]["WantedBy"] == "multi-user.target"
+
+
+def test_demarrage_cree_le_registre(reglages, tmp_path):
+    arret = threading.Event()
+    arret.set()
+    assert principal(options(reglages, tmp_path), arret) == CODE_OK
+    assert (tmp_path / "donnees" / "registre.sqlite").exists()
+    assert (tmp_path / "donnees" / "photos").is_dir()
+
+
+def test_registre_abime_arrete_le_demarrage(reglages, tmp_path, capsys):
+    (tmp_path / "donnees").mkdir()
+    (tmp_path / "donnees" / "registre.sqlite").write_bytes(b"abime" * 1000)
+    arret = threading.Event()
+    arret.set()
+    assert principal(options(reglages, tmp_path), arret) == CODE_REGISTRE_ABIME
+    assert "base du registre abîmée" in capsys.readouterr().err
