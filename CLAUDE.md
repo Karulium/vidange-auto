@@ -21,6 +21,9 @@ lave et range, en Guadeloupe. La mécanique est conçue ailleurs (projet Claude
 - Ne réécris pas une partie qui marche et qui n'est pas dans ta tâche.
 - Si la tâche est floue ou trop grosse, arrête-toi et pose la question dans la PR
   au lieu de deviner longtemps.
+- Tu ne peux pas joindre le projet Claude où la mécanique se décide. Tes questions vont dans la
+  description de la PR, sous un titre « Questions pour Karulium », numérotées, chacune avec ta
+  recommandation. Continue le reste de la tâche avec ta recommandation en attendant.
 
 ## Façon de travailler sur GitHub
 

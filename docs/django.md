@@ -7,6 +7,10 @@ aucun calcul lourd dessus.
 Sa base (apps) : Especes, Semences, Recettes, Traitements, Blocs, Recoltes, Mesures, Contaminations, Images ;
 le lot d'inoculation est la table pivot.
 
+**Explication complète de la base, écrite par Karulium : `docs/base-culture.md`** (ce que chaque table représente
+dans le travail réel, comment elles sont reliées). La lire avant toute tâche qui touche au lien avec la culture,
+aux données collectées (Pétri, bocaux, seaux) ou aux plans d'expériences.
+
 ## Principe
 
 - La machine ne dépend jamais de ce logiciel pour tourner. Le Pi met chaque envoi dans une file et réessaie.
