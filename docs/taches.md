@@ -87,6 +87,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 
 - [ ] 20. Fiabilité : chien de garde Pi ↔ cartes (14), dérive de position (15), bilan et « quoi faire » des alarmes (17, 18),
   check-list de démarrage (12), reprise après coupure et onduleur (3, 4), santé de l'informatique (45). — Sonnet.
+- [ ] 20 bis. Comptes (58) et restauration d'un Pi neuf depuis la sauvegarde (79). — Sonnet.
 - [ ] 21. Entretien : compteurs par axe, calendrier, pièces d'usure, page maintenance (40, 41, 43, 44). — Sonnet.
 - [ ] 22. Notifications sur le téléphone (ntfy), résumé du soir, escalade (60 à 63). — Sonnet.
 - [ ] 23. Page web : vue 3D en direct et rejeu d'incident (54, 55), statistiques (57), appli installable (59),

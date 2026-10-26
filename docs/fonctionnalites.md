@@ -36,6 +36,9 @@ Les fonctions sont rangées par tâche dans `docs/taches.md`.
   au maximum les essais (voir plus bas).
 - **Informatique** : 78 sauvegarde automatique ; 80 Tailscale à droits limités ; 81 mise à jour avec retour arrière ;
   82 journal des changements en français ; 83 heure juste (pile de l'horloge du Pi 5, à ajouter).
+- **Comptes (58)** : un identifiant par personne ; Karulium = tous les droits, employé = production sans réglages,
+  visiteur = regarder seulement.
+- **Restauration (79)** : un Pi neuf est remis en état depuis la sauvegarde en une commande, en moins d'une heure.
 - **Aide** : 84 mode guidé pour un employé ; 85 manuel d'utilisation tenu à jour ; 86 carnet de bord.
 
 ## Déjà faites dans le logiciel de culture (ne pas refaire ici)
@@ -55,4 +58,3 @@ d'ouvrir ; 64 compteur de consommables ; 65 prévision des besoins ; 72 détecti
   prépare un plan d'essais (quels réglages sur quels seaux d'un lot : dose, température, temps...), dans des limites
   fixées par Karulium ; il l'accepte ; la machine l'applique seau par seau et note tout ; les résultats reviennent
   du logiciel de culture.
-- **58, comptes** et **79, restauration** : expliqués à nouveau, en attente de sa réponse.
