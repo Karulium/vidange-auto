@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vidange"
+version = "0.1.0"
+description = "Programme du Raspberry Pi 5 de la machine « Vidange automatique » de Karulium"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.5,<3",
+    "PyYAML>=6.0,<7",
+]
+
+[project.optional-dependencies]
+# Outils pour les tests et le style (pas besoin sur le Pi en production).
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+vidange = "vidange.demarrage:main"
+
+[tool.setuptools.packages.find]
+include = ["vidange*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]

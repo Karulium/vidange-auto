@@ -1,0 +1,13 @@
+# Secrets : jamais dans le dépôt (seul le modèle secrets.exemple.yaml y est).
+secrets.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Données produites en essai (journal, base...)
+pi/donnees/

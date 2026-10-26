@@ -1,0 +1,31 @@
+# Service systemd : démarre le programme du Pi avec le Pi, et le relance s'il plante.
+# Installation pas à pas : pi/systeme/installation.md
+
+[Unit]
+Description=Vidange automatique : programme du Pi (le chef)
+# Pas d'attente du réseau : la machine doit tourner sans lui.
+After=local-fs.target
+# Relancer sans limite de nombre (le délai RestartSec évite de s'emballer).
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=vidange
+Group=vidange
+WorkingDirectory=/opt/vidange-auto/pi
+Environment=VIDANGE_REGLAGES=/opt/vidange-auto/pi/reglages
+Environment=VIDANGE_SECRETS=/etc/vidange/secrets.yaml
+Environment=VIDANGE_DONNEES=/var/lib/vidange
+Environment=PYTHONUNBUFFERED=1
+# Crée /var/lib/vidange (journal, plus tard la base) pour le compte vidange.
+StateDirectory=vidange
+ExecStart=/opt/vidange-auto/pi/.venv/bin/vidange
+# Plantage : on relance après 5 s.
+Restart=on-failure
+RestartSec=5
+# Code 2 = réglages faux : relancer ne servirait à rien, on attend que Karulium corrige.
+RestartPreventExitStatus=2
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

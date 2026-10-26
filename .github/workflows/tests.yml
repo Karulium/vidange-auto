@@ -1,0 +1,30 @@
+# Tests du programme du Pi, lancés à chaque PR et à chaque changement de main.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  pi:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # Même version que Raspberry Pi OS Bookworm.
+          python-version: "3.11"
+      - name: Installation
+        run: pip install -e ".[dev]"
+      - name: Style (ruff)
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Tests (pytest)
+        run: pytest
+      - name: Vérification des réglages du dépôt
+        run: vidange --verifier
