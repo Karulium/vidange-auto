@@ -29,7 +29,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   trop d'entrées sur une carte, tension 24 V sans isolement. Le contenu sera rempli depuis le projet :
   mettre seulement quelques lignes d'exemple marquées « exemple ».
 
-- [ ] **3. Liaison FluidNC + faux FluidNC** — Modèle : Sonnet.
+- [x] **3. Liaison FluidNC + faux FluidNC** — Modèle : Sonnet.
   Client série vers une carte FluidNC : envoi de G-code avec contrôle de flux, lecture de l'état (`?`),
   positions, alarmes, déblocage, reprise après coupure du câble. **Chaque carte reconnue par le numéro de série
   de son USB** (jamais par l'ordre des ports), réglé dans les réglages. Un faux FluidNC pour les tests

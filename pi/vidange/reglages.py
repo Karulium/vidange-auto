@@ -143,18 +143,76 @@ class Programme(Modele):
     journal: Journal
 
 
+# ---------------------------------------------------------------- fluidnc.yaml
+
+
+class LiaisonFluidnc(Modele):
+    """Réglages communs aux liaisons série avec les cartes FluidNC."""
+
+    vitesse_bauds: int = Field(gt=0)
+    # Place dans le tampon de réception de la carte (octets) : le contrôle de flux
+    # n'envoie jamais plus de lignes sans réponse que ce qui y tient.
+    taille_tampon: int = Field(ge=16)
+    # Tous les combien on demande l'état (« ? »).
+    periode_etat_s: float = Field(gt=0)
+    # Sans rien recevoir pendant ce temps, la carte est déclarée muette et la liaison reprise.
+    delai_silence_s: float = Field(gt=0)
+    # Attente entre deux essais de connexion.
+    delai_reconnexion_s: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier_delais(self) -> "LiaisonFluidnc":
+        if self.delai_silence_s < 3 * self.periode_etat_s:
+            raise ValueError(
+                f"delai_silence_s ({self.delai_silence_s:g} s) doit valoir au moins "
+                f"3 fois periode_etat_s ({self.periode_etat_s:g} s)"
+            )
+        return self
+
+
+class CarteFluidnc(Modele):
+    description: str = ""
+    # Numéro de série de l'USB de la carte : c'est lui qui la reconnaît, jamais l'ordre des ports.
+    numero_serie_usb: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
+
+
+class Fluidnc(Modele):
+    """fluidnc.yaml : les cartes FluidNC et leur liaison avec le Pi."""
+
+    exemple: bool = False
+    liaison: LiaisonFluidnc
+    cartes: dict[Nom, CarteFluidnc] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _verifier_numeros(self) -> "Fluidnc":
+        deja_vus: dict[str, str] = {}
+        erreurs = []
+        for nom, carte in self.cartes.items():
+            autre = deja_vus.setdefault(carte.numero_serie_usb, nom)
+            if autre != nom:
+                erreurs.append(
+                    f"les cartes « {autre} » et « {nom} » ont le même numéro de série USB "
+                    f"« {carte.numero_serie_usb} »"
+                )
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 # --------------------------------------------------------------- l'ensemble
 
 
 class Reglages(Modele):
     machine: Machine
     programme: Programme
+    fluidnc: Fluidnc
 
 
 # Nom du fichier → (nom dans Reglages, modèle). Ajouter ici chaque nouveau fichier.
 FICHIERS: dict[str, tuple[str, type[Modele]]] = {
     "machine.yaml": ("machine", Machine),
     "programme.yaml": ("programme", Programme),
+    "fluidnc.yaml": ("fluidnc", Fluidnc),
 }
 
 
@@ -243,7 +301,7 @@ _MESSAGES = {
     "int_from_float": "doit être un nombre entier",
     "bool_parsing": "doit être « true » (oui) ou « false » (non)",
     "bool_type": "doit être « true » (oui) ou « false » (non)",
-    "string_type": "doit être un texte",
+    "string_type": "doit être un texte (entre guillemets s'il n'a que des chiffres)",
     "dict_type": "doit être une liste de « nom: valeur »",
     "list_type": "doit être une liste (une ligne « - nom » par élément)",
     "model_type": "doit être une liste de « nom: valeur »",
