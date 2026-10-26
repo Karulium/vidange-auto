@@ -6,3 +6,9 @@ journal:
   # Le fichier de journal change quand il atteint cette taille ; on garde ce nombre d'anciens fichiers.
   taille_fichier_mo: 10
   nombre_fichiers: 10
+
+chef:
+  # Le chef d'orchestre regarde les conditions des étapes tous les :
+  periode_s: 0.05
+  # Une alarme dans un module met toute la machine en pause (true), ou seulement ce module (false).
+  alarme_pause_tout: true

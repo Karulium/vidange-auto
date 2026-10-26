@@ -1,7 +1,7 @@
 # Programme du Raspberry Pi 5 (le chef)
 
 Paquet Python `vidange` (Python 3.11, comme Raspberry Pi OS Bookworm).
-Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés, journal, secrets, liaison avec les cartes FluidNC (et faux FluidNC), entrées/sorties du Pi par leur nom (et faux capteurs). Pas encore de logique de machine.
+Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés, journal, secrets, liaison avec les cartes FluidNC (et faux FluidNC), entrées/sorties du Pi par leur nom (et faux capteurs), chef d'orchestre (moteur d'étapes) avec un module d'exemple. Pas encore de vrai module de la machine.
 
 ## Ce qu'il y a ici
 
@@ -22,8 +22,14 @@ Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés,
 | `vidange/materiel/modbus.py` | Modbus RTU sur RS485 (transmetteurs d'ozone) |
 | `vidange/materiel/faux.py` | Faux capteurs et fausses cartes pour les tests et le simulateur |
 | `vidange/materiel/outil.py` | Commande `vidange-es` (lister, surveiller, commander) pour les essais |
-| `reglages/machine.yaml` | Axes, positions, zones (pour l'instant : un **exemple** inventé) |
-| `reglages/programme.yaml` | Réglages du programme lui-même (journal) |
+| `vidange/chef/chef.py` | Chef d'orchestre : fait avancer les modules, pause, reprise, alarmes, Go, carnet |
+| `vidange/chef/etapes.py` | Ce qui décrit un module : étapes, conditions, actions |
+| `vidange/chef/zones.py` | Zones réservées entre modules |
+| `vidange/chef/carnet.py` | Carnet de l'état du cycle (pour la reprise après coupure) |
+| `vidange/chef/axes.py` | Envoie les axes à des positions nommées de `machine.yaml` |
+| `vidange/chef/exemple.py` | Module d'**exemple** (montre comment écrire un module) |
+| `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) |
+| `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre) |
 | `reglages/fluidnc.yaml` | Cartes FluidNC (numéro de série USB) et réglages de leur liaison |
 | `secrets.exemple.yaml` | Modèle **vide** du fichier de secrets |
 | `systeme/vidange.service` | Service qui démarre avec le Pi et se relance s'il plante |
@@ -97,3 +103,52 @@ with Materiel(liste) as materiel:  # liste = charger_entrees_sorties(...)
 - Une puce qui ne répond pas lève `ErreurMateriel` (avec le nom du signal) ; le reste continue.
 - Faux matériel : `Materiel(liste, FausseFabrique(liste))`, puis `faux.actionner(...)`, `faux.regler(...)`,
   `faux.commande(...)`, `faux.debrancher(...)`. Essai rapide : `.venv/bin/vidange-es --faux lister`.
+
+## Chef d'orchestre, pour écrire un module
+
+Un module = une liste d'étapes. Chaque étape : (1) attend le Go de Karulium si elle le demande,
+(2) attend ses conditions d'entrée et réserve ses zones, (3) lance son action une fois, sans attendre,
+(4) attend sa condition de fin au plus son délai maximal, (5) libère ses zones. Modèle : `vidange/chef/exemple.py`.
+
+```python
+from vidange.chef import Axes, Carnet, Chef, Condition, Etape, Module
+
+axes = Axes(reglages.machine, {"portique": liaison_portique})
+module = Module(
+    nom="griffe",
+    etapes=(
+        Etape(
+            "descendre",
+            "Regarder si la griffe touche quelque chose, puis acquitter et donner le Go.",
+            action=lambda: axes.aller("griffe_basse"),  # nom de position de machine.yaml
+            fin=axes.arrives,
+            delai_max="griffe_descente_max",  # nom dans machine.yaml → durees
+            entree=(Condition("seau en place", lambda: materiel.lire("seau_present")),),
+            reserver=("zone_seau",),  # nom dans machine.yaml → zones
+            demande_go=True,
+        ),
+    ),
+    surveillances=(axes.surveillance,),  # vérifiées pendant les gestes
+    pauser=axes.pauser,
+    reprendre=axes.reprendre,
+    arreter=axes.pauser,
+)
+chef = Chef(reglages.machine, reglages.programme.chef, Carnet(donnees / "etat-cycle.json"))
+chef.lancer(module)  # refuse un délai ou une zone inconnus de machine.yaml
+chef.demarrer()  # puis : chef.donner_go("griffe"), chef.pause(), chef.reprendre(),
+# chef.acquitter("griffe"), chef.abandonner("griffe"), chef.etat()
+```
+
+- **Une action doit être rejouable** (aller à une position absolue, pas « avancer de 10 cm ») : après une alarme
+  ou une coupure, l'étape est refaite depuis le début.
+- Conditions et actions doivent être **rapides** (lire un capteur, envoyer une ligne) : jamais d'attente dedans.
+- Une erreur dans une condition ou une action (capteur muet, ligne refusée, `ErreurEtape`) met le module en
+  **alarme** avec le « quoi faire » de l'étape. Une alarme arrête le module (`arreter`) et, si
+  `alarme_pause_tout: true` (programme.yaml), met toute la machine en pause.
+- Après une alarme : `acquitter`, puis **Go** obligatoire, puis l'étape est refaite.
+- Le temps d'une pause ne compte pas dans les délais.
+- Plusieurs modules tournent ensemble ; un module qui veut une zone tenue par un autre attend
+  (« zone « x » libre (tenue par « y ») »). Une zone reste tenue jusqu'à `liberer` ou la fin du module.
+- L'état est noté dans `donnees/etat-cycle.json` à chaque changement (fichier jamais à moitié écrit).
+  Après une coupure : `chef.reprendre_cycle([modules])` remet chaque module à son étape, en attente du Go.
+- Le zéro des axes de `machine.yaml` est le zéro machine de leur carte FluidNC (mètres × 1000 = mm).

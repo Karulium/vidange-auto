@@ -9,26 +9,40 @@
 #   - la course d'un axe ne sort pas de son rail ;
 #   - une position ou une zone ne sort pas de la course de ses axes ;
 #   - deux zones ne se chevauchent pas (un axe non cité dans une zone = toute sa course) ;
+#   - la carte FluidNC d'un axe existe dans fluidnc.yaml, et deux axes n'ont pas la même lettre
+#     sur la même carte ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
 
 exemple: true
 
+# Pour chaque axe : sa carte FluidNC (nom dans fluidnc.yaml) et sa lettre sur cette carte.
+# Le zéro de l'axe ici est le zéro machine de la carte (positions FluidNC en mm = mètres × 1000).
 axes:
   exemple_x:
     longueur_rail: 2.0
     course: [0.0, 1.9]
+    carte: portique
+    lettre: X
   exemple_y:
     longueur_rail: 1.0
     course: [0.0, 0.9]
+    carte: portique
+    lettre: Y
   exemple_z:
     longueur_rail: 1.2
     course: [0.05, 1.1]
+    carte: portique
+    lettre: Z
 
 positions:
   exemple_repos:
-    exemple_x: 0.1
-    exemple_y: 0.1
+    exemple_x: 0.8
+    exemple_y: 0.5
     exemple_z: 1.0
+  exemple_dans_zone_a:
+    exemple_x: 0.3
+    exemple_y: 0.2
+    exemple_z: 0.9
 
 zones:
   exemple_zone_a:
@@ -36,3 +50,7 @@ zones:
     exemple_y: [0.0, 0.3]
   exemple_zone_b:
     exemple_x: [1.0, 1.9]
+
+# Délais maximaux des étapes, en secondes, par nom. Une étape qui dépasse le sien part en alarme.
+durees:
+  exemple_deplacement_max: 30

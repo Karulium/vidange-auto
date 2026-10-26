@@ -180,3 +180,39 @@ def test_fluidnc_silence_trop_court(reglages):
     remplacer(reglages / "fluidnc.yaml", "delai_silence_s: 2", "delai_silence_s: 0.5")
     message = erreur_de(reglages)
     assert "delai_silence_s (0.5 s) doit valoir au moins 3 fois periode_etat_s (0.2 s)" in message
+
+
+def test_axe_sur_carte_inconnue(reglages):
+    remplacer(reglages / "machine.yaml", "carte: portique", "carte: chariot_inconnu")
+    message = erreur_de(reglages)
+    assert "machine.yaml, axes → exemple_x : carte « chariot_inconnu » absente de fluidnc.yaml" in (
+        message
+    )
+
+
+def test_axe_avec_carte_sans_lettre(reglages):
+    remplacer(reglages / "machine.yaml", "    lettre: X\n", "")
+    assert "« carte » et « lettre » vont ensemble" in erreur_de(reglages)
+
+
+def test_deux_axes_avec_la_meme_lettre(reglages):
+    remplacer(reglages / "machine.yaml", "lettre: Y", "lettre: X")
+    message = erreur_de(reglages)
+    assert "les axes « exemple_x » et « exemple_y » ont la même lettre X" in message
+
+
+def test_lettre_d_axe_inconnue(reglages):
+    remplacer(reglages / "machine.yaml", "lettre: Y", "lettre: W")
+    assert "exemple_y → lettre : doit être l'un de" in erreur_de(reglages)
+
+
+def test_duree_negative(reglages):
+    remplacer(
+        reglages / "machine.yaml", "exemple_deplacement_max: 30", "exemple_deplacement_max: -1"
+    )
+    assert "durees → exemple_deplacement_max : doit être plus grand que 0" in erreur_de(reglages)
+
+
+def test_reglages_du_chef_manquants(reglages):
+    remplacer(reglages / "programme.yaml", "  alarme_pause_tout: true\n", "")
+    assert "programme.yaml, chef → alarme_pause_tout : manque" in erreur_de(reglages)

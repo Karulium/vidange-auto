@@ -41,7 +41,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   sont reliés au Pi (GPIO direct ou I2C) n'est pas encore décidée : prévoir les deux derrière la même interface.
   Un faux de chaque capteur pour les tests et le simulateur.
 
-- [ ] **5. Chef d'orchestre** — Modèle : Opus.
+- [x] **5. Chef d'orchestre** — Modèle : Opus.
   Moteur d'étapes : un module = une liste d'étapes avec conditions d'entrée, action, condition de fin, délai maximal.
   Zones réservées entre axes, pause, reprise, alarme avec message « quoi faire », attente du « Go » de Karulium.
   **L'état du cycle est noté en continu** (pour la reprise après coupure). Un module d'exemple sur le faux FluidNC.
