@@ -51,7 +51,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   réglages appliqués (ancien / nouveau / qui / quand). **Les photos restent en fichiers sur le SSD ; la base garde
   seulement leur chemin.** Montées de version de la base. Copie de secours quotidienne.
 
-- [ ] **7. Fiabilité** — Modèle : Opus.
+- [x] **7. Fiabilité** — Modèle : Opus.
   Chien de garde Pi ↔ cartes (fonction 14), check-list de démarrage (12), reprise après coupure de courant (3),
   arrêt propre sur onduleur (4), bilan et « quoi faire » de chaque alarme (17, 18), santé de l'informatique (45).
   À faire avant que la vraie machine bouge.

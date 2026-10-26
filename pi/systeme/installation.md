@@ -69,9 +69,34 @@ journalctl -u vidange -f
 ```
 Le journal est aussi gardé dans `/var/lib/vidange/journal/vidange.log`.
 
-## 6. Essais à faire sur le vrai Pi
+## 6. Donner au programme le droit d'éteindre le Pi (onduleur)
+
+Quand l'onduleur dit que le courant est coupé depuis trop longtemps, le programme s'arrête proprement puis
+éteint le Pi. Le compte `vidange` a le droit de lancer **seulement** cette commande-là :
+```
+echo 'vidange ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff' | sudo tee /etc/sudoers.d/vidange-extinction
+sudo chmod 440 /etc/sudoers.d/vidange-extinction
+sudo visudo -c          # doit dire « parsed OK » pour chaque fichier
+```
+
+## 7. Chien de garde matériel du Pi
+
+Si tout le Pi se fige (pas seulement le programme), sa puce « chien de garde » le redémarre. On demande
+à systemd de l'utiliser (le Pi 5 accepte au plus 15 s) :
+```
+sudo mkdir -p /etc/systemd/system.conf.d
+printf '[Manager]\nRuntimeWatchdogSec=14\n' | sudo tee /etc/systemd/system.conf.d/chien-de-garde.conf
+sudo systemctl daemon-reexec
+systemctl show -p RuntimeWatchdogUSec        # doit dire RuntimeWatchdogUSec=14s
+```
+
+Le chien de garde du programme lui-même est déjà dans `vidange.service` (`WatchdogSec`) : si le programme
+se fige, systemd le relance.
+
+## 8. Essais à faire sur le vrai Pi
 
 Essai des capteurs et des relais : voir `essai-entrees-sorties.md`.
+Essai de la fiabilité (programme figé, coupure de courant, onduleur...) : voir `essai-fiabilite.md`.
 
 Cocher chaque essai réussi.
 

@@ -229,3 +229,13 @@ def test_carte_trouvee_par_son_numero_de_serie(monkeypatch):
         with pytest.raises(ErreurFluidnc):
             liaison.attendre_connexion(0.1)
     assert appels[0] == ("A1", 115200, 0.02)
+
+
+def test_redemarrage_tout_seul_compte(faux, liaison):
+    """Une carte qui redémarre seule est comptée ; une réinitialisation demandée ne l'est pas."""
+    liaison.reinitialiser()
+    liaison.attendre(lambda etat: etat.rapports_recus > 2, DELAI)
+    assert liaison.etat.redemarrages == 0
+    faux.redemarrer()
+    # Position perdue : la carte se remet en alarme (le faux comme le vrai FluidNC).
+    liaison.attendre(lambda etat: etat.redemarrages == 1 and etat.en_alarme, DELAI)

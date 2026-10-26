@@ -55,6 +55,9 @@ class EtatCarte:
     coupures: int = 0
     # Nombre de rapports d'état reçus depuis le démarrage.
     rapports_recus: int = 0
+    # Nombre de fois où la carte a redémarré toute seule (alimentation, parasite...) alors
+    # qu'elle parlait déjà : pas son démarrage normal, ni une réinitialisation demandée.
+    redemarrages: int = 0
 
     @property
     def au_repos(self) -> bool:
@@ -147,6 +150,7 @@ class Liaison:
         self._prochaine_demande = 0.0
         self._prevenu_repere = False
         self._pause_avant_connexion = False
+        self._reinitialisation_demandee = False
 
         self._arret = threading.Event()
         self._fil: threading.Thread | None = None
@@ -258,6 +262,7 @@ class Liaison:
         """
         with self._verrou:
             self._ecrire_temps_reel(protocole.REINITIALISATION)
+            self._reinitialisation_demandee = True
             self._abandonner("annulée : réinitialisation de la carte")
 
     # ------------------------------------------------------------ fonctionnement interne
@@ -455,6 +460,10 @@ class Liaison:
                 "perdue : la carte a redémarré, on ne sait pas si elle l'a exécutée",
                 "annulée : la carte a redémarré",
             )
+            if self._reinitialisation_demandee:
+                self._reinitialisation_demandee = False
+            elif self._etat.etat is not None:
+                self._mettre_a_jour(redemarrages=self._etat.redemarrages + 1)
         elif sorte == "message":
             self._journal.info("Carte « %s » : %s", self.nom, ligne)
         else:

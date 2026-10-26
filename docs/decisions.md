@@ -48,6 +48,19 @@ si l'une pose problème, elle le dit dans sa PR.
      d'essais feront varier la dose. Dans le logiciel de culture, un lot d'inoculation réunit plusieurs bocaux et
      plusieurs seaux.
   3. 30 copies gardées, réglable dans `programme.yaml`.
+- **Petits seaux : un bocal de mycélium peut servir à 2 seaux au plus** (Karulium, 26/10/2026). Le registre le
+  permet déjà (une dose = un seau + un bocal). Les gestes du module Mycélium en tiendront compte (le bocal reste
+  dans l'agitateur entre les deux seaux, qui passent l'un après l'autre).
+- **Réponses aux questions de la PR n° 8** (fiabilité) :
+  1. **Onduleur** : Karulium a déjà choisi (08/10/2026, projet mécanique) un **onduleur 230 V** (« niveau 2 »,
+     environ 120 €), posé sur une étagère sous l'armoire ; il garde l'armoire alimentée. Le signal
+     `onduleur_sur_batterie` ne vient pas de l'onduleur lui-même mais d'un **petit relais 230 V branché AVANT
+     l'onduleur** (sur le secteur) : son contact est fermé tant que le secteur est là. Aucun ajout au code, et
+     ça marche avec n'importe quel onduleur. Un fil coupé se voit comme une coupure (pause, puis arrêt propre) :
+     c'est le côté prudent. Lecture de la batterie par USB (NUT) : peut-être plus tard, pas nécessaire.
+  2. **Relais « chien de garde » vers les cartes** : pas pour l'instant (aucun risque pour les personnes, la
+     sécurité est câblée). On en reparle quand on comptera les entrées des cartes ; `battement_pi` est prêt.
+  3. **Lieu sûr proposé à chaque démarrage** : oui (il attend toujours le Go).
 
 ## Accès à distance et mises à jour (Karulium, 26/10/2026)
 

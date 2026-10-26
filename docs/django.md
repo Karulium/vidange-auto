@@ -20,6 +20,8 @@ aux données collectées (Pétri, bocaux, seaux) ou aux plans d'expériences.
 - Dans l'autre sens, le Pi peut demander la recette ou le lot prévu (souche, dose).
 - Liaison : API web interne protégée par une clé, réseau local seulement.
 
-## À demander à Karulium avant d'écrire l'app « machine »
+## Où est le code
 
-Où est le code (dépôt GitHub ?), version de Django, présence de Django REST Framework.
+Dépôt GitHub privé **`Karulium/Karulium`** (Karulium, 26/10/2026). Les sessions de ce dépôt ne le lisent
+pas et n'y écrivent jamais : ce qu'il faut en savoir (version de Django, Django REST Framework, tables,
+lots d'inoculation, QR) sera recopié ici avant la tâche 10.

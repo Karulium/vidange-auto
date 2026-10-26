@@ -406,7 +406,9 @@ class Registre:
         quoi_faire: str | None = None,
         etape: str | None = None,
         cycle: int | None = None,
+        bilan: str | None = None,
     ) -> int:
+        """`bilan` : chemin du fichier de bilan de l'alarme, relatif au dossier des données."""
         with self._ecriture() as cnx:
             return self._inserer(
                 cnx,
@@ -418,8 +420,13 @@ class Registre:
                     "message": message,
                     "quoi_faire": quoi_faire,
                     "cycle_id": cycle,
+                    "bilan": bilan,
                 },
             )
+
+    def alarmes_ouvertes(self) -> list[dict[str, Any]]:
+        """Les alarmes pas encore acquittées, de la plus vieille à la plus récente."""
+        return self.lire("SELECT * FROM alarmes WHERE acquittee_le IS NULL ORDER BY id")
 
     def acquitter_alarme(self, alarme: int, qui: str) -> None:
         with self._ecriture() as cnx:

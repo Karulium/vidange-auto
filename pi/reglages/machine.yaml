@@ -11,6 +11,7 @@
 #   - deux zones ne se chevauchent pas (un axe non cité dans une zone = toute sa course) ;
 #   - la carte FluidNC d'un axe existe dans fluidnc.yaml, et deux axes n'ont pas la même lettre
 #     sur la même carte ;
+#   - chaque geste de « lieu_sur » cite une carte, une position et un délai qui existent ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
 
 exemple: true
@@ -54,3 +55,16 @@ zones:
 # Délais maximaux des étapes, en secondes, par nom. Une étape qui dépasse le sien part en alarme.
 durees:
   exemple_deplacement_max: 30
+  exemple_prise_origine_max: 90
+
+# Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
+# et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :
+#   - prise_origine: <carte>   prise d'origine ($H) d'une carte FluidNC (fluidnc.yaml) ;
+#   - aller: <position>        envoyer les axes à une position nommée (plus haut).
+# Chaque geste a son délai maximal (nom dans durees). L'ordre (quelle carte d'abord, quels axes
+# remontent avant de bouger) vient de la mécanique : il sera rempli avec les modules.
+lieu_sur:
+  - prise_origine: portique
+    delai: exemple_prise_origine_max
+  - aller: exemple_repos
+    delai: exemple_deplacement_max

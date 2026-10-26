@@ -7,8 +7,12 @@
     chef.pause() / chef.reprendre()
     chef.acquitter("exemple") # après une alarme : l'étape sera refaite, après un nouveau Go
     chef.etat()               # pour les écrans : ce que fait chaque module, ce qu'il attend
+    chef.memoriser("exemple", seau="S1293", cycle=12)  # gardé dans le carnet (reprise)
+    chef.sur_alarme.append(f)  # f(alarme) est appelée à chaque nouvelle alarme (bilan...)
 
 Plusieurs modules peuvent tourner en même temps : ils se partagent les zones réservées.
+Un module « exclusif » (lieu sûr) passe avant tous les autres : tant qu'il est en route,
+les autres attendent, et un Go qui leur est donné est refusé.
 
 Le temps d'une pause ne compte pas dans les délais. Une alarme arrête le module (et met toute
 la machine en pause si « alarme_pause_tout ») ; elle attend que Karulium l'acquitte, puis l'étape
@@ -16,15 +20,18 @@ est refaite depuis le début après un nouveau Go.
 
 À chaque changement (étape, phase, pause, Go, alarme, zones), l'état est noté dans le carnet,
 pour la reprise après coupure (`reprendre_cycle`). Après une coupure, rien ne repart sans Go.
+La mémoire d'un module (seau en cours, numéro du cycle dans le registre...) est notée avec,
+pour reprendre au bon seau. Par convention, « cycle » y est le numéro du cycle du registre.
 
 Les conditions et les actions sont appelées par le chef lui-même : elles doivent être rapides
 (lire un capteur, envoyer une ligne), jamais attendre.
 """
 
+import json
 import threading
 import time
 from collections.abc import Callable, Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Literal
 
@@ -32,6 +39,7 @@ from vidange.chef.carnet import Carnet
 from vidange.chef.etapes import ErreurChef, ErreurEtape, Etape, Module
 from vidange.chef.zones import Reservations
 from vidange.journal import donner_journal
+from vidange.quoi_faire import ERREUR_PROGRAMME, pour_erreur
 from vidange.reglages import Machine, ReglagesChef
 
 journal = donner_journal("chef")
@@ -102,6 +110,8 @@ class _Deroulement:
     mis_en_pause: bool = False
     attend: str = ""
     alarme: Alarme | None = None
+    # Ce que le module veut retrouver après une coupure (seau en cours...), noté dans le carnet.
+    memoire: dict[str, Any] = field(default_factory=dict)
 
     @property
     def etape(self) -> Etape:
@@ -144,6 +154,8 @@ class Chef:
         self._dernier: float | None = None
         self._arret = threading.Event()
         self._fil: threading.Thread | None = None
+        # Appelées (sous le verrou du chef : elles doivent être rapides) à chaque nouvelle alarme.
+        self.sur_alarme: list[Callable[[Alarme], object]] = []
 
     # ------------------------------------------------------------ marche / arrêt
 
@@ -188,6 +200,13 @@ class Chef:
             ancien = self._deroulements.get(module.nom)
             if ancien is not None and ancien.statut in ("en_cours", "alarme"):
                 raise ErreurChef(f"le module « {module.nom} » est déjà en route")
+            if module.exclusif:
+                for autre in self._deroulements.values():
+                    if autre.statut == "en_cours" and not autre.attend_go:
+                        raise ErreurChef(
+                            f"module exclusif « {module.nom} » : « {autre.nom} » est en plein "
+                            "geste, le mettre en pause ou attendre qu'il attende un Go"
+                        )
             self._deroulements[module.nom] = _Deroulement(module)
             journal.info("Module « %s » lancé (%d étapes)", module.nom, len(module.etapes))
             self._noter()
@@ -214,7 +233,10 @@ class Chef:
                     raise ErreurChef(f"carnet : module « {note['module']} » inconnu du programme")
                 self.verifier(module)
                 deroulement = _Deroulement(
-                    module, numero=module.numero(note["etape"]), go_obligatoire=True
+                    module,
+                    numero=module.numero(note["etape"]),
+                    go_obligatoire=True,
+                    memoire=dict(note.get("memoire") or {}),
                 )
                 if note.get("alarme"):
                     deroulement.statut = "alarme"
@@ -240,6 +262,9 @@ class Chef:
     def donner_go(self, nom: str) -> None:
         with self._verrou:
             deroulement = self._trouver(nom)
+            exclusif = self._exclusif_actif()
+            if exclusif is not None and exclusif is not deroulement:
+                raise ErreurChef(f"le module « {nom} » attend la fin de « {exclusif.nom} »")
             if not deroulement.attend_go:
                 raise ErreurChef(f"le module « {nom} » n'attend pas de Go")
             deroulement.go_recu = True
@@ -312,12 +337,35 @@ class Chef:
 
     # ------------------------------------------------------------ ce qu'on sait
 
+    def memoriser(self, nom: str, **valeurs: Any) -> None:
+        """Garde des valeurs du module (seau en cours...) dans le carnet, pour la reprise."""
+        with self._verrou:
+            deroulement = self._trouver(nom)
+            try:
+                json.dumps(valeurs)
+            except (TypeError, ValueError):
+                raise ErreurChef(
+                    f"module « {nom} » : mémoire impossible à noter (textes et nombres seulement)"
+                ) from None
+            deroulement.memoire.update(valeurs)
+            self._noter()
+
+    def memoire(self, nom: str) -> dict[str, Any]:
+        with self._verrou:
+            return dict(self._trouver(nom).memoire)
+
     @property
     def en_pause(self) -> bool:
         return self._en_pause
 
+    @property
+    def dernier_tour(self) -> float | None:
+        """Heure (horloge du chef) du dernier tour : sert au chien de garde (chef figé ?)."""
+        return self._dernier
+
     def etat(self) -> EtatChef:
         with self._verrou:
+            exclusif = self._exclusif_actif()
             modules = tuple(
                 EtatModule(
                     module=d.nom,
@@ -326,13 +374,26 @@ class Chef:
                     numero=d.numero + 1,
                     nombre_etapes=len(d.module.etapes),
                     phase=d.phase,
-                    attend=ATTENTE_GO if d.attend_go else d.attend,
+                    attend=self._attente(d, exclusif),
                     zones=tuple(self._zones.tenues_par(d.nom)),
                     alarme=d.alarme,
                 )
                 for d in self._deroulements.values()
             )
             return EtatChef(en_pause=self._en_pause, modules=modules)
+
+    @staticmethod
+    def _attente(d: _Deroulement, exclusif: _Deroulement | None) -> str:
+        if d.statut == "en_cours" and exclusif is not None and exclusif is not d:
+            return f"fin de « {exclusif.nom} »"
+        return ATTENTE_GO if d.attend_go else d.attend
+
+    def _exclusif_actif(self) -> _Deroulement | None:
+        """Le module exclusif en route (ou en alarme), s'il y en a un."""
+        for d in self._deroulements.values():
+            if d.module.exclusif and d.statut in ("en_cours", "alarme"):
+                return d
+        return None
 
     # ------------------------------------------------------------ fonctionnement
 
@@ -342,10 +403,13 @@ class Chef:
             maintenant = self._horloge()
             ecoule = 0.0 if self._dernier is None else max(maintenant - self._dernier, 0.0)
             self._dernier = maintenant
+            exclusif = self._exclusif_actif()
             for deroulement in list(self._deroulements.values()):
                 # Une alarme d'un module peut mettre les autres en pause pendant ce tour.
                 if self._en_pause:
                     return
+                if exclusif is not None and deroulement is not exclusif:
+                    continue
                 if deroulement.statut == "en_cours":
                     self._avancer_module(deroulement, ecoule)
 
@@ -379,11 +443,14 @@ class Chef:
             d.attend = etape.fin.texte
             self._verifier_delai(d, etape.delai_max, f"pas atteint : {etape.fin.texte}")
         except ErreurEtape as erreur:
-            self._alarme(d, str(erreur))
+            self._alarme(d, str(erreur), erreur.quoi_faire or None)
         except Exception as erreur:
             # Erreur imprévue du code d'un module (ou capteur muet) : alarme, le reste continue.
             journal.exception("« %s », étape « %s » : erreur", d.nom, etape.nom)
-            self._alarme(d, f"erreur : {erreur}")
+            quoi_faire = pour_erreur(erreur)
+            if quoi_faire is None:
+                quoi_faire = f"{d.etape.quoi_faire} {ERREUR_PROGRAMME}"
+            self._alarme(d, f"erreur : {erreur}", quoi_faire)
 
     def _peut_entrer(self, d: _Deroulement) -> bool:
         for condition in d.etape.entree:
@@ -446,6 +513,11 @@ class Chef:
         )
         self._appeler(d, d.module.arreter, "l'arrêt")
         self._noter()
+        for ecouteur in self.sur_alarme:
+            try:
+                ecouteur(d.alarme)
+            except Exception:
+                journal.exception("« %s » : le bilan de l'alarme a échoué", d.nom)
         if self._reglages.alarme_pause_tout:
             self.pause()
 
@@ -478,6 +550,7 @@ class Chef:
                     "go_recu": d.go_recu,
                     "zones": self._zones.tenues_par(d.nom),
                     "alarme": asdict(d.alarme) if d.alarme is not None else None,
+                    "memoire": d.memoire,
                 }
                 for d in self._deroulements.values()
             ],

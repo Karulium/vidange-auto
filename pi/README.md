@@ -1,13 +1,15 @@
 # Programme du Raspberry Pi 5 (le chef)
 
 Paquet Python `vidange` (Python 3.11, comme Raspberry Pi OS Bookworm).
-Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés, journal, secrets, liaison avec les cartes FluidNC (et faux FluidNC), entrées/sorties du Pi par leur nom (et faux capteurs), chef d'orchestre (moteur d'étapes) avec un module d'exemple, registre (base SQLite) avec copie de secours quotidienne. Pas encore de vrai module de la machine.
+Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés, journal, secrets, liaison avec les cartes FluidNC (et faux FluidNC), entrées/sorties du Pi par leur nom (et faux capteurs), chef d'orchestre (moteur d'étapes) avec un module d'exemple, registre (base SQLite) avec copie de secours quotidienne, fiabilité (chien de garde, check-list de démarrage,
+reprise après coupure et retour en lieu sûr, arrêt propre sur onduleur, bilan de chaque alarme, santé du Pi).
+Pas encore de vrai module de la machine.
 
 ## Ce qu'il y a ici
 
 | Chemin | Rôle |
 |---|---|
-| `vidange/demarrage.py` | Démarrage : lit les réglages, met le journal en place, attend l'arrêt |
+| `vidange/demarrage.py` | Démarrage : réglages, journal, registre, matériel, cartes, chef, surveillance ; arrêt propre |
 | `vidange/reglages.py` | Lecture et vérification des fichiers de `reglages/` |
 | `vidange/entrees_sorties.py` | Lecture et vérification de `docs/entrees-sorties.yaml` (cartes, broches, tensions) |
 | `vidange/journal.py` | Journal (logs) commun : `donner_journal("nom")` |
@@ -32,6 +34,14 @@ Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés,
 | `vidange/registre/montees.py` | Tables de la base et leurs montées de version |
 | `vidange/registre/sauvegarde.py` | Copie de secours quotidienne de la base |
 | `vidange/registre/outil.py` | Commande `vidange-registre` (état de la base, copie à la main) |
+| `vidange/quoi_faire.py` | **Catalogue des « quoi faire »** de chaque alarme (cartes FluidNC, câble, capteur muet...) |
+| `vidange/fiabilite/chien_de_garde.py` | Chien de garde : surveille les cartes et le chef, dit « je vis » à systemd, battement |
+| `vidange/fiabilite/checklist.py` | Check-list de démarrage : tout ce qui empêche de lancer la production |
+| `vidange/fiabilite/marche.py` | Reconnaît comment s'est fini le passage précédent (propre, plantage, coupure) |
+| `vidange/fiabilite/lieu_sur.py` | Module « lieu_sur » : prises d'origine et positions sûres (liste de `machine.yaml`) |
+| `vidange/fiabilite/onduleur.py` | Arrêt propre sur onduleur |
+| `vidange/fiabilite/bilans.py` | Bilan de chaque alarme (fichier JSON) et alarme dans le registre ; acquittement |
+| `vidange/fiabilite/sante.py` | Santé du Pi : température, alimentation, disque, mémoire, heure, copie de secours |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) |
 | `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, copie de secours du registre) |
 | `reglages/fluidnc.yaml` | Cartes FluidNC (numéro de série USB) et réglages de leur liaison |
@@ -39,6 +49,7 @@ Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés,
 | `systeme/vidange.service` | Service qui démarre avec le Pi et se relance s'il plante |
 | `systeme/installation.md` | Installation sur le Pi, pas à pas |
 | `systeme/essai-entrees-sorties.md` | Essai des entrées/sorties sur le vrai matériel, pas à pas |
+| `systeme/essai-fiabilite.md` | Essai de la fiabilité sur le vrai matériel (coupures, chien de garde...), pas à pas |
 | `tests/` | Tests (pytest) |
 
 ## Essayer sur un PC
@@ -85,6 +96,8 @@ with Liaison("portique", reglages.fluidnc) as portique:  # se connecte et se rec
 - `0` : arrêt normal.
 - `1` : plantage imprévu (systemd relance le programme 5 s après).
 - `2` : réglages faux (systemd ne relance pas : corriger les réglages, puis relancer le service).
+- `3` : base du registre abîmée (systemd ne relance pas : voir « Registre » plus bas).
+- Programme figé : il ne dit plus « je vis » ; systemd l'arrête et le relance au bout de `WatchdogSec`.
 
 ## Entrées/sorties du Pi, pour le chef d'orchestre
 
@@ -156,6 +169,35 @@ chef.demarrer()  # puis : chef.donner_go("griffe"), chef.pause(), chef.reprendre
 - L'état est noté dans `donnees/etat-cycle.json` à chaque changement (fichier jamais à moitié écrit).
   Après une coupure : `chef.reprendre_cycle([modules])` remet chaque module à son étape, en attente du Go.
 - Le zéro des axes de `machine.yaml` est le zéro machine de leur carte FluidNC (mètres × 1000 = mm).
+- **Reprise au bon seau** : `chef.memoriser("griffe", seau="S1293", cycle=12)` garde ces valeurs dans le carnet ;
+  après une coupure, `chef.memoire("griffe")` les rend. Par convention, `cycle` = numéro du cycle du registre
+  (le bilan d'une alarme le note avec elle).
+- `ErreurEtape("message", quoi_faire)` : quand on connaît la cause exacte, son « quoi faire » remplace celui de
+  l'étape. Les « quoi faire » communs sont dans `vidange/quoi_faire.py`.
+- Un module `exclusif=True` (comme « lieu_sur ») passe avant tous les autres : tant qu'il tourne, les autres
+  attendent (« fin de « lieu_sur » ») et un Go qui leur est donné est refusé.
+
+## Fiabilité (tâche 7)
+
+- **Au démarrage**, le programme dit comment s'est fini le passage précédent (`donnees/etat-programme.json`) :
+  arrêt propre, plantage (le programme a été relancé) ou coupure (le Pi a redémarré). Plantage et coupure
+  sont notés comme une alarme dans le registre, à acquitter.
+- **Reprise** : les modules du carnet reprennent à leur étape, avec leur mémoire. Le module « lieu_sur »
+  (prises d'origine et positions sûres, liste `lieu_sur` de `machine.yaml`) est proposé à chaque démarrage :
+  il attend le Go, et passe avant les modules repris. Ensuite seulement, chaque module attend son Go.
+- **Check-list de démarrage** : écrite au journal à chaque démarrage. Bloquant : réglages d'exemple,
+  entrée/sortie illisible ou pas dans son état `au_demarrage`, carte FluidNC absente ou en alarme, module en
+  alarme, disque presque plein, courant coupé. La page web et l'écran la referont avant chaque lancement.
+- **Chien de garde** : toutes les 2 s, si le chef d'orchestre tourne, « je vis » à systemd (et battement de
+  `battement_pi` s'il existe). Les cartes FluidNC sont surveillées par leur liaison (muette, débranchée,
+  redémarrée toute seule).
+- **Onduleur** : `onduleur_sur_batterie` actionné → pause tout de suite ; après `delai_avant_arret_s`, arrêt
+  propre puis extinction du Pi (`commande_arret`). Courant revenu avant : la machine reste en pause.
+- **Bilan de chaque alarme** : `donnees/bilans/AAAA-MM-JJ/HHMMSS-module.json` (alarme, quoi faire, modules,
+  cartes et positions, entrées, sorties, mesures, santé, fin du journal) ; le registre garde son chemin.
+  Le clip vidéo viendra avec la tâche 12 (`bilans.collecteurs`). Acquitter : `bilans.acquitter(numero, qui)`.
+- **Santé du Pi** : toutes les 5 min, notée dans le registre (mesures `temperature_pi`, `disque_libre`,
+  `memoire_libre`) ; un changement de niveau est écrit au journal. Seuils dans `programme.yaml` → `fiabilite`.
 
 ## Registre (base SQLite)
 
