@@ -61,6 +61,10 @@ si l'une pose problème, elle le dit dans sa PR.
   2. **Relais « chien de garde » vers les cartes** : pas pour l'instant (aucun risque pour les personnes, la
      sécurité est câblée). On en reparle quand on comptera les entrées des cartes ; `battement_pi` est prêt.
   3. **Lieu sûr proposé à chaque démarrage** : oui (il attend toujours le Go).
+- **Réponse à la question de la PR n° 9** (API et page web) : **option A** pour l'instant. La page est
+  joignable depuis le réseau local (en clair, http, protégé par le mot de passe du Wi-Fi de l'atelier) et par
+  Tailscale (chiffré) ; elle marche sans Internet. Si d'autres personnes utilisent ce Wi-Fi : passer à « Tailscale
+  seulement » en retirant les réseaux locaux de `reseaux_autorises` (`programme.yaml`), sans toucher au code.
 
 ## Accès à distance et mises à jour (Karulium, 26/10/2026)
 
