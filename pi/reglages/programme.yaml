@@ -1,0 +1,8 @@
+# Réglages du programme du Pi lui-même (pas de la machine).
+
+journal:
+  # Ce qu'on garde : detail (tout), info (normal), avertissement, erreur.
+  niveau: info
+  # Le fichier de journal change quand il atteint cette taille ; on garde ce nombre d'anciens fichiers.
+  taille_fichier_mo: 10
+  nombre_fichiers: 10

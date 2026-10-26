@@ -16,7 +16,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
 
 ## Partie 1 : la base, qui ne dépend pas de la mécanique
 
-- [ ] **1. Squelette du programme du Pi** — Modèle : Opus.
+- [x] **1. Squelette du programme du Pi** — Modèle : Opus.
   Paquet Python `pi/vidange/` (Python 3.11), dépendances (`pyproject.toml`), tests (pytest), style (ruff),
   GitHub Actions qui lance tout à chaque PR. Chargement et vérification des fichiers de réglages
   (`pi/reglages/*.yaml`, pydantic) avec un exemple : une erreur arrête le démarrage avec un message clair en français.

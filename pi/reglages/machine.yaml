@@ -1,0 +1,38 @@
+# Réglages de la machine : axes, positions nommées, zones réservées.
+# Unités : mètres. Repère : x vers le stockage, y vers l'allée, z vers le haut.
+#
+# ATTENTION : tout ce fichier est un EXEMPLE (valeurs inventées) pour montrer le format.
+# Les vrais axes, positions et zones arrivent avec les tâches des modules,
+# depuis docs/decisions.md. Quand le fichier sera vrai, passer « exemple » à false.
+#
+# Vérifié au démarrage :
+#   - la course d'un axe ne sort pas de son rail ;
+#   - une position ou une zone ne sort pas de la course de ses axes ;
+#   - deux zones ne se chevauchent pas (un axe non cité dans une zone = toute sa course) ;
+#   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
+
+exemple: true
+
+axes:
+  exemple_x:
+    longueur_rail: 2.0
+    course: [0.0, 1.9]
+  exemple_y:
+    longueur_rail: 1.0
+    course: [0.0, 0.9]
+  exemple_z:
+    longueur_rail: 1.2
+    course: [0.05, 1.1]
+
+positions:
+  exemple_repos:
+    exemple_x: 0.1
+    exemple_y: 0.1
+    exemple_z: 1.0
+
+zones:
+  exemple_zone_a:
+    exemple_x: [0.0, 0.5]
+    exemple_y: [0.0, 0.3]
+  exemple_zone_b:
+    exemple_x: [1.0, 1.9]
