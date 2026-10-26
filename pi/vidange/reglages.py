@@ -32,6 +32,8 @@ class Modele(BaseModel):
 # Noms des axes, positions, zones : minuscules sans accent, comme dans le code.
 Nom = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*$")]
 Intervalle = tuple[float, float]
+# Lettres des axes d'une carte FluidNC.
+Lettre = Literal["X", "Y", "Z", "A", "B", "C"]
 
 
 # ---------------------------------------------------------------- machine.yaml
@@ -42,9 +44,14 @@ class Axe(Modele):
 
     longueur_rail: float = Field(gt=0)
     course: Intervalle
+    # Carte FluidNC qui fait bouger l'axe (nom dans fluidnc.yaml) et lettre de l'axe sur la carte.
+    carte: Nom | None = None
+    lettre: Lettre | None = None
 
     @model_validator(mode="after")
     def _verifier_course(self) -> "Axe":
+        if (self.carte is None) != (self.lettre is None):
+            raise ValueError("« carte » et « lettre » vont ensemble : écrire les deux, ou aucun")
         debut, fin = self.course
         if debut >= fin:
             raise ValueError(
@@ -70,10 +77,22 @@ class Machine(Modele):
     zones: dict[Nom, Annotated[dict[Nom, Intervalle], Field(min_length=1)]] = Field(
         default_factory=dict
     )
+    # Délais maximaux des étapes (s), par nom : le code des modules ne cite que ces noms.
+    durees: dict[Nom, Annotated[float, Field(gt=0)]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
         erreurs: list[str] = []
+        lettres_prises: dict[tuple[str, str], str] = {}
+        for nom, axe in self.axes.items():
+            if axe.carte is None or axe.lettre is None:
+                continue
+            autre = lettres_prises.setdefault((axe.carte, axe.lettre), nom)
+            if autre != nom:
+                erreurs.append(
+                    f"les axes « {autre} » et « {nom} » ont la même lettre {axe.lettre} "
+                    f"sur la carte « {axe.carte} »"
+                )
         for nom, valeurs in self.positions.items():
             for axe, valeur in valeurs.items():
                 if axe not in self.axes:
@@ -137,10 +156,20 @@ class Journal(Modele):
     nombre_fichiers: int = Field(ge=1)
 
 
+class ReglagesChef(Modele):
+    """Réglages du chef d'orchestre."""
+
+    # Tous les combien il regarde les conditions des étapes (s).
+    periode_s: float = Field(gt=0, le=1)
+    # Une alarme dans un module met toute la machine en pause, ou seulement ce module.
+    alarme_pause_tout: bool
+
+
 class Programme(Modele):
     """programme.yaml : réglages du programme lui-même (pas de la machine)."""
 
     journal: Journal
+    chef: ReglagesChef
 
 
 # ---------------------------------------------------------------- fluidnc.yaml
@@ -238,9 +267,23 @@ def charger_reglages(dossier: Path) -> Reglages:
             erreurs.append(str(erreur))
         except ValidationError as erreur:
             erreurs.extend(traduire_erreurs(erreur, nom_fichier))
+    if not erreurs:
+        erreurs.extend(_verifier_entre_fichiers(valeurs))
     if erreurs:
         raise ErreurReglages(rediger(erreurs, dossier))
     return Reglages.model_validate(valeurs)
+
+
+def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
+    """Ce qu'un fichier cite d'un autre fichier doit y exister."""
+    machine, fluidnc = valeurs["machine"], valeurs["fluidnc"]
+    assert isinstance(machine, Machine) and isinstance(fluidnc, Fluidnc)
+    return [
+        f"machine.yaml, axes → {nom} : carte « {axe.carte} » absente de fluidnc.yaml "
+        f"(cartes : {', '.join(fluidnc.cartes)})"
+        for nom, axe in machine.axes.items()
+        if axe.carte is not None and axe.carte not in fluidnc.cartes
+    ]
 
 
 def rediger(erreurs: list[str], dossier: Path) -> str:
