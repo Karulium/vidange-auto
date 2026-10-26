@@ -14,6 +14,28 @@ si l'une pose problème, elle le dit dans sa PR.
 - Assistant vocal éventuel : jamais de commande des moteurs.
 - UV et ozone : modes verrouillés par le Pi (en plus des sécurités câblées).
 
+## Accès à distance et mises à jour (Karulium, 26/10/2026)
+
+- **Accès à distance par Tailscale** (Karulium l'utilise déjà pour son serveur). Aucun port ouvert sur la box.
+  L'API et la page web du Pi ne sont joignables que par le réseau local et Tailscale, avec une clé.
+- **Vidéos à distance** : voir les caméras en direct sur la page web, et revoir les clips d'incidents
+  (mémoire tournante de 60 s gardée à chaque alarme).
+- **Pilotage manuel à distance, en cas de problème : OUI** (choix de Karulium). Garde-fous logiciels prévus :
+  - un « mode à distance » qu'on active exprès, avec la vidéo en direct affichée pendant tout le pilotage ;
+  - vitesse réduite (plafond dans les réglages) ;
+  - « homme mort » : le mouvement ne dure que tant que le bouton est tenu ; il s'arrête si on lâche,
+    si la connexion se coupe ou si la vidéo se fige ;
+  - l'écran de l'armoire affiche « pilotage à distance en cours » ; une action sur place (Pause, arrêt) reprend
+    toujours la main ;
+  - chaque action à distance est notée dans le registre (qui, quand, quoi).
+  La sécurité câblée (arrêt d'urgence, portes) reste au-dessus de tout et coupe aussi le pilotage à distance.
+- **Mises à jour des cartes par le Pi** (pas de wifi sur les cartes) : le Pi met à jour les ESP32 par leur câble USB
+  (programme FluidNC et ses réglages, programme du spray), seulement machine à l'arrêt, en gardant l'ancienne
+  version pour revenir en arrière, et en vérifiant la carte après la mise à jour. Le RP2040 de l'accéléromètre
+  sera mis à jour par 2 fils de plus vers le Pi (SWD) : à ajouter au câblage.
+- **Mise à jour du programme du Pi lui-même** : depuis GitHub (versions acceptées sur `main`), machine à l'arrêt,
+  retour possible à la version d'avant.
+
 ## Règles validées (modules figés)
 
 1. **Caméra du plafond** : 9 règles « situation → travail » validées (tableau à recopier ici quand la tâche Vision arrive). Le Pi PROPOSE le travail et attend le « Go » de Karulium. Repère ArUco 40 mm sur le plateau du rince-verre du lave-bocal. Corrections après essais réels.

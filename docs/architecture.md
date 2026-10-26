@@ -26,7 +26,7 @@ Chaque morceau peut planter sans faire tomber les autres.
 2. **Chef d'orchestre** : chaque module est une liste d'étapes avec leurs conditions (« la griffe ne descend que si... »). Gère pause, reprise, alarmes, zones réservées entre axes, attente du « Go ».
 3. **Vision** : caméras, QR, repérage des bocaux et des seaux (OpenCV, zxing-cpp, NumPy ; YOLO nano en option).
 4. **Registre** : base SQLite sur le Pi (fûts, seaux, bocaux, cycles, mesures, photos, alarmes, réglages appliqués).
-5. **Écrans** : Nextion (simple : état, alarme et quoi faire, Pause, Go, compteurs) et page web locale (tout le reste : photos, historique, réglages), ouverte depuis le téléphone ou un PC.
+5. **Écrans** : Nextion (simple : état, alarme et quoi faire, Pause, Go, compteurs) et page web (tout le reste : vidéos, photos, historique, réglages, pilotage manuel), ouverte depuis le téléphone ou un PC, sur place ou à distance par Tailscale.
 6. **Liens extérieurs** : vers le logiciel de culture (Django, serveur N97), vers le PC de bureau (calculs lourds, seulement sur demande de Karulium), vers la copie de secours de la maison (tunnel chiffré, aucun port ouvert). Tout passe par une **file d'envoi** : la machine ne dépend jamais du réseau.
 7. **Simulateur** : le même chef d'orchestre tourne contre une machine imaginaire (faux FluidNC, faux capteurs, durées réglables). C'est la base du jumeau numérique et des tests.
 

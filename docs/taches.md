@@ -60,17 +60,27 @@ Opus pour poser les bases ; Sonnet pour le reste.
   Seuil de choc réglable, sortie « OK » en sécurité positive (coupée sur choc ou panne), envoi des mesures en série.
   Côté Pi : lecture et enregistrement des chocs.
 
+- [ ] **11. Accès à distance : vidéos et pilotage manuel** — Modèle : Opus.
+  Suivre `docs/decisions.md` (partie « Accès à distance »). Vidéo en direct des caméras sur la page web,
+  clips d'incidents, mode à distance avec homme mort, vitesse réduite, arrêt si connexion perdue ou vidéo figée,
+  priorité à l'armoire, journal des actions. Tests avec le faux FluidNC (coupure de connexion simulée).
+
+- [ ] **12. Mises à jour des cartes et du Pi** — Modèle : Sonnet.
+  Mise à jour des ESP32 par USB depuis le Pi (esptool), envoi des réglages FluidNC, retour à l'ancienne version,
+  vérification après mise à jour ; RP2040 par SWD ; mise à jour du programme du Pi depuis `main`.
+  Seulement machine à l'arrêt. Lancement depuis la page web.
+
 ## Partie 2 : les modules figés (après la partie 1)
 
 Avant chaque tâche, le projet recopie ici les gestes, positions et règles du module.
 
-- [ ] 11. Poste du fût
-- [ ] 12. Griffe (transfert fût vers seau)
-- [ ] 13. Mycélium (dosage)
-- [ ] 14. Porte-bocal
-- [ ] 15. Lavage
-- [ ] 16. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage
-- [ ] 17. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi
+- [ ] 13. Poste du fût
+- [ ] 14. Griffe (transfert fût vers seau)
+- [ ] 15. Mycélium (dosage)
+- [ ] 16. Porte-bocal
+- [ ] 17. Lavage
+- [ ] 18. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage
+- [ ] 19. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi
 
 ## Partie 3 : les autres modules, au fil des gels
 
