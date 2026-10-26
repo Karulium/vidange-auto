@@ -93,6 +93,11 @@ def principal(arguments: list[str] | None = None, arret: threading.Event | None 
             "machine.yaml contient des valeurs d'EXEMPLE (exemple: true) : "
             "ne pas faire bouger la vraie machine avec."
         )
+    if reglages.fluidnc.exemple:
+        journal.warning(
+            "fluidnc.yaml contient des numéros de série d'EXEMPLE (exemple: true) : "
+            "les cartes FluidNC ne seront pas trouvées."
+        )
     exemples = entrees_sorties.exemples()
     if exemples:
         journal.warning(

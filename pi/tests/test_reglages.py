@@ -145,3 +145,38 @@ def test_toutes_les_erreurs_sont_dites_d_un_coup(reglages):
     message = erreur_de(reglages)
     assert "nombre_fichiers : doit valoir au moins 1" in message
     assert "longueur_rail : doit être plus grand que 0" in message
+
+
+# ---------------------------------------------------------------- fluidnc.yaml
+
+
+def test_fluidnc_du_depot():
+    fluidnc = charger_reglages(DOSSIER_PI / "reglages").fluidnc
+    assert fluidnc.exemple is True
+    assert set(fluidnc.cartes) == {"portique", "chariot", "mycelium_lavage", "prehension"}
+
+
+def test_fluidnc_numero_de_serie_en_double(reglages):
+    remplacer(reglages / "fluidnc.yaml", '"EXEMPLE-CHARIOT"', '"EXEMPLE-PORTIQUE"')
+    message = erreur_de(reglages)
+    assert (
+        "les cartes « portique » et « chariot » ont le même numéro de série USB "
+        "« EXEMPLE-PORTIQUE »" in message
+    )
+
+
+def test_fluidnc_numero_de_serie_sans_guillemets(reglages):
+    remplacer(reglages / "fluidnc.yaml", '"EXEMPLE-CHARIOT"', "0001")
+    message = erreur_de(reglages)
+    assert "chariot → numero_serie_usb : doit être un texte (entre guillemets" in message
+
+
+def test_fluidnc_numero_de_serie_vide(reglages):
+    remplacer(reglages / "fluidnc.yaml", '"EXEMPLE-CHARIOT"', '"  "')
+    assert "chariot → numero_serie_usb" in erreur_de(reglages)
+
+
+def test_fluidnc_silence_trop_court(reglages):
+    remplacer(reglages / "fluidnc.yaml", "delai_silence_s: 2", "delai_silence_s: 0.5")
+    message = erreur_de(reglages)
+    assert "delai_silence_s (0.5 s) doit valoir au moins 3 fois periode_etat_s (0.2 s)" in message

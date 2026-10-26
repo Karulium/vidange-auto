@@ -1,0 +1,38 @@
+# Cartes FluidNC (ESP32, axes) et leur liaison USB avec le Pi.
+#
+# ATTENTION : les numéros de série ci-dessous sont des EXEMPLES. Pour lire les vrais,
+# brancher les cartes sur le Pi et lancer : vidange-fluidnc lister
+# (procédure complète : fluidnc/essai-liaison.md). Quand ils sont vrais, passer « exemple » à false.
+#
+# Chaque carte est reconnue par le numéro de série de son USB, jamais par l'ordre des ports
+# (/dev/ttyACM0, /dev/ttyACM1... peuvent s'échanger à chaque démarrage).
+# Toujours écrire le numéro entre guillemets.
+#
+# Vérifié au démarrage : deux cartes avec le même numéro, un délai de silence trop court.
+
+exemple: true
+
+liaison:
+  vitesse_bauds: 115200
+  # Tampon de réception de la carte, en octets (128 comme Grbl : sans risque avec FluidNC).
+  taille_tampon: 128
+  # Demande de l'état (positions, alarme) toutes les :
+  periode_etat_s: 0.2
+  # Rien reçu pendant ce temps = carte muette : la liaison est fermée puis reprise.
+  delai_silence_s: 2
+  # Attente entre deux essais de connexion (câble débranché, carte éteinte).
+  delai_reconnexion_s: 2
+
+cartes:
+  portique:
+    description: Axes du portique
+    numero_serie_usb: "EXEMPLE-PORTIQUE"
+  chariot:
+    description: Axes du chariot
+    numero_serie_usb: "EXEMPLE-CHARIOT"
+  mycelium_lavage:
+    description: Axes du mycélium et du lavage
+    numero_serie_usb: "EXEMPLE-MYCELIUM-LAVAGE"
+  prehension:
+    description: Axes de la préhension
+    numero_serie_usb: "EXEMPLE-PREHENSION"
