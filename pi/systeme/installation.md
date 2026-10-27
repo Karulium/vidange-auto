@@ -122,6 +122,7 @@ La page web est servie par le programme lui-même, sur le port réglé dans `pro
 Essai des capteurs et des relais : voir `essai-entrees-sorties.md`.
 Essai de la fiabilité (programme figé, coupure de courant, onduleur...) : voir `essai-fiabilite.md`.
 Essai de la page web (téléphone, Tailscale) : voir `essai-page-web.md`.
+Essai de l'écran de l'armoire (câblage, UART n° 2 du Pi 5) : voir `essai-ecran.md`.
 
 Cocher chaque essai réussi.
 

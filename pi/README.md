@@ -46,8 +46,10 @@ Pas encore de vrai module de la machine.
 | `vidange/api/app.py` | API du Pi (FastAPI) : état, check-list, alarmes, Go, Pause, historique, photos ; clé, réseaux autorisés |
 | `vidange/api/serveur.py` | Serveur web de l'API (uvicorn) dans un fil à part |
 | `vidange/api/page/index.html` | La page web en français, lisible sur téléphone (une seule page, rien à télécharger d'Internet) |
+| `vidange/ecran/` | Écran Nextion de l'armoire : protocole série, liaison, pages et boutons, faux écran pour les tests |
+| `vidange/mode.py` | Mode de la machine (production, lavage, UV-ozone), gardé dans un fichier, changé machine au repos |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) |
-| `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API) |
+| `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran) |
 | `reglages/fluidnc.yaml` | Cartes FluidNC (numéro de série USB) et réglages de leur liaison |
 | `secrets.exemple.yaml` | Modèle **vide** du fichier de secrets |
 | `systeme/vidange.service` | Service qui démarre avec le Pi et se relance s'il plante |
@@ -55,6 +57,7 @@ Pas encore de vrai module de la machine.
 | `systeme/essai-entrees-sorties.md` | Essai des entrées/sorties sur le vrai matériel, pas à pas |
 | `systeme/essai-fiabilite.md` | Essai de la fiabilité sur le vrai matériel (coupures, chien de garde...), pas à pas |
 | `systeme/essai-page-web.md` | Essai de la page web sur le vrai Pi (téléphone, Tailscale), pas à pas |
+| `systeme/essai-ecran.md` | Essai de l'écran Nextion sur le vrai Pi (câblage, UART, chaque page), pas à pas |
 | `tests/` | Tests (pytest) |
 
 ## Essayer sur un PC

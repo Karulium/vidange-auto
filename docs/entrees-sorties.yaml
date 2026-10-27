@@ -163,6 +163,9 @@ cartes:
 #   onduleur_sur_batterie : entrée actionnée quand l'onduleur dit « courant coupé » ;
 #   battement_pi : sortie que le Pi fait battre tant qu'il va bien (pour un relais
 #     « chien de garde » qui mettrait les cartes FluidNC en pause si le Pi se fige).
+# (tâche 9, écran de l'armoire) :
+#   ecran_nextion : liaison série vers l'écran Nextion ; son « fichier » est l'UART du Pi
+#     (GPIO 4/5 = /dev/ttyAMA2, avec « dtoverlay=uart2-pi5 » : voir pi/systeme/essai-ecran.md).
 signaux:
   reed_panneau_poste_fut:
     exemple: true

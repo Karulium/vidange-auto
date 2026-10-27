@@ -13,6 +13,7 @@ from vidange.demarrage import (
     Raccords,
     principal,
 )
+from vidange.ecran import FauxNextion
 from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.fluidnc import FauxFluidnc
 from vidange.journal import NOM_FICHIER
@@ -129,6 +130,7 @@ def raccords_faux(entrees_sorties):
         ports={nom: carte.ouvrir for nom, carte in cartes.items()},
         notifier=lambda message: messages.append(message) or True,
         lancer=commandes.append,
+        ecran=FauxNextion().ouvrir,
     )
     return raccords, messages, commandes
 
@@ -218,3 +220,43 @@ def test_sans_cle_la_machine_demarre_sans_api(reglages, tmp_path):
     journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
     assert "l'API et la page web ne démarrent pas" in journal
     assert "[attention] API et page web : pas de clé" in journal
+
+
+# ---------------------------------------------------------------- tâche 9 : écran de l'armoire
+
+
+def test_l_ecran_montre_l_etat_et_donne_le_go(reglages, entrees_sorties, tmp_path):
+    nextion = FauxNextion()
+    raccords, messages, _ = raccords_faux(entrees_sorties)
+    raccords.ecran = nextion.ouvrir
+    arguments = [*options(reglages, tmp_path), "--entrees-sorties", str(entrees_sorties)]
+    arret = threading.Event()
+    fil = threading.Thread(target=lambda: principal(arguments, arret, raccords))
+    fil.start()
+    try:
+        attendre(lambda: "READY=1" in messages)
+        # Le retour en lieu sûr est proposé au démarrage : il attend le Go.
+        attendre(lambda: nextion.texte("b_bandeau") == "ATTEND LE GO")
+        assert nextion.texte("t_mode") == "Mode : Production"
+        nextion.appuyer("b_go")
+        attendre(lambda: nextion.page == "confirmer")
+        assert "lieu sur" in nextion.texte("t_question")
+        nextion.appuyer("b_non")
+        attendre(lambda: nextion.page == "etat")
+    finally:
+        arret.set()
+        fil.join(10)
+    assert not fil.is_alive()
+    journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
+    assert "Écran : port série ouvert" in journal
+
+
+def test_sans_ecran_dans_la_liste_la_machine_demarre(reglages, entrees_sorties, tmp_path):
+    remplacer(entrees_sorties, "  ecran_nextion:", "  autre_ecran:")
+    arret = threading.Event()
+    arret.set()
+    arguments = [*options(reglages, tmp_path), "--entrees-sorties", str(entrees_sorties)]
+    assert principal(arguments, arret) == CODE_OK
+    journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
+    assert "pas d'écran de l'armoire" in journal
+    assert "[attention] écran de l'armoire : pas de signal « ecran_nextion »" in journal

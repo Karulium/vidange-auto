@@ -14,7 +14,7 @@
 7. Lance la surveillance : santé du Pi, onduleur, chien de garde (et dit à systemd « prêt »),
    bilan de chaque alarme. Écrit la check-list de démarrage au journal.
    Lance l'API et la page web, si le fichier de secrets donne une clé (sinon la machine
-   tourne quand même, et la check-list le signale).
+   tourne quand même, et la check-list le signale), et l'écran de l'armoire.
 8. Attend l'ordre d'arrêt, puis arrête tout proprement (machine en pause, état noté). Si l'ordre
    vient de l'onduleur, éteint le Pi à la fin.
 
@@ -36,6 +36,8 @@ from pathlib import Path
 from vidange import __version__
 from vidange.api import ServeurApi, Services, constats_api, creer_app
 from vidange.chef import Carnet, Chef, ErreurChef, Module
+from vidange.ecran import SIGNAL as SIGNAL_ECRAN
+from vidange.ecran import Ecran, LiaisonEcran, PortEcran, ouvrir_port_ecran
 from vidange.entrees_sorties import EntreesSorties, charger_entrees_sorties
 from vidange.fiabilite import (
     Bilans,
@@ -55,6 +57,7 @@ from vidange.fiabilite.checklist import (
     constats_reglages,
 )
 from vidange.fiabilite.chien_de_garde import notifier_systemd
+from vidange.fiabilite.constats import Constat
 from vidange.fiabilite.lieu_sur import NOM as NOM_LIEU_SUR
 from vidange.fiabilite.onduleur import RAISON_ARRET
 from vidange.fiabilite.onduleur import SIGNAL as SIGNAL_ONDULEUR
@@ -64,6 +67,7 @@ from vidange.fluidnc.ports import Port
 from vidange.journal import NOM_FICHIER, configurer_journal, donner_journal
 from vidange.materiel import Materiel
 from vidange.materiel.materiel import Fabrique
+from vidange.mode import ModeMachine
 from vidange.quoi_faire import COUPURE_COURANT, PLANTAGE
 from vidange.registre import (
     DOSSIER_SAUVEGARDES,
@@ -82,6 +86,7 @@ CODE_REGISTRE_ABIME = 3
 
 DOSSIER_PI = Path(__file__).resolve().parent.parent
 NOM_CARNET = "etat-cycle.json"
+NOM_MODE = "mode.json"
 
 journal = donner_journal("demarrage")
 
@@ -99,6 +104,8 @@ class Raccords:
     # Nom de carte → ouverture de son port ; None : vrais ports USB (par numéro de série).
     ports: Mapping[str, Callable[[], Port]] | None = None
     sondes: Sondes | None = None
+    # Ouverture du port de l'écran ; None : l'UART du signal « ecran_nextion ».
+    ecran: Callable[[], PortEcran] | None = None
     notifier: Callable[[str], bool] = notifier_systemd
     # Lance une commande du système (extinction du Pi par l'onduleur).
     lancer: Callable[[list[str]], object] = lancer_commande
@@ -205,6 +212,31 @@ def preparer_api(secrets: Secrets, reglages: Reglages, services: Services) -> Se
         return None
     app = creer_app(services, reglages.programme.api, secrets.cle_api.get_secret_value())
     return ServeurApi(app, reglages.programme.api)
+
+
+def constats_ecran(liaison: LiaisonEcran | None) -> list[Constat]:
+    """Pour la check-list. Sans écran, la machine peut tourner : jamais bloquant."""
+    if liaison is None:
+        texte = f"pas de signal « {SIGNAL_ECRAN} » dans entrees-sorties.yaml"
+        return [Constat("écran de l'armoire", "attention", texte)]
+    return liaison.constats()
+
+
+def preparer_ecran(
+    reglages: Reglages, liste: EntreesSorties, ouvrir: Callable[[], PortEcran] | None
+) -> LiaisonEcran | None:
+    """La liaison avec l'écran, ou None si la liste des entrées/sorties n'en a pas."""
+    if ouvrir is None:
+        signal = liste.signaux.get(SIGNAL_ECRAN)
+        if signal is None or signal.fichier is None:
+            journal.warning(
+                "Pas de signal « %s » (avec son « fichier ») dans entrees-sorties.yaml : "
+                "pas d'écran de l'armoire.",
+                SIGNAL_ECRAN,
+            )
+            return None
+        ouvrir = ouvrir_port_ecran(signal.fichier, reglages.programme.ecran.vitesse_bauds)
+    return LiaisonEcran(reglages.programme.ecran, ouvrir)
 
 
 def principal(
@@ -318,6 +350,11 @@ def principal(
     arret_bilans = threading.Event()
     fil_bilans = bilans.demarrer(arret_bilans)
     serveur: ServeurApi | None = None
+    mode = ModeMachine(dossier_donnees / NOM_MODE, chef, registre)
+    liaison_ecran = preparer_ecran(reglages, entrees_sorties, raccords.ecran)
+    # L'écran s'arrête en premier, comme l'API : plus d'ordre pendant l'arrêt.
+    arret_ecran = threading.Event()
+    fil_ecran: threading.Thread | None = None
     try:
         for liaison in liaisons.values():
             liaison.demarrer()
@@ -338,6 +375,7 @@ def principal(
                 "santé du Pi": sante.constats,
                 "onduleur": onduleur.constats,
                 "API": lambda: constats_api(serveur),
+                "écran": lambda: constats_ecran(liaison_ecran),
             }
         )
         serveur = preparer_api(
@@ -345,6 +383,11 @@ def principal(
         )
         if serveur is not None:
             serveur.demarrer()
+        if liaison_ecran is not None:
+            ecran = Ecran(
+                reglages.programme.ecran, liaison_ecran, chef, registre, bilans.acquitter, mode
+            )
+            fil_ecran = ecran.demarrer(arret_ecran)
         gardien.pret()
         journal.info(
             "Programme du Pi version %s démarré, réglages : %s", __version__, dossier_reglages
@@ -353,9 +396,12 @@ def principal(
         arret.wait()
         journal.info("Arrêt (%s) : arrêt propre.", raison_arret[0])
     finally:
-        # Plus d'ordre de la page web pendant l'arrêt.
+        # Plus d'ordre de la page web ni de l'écran pendant l'arrêt.
         if serveur is not None:
             serveur.arreter()
+        arret_ecran.set()
+        if fil_ecran is not None:
+            fil_ecran.join()
         gardien.arreter()
         # Un module en plein geste : les axes s'arrêtent sans perdre leur position, et l'état
         # est noté dans le carnet (reprise au prochain démarrage, après le Go).
@@ -370,6 +416,8 @@ def principal(
             liaison.arreter()
         if materiel is not None:
             materiel.fermer()
+        if liaison_ecran is not None:
+            liaison_ecran.fermer()
         registre.fermer()
         marche.noter_arret(raison_arret[0])
     if raison_arret[0] == RAISON_ARRET:

@@ -60,7 +60,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   API (FastAPI) sur le réseau local et Tailscale, protégée par une clé : état, alarmes, Go, Pause, historique, photos.
   Page web simple en français, lisible sur téléphone.
 
-- [ ] **9. Écran Nextion, côté Pi** — Modèle : Sonnet.
+- [x] **9. Écran Nextion, côté Pi** — Modèle : Sonnet.
   Protocole série Nextion (envoi de valeurs, lecture des appuis). Pages : état, alarme + quoi faire, Pause, Go,
   compteurs, mode (production / lavage / UV-ozone), grands boutons, code couleur (46 à 48). Écrire dans
   `nextion/pages.md` chaque page, bouton par bouton (nom, position, taille), pour que Karulium la monte dans Nextion Editor.
