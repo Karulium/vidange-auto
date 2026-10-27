@@ -69,7 +69,9 @@ def test_chef_vivant_puis_fige(materiel):
 
 def test_cartes_surveillees():
     faux = FauxFluidnc()
-    with Liaison("portique", reglages_essai(), ouvrir=faux.ouvrir) as liaison:
+    # Silence toléré long : un ordinateur d'essai lent ne doit pas faire croire à une coupure.
+    reglages = reglages_essai(delai_silence_s=DELAI)
+    with Liaison("portique", reglages, ouvrir=faux.ouvrir) as liaison:
         liaison.attendre_connexion(DELAI)
         gardien = ChienDeGarde(REGLAGES, {"portique": liaison}, notifier=lambda m: False)
         gardien.pret()
