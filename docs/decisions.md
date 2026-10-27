@@ -72,8 +72,9 @@ si l'une pose problème, elle le dit dans sa PR.
      modules (Poste du fût, Lavage, Nettoyage) le liront quand on écrira leurs gestes. La sécurité UV et ozone
      reste câblée.
 - **Réponses aux questions de la PR n° 12** (file d'envoi) :
-  1. Ordinateur qui reçoit la copie de secours : **à confirmer par Karulium**. En attendant, `envois.secours.commande`
-     reste vide (rien ne part, rien n'est perdu : les copies restent sur le SSD du Pi).
+  1. Ordinateur qui reçoit la copie de secours : **le serveur de culture N97** (Linux, déjà sur Tailscale ;
+     choix de Karulium, 27/10/2026), par rsync. `envois.secours.commande` sera remplie à l'installation du Pi
+     (nom Tailscale du N97, compte) ; vérifier alors la place libre sur son disque.
   2. Photos envoyées au logiciel de culture : décidé avec la tâche Vision (n° 22) ; pour l'instant seule leur
      description part avec le cycle.
   3. Dossier des photos envoyé chaque jour à la copie de secours : **oui** (`photos: true`).
