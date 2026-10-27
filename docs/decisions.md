@@ -78,6 +78,16 @@ si l'une pose problème, elle le dit dans sa PR.
   2. Photos envoyées au logiciel de culture : décidé avec la tâche Vision (n° 22) ; pour l'instant seule leur
      description part avec le cycle.
   3. Dossier des photos envoyé chaque jour à la copie de secours : **oui** (`photos: true`).
+- **Réponses aux questions de la PR n° 14** (accès à distance), recommandations suivies :
+  1. Débloquer une carte en alarme (`$X`) : **jamais à distance**, seulement sur place.
+  2. Une carte qui garde la fin d'un geste du cycle figé en pause : le pilotage à distance **refuse** de la bouger
+     (un bouton « oublier le geste » pourra venir après les essais réels).
+  3. **Un seul plafond de vitesse** (2 cm/s) pour tous les axes au début, à ajuster aux essais.
+  4. Pendant le pilotage manuel « en cas de problème », les zones réservées et les règles validées ne sont **pas**
+     vérifiées : c'est Karulium qui regarde la vidéo (vitesse plafond, homme mort, voyant-buzzer, sécurité câblée).
+- **Prise d'origine obligatoire à la mise sous tension** : les réglages de chaque carte FluidNC (dossier `fluidnc/`)
+  gardent `start: must_home: true`. Une carte qui n'a pas fait sa prise d'origine reste en alarme : aucun
+  déplacement manuel à distance ne peut partir d'une position fausse (et `$X` est interdit à distance).
 - **Préhension figée** (27/10/2026) : capteur inductif M8 24 V ; capteur de vide sur l'ADS1115 **en 3,3 V**
   (pas de pont diviseur) ; pour poser ou prendre un bocal sur le porte-bocal, la tête est orientée à ± 3°
   (grâce aux méplats) et ne tourne pas entre les mors.
