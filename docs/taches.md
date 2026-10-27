@@ -74,7 +74,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   Rejouer un cycle complet du module d'exemple avec des durées réglables, sortir le planning (qui fait quoi, quand)
   et le temps total. Préparer la place pour le solveur OR-Tools.
 
-- [ ] **12. Accès à distance : vidéos et pilotage manuel** — Modèle : Opus.
+- [x] **12. Accès à distance : vidéos et pilotage manuel** — Modèle : Opus.
   Suivre `docs/decisions.md` (partie « Accès à distance »). Vidéo en direct des caméras sur la page web,
   clips d'incidents, mode à distance avec homme mort, vitesse réduite, arrêt si connexion perdue ou vidéo figée,
   priorité à l'armoire, journal des actions, **voyant-buzzer sur place avant et pendant tout mouvement lancé

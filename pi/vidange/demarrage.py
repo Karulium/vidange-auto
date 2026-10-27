@@ -15,7 +15,8 @@
    bilan de chaque alarme. Écrit la check-list de démarrage au journal.
    Lance l'API et la page web, si le fichier de secrets donne une clé (sinon la machine
    tourne quand même, et la check-list le signale), et l'écran de l'armoire. Lance la file
-   d'envoi (cycles vers le logiciel de culture, copies vers la maison).
+   d'envoi (cycles vers le logiciel de culture, copies vers la maison), les caméras (vidéo en
+   direct, clip à chaque alarme) et le pilotage à distance (qui attend qu'on l'active).
 8. Attend l'ordre d'arrêt, puis arrête tout proprement (machine en pause, état noté). Si l'ordre
    vient de l'onduleur, éteint le Pi à la fin.
 
@@ -36,7 +37,9 @@ from pathlib import Path
 
 from vidange import __version__
 from vidange.api import ServeurApi, Services, constats_api, creer_app
+from vidange.cameras import Cameras, Flux
 from vidange.chef import Carnet, Chef, ErreurChef, Module
+from vidange.distance import PiloteDistance
 from vidange.ecran import SIGNAL as SIGNAL_ECRAN
 from vidange.ecran import Ecran, LiaisonEcran, PortEcran, ouvrir_port_ecran
 from vidange.entrees_sorties import EntreesSorties, charger_entrees_sorties
@@ -108,6 +111,8 @@ class Raccords:
     sondes: Sondes | None = None
     # Ouverture du port de l'écran ; None : l'UART du signal « ecran_nextion ».
     ecran: Callable[[], PortEcran] | None = None
+    # Nom de caméra → ouverture de sa vidéo ; None : les commandes de programme.yaml.
+    cameras: Mapping[str, Callable[[], Flux]] | None = None
     notifier: Callable[[str], bool] = notifier_systemd
     # Lance une commande du système (extinction du Pi par l'onduleur).
     lancer: Callable[[list[str]], object] = lancer_commande
@@ -285,6 +290,11 @@ def principal(
             "fluidnc.yaml contient des numéros de série d'EXEMPLE (exemple: true) : "
             "les cartes FluidNC ne seront pas trouvées."
         )
+    if reglages.programme.cameras.exemple:
+        journal.warning(
+            "programme.yaml : les commandes des caméras sont des EXEMPLES (cameras → exemple) : "
+            "les vérifier sur le vrai Pi (pi/systeme/essai-distance.md)."
+        )
     exemples = entrees_sorties.exemples()
     if exemples:
         journal.warning(
@@ -352,6 +362,18 @@ def principal(
         dossier_donnees / "journal" / NOM_FICHIER,
     )
     chef.sur_alarme.append(bilans.recevoir)
+    cameras = Cameras(reglages.programme.cameras, dossier_donnees, raccords.cameras)
+    # Le clip des dernières secondes de chaque caméra, dans le bilan de chaque alarme.
+    bilans.collecteurs["clip_video"] = lambda: cameras.garder_clip("alarme")
+    pilote = PiloteDistance(
+        reglages.programme.distance,
+        reglages.machine,
+        liaisons,
+        chef,
+        materiel,
+        cameras.age,
+        registre,
+    )
     onduleur = Onduleur(fiabilite.onduleur, materiel, chef, demander_arret)
     gardien = ChienDeGarde(
         fiabilite.chien_de_garde, liaisons, chef, materiel, notifier=raccords.notifier
@@ -370,7 +392,13 @@ def principal(
             liaison.demarrer()
         _, erreur_reprise = preparer_chef(chef, module_lieu_sur(reglages.machine, liaisons))
         chef.demarrer()
-        fils += [sante.demarrer(arret), onduleur.demarrer(arret), gardien.demarrer(arret)]
+        cameras.demarrer()
+        fils += [
+            sante.demarrer(arret),
+            onduleur.demarrer(arret),
+            gardien.demarrer(arret),
+            pilote.demarrer(arret),
+        ]
         checklist = CheckList(
             {
                 "réglages": lambda: constats_reglages(reglages, entrees_sorties),
@@ -387,16 +415,32 @@ def principal(
                 "API": lambda: constats_api(serveur),
                 "écran": lambda: constats_ecran(liaison_ecran),
                 "envois": facteur.constats,
+                "caméras": cameras.constats,
             }
         )
         serveur = preparer_api(
-            secrets, reglages, Services(chef, registre, bilans.acquitter, checklist.verifier)
+            secrets,
+            reglages,
+            Services(
+                chef,
+                registre,
+                bilans.acquitter,
+                checklist.verifier,
+                cameras=cameras,
+                pilote=pilote,
+            ),
         )
         if serveur is not None:
             serveur.demarrer()
         if liaison_ecran is not None:
             ecran = Ecran(
-                reglages.programme.ecran, liaison_ecran, chef, registre, bilans.acquitter, mode
+                reglages.programme.ecran,
+                liaison_ecran,
+                chef,
+                registre,
+                bilans.acquitter,
+                mode,
+                pilote=pilote,
             )
             fil_ecran = ecran.demarrer(arret_ecran)
         gardien.pret()
@@ -413,6 +457,8 @@ def principal(
         arret_ecran.set()
         if fil_ecran is not None:
             fil_ecran.join()
+        # Plus de mouvement à distance, voyant éteint.
+        pilote.arreter()
         gardien.arreter()
         # Un module en plein geste : les axes s'arrêtent sans perdre leur position, et l'état
         # est noté dans le carnet (reprise au prochain démarrage, après le Go).
@@ -423,6 +469,7 @@ def principal(
         arret_bilans.set()
         for fil in [*fils, fil_bilans]:
             fil.join()
+        cameras.arreter()
         for liaison in liaisons.values():
             liaison.arreter()
         if materiel is not None:

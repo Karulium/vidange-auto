@@ -386,3 +386,39 @@ def test_reglages_de_l_ecran_verifies(reglages):
     remplacer(programme, "silence_s: 6", "silence_s: 3")
     with pytest.raises(ErreurReglages, match=r"silence_s \(3 s\) doit valoir au moins 2 fois"):
         charger_reglages(reglages)
+
+
+# ---------------------------------------------------------------- pilotage à distance
+
+
+class PiloteEnCours:
+    """Un pilotage à distance en cours, vu par l'écran."""
+
+    def __init__(self) -> None:
+        self.actif = True
+        self.repris_par: list[str] = []
+
+    def reprendre_la_main(self, qui: str) -> None:
+        self.repris_par.append(qui)
+        self.actif = False
+
+
+def test_pilotage_a_distance_affiche_et_appui_reprend_la_main(b):
+    b.jusqu_au_go()
+    pilote = PiloteEnCours()
+    b.ecran.pilote = pilote
+    b.chef.pause()
+    b.tour()
+    assert b.texte("b_bandeau") == "À DISTANCE : TOUCHER = STOP"
+    assert b.nextion.couleur("b_bandeau") == fond("distance")
+    assert b.texte("t_info").startswith("Pilotage à distance en cours")
+    # N'importe quel bouton (ici GO) reprend la main, et ne fait rien d'autre.
+    b.appuyer("b_go")
+    assert pilote.repris_par == ["écran de l'armoire"]
+    assert b.nextion.page == "etat"
+    assert b.texte("t_info") == "Pilotage à distance arrêté : la main est à l'armoire."
+    assert b.chef.etat().attendent_go == ["essai"]
+    assert b.texte("b_bandeau") == "EN PAUSE"
+    # Ensuite, les boutons refont leur travail habituel.
+    b.appuyer("b_go")
+    assert b.nextion.page == "confirmer"

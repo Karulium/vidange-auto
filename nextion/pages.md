@@ -59,6 +59,7 @@ Le Pi colore le bandeau du haut et certains boutons (réglable dans `programme.y
 | rouge | alarme |
 | gris foncé | rien en cours |
 | bleu | mode lavage ou UV-ozone ; mode choisi |
+| violet | pilotage à distance en cours (bandeau) |
 | gris clair | bouton ordinaire |
 | gris pâle, écriture grise | bouton sans effet pour l'instant (GO sans Go attendu...) |
 
@@ -83,7 +84,10 @@ en cours, ce qu'il attend, et les messages de l'écran (« Aucun Go attendu »..
 | `b_mode` | Bouton | 358 | 182 | 118 | 86 | 1 | 10 |
 
 - `b_bandeau` : « EN MARCHE » (vert), « ATTEND LE GO » (jaune), « EN PAUSE » (orange),
-  « ALARME (2) : TOUCHER ICI » (rouge), « À L'ARRÊT » (gris). Le toucher montre les alarmes.
+  « ALARME (2) : TOUCHER ICI » (rouge), « À L'ARRÊT » (gris), « À DISTANCE : TOUCHER = STOP » (violet,
+  pendant un pilotage à distance). Le toucher montre les alarmes.
+  Pendant un pilotage à distance, **n'importe quel bouton** de l'écran l'arrête (et ne fait rien d'autre) :
+  la main est toujours à l'armoire.
   Texte centré.
 - `t_module` (2 lignes) : « lieu sur, étape 1/3 : aller ».
 - `b_pause` : « PAUSE » (tout de suite) ou « REPRENDRE » (demande « Oui »).

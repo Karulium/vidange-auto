@@ -310,6 +310,8 @@ class CouleursEcran(Modele):
     alarme: FondTexte
     repos: FondTexte
     mode: FondTexte
+    # Pilotage à distance en cours (tâche 12).
+    distance: FondTexte
     bouton: FondTexte
     inactif: FondTexte
 
@@ -411,6 +413,75 @@ class ReglagesEnvois(Modele):
         return self
 
 
+class Camera(Modele):
+    """Une caméra : la commande qui écrit sa vidéo (images JPEG à la suite, « MJPEG »)."""
+
+    description: str = ""
+    # La commande et ses options (taille d'image, images par seconde, appareil...). Le Pi la
+    # relance seule si elle s'arrête.
+    commande: list[Annotated[str, StringConstraints(min_length=1)]] = Field(min_length=1)
+
+
+class ReglagesCameras(Modele):
+    """Caméras (tâche 12) : vidéo en direct sur la page web, clips des alarmes."""
+
+    # Vrai tant que les commandes sont des exemples : le programme le signale.
+    exemple: bool = False
+    # Mémoire tournante de chaque caméra (s) : gardée en clip à chaque alarme.
+    memoire_s: float = Field(gt=0)
+    # Une caméra sans nouvelle image depuis ce temps (s) est déclarée figée.
+    figee_s: float = Field(gt=0)
+    # Commande arrêtée ou figée : relancée après ce temps (s).
+    relance_s: float = Field(gt=0)
+    # La page web demande une nouvelle image ce nombre de fois par seconde.
+    page_images_par_s: float = Field(gt=0, le=30)
+    # Les clips plus vieux que ce nombre de jours sont effacés.
+    clips_gardes_jours: int = Field(ge=1)
+    liste: dict[Nom, Camera] = Field(default_factory=dict)
+
+
+class ReglagesDistance(Modele):
+    """Pilotage manuel à distance (tâche 12) : ses garde-fous logiciels."""
+
+    # Vitesse des axes pilotés à distance, au plus (m/s).
+    vitesse_max_m_s: float = Field(gt=0)
+    # Bouton tenu : la page redit « je tiens » tous les (s).
+    battement_s: float = Field(gt=0)
+    # « Homme mort » : sans « je tiens » depuis ce temps (s), le mouvement s'arrête.
+    homme_mort_s: float = Field(gt=0)
+    # Le Pi regarde le pilotage tous les (s).
+    periode_s: float = Field(gt=0, le=1)
+    # La carte n'a jamais plus que ce temps (s) de mouvement d'avance : si le Pi se fige,
+    # l'axe s'arrête de lui-même après au plus « vitesse_max × avance_s ».
+    avance_s: float = Field(gt=0)
+    # L'image vue sur la page est plus vieille que ça (s) : vidéo figée, arrêt.
+    video_figee_s: float = Field(gt=0)
+    # Voyant et buzzer sur place : allumés ce temps (s) avant le premier mouvement, et gardés
+    # ce temps (s) après le dernier.
+    voyant_avant_s: float = Field(ge=0)
+    voyant_apres_s: float = Field(ge=0)
+    # Mode à distance sans aucun mouvement depuis ce temps (min) : il se termine seul.
+    inactivite_max_min: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier_delais(self) -> "ReglagesDistance":
+        erreurs = []
+        if self.homme_mort_s < 2 * self.battement_s:
+            erreurs.append(
+                f"homme_mort_s ({self.homme_mort_s:g} s) doit valoir au moins 2 fois "
+                f"battement_s ({self.battement_s:g} s)"
+            )
+        for nom in ("homme_mort_s", "avance_s"):
+            if getattr(self, nom) < 2 * self.periode_s:
+                erreurs.append(
+                    f"{nom} ({getattr(self, nom):g} s) doit valoir au moins 2 fois "
+                    f"periode_s ({self.periode_s:g} s)"
+                )
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class Programme(Modele):
     """programme.yaml : réglages du programme lui-même (pas de la machine)."""
 
@@ -421,6 +492,19 @@ class Programme(Modele):
     api: ReglagesApi
     ecran: ReglagesEcran
     envois: ReglagesEnvois
+    cameras: ReglagesCameras
+    distance: ReglagesDistance
+
+    @model_validator(mode="after")
+    def _verifier_video(self) -> "Programme":
+        # La page doit recevoir au moins 2 images avant que la vidéo soit dite figée.
+        if self.distance.video_figee_s * self.cameras.page_images_par_s < 2:
+            raise ValueError(
+                f"distance → video_figee_s ({self.distance.video_figee_s:g} s) doit laisser "
+                f"passer au moins 2 images de la page (cameras → page_images_par_s : "
+                f"{self.cameras.page_images_par_s:g})"
+            )
+        return self
 
 
 # ---------------------------------------------------------------- fluidnc.yaml
@@ -587,6 +671,15 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
         for numero, geste in enumerate(machine.lieu_sur, start=1)
         if geste.prise_origine is not None and geste.prise_origine not in fluidnc.cartes
     ]
+    programme = valeurs["programme"]
+    assert isinstance(programme, Programme)
+    avance, periode_etat = programme.distance.avance_s, fluidnc.liaison.periode_etat_s
+    if avance < 2 * periode_etat:
+        # Le Pi ajoute du mouvement d'après les positions lues : elles doivent être fraîches.
+        erreurs.append(
+            f"programme.yaml, distance → avance_s ({avance:g} s) doit valoir au moins 2 fois "
+            f"periode_etat_s de fluidnc.yaml ({periode_etat:g} s)"
+        )
     simulateur = valeurs["simulateur"]
     assert isinstance(simulateur, ReglagesSimulateur)
     erreurs += [

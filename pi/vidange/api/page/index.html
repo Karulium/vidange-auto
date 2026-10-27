@@ -70,7 +70,17 @@
   #cle { max-width: 420px; margin: 40px auto; }
   #cle input { width: 100%; padding: 12px; font-size: 18px; border-radius: 8px; border: 1px solid var(--bord); }
   #erreur { color: var(--rouge); font-weight: 700; margin: 8px 0; }
-  #message { position: fixed; left: 16px; right: 16px; bottom: 16px; display: none; z-index: 3;
+  .bleu { background: var(--bleu); }
+  .camera { width: 100%; display: block; border-radius: 8px; background: #000; min-height: 120px; }
+  .choix { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+  .choix button.actif { background: var(--bleu); color: #fff; border-color: var(--bleu); }
+  .axe { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; }
+  .axe .gros { margin: 0; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .axe .milieu { text-align: center; min-width: 90px; }
+  .gros.tenu { outline: 6px solid var(--orange); }
+  /* Le message ne doit jamais empêcher de toucher un bouton (pilotage à distance). */
+  #message { position: fixed; left: 16px; right: 16px; top: 16px; display: none; z-index: 3;
+    pointer-events: none;
     padding: 12px; border-radius: 10px; color: #fff; font-weight: 700; text-align: center; }
 </style>
 </head>
@@ -96,6 +106,7 @@
     <nav>
       <button data-vue="etat" class="actif">État</button>
       <button data-vue="historique">Historique</button>
+      <button data-vue="video">Vidéo</button>
       <button data-vue="photos">Photos</button>
       <button data-vue="checklist">Check-list</button>
     </nav>
@@ -119,6 +130,29 @@
       <div id="cycles"></div>
       <button id="plus-cycles" class="petit" hidden>Plus ancien</button>
       <div id="cycle"></div>
+    </section>
+
+    <section id="vue-video">
+      <div id="choix-camera" class="choix"></div>
+      <img id="video" class="camera" alt="vidéo en direct">
+      <div id="video-info" class="doux"></div>
+
+      <h2>Pilotage à distance</h2>
+      <div id="distance"></div>
+
+      <h2>Clips des alarmes</h2>
+      <div id="clips"></div>
+      <div id="lecteur" hidden class="carte">
+        <div id="lecteur-titre"></div>
+        <div id="lecteur-cameras" class="choix"></div>
+        <img id="lecteur-image" class="camera" alt="image du clip">
+        <input id="lecteur-curseur" type="range" min="0" value="0" style="width:100%">
+        <div id="lecteur-heure" class="doux"></div>
+        <button id="lecteur-lire" class="petit">Lire</button>
+      </div>
+
+      <h2>Journal du pilotage à distance</h2>
+      <div id="journal-distance"></div>
     </section>
 
     <section id="vue-photos">
@@ -150,6 +184,7 @@ try { cle = localStorage.getItem("cle_api") || ""; } catch (e) { cle = ""; }
 function el(balise, attributs, ...enfants) {
   const e = document.createElement(balise);
   for (const [nom, valeur] of Object.entries(attributs || {})) {
+    if (valeur === null || valeur === undefined) continue;
     if (nom === "classe") e.className = valeur;
     else if (nom.startsWith("sur")) e.addEventListener(nom.slice(3), valeur);
     else e.setAttribute(nom, valeur);
@@ -241,6 +276,7 @@ function montrer(nom) {
   for (const s of document.querySelectorAll("main section")) s.classList.toggle("actif", s.id === "vue-" + nom);
   if (nom === "historique") chargerCycles(true);
   if (nom === "photos") chargerPhotos(true);
+  if (nom === "video") ouvrirVideo(); else fermerVideo();
   if (nom === "checklist") chargerChecklist();
 }
 
@@ -251,7 +287,9 @@ let minuterie = null;
 
 function bandeau(etat) {
   const b = $("bandeau");
-  if (etat.alarmes_ouvertes.length || etat.modules.some((m) => m.statut === "alarme")) {
+  if (etat.distance) {
+    b.className = "bleu"; b.textContent = "PILOTAGE À DISTANCE en cours (machine en pause)";
+  } else if (etat.alarmes_ouvertes.length || etat.modules.some((m) => m.statut === "alarme")) {
     b.className = "rouge"; b.textContent = "ALARME : voir ci-dessous quoi faire";
   } else if (etat.en_pause) {
     b.className = "orange"; b.textContent = "Machine en PAUSE";
@@ -417,6 +455,277 @@ async function chargerPhotos(depuisLeDebut) {
   } catch (erreur) { if (!(erreur instanceof Refus)) dire(erreur.message, "rouge"); }
 }
 $("plus-photos").addEventListener("click", () => chargerPhotos(false));
+
+// ------------------------------------------------------------ vidéo en direct
+
+let cameras = [], imagesParS = 4, cameraVue = null, numeroVu = null, minuterieVideo = null;
+let minuterieDistance = null, adresseVideo = null;
+
+async function ouvrirVideo() {
+  try {
+    const reponse = await lire("/api/cameras");
+    cameras = reponse.cameras; imagesParS = reponse.images_par_s || 4;
+  } catch (erreur) { if (!(erreur instanceof Refus)) dire(erreur.message, "rouge"); return; }
+  if (!cameras.some((c) => c.nom === cameraVue)) cameraVue = cameras.length ? cameras[0].nom : null;
+  afficherChoixCameras();
+  clearTimeout(minuterieVideo);
+  chargerImage();
+  rafraichirDistance();
+  chargerClips();
+  chargerJournalDistance();
+}
+
+function fermerVideo() {
+  clearTimeout(minuterieVideo); clearTimeout(minuterieDistance);
+  arreterTenir();
+  numeroVu = null;
+}
+
+function afficherChoixCameras() {
+  if (!cameras.length) {
+    remplir("choix-camera", el("p", { classe: "doux" }, "Aucune caméra (programme.yaml → cameras)."));
+    return;
+  }
+  remplir("choix-camera", ...cameras.map((c) => el("button", {
+    classe: "petit" + (c.nom === cameraVue ? " actif" : ""),
+    surclick: () => { cameraVue = c.nom; numeroVu = null; arreterTenir(); afficherChoixCameras(); },
+  }, c.description || c.nom)));
+}
+
+// Une image toutes les 1/imagesParS s ; son numéro (en-tête X-Image) est redit au Pi pendant le
+// pilotage : si l'image affichée vieillit (vidéo figée, réseau lent), le Pi arrête le mouvement.
+async function chargerImage() {
+  clearTimeout(minuterieVideo);
+  if (vue !== "video" || !cameraVue) return;
+  const debut = Date.now(), camera = cameraVue;
+  try {
+    const reponse = await api("/api/cameras/" + encodeURIComponent(camera) + "/image");
+    const numero = Number(reponse.headers.get("X-Image"));
+    const adresse = URL.createObjectURL(await reponse.blob());
+    const image = $("video");
+    image.onload = () => {
+      if (camera === cameraVue) numeroVu = numero;
+      if (adresseVideo) URL.revokeObjectURL(adresseVideo);
+      adresseVideo = adresse;
+      $("video-info").textContent = "En direct · image n° " + numero + " · " + new Date().toLocaleTimeString("fr-FR");
+    };
+    image.onerror = () => { URL.revokeObjectURL(adresse); $("video-info").textContent = "Image illisible."; };
+    image.src = adresse;
+  } catch (erreur) {
+    if (erreur instanceof Refus) return;
+    $("video-info").textContent = "Pas de vidéo : " + erreur.message;
+  }
+  minuterieVideo = setTimeout(chargerImage, Math.max(50, 1000 / imagesParS - (Date.now() - debut)));
+}
+
+// ------------------------------------------------------------ pilotage à distance
+
+let distance = null, tenu = null;
+
+async function rafraichirDistance() {
+  clearTimeout(minuterieDistance);
+  if (vue !== "video") return;
+  try { afficherDistance(await lire("/api/distance")); }
+  catch (erreur) {
+    if (erreur instanceof Refus) return;
+    remplir("distance", el("p", { classe: "doux" }, erreur.message));
+  }
+  minuterieDistance = setTimeout(rafraichirDistance, 1000);
+}
+
+function boutonTenir(axe, sens, texte) {
+  const b = el("button", { classe: "gros " + (sens > 0 ? "vert" : "orange") }, texte);
+  b.addEventListener("pointerdown", (ev) => {
+    ev.preventDefault();
+    try { b.setPointerCapture(ev.pointerId); } catch (e) { /* rien */ }
+    b.classList.add("tenu");
+    commencerTenir(axe, sens);
+  });
+  for (const fin of ["pointerup", "pointercancel", "lostpointercapture"]) {
+    b.addEventListener(fin, () => { b.classList.remove("tenu"); arreterTenir(); });
+  }
+  b.addEventListener("contextmenu", (ev) => ev.preventDefault());
+  return b;
+}
+
+function afficherDistance(etat) {
+  distance = etat;
+  // Pendant qu'un bouton est tenu, on ne refait pas les boutons (le doigt est dessus).
+  if (tenu) {
+    if ($("distance-etat")) remplir("distance-etat", ...texteDistance(etat));
+    for (const a of etat.axes) {
+      const position = $("position-" + a.nom);
+      if (position) position.textContent = textePosition(a);
+    }
+    return;
+  }
+  if (!etat.actif) {
+    remplir("distance",
+      el("div", { classe: "carte" }, ...texteDistance(etat),
+        el("p", { classe: "doux" }, "En cas de problème seulement. La machine se met en pause ; "
+          + "le voyant et le buzzer préviennent sur place avant chaque mouvement ; un appui sur "
+          + "l'écran de l'armoire reprend la main."),
+        el("button", {
+          classe: "gros bleu",
+          disabled: etat.refus ? "disabled" : null,
+          surclick: () => {
+            if (confirm("Activer le pilotage à distance ? La machine se met en pause."))
+              ordreDistance("/api/distance/activer", "Mode à distance activé.");
+          },
+        }, "Activer le mode à distance")));
+    return;
+  }
+  remplir("distance",
+    el("div", { classe: "carte attention", id: "distance-etat" }, ...texteDistance(etat)),
+    ...etat.axes.map((a) => el("div", { classe: "carte" },
+      el("div", { classe: "axe" },
+        boutonTenir(a.nom, -1, "◀ −"),
+        el("div", { classe: "milieu" }, el("strong", {}, a.nom),
+          el("div", { id: "position-" + a.nom }, textePosition(a)),
+          el("div", { classe: "doux" }, a.etat_carte)),
+        boutonTenir(a.nom, 1, "+ ▶")))),
+    el("button", { classe: "gros gris", surclick: () => ordreDistance("/api/distance/quitter", "Mode à distance terminé.") },
+      "Quitter le mode à distance"));
+}
+
+function textePosition(axe) { return axe.position === null ? "?" : axe.position.toFixed(3) + " m"; }
+
+function texteDistance(etat) {
+  const lignes = [];
+  if (etat.actif) {
+    lignes.push(el("strong", {}, "Mode à distance ACTIF"), el("div", { classe: "doux" },
+      "Depuis " + heure(etat.depuis) + " · " + etat.qui + " · vitesse au plus " + etat.vitesse_max_m_s * 1000 + " mm/s"));
+    lignes.push(el("div", {}, "Tenir un bouton pour bouger l'axe ; le lâcher l'arrête."));
+  } else {
+    lignes.push(el("strong", {}, "Mode à distance arrêté"));
+    if (etat.refus) lignes.push(el("div", {}, "Impossible maintenant : " + etat.refus));
+  }
+  const m = etat.mouvement;
+  if (m) lignes.push(el("div", {}, m.lance ? "En mouvement : " + m.axe + (m.sens > 0 ? " +" : " −")
+    : "Voyant et buzzer sur place… départ dans " + m.depart_dans_s + " s"));
+  if (etat.voyant) lignes.push(el("div", { classe: "doux" }, "Voyant-buzzer allumé sur place."));
+  if (etat.message) lignes.push(el("div", { classe: "quoi" }, etat.message));
+  return lignes;
+}
+
+async function ordreDistance(chemin, texteOk) {
+  try {
+    afficherDistance(await (await api(chemin, { method: "POST" })).json());
+    dire(texteOk, "vert");
+  } catch (erreur) { if (!(erreur instanceof Refus)) dire("Refusé : " + erreur.message, "rouge"); }
+  chargerJournalDistance();
+  rafraichir();
+}
+
+function commencerTenir(axe, sens) {
+  arreterTenir();
+  tenu = { axe, sens };
+  envoyerTenir();
+  tenu.minuterie = setInterval(envoyerTenir, (distance ? distance.battement_s : 0.2) * 1000);
+}
+
+async function envoyerTenir() {
+  if (!tenu) return;
+  const corps = { axe: tenu.axe, sens: tenu.sens, camera: cameraVue || "", image: numeroVu || 0 };
+  try {
+    const reponse = await api("/api/distance/tenir", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps),
+    });
+    afficherDistance(await reponse.json());
+  } catch (erreur) {
+    arreterTenir();
+    if (!(erreur instanceof Refus)) dire("Arrêt : " + erreur.message, "rouge");
+  }
+}
+
+function arreterTenir() {
+  if (!tenu) return;
+  clearInterval(tenu.minuterie);
+  tenu = null;
+  api("/api/distance/lacher", { method: "POST" }).then((r) => r.json()).then(afficherDistance).catch(() => {});
+}
+
+// Page cachée, autre application, écran éteint : on lâche tout.
+window.addEventListener("blur", arreterTenir);
+document.addEventListener("visibilitychange", () => { if (document.hidden) arreterTenir(); });
+
+async function chargerJournalDistance() {
+  try {
+    const actions = await lire("/api/distance/journal?limite=20");
+    remplir("journal-distance", actions.length
+      ? tableau(["Quand", "Qui", "Action", "Détail"], actions.map((a) => [heure(a.quand), a.qui, a.action, a.detail]))
+      : el("p", { classe: "doux" }, "Aucune action à distance."));
+  } catch (erreur) { /* pas de pilote : rien à montrer */ }
+}
+
+// ------------------------------------------------------------ clips des alarmes
+
+let clip = null, lecture = null;
+
+async function chargerClips() {
+  try {
+    const clips = await lire("/api/clips?limite=20");
+    remplir("clips", ...(clips.length ? clips.map((c) => el("div", { classe: "carte" },
+      el("strong", {}, heure(c.date)), " · " + (c.raison || ""),
+      el("div", { classe: "doux" }, Object.entries(c.cameras || {}).map(([nom, i]) => nom + " (" + i.duree_s + " s)").join(", ")),
+      el("button", { classe: "petit", surclick: () => ouvrirClip(c) }, "Revoir")))
+      : [el("p", { classe: "doux" }, "Aucun clip.")]));
+  } catch (erreur) { remplir("clips", el("p", { classe: "doux" }, erreur.message)); }
+}
+
+function ouvrirClip(c) {
+  $("lecteur").hidden = false;
+  $("lecteur-titre").textContent = "Clip du " + heure(c.date);
+  const noms = Object.keys(c.cameras || {});
+  remplir("lecteur-cameras", ...noms.map((nom) => el("button", {
+    classe: "petit", surclick: () => choisirCameraClip(c.clip, nom),
+  }, nom)));
+  if (noms.length) choisirCameraClip(c.clip, noms[0]);
+  $("lecteur").scrollIntoView({ behavior: "smooth" });
+}
+
+async function choisirCameraClip(nomClip, camera) {
+  arreterLecture();
+  try {
+    const index = await lire("/api/clips/" + encodeURIComponent(nomClip) + "/" + encodeURIComponent(camera));
+    clip = { nom: nomClip, camera, heures: index.heures };
+    $("lecteur-curseur").max = Math.max(0, clip.heures.length - 1);
+    montrerImageClip(0);
+  } catch (erreur) { if (!(erreur instanceof Refus)) dire(erreur.message, "rouge"); }
+}
+
+async function montrerImageClip(rang) {
+  if (!clip || !clip.heures.length) return;
+  $("lecteur-curseur").value = rang;
+  $("lecteur-heure").textContent = "Image " + (rang + 1) + "/" + clip.heures.length + " · " + heure(clip.heures[rang]);
+  try {
+    const reponse = await api("/api/clips/" + encodeURIComponent(clip.nom) + "/" + encodeURIComponent(clip.camera) + "/" + rang);
+    const image = $("lecteur-image"), ancienne = image.src;
+    image.src = URL.createObjectURL(await reponse.blob());
+    if (ancienne.startsWith("blob:")) URL.revokeObjectURL(ancienne);
+  } catch (erreur) { arreterLecture(); }
+}
+
+function arreterLecture() { clearTimeout(lecture); lecture = null; $("lecteur-lire").textContent = "Lire"; }
+
+async function lireClip() {
+  if (!clip) return;
+  let rang = Number($("lecteur-curseur").value);
+  if (rang >= clip.heures.length - 1) rang = 0;
+  $("lecteur-lire").textContent = "Pause";
+  const suivante = async () => {
+    await montrerImageClip(rang);
+    if (rang >= clip.heures.length - 1) { arreterLecture(); return; }
+    // Au rythme où les images sont arrivées (heures notées dans le clip).
+    const ecart = new Date(clip.heures[rang + 1]) - new Date(clip.heures[rang]);
+    rang += 1;
+    lecture = setTimeout(suivante, Math.min(Math.max(ecart, 20), 2000));
+  };
+  lecture = setTimeout(suivante, 0);
+}
+
+$("lecteur-lire").addEventListener("click", () => { if (lecture) arreterLecture(); else lireClip(); });
+$("lecteur-curseur").addEventListener("input", () => { arreterLecture(); montrerImageClip(Number($("lecteur-curseur").value)); });
 
 // ------------------------------------------------------------ check-list
 

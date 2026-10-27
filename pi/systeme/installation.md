@@ -17,7 +17,7 @@ Chaque commande se tape dans un terminal du Pi (ou par SSH). Ce qui suit `#` est
 3. Créer le compte `vidange` qui fera tourner le programme (sans mot de passe, sans connexion) :
    ```
    sudo useradd --system --create-home --shell /usr/sbin/nologin vidange
-   sudo usermod -aG dialout,gpio,i2c vidange   # accès aux ports série, GPIO et I2C (tâches suivantes)
+   sudo usermod -aG dialout,gpio,i2c,video vidange   # ports série, GPIO, I2C et caméras
    ```
 4. Activer le bus I2C (capteurs de l'armoire) :
    ```
@@ -144,6 +144,15 @@ rsync n'efface jamais rien à la maison, et n'envoie que les photos nouvelles.
 
 Essai : voir `essai-envois.md`.
 
+## 9 bis. Caméras (vidéo en direct, clips des alarmes, pilotage à distance)
+
+La caméra du plafond se lit avec `rpicam-vid` (déjà dans Raspberry Pi OS), les caméras USB avec `ffmpeg` :
+```
+sudo apt install -y ffmpeg
+ls /dev/v4l/by-id/          # le nom de chaque caméra USB, à recopier dans programme.yaml
+```
+Les commandes sont dans `programme.yaml` (`cameras` → `liste`). Essai pas à pas : voir `essai-distance.md`.
+
 ## 10. Essais à faire sur le vrai Pi
 
 Essai des capteurs et des relais : voir `essai-entrees-sorties.md`.
@@ -151,6 +160,7 @@ Essai de la fiabilité (programme figé, coupure de courant, onduleur...) : voir
 Essai de la page web (téléphone, Tailscale) : voir `essai-page-web.md`.
 Essai de l'écran de l'armoire (câblage, UART n° 2 du Pi 5) : voir `essai-ecran.md`.
 Essai de la file d'envoi (copie à la maison, coupure du réseau) : voir `essai-envois.md`.
+Essai des caméras et du pilotage à distance (voyant-buzzer, homme mort) : voir `essai-distance.md`.
 
 Cocher chaque essai réussi.
 

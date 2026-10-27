@@ -6,6 +6,7 @@ import socket
 import threading
 import urllib.request
 
+from vidange.cameras import FausseCamera
 from vidange.demarrage import (
     CODE_OK,
     CODE_REGISTRE_ABIME,
@@ -131,6 +132,7 @@ def raccords_faux(entrees_sorties):
         notifier=lambda message: messages.append(message) or True,
         lancer=commandes.append,
         ecran=FauxNextion().ouvrir,
+        cameras={nom: FausseCamera(nom).ouvrir for nom in reglages.programme.cameras.liste},
     )
     return raccords, messages, commandes
 
@@ -260,3 +262,57 @@ def test_sans_ecran_dans_la_liste_la_machine_demarre(reglages, entrees_sorties, 
     journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
     assert "pas d'écran de l'armoire" in journal
     assert "[attention] écran de l'armoire : pas de signal « ecran_nextion »" in journal
+
+
+# ---------------------------------------------------------------- tâche 12 : accès à distance
+
+
+def test_pilotage_a_distance_puis_l_armoire_reprend_la_main(reglages, entrees_sorties, tmp_path):
+    with socket.socket() as prise:
+        prise.bind(("127.0.0.1", 0))
+        port = prise.getsockname()[1]
+    remplacer(reglages / "programme.yaml", "adresse: 0.0.0.0", "adresse: 127.0.0.1")
+    remplacer(reglages / "programme.yaml", "port: 8080", f"port: {port}")
+    secrets = tmp_path / "secrets.yaml"
+    secrets.write_text("cle_api: une-cle-de-test-assez-longue\n", encoding="utf-8")
+    secrets.chmod(0o600)
+    nextion = FauxNextion()
+    raccords, messages, _ = raccords_faux(entrees_sorties)
+    raccords.ecran = nextion.ouvrir
+    arguments = [*options(reglages, tmp_path), "--entrees-sorties", str(entrees_sorties)]
+    arret = threading.Event()
+    fil = threading.Thread(target=lambda: principal(arguments, arret, raccords))
+    fil.start()
+
+    def demander(chemin: str, methode: str = "GET"):
+        demande = urllib.request.Request(
+            f"http://127.0.0.1:{port}{chemin}",
+            method=methode,
+            headers={"Authorization": "Bearer une-cle-de-test-assez-longue"},
+        )
+        with urllib.request.urlopen(demande, timeout=5) as reponse:
+            return reponse.headers, reponse.read()
+
+    try:
+        attendre(lambda: "READY=1" in messages)
+        # Les fausses caméras envoient leur vidéo.
+        entetes, image = demander("/api/cameras/plafond/image")
+        assert image.startswith(b"\xff\xd8") and int(entetes["X-Image"]) >= 1
+        etat = json.loads(demander("/api/distance/activer", "POST")[1])
+        assert etat["actif"] and [axe["nom"] for axe in etat["axes"]] == [
+            "exemple_x",
+            "exemple_y",
+            "exemple_z",
+        ]
+        attendre(lambda: nextion.texte("b_bandeau") == "À DISTANCE : TOUCHER = STOP")
+        nextion.appuyer("b_pause")
+        attendre(lambda: not json.loads(demander("/api/distance")[1])["actif"])
+        journal_distance = json.loads(demander("/api/distance/journal")[1])
+        assert [ligne["action"] for ligne in journal_distance] == ["reprise_sur_place", "activer"]
+        assert journal_distance[0]["qui"] == "écran de l'armoire"
+    finally:
+        arret.set()
+        fil.join(10)
+    assert not fil.is_alive()
+    journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
+    assert "Pilotage à distance terminé (écran de l'armoire)" in journal

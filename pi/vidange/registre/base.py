@@ -53,6 +53,7 @@ TOUTES_LES_TABLES = (
     "alarmes",
     "reglages_appliques",
     "envois",
+    "actions_distance",
 )
 
 
@@ -471,6 +472,15 @@ class Registre:
                     "nouveau": en_json(nouveau),
                     "raison": raison,
                 },
+            )
+
+    def noter_action_distance(self, qui: str, action: str, detail: str | None = None) -> int:
+        """Une action du pilotage à distance (activer, mouvement, arrêt...) : qui, quand, quoi."""
+        with self._ecriture() as cnx:
+            return self._inserer(
+                cnx,
+                "actions_distance",
+                {"quand": self._quand(), "qui": qui, "action": action, "detail": detail},
             )
 
     # ------------------------------------------------------------ file d'envoi

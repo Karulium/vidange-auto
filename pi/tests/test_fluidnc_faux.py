@@ -248,3 +248,50 @@ def test_six_axes(horloge):
 def test_axes_mal_donnes():
     with pytest.raises(ValueError):
         FauxFluidnc(axes="XYQ")
+
+
+def test_deplacement_manuel_puis_annule(horloge):
+    carte, port = nouvelle_carte(horloge)
+    # 600 mm/min = 10 mm/s ; le second s'enchaîne après le premier.
+    assert envoyer(port, "$J=G53 X10 F600", "$J=G53 X20 F600") == ["ok", "ok"]
+    horloge.avancer(0.5)
+    rapport = etat(port)
+    assert rapport.etat == "Jog"
+    assert rapport.positions["X"] == pytest.approx(5)
+    port.write(b"\x85")  # annulation : arrêt sur place, position gardée
+    rapport = etat(port)
+    assert rapport.etat == "Idle"
+    horloge.avancer(1)
+    assert etat(port).positions["X"] == pytest.approx(5)
+
+
+def test_deplacement_manuel_relatif_et_jusqu_au_bout(horloge):
+    carte, port = nouvelle_carte(horloge)
+    assert envoyer(port, "$J=G91 X-3 Y4 F6000") == ["ok"]
+    horloge.avancer(1)
+    rapport = etat(port)
+    assert rapport.etat == "Idle"
+    assert rapport.positions == {"X": -3, "Y": 4, "Z": 0}
+
+
+def test_deplacement_manuel_refuse(horloge):
+    carte, port = nouvelle_carte(horloge)
+    assert envoyer(port, "$J=G53 X10") == ["error:22"]  # sans vitesse
+    assert envoyer(port, "$J=G53 Q10 F100") == ["error:20"]
+    assert envoyer(port, "G1 X10 F600", "$J=G53 X20 F600") == ["ok", "error:8"]  # pas au repos
+    horloge.avancer(2)
+    carte.declencher_alarme(1)
+    lire(port)
+    assert envoyer(port, "$J=G53 X20 F600") == ["error:8"]
+
+
+def test_pause_pendant_un_deplacement_manuel(horloge):
+    carte, port = nouvelle_carte(horloge)
+    envoyer(port, "$J=G53 X10 F600")
+    horloge.avancer(0.2)
+    port.write(b"!")
+    assert etat(port).etat == "Hold:0"
+    # Annuler pendant la pause : le déplacement manuel est oublié.
+    port.write(b"\x85")
+    assert etat(port).etat == "Idle"
+    assert carte.positions["X"] == pytest.approx(2)

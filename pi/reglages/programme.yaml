@@ -97,6 +97,7 @@ ecran:
     alarme: {fond: "#D00000", texte: "#FFFFFF"}   # rouge : alarme
     repos: {fond: "#606060", texte: "#FFFFFF"}    # gris foncé : rien en cours
     mode: {fond: "#0060D0", texte: "#FFFFFF"}     # bleu : mode lavage ou UV-ozone
+    distance: {fond: "#8000C0", texte: "#FFFFFF"} # violet : pilotage à distance en cours
     bouton: {fond: "#E0E0E0", texte: "#000000"}   # bouton ordinaire
     inactif: {fond: "#B0B0B0", texte: "#707070"}  # bouton sans effet pour l'instant
 
@@ -130,3 +131,62 @@ envois:
     duree_max_s: 3600
     # Envoyer aussi le dossier des photos chaque jour (avec rsync, seules les nouvelles partent).
     photos: true
+
+# Caméras (tâche 12) : vidéo en direct sur la page web, et clip des dernières secondes à chaque
+# alarme (dossier donnees/clips). Chaque caméra est une commande qui écrit sa vidéo en « MJPEG »
+# (images JPEG à la suite) ; le Pi la relance seule si elle s'arrête ou se fige.
+# Essai pas à pas : pi/systeme/essai-distance.md.
+cameras:
+  # Les commandes ci-dessous sont des EXEMPLES (appareils, tailles d'image) : à vérifier sur le
+  # vrai Pi avec les vraies caméras, puis passer « exemple » à false.
+  exemple: true
+  # Mémoire tournante de chaque caméra (s), gardée en clip à chaque alarme.
+  memoire_s: 60
+  # Pas de nouvelle image depuis ce temps (s) : caméra figée (dit à la check-list), relancée
+  # après « relance_s ».
+  figee_s: 3
+  relance_s: 5
+  # La page web demande une nouvelle image ce nombre de fois par seconde (vidéo en direct).
+  page_images_par_s: 4
+  # Les clips sont effacés après ce nombre de jours.
+  clips_gardes_jours: 60
+  liste:
+    plafond:
+      description: Caméra du plafond (Camera Module 3 Wide, prise caméra n° 0 du Pi)
+      commande: [rpicam-vid, --camera, "0", --nopreview, --timeout, "0", --codec, mjpeg,
+                 --width, "1280", --height, "720", --framerate, "5", --output, "-"]
+    tete_griffe:
+      description: Caméra USB de la tête de griffe
+      # Toujours /dev/v4l/by-id/... (le nom de la caméra), jamais /dev/video0 (l'ordre change).
+      commande: [ffmpeg, -loglevel, error, -f, v4l2, -input_format, mjpeg, -framerate, "5",
+                 -video_size, 1280x720, -i, /dev/v4l/by-id/usb-EXEMPLE-TETE-video-index0,
+                 -c:v, copy, -bsf:v, mjpeg2jpeg, -f, mjpeg, "-"]
+    dosage:
+      description: Caméra du dosage (sur servo)
+      commande: [ffmpeg, -loglevel, error, -f, v4l2, -input_format, mjpeg, -framerate, "5",
+                 -video_size, 1280x720, -i, /dev/v4l/by-id/usb-EXEMPLE-DOSAGE-video-index0,
+                 -c:v, copy, -bsf:v, mjpeg2jpeg, -f, mjpeg, "-"]
+
+# Pilotage manuel à distance (tâche 12), depuis la page web, en cas de problème. Garde-fous
+# logiciels (la sécurité câblée reste au-dessus de tout) : mode activé exprès, vidéo en direct,
+# vitesse réduite, « homme mort », voyant-buzzer sur place, priorité à l'armoire, tout est noté.
+distance:
+  # Plafond de vitesse des axes pilotés à distance (m/s).
+  vitesse_max_m_s: 0.02
+  # Bouton tenu : la page redit « je tiens » tous les (s) ; sans nouvelle depuis
+  # « homme_mort_s » (bouton lâché, connexion coupée), le mouvement s'arrête.
+  battement_s: 0.2
+  homme_mort_s: 0.6
+  # Le Pi regarde le pilotage tous les (s).
+  periode_s: 0.05
+  # La carte n'a jamais plus que ce temps (s) de mouvement d'avance : même si le Pi se fige,
+  # l'axe s'arrête seul après au plus vitesse_max_m_s × avance_s (1 cm ici).
+  avance_s: 0.5
+  # L'image affichée sur la page a plus que ce temps (s) : vidéo figée, arrêt.
+  video_figee_s: 2
+  # Voyant et buzzer sur place : allumés ce temps (s) avant le premier mouvement, et gardés
+  # ce temps (s) après le dernier (des appuis rapprochés n'attendent pas à chaque fois).
+  voyant_avant_s: 3
+  voyant_apres_s: 10
+  # Mode à distance sans mouvement depuis ce temps (min) : il se termine seul.
+  inactivite_max_min: 15

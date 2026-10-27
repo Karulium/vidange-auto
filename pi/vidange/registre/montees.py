@@ -194,7 +194,24 @@ _VERSION_3 = (
     "CREATE INDEX envois_statut ON envois (statut, destination)",
 )
 
+# Version 4 (tâche 12) : le journal du pilotage à distance (qui, quand, quoi).
+_VERSION_4 = (
+    """
+    CREATE TABLE actions_distance (
+        id INTEGER PRIMARY KEY,
+        quand TEXT NOT NULL,
+        -- D'où vient l'action : « page web (100.101.102.103) », « écran de l'armoire »...
+        qui TEXT NOT NULL,
+        -- activer, quitter, mouvement, arret, refus, reprise_sur_place.
+        action TEXT NOT NULL,
+        -- En clair : axe et sens, position d'arrivée, raison de l'arrêt ou du refus...
+        detail TEXT
+    )
+    """,
+    "CREATE INDEX actions_distance_quand ON actions_distance (quand)",
+)
+
 # Montée n° i (en partant de 1) : ce qui fait passer la base de la version i - 1 à la version i.
-MONTEES: tuple[tuple[str, ...], ...] = (_VERSION_1, _VERSION_2, _VERSION_3)
+MONTEES: tuple[tuple[str, ...], ...] = (_VERSION_1, _VERSION_2, _VERSION_3, _VERSION_4)
 
 VERSION = len(MONTEES)
