@@ -5,8 +5,8 @@ et vérifiée de la base est posée dans le dossier des sauvegardes, sous le nom
 « registre-AAAA-MM-JJ.sqlite ». On garde les dernières copies (nombre réglé), les plus
 vieilles sont effacées. Si le Pi était éteint à l'heure dite, la copie se fait dès qu'il tourne.
 
-Les photos ne sont pas dans cette copie (elles restent en fichiers) ; l'envoi des copies hors
-de la machine viendra avec la file d'envoi (tâche 10).
+Les photos ne sont pas dans cette copie (elles restent en fichiers). Chaque copie faite est
+donnée à `apres_copie` : la file d'envoi l'emporte à la maison (vidange/envois).
 
 Une copie ratée est notée dans le journal et réessayée plus tard : elle n'arrête jamais la machine.
 """
@@ -37,11 +37,13 @@ class SauvegardeQuotidienne:
         dossier: Path,
         reglages: ReglagesRegistre,
         horloge: Callable[[], datetime] = maintenant,
+        apres_copie: Callable[[Path], None] | None = None,
     ) -> None:
         self.registre = registre
         self.dossier = dossier
         self.reglages = reglages
         self._horloge = horloge
+        self._apres_copie = apres_copie
 
     def copies(self) -> list[Path]:
         """Les copies quotidiennes présentes, de la plus vieille à la plus récente."""
@@ -66,6 +68,8 @@ class SauvegardeQuotidienne:
         self.registre.copier_vers(cible)
         journal.info("Copie de secours du registre faite : %s", cible)
         self.nettoyer()
+        if self._apres_copie is not None:
+            self._apres_copie(cible)
         return cible
 
     def nettoyer(self) -> list[Path]:

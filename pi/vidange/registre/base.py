@@ -24,6 +24,7 @@ import json
 import os
 import sqlite3
 import threading
+import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -51,6 +52,7 @@ TOUTES_LES_TABLES = (
     "photos",
     "alarmes",
     "reglages_appliques",
+    "envois",
 )
 
 
@@ -256,6 +258,8 @@ class Registre:
             )
 
     def finir_cycle(self, cycle: int, issue: Literal["termine", "abandonne"] = "termine") -> None:
+        """Clôt un cycle et le met dans la file d'envoi vers le logiciel de culture
+        (dans la même écriture : jamais l'un sans l'autre)."""
         with self._ecriture() as cnx:
             curseur = cnx.execute(
                 "UPDATE cycles SET fin = ?, issue = ? WHERE id = ? AND fin IS NULL",
@@ -263,6 +267,7 @@ class Registre:
             )
             if curseur.rowcount != 1:
                 raise ErreurRegistre(f"cycle n° {cycle} inconnu ou déjà fini")
+            self._ajouter_envoi(cnx, "culture", "cycle", str(cycle))
 
     def cycles_en_cours(self) -> list[dict[str, Any]]:
         """Les cycles pas encore finis (après une coupure : ceux à reprendre ou à clore)."""
@@ -467,6 +472,76 @@ class Registre:
                     "raison": raison,
                 },
             )
+
+    # ------------------------------------------------------------ file d'envoi
+
+    def ajouter_envoi(
+        self, destination: str, sorte: str, objet: str, remplace: str | None = None
+    ) -> int:
+        """Met une chose dans la file d'envoi (voir vidange/envois). Si la même chose attend
+        déjà, rien n'est ajouté : rend le numéro de l'envoi qui attend.
+
+        `remplace` : motif (LIKE de SQLite) des envois en attente que celui-ci rend inutiles
+        (exemple : les anciennes copies de la base) ; ils sont retirés de la file."""
+        with self._ecriture() as cnx:
+            if remplace is not None:
+                cnx.execute(
+                    "DELETE FROM envois WHERE destination = ? AND sorte = ? AND statut = 'attente' "
+                    "AND objet LIKE ? AND objet != ?",
+                    (destination, sorte, remplace, objet),
+                )
+            return self._ajouter_envoi(cnx, destination, sorte, objet)
+
+    def _ajouter_envoi(
+        self, cnx: sqlite3.Connection, destination: str, sorte: str, objet: str
+    ) -> int:
+        ligne = cnx.execute(
+            "SELECT id FROM envois WHERE destination = ? AND sorte = ? AND objet = ? "
+            "AND statut = 'attente'",
+            (destination, sorte, objet),
+        ).fetchone()
+        if ligne is not None:
+            return ligne[0]
+        return self._inserer(
+            cnx,
+            "envois",
+            {
+                "cle": str(uuid.uuid4()),
+                "destination": destination,
+                "sorte": sorte,
+                "objet": objet,
+                "cree_le": self._quand(),
+            },
+        )
+
+    def noter_essai_envoi(self, envoi: int, statut: str, erreur: str | None = None) -> None:
+        """Le résultat d'un essai d'envoi : « envoye », « refuse », ou « attente » (raté,
+        on réessaiera ; `erreur` dit pourquoi)."""
+        with self._ecriture() as cnx:
+            quand = self._quand()
+            curseur = cnx.execute(
+                "UPDATE envois SET statut = ?, essais = essais + 1, dernier_essai = ?, "
+                "derniere_erreur = ?, envoye_le = ? WHERE id = ?",
+                (statut, quand, erreur, quand if statut == "envoye" else None, envoi),
+            )
+            if curseur.rowcount != 1:
+                raise ErreurRegistre(f"envoi n° {envoi} inconnu")
+
+    def renvoyer(self, envoi: int) -> None:
+        """Remet un envoi (refusé, ou déjà envoyé) dans la file, avec la même clé."""
+        with self._ecriture() as cnx:
+            curseur = cnx.execute(
+                "UPDATE envois SET statut = 'attente', envoye_le = NULL WHERE id = ?", (envoi,)
+            )
+            if curseur.rowcount != 1:
+                raise ErreurRegistre(f"envoi n° {envoi} inconnu")
+
+    def effacer_envois(self, avant: datetime) -> int:
+        """Efface les envois réussis avant ce moment ; rend leur nombre."""
+        with self._ecriture() as cnx:
+            return cnx.execute(
+                "DELETE FROM envois WHERE statut = 'envoye' AND envoye_le < ?", (heure(avant),)
+            ).rowcount
 
     # ------------------------------------------------------------ lecture et copie
 

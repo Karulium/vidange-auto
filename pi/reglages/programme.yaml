@@ -99,3 +99,34 @@ ecran:
     mode: {fond: "#0060D0", texte: "#FFFFFF"}     # bleu : mode lavage ou UV-ozone
     bouton: {fond: "#E0E0E0", texte: "#000000"}   # bouton ordinaire
     inactif: {fond: "#B0B0B0", texte: "#707070"}  # bouton sans effet pour l'instant
+
+# File d'envoi vers l'extérieur (tâche 10) : les cycles vers le logiciel de culture, les copies de
+# secours vers la maison. Tout attend dans le registre jusqu'à ce que l'envoi réussisse : la machine
+# ne dépend jamais du réseau. Voir docs/django.md (format des cycles) et pi/systeme/essai-envois.md.
+envois:
+  # La file est regardée tous les (s).
+  periode_s: 30
+  # Destination qui ne répond pas : nouvel essai après 1 min, puis 2, 4, 8... sans dépasser 60 min.
+  attente_premier_echec_s: 60
+  attente_max_min: 60
+  # Un envoi qui attend depuis plus de 24 h est signalé dans la check-list (la machine tourne quand même).
+  signaler_apres_h: 24
+  # Les envois réussis restent visibles 30 jours dans la file, puis sont effacés.
+  garder_envoyes_jours: 30
+  # Logiciel de culture (Django, serveur de culture) ; le jeton est « jeton_culture » du fichier de secrets.
+  culture:
+    # Adresse de l'app « machine », exemple : http://192.168.1.20:8000/machine/api/cycles/
+    # Vide : l'app n'existe pas encore, les cycles attendent dans la file.
+    adresse: ""
+    machine: vidange-1
+    fuseau_horaire: America/Guadeloupe
+    delai_reponse_s: 10
+  # Copie de secours vers la maison, par Tailscale (voir pi/systeme/installation.md, partie 9).
+  secours:
+    # Exemple avec rsync (rien n'est jamais effacé à la maison) :
+    # commande: [rsync, -a, --partial, --timeout=60, "{chemin}", "vidange@maison:sauvegardes-vidange/"]
+    # Vide : pas encore prête, les copies attendent dans la file.
+    commande: []
+    duree_max_s: 3600
+    # Envoyer aussi le dossier des photos chaque jour (avec rsync, seules les nouvelles partent).
+    photos: true

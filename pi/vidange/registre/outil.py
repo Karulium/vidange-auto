@@ -10,6 +10,7 @@ import argparse
 import sys
 
 from vidange.demarrage import DOSSIER_PI, _chemin
+from vidange.envois import mettre_en_file_secours
 from vidange.journal import configurer_journal
 from vidange.registre import (
     DOSSIER_SAUVEGARDES,
@@ -37,7 +38,13 @@ def main(arguments: list[str] | None = None) -> int:
         return 2
     try:
         sauvegarde = SauvegardeQuotidienne(
-            registre, donnees / DOSSIER_SAUVEGARDES, reglages.programme.registre
+            registre,
+            donnees / DOSSIER_SAUVEGARDES,
+            reglages.programme.registre,
+            # La copie faite à la main part aussi à la maison (file d'envoi).
+            apres_copie=mettre_en_file_secours(
+                registre, reglages.programme.envois.secours, donnees
+            ),
         )
         if options.ordre == "sauvegarder":
             print(f"Copie faite : {sauvegarde.sauvegarder()}")

@@ -63,10 +63,130 @@ la même règle que la machine (un seau ne reçoit jamais deux variétés).
 - Les photos choisies vont dans `Images`, les poids et durées dans des mesures ou dans les tables propres à
   l'app « machine » ; le cycle complet (alarmes, durées) reste dans l'app « machine ».
 
-## Points encore ouverts (ne bloquent pas la tâche 10)
+## Points encore ouverts
 
 1. Le contenu exact du QR collé sur un seau et sur un bocal (l'`identifiant` seul, ou « S » / « B » devant) :
    à vérifier sur une étiquette réelle.
 2. Les formats de seaux de la machine (A Superlift, B 5 L, C large, D) ne correspondent pas un à un aux types
    du logiciel de culture (Transparent 10 L, Opaque 10 L, Petit 5 L) : la correspondance ira dans les réglages
    du Pi quand l'app « machine » sera écrite.
+
+## Format exact d'un cycle envoyé par le Pi (tâche 10, format n° 1)
+
+Ce que l'app « machine » recevra. Le code qui fabrique ces données est `pi/vidange/envois/cycle.py` ; un test
+vérifie que l'exemple ci-dessous a exactement les mêmes champs que ce que le Pi envoie (si l'un change, l'autre
+doit changer dans la même PR).
+
+### Comment le Pi envoie
+
+- **Quand** : chaque cycle fini (vidange d'un fût, lavage...) entre dans la **file d'envoi** du Pi (table
+  `envois` du registre, dans la même écriture que la fin du cycle). Le Pi l'envoie dès que le logiciel de culture
+  répond ; s'il ne répond pas, il réessaie (1 min, 2, 4... puis toutes les heures), même après une coupure de
+  courant. La machine n'attend jamais cet envoi.
+- **Requête** : `POST` en JSON (UTF-8) vers l'adresse réglée dans `pi/reglages/programme.yaml`
+  (`envois.culture.adresse`, exemple `http://192.168.1.20:8000/machine/api/cycles/`, avec le `/` final : Django
+  ne suit pas une redirection de `POST`).
+- **En-têtes** : `Content-Type: application/json; charset=utf-8` et `Authorization: Token <jeton>`. Le jeton est
+  celui d'un compte « machine » du logiciel de culture (Django REST Framework, `TokenAuthentication`) ; côté Pi, il
+  est dans le fichier de secrets (`jeton_culture`), jamais dans Git.
+- **Réponses attendues de l'app « machine »** :
+  | Réponse | Ce que le Pi en fait |
+  |---|---|
+  | `200` ou `201` | reçu : le cycle sort de la file |
+  | `400` ou `422` (avec un message en JSON) | **données refusées** : mis de côté, signalé dans la check-list ; Karulium corrige, puis `vidange-envois renvoyer <n°>` |
+  | tout le reste (`401`, `403`, `404`, `500`, pas de réponse en 10 s...) | réessayé plus tard (le jeton, l'adresse ou le serveur se réparent sans toucher aux données) |
+- **Le même cycle peut arriver deux fois** (coupure pendant un envoi, Pi remis en état depuis une copie, envoi
+  relancé à la main) : il porte toujours la même `cle`. L'app « machine » doit le reconnaître : si la `cle` est
+  déjà connue, **remplacer** le cycle reçu avant (ou ne rien faire) et répondre `200`. Ne jamais se fier au
+  `numero` seul : après une remise en état du Pi, un numéro peut revenir.
+- Un cycle peut être envoyé une 2ᵉ fois, plus complet (alarme acquittée entre-temps, par exemple) : c'est
+  pourquoi on remplace plutôt que d'ignorer.
+
+### Les données
+
+```json
+{
+  "format": 1,
+  "cle": "6f1c2a4e-0b7d-4a51-9d1e-3c8f2b7a9e10",
+  "machine": "vidange-1",
+  "cycle": {
+    "numero": 42,
+    "module": "vidange",
+    "debut": "2026-10-27T08:00:00",
+    "fin": "2026-10-27T08:15:00",
+    "issue": "termine",
+    "fut": "F3",
+    "remarque": null
+  },
+  "seaux": [
+    {
+      "seau": "S1293",
+      "type_seau": "opaque_10l",
+      "quand": "2026-10-27T08:05:00",
+      "doses": [
+        {"bocal": "B327", "quantite_g": 120.0, "quand": "2026-10-27T08:05:00"},
+        {"bocal": "B328", "quantite_g": null, "quand": "2026-10-27T08:05:30"}
+      ]
+    }
+  ],
+  "bocaux": ["B327", "B328"],
+  "etapes": [
+    {"etape": "descendre", "debut": "2026-10-27T08:04:48", "fin": "2026-10-27T08:05:00",
+     "duree_s": 12.4, "issue": "faite"}
+  ],
+  "mesures": [
+    {"nom": "poids_seau", "valeur": 6.2, "unite": "kg", "capteur": "balance",
+     "quand": "2026-10-27T08:05:00", "fut": null, "seau": "S1293", "bocal": null, "petri": null}
+  ],
+  "photos": [
+    {"numero": 7, "quand": "2026-10-27T08:05:10", "camera": "dosage", "fichier": "2026-10-27/dose.jpg",
+     "remarque": null, "fut": null, "seau": "S1293", "bocal": "B327", "petri": null}
+  ],
+  "alarmes": [
+    {"numero": 3, "quand": "2026-10-27T08:07:00", "module": "vidange", "etape": "descendre",
+     "message": "fût coincé", "quoi_faire": "Dégager le fût.", "acquittee_le": "2026-10-27T08:09:00",
+     "acquittee_par": "karulium"}
+  ]
+}
+```
+
+Règles communes :
+
+- **Heures** : heure locale de Guadeloupe, **sans fuseau**, à la seconde (`2026-10-27T08:05:00`), comme le
+  logiciel de culture les range (`USE_TZ = False`). Le fuseau est réglé dans `programme.yaml`
+  (`envois.culture.fuseau_horaire`).
+- **Codes** des fûts, seaux, bocaux et Pétri : le texte lu dans leur QR, tel quel (voir « Points encore
+  ouverts », n° 1).
+- Un champ sans valeur vaut `null` ; une liste vide vaut `[]`. Tous les champs sont toujours présents.
+- `format` : numéro du format. Il ne change que si le format change d'une façon que l'app doit savoir ; l'app
+  doit refuser (`400`) un format qu'elle ne connaît pas.
+
+Les champs :
+
+| Champ | Ce que c'est |
+|---|---|
+| `cle` | identifiant unique de l'envoi (UUID) : la clé à garder pour reconnaître un cycle déjà reçu |
+| `machine` | nom de la machine (`envois.culture.machine`), s'il y en a un jour plusieurs |
+| `cycle.numero` | numéro du cycle dans le registre du Pi (pour en parler, pas comme clé) |
+| `cycle.module` | le module du cycle : `vidange` (un fût vidé dans des seaux), `lavage`... Seuls les cycles avec des `seaux` créent des blocs |
+| `cycle.debut`, `cycle.fin` | début et fin du cycle |
+| `cycle.issue` | `termine` (fini normalement) ou `abandonne` (arrêté en route : les seaux déjà remplis sont quand même listés) |
+| `cycle.fut` | code du fût vidé (ou `null`) : son substrat et son traitement thermique |
+| `seaux[]` | chaque seau rempli, dans l'ordre : `seau` (code du QR), `type_seau` (nom du format dans `machine.yaml`, ou `null` s'il n'est pas connu), `quand` (fin du remplissage) |
+| `seaux[].doses[]` | le mycélium versé dans ce seau : `bocal` (code du QR), `quantite_g` (grammes si pesés, sinon `null`), `quand`. Plusieurs doses et plusieurs bocaux possibles ; un bocal peut servir à deux petits seaux |
+| `bocaux` | les codes de tous les bocaux versés pendant le cycle, sans doublon, dans l'ordre d'usage : les `semences` du lot d'inoculation |
+| `etapes[]` | chaque geste fait : `etape` (son nom), `debut`, `fin`, `duree_s` (secondes, sans les pauses), `issue` (`faite`, `alarme`, `abandonnee`) |
+| `mesures[]` | chaque mesure du cycle : `nom` (exemple `poids_seau`), `valeur`, `unite` (`kg`, `g`, `°C`...), `capteur` (nom dans la liste des entrées/sorties), `quand`, et l'objet mesuré (`fut`, `seau`, `bocal` ou `petri`, les autres à `null`) |
+| `photos[]` | les photos prises pendant le cycle : `numero` (sur le Pi), `quand`, `camera`, `fichier` (chemin sur le Pi, relatif au dossier des photos), `remarque`, et l'objet photographié. **Seulement leur description pour l'instant** : l'envoi des fichiers des photos choisies viendra plus tard (question n° 2 de la PR de la tâche 10) |
+| `alarmes[]` | les alarmes du cycle : `numero` (sur le Pi), `quand`, `module`, `etape`, `message`, `quoi_faire`, `acquittee_le`, `acquittee_par` (`null` si pas encore acquittée) |
+
+### Ce que l'app « machine » en fera (rappel, voir plus haut)
+
+- Chaque élément de `seaux` → un nouveau `Blocs` dont le `contenant` est le seau du QR.
+- `bocaux` + les blocs créés → un `Lot_inoculation` (`date` = `cycle.fin`, `semences` = les bocaux, `Blocs` = les
+  blocs, `quantite_semences` = la somme des `quantite_g` si toutes sont connues). La règle « une seule espèce par
+  lot » s'applique : si les bocaux sont de deux espèces, répondre `400` avec un message clair.
+- Les mesures de poids (`poids_seau`) → la première pesée de chaque bloc. Le reste (étapes, alarmes) se garde
+  dans les tables de l'app « machine ».
+- Un seau ou un bocal inconnu du logiciel de culture → `400` avec le code en cause (le Pi met le cycle de côté,
+  Karulium corrige, puis le renvoie).

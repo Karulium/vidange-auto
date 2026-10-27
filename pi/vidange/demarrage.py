@@ -14,7 +14,8 @@
 7. Lance la surveillance : santé du Pi, onduleur, chien de garde (et dit à systemd « prêt »),
    bilan de chaque alarme. Écrit la check-list de démarrage au journal.
    Lance l'API et la page web, si le fichier de secrets donne une clé (sinon la machine
-   tourne quand même, et la check-list le signale), et l'écran de l'armoire.
+   tourne quand même, et la check-list le signale), et l'écran de l'armoire. Lance la file
+   d'envoi (cycles vers le logiciel de culture, copies vers la maison).
 8. Attend l'ordre d'arrêt, puis arrête tout proprement (machine en pause, état noté). Si l'ordre
    vient de l'onduleur, éteint le Pi à la fin.
 
@@ -39,6 +40,7 @@ from vidange.chef import Carnet, Chef, ErreurChef, Module
 from vidange.ecran import SIGNAL as SIGNAL_ECRAN
 from vidange.ecran import Ecran, LiaisonEcran, PortEcran, ouvrir_port_ecran
 from vidange.entrees_sorties import EntreesSorties, charger_entrees_sorties
+from vidange.envois import mettre_en_file_secours, preparer_facteur
 from vidange.fiabilite import (
     Bilans,
     CheckList,
@@ -318,10 +320,18 @@ def principal(
     carnet = Carnet(dossier_donnees / NOM_CARNET)
     if fin.brutale:
         noter_fin_brutale(registre, fin, carnet)
-    sauvegarde = SauvegardeQuotidienne(
-        registre, dossier_donnees / DOSSIER_SAUVEGARDES, reglages.programme.registre
+    envois = reglages.programme.envois
+    jeton = secrets.jeton_culture
+    facteur = preparer_facteur(
+        registre, envois, jeton.get_secret_value() if jeton else None, dossier_donnees
     )
-    fils = [sauvegarde.demarrer(arret)]
+    sauvegarde = SauvegardeQuotidienne(
+        registre,
+        dossier_donnees / DOSSIER_SAUVEGARDES,
+        reglages.programme.registre,
+        apres_copie=mettre_en_file_secours(registre, envois.secours, dossier_donnees),
+    )
+    fils = [sauvegarde.demarrer(arret), facteur.demarrer(arret)]
     materiel, erreur_materiel = ouvrir_materiel(entrees_sorties, raccords.fabrique)
     ports = raccords.ports or {}
     liaisons = {
@@ -376,6 +386,7 @@ def principal(
                 "onduleur": onduleur.constats,
                 "API": lambda: constats_api(serveur),
                 "écran": lambda: constats_ecran(liaison_ecran),
+                "envois": facteur.constats,
             }
         )
         serveur = preparer_api(
