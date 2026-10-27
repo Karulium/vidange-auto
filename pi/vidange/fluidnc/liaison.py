@@ -6,6 +6,7 @@ Une liaison par carte. Elle :
   « ok » ou « error:N » libère la place de la plus ancienne ligne envoyée ;
 - demande l'état (« ? ») régulièrement et garde le dernier : état, positions, alarme ;
 - débloque, met en pause, reprend, réinitialise ;
+- fait les déplacements manuels (« $J= ») du pilotage à distance, et les annule ;
 - se reconnecte seule après une coupure du câble (ou une carte muette), en retrouvant la carte
   par le numéro de série de son USB, même si son port a changé de nom.
 
@@ -246,6 +247,18 @@ class Liaison:
         return self.attendre(
             lambda etat: etat.rapports_recus > deja, max(fin - time.monotonic(), 0)
         )
+
+    def deplacer_manuel(self, positions_mm: dict[str, float], vitesse_mm_min: float) -> Commande:
+        """Déplacement manuel (« $J= ») vers des positions machine (mm, par lettre d'axe).
+
+        Il s'enchaîne après le déplacement manuel d'avant ; `annuler_deplacement` les arrête tous.
+        """
+        mots = " ".join(f"{lettre}{valeur:.3f}" for lettre, valeur in positions_mm.items())
+        return self.envoyer(f"{protocole.DEPLACEMENT_MANUEL}G53 {mots} F{vitesse_mm_min:.0f}")
+
+    def annuler_deplacement(self) -> None:
+        """Arrête tout de suite les déplacements manuels (0x85), sans perdre la position."""
+        self._ecrire_temps_reel(protocole.ANNULER_DEPLACEMENT)
 
     def pause(self) -> None:
         """Pause immédiate (« ! ») : les axes ralentissent et s'arrêtent, rien n'est perdu."""

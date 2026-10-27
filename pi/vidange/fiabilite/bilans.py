@@ -6,8 +6,8 @@ les modules, la mémoire du module (seau en cours...), l'état et les positions 
 FluidNC, toutes les entrées et sorties, les mesures, la santé du Pi, et les dernières lignes
 du journal. L'alarme est notée dans le registre avec le chemin de son bilan.
 
-Le clip vidéo des 60 s avant l'alarme viendra avec la tâche 12 (caméras) : sa place est
-prête (« clip_video »), et `collecteurs` permet d'ajouter d'autres morceaux au bilan.
+Le clip vidéo des dernières secondes de chaque caméra (tâche 12) est ajouté par le démarrage
+dans `collecteurs` (« clip_video » : le dossier du clip) ; d'autres morceaux peuvent l'être aussi.
 
 Le chef appelle `recevoir` pendant qu'il tient son verrou : le bilan est fait dans un fil à
 part, pour ne jamais retarder le chef (les lectures de capteurs peuvent prendre du temps).
@@ -139,7 +139,7 @@ class Bilans:
         if self._sante is not None:
             bilan["sante"] = _ou_erreur(lambda: [asdict(c) for c in self._sante()])
         bilan["journal"] = _ou_erreur(self._fin_du_journal)
-        # Tâche 12 : le clip vidéo des 60 s avant l'alarme.
+        # Le clip vidéo (tâche 12) : None s'il n'y a pas de caméra.
         bilan["clip_video"] = None
         for nom, collecteur in self.collecteurs.items():
             bilan[nom] = _ou_erreur(collecteur)

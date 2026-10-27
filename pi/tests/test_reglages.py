@@ -262,3 +262,29 @@ def test_seuils_de_sante_verifies(reglages):
     message = erreur_de(reglages)
     assert "disque_libre_minimum_go doit être plus petit que disque_libre_attention_go" in message
     assert "chef_fige_s (3 s) doit valoir au moins 2 fois periode_s (2 s)" in message
+
+
+def test_garde_fous_du_pilotage_a_distance_verifies(reglages):
+    programme = reglages / "programme.yaml"
+    remplacer(programme, "homme_mort_s: 0.6", "homme_mort_s: 0.3")
+    remplacer(programme, "pilotage tous les (s).\n  periode_s: 0.05", "pilotage.\n  periode_s: 0.2")
+    texte = erreur_de(reglages)
+    assert "homme_mort_s (0.3 s) doit valoir au moins 2 fois battement_s (0.2 s)" in texte
+    assert "homme_mort_s (0.3 s) doit valoir au moins 2 fois periode_s (0.2 s)" in texte
+
+
+def test_video_figee_laisse_passer_des_images(reglages):
+    remplacer(reglages / "programme.yaml", "video_figee_s: 2", "video_figee_s: 0.4")
+    assert "video_figee_s (0.4 s) doit laisser passer au moins 2 images" in erreur_de(reglages)
+
+
+def test_avance_du_pilotage_et_etat_des_cartes(reglages):
+    remplacer(reglages / "fluidnc.yaml", "periode_etat_s: 0.2", "periode_etat_s: 0.3")
+    assert "distance → avance_s (0.5 s) doit valoir au moins 2 fois periode_etat_s" in erreur_de(
+        reglages
+    )
+
+
+def test_commande_de_camera_vide_refusee(reglages):
+    remplacer(reglages / "programme.yaml", "commande: [rpicam-vid,", "commande: []\n      x: [")
+    assert "cameras → liste → plafond → commande : ne doit pas être vide" in erreur_de(reglages)

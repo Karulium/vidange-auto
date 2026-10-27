@@ -3,7 +3,8 @@
 Paquet Python `vidange` (Python 3.11, comme Raspberry Pi OS Bookworm).
 Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés, journal, secrets, liaison avec les cartes FluidNC (et faux FluidNC), entrées/sorties du Pi par leur nom (et faux capteurs), chef d'orchestre (moteur d'étapes) avec un module d'exemple, registre (base SQLite) avec copie de secours quotidienne, fiabilité (chien de garde, check-list de démarrage,
 reprise après coupure et retour en lieu sûr, arrêt propre sur onduleur, bilan de chaque alarme, santé du Pi),
-API et page web locale (état, alarmes, Go, Pause, historique, photos), simulateur de cycle (jumeau, version 0).
+API et page web locale (état, alarmes, Go, Pause, historique, photos), simulateur de cycle (jumeau, version 0),
+vidéos des caméras (en direct et clips des alarmes) et pilotage manuel à distance avec ses garde-fous.
 Pas encore de vrai module de la machine.
 
 ## Ce qu'il y a ici
@@ -49,9 +50,11 @@ Pas encore de vrai module de la machine.
 | `vidange/api/serveur.py` | Serveur web de l'API (uvicorn) dans un fil à part |
 | `vidange/api/page/index.html` | La page web en français, lisible sur téléphone (une seule page, rien à télécharger d'Internet) |
 | `vidange/ecran/` | Écran Nextion de l'armoire : protocole série, liaison, pages et boutons, faux écran pour les tests |
+| `vidange/cameras/` | Caméras : vidéo lue depuis une commande (MJPEG), mémoire tournante, clips des alarmes, fausse caméra |
+| `vidange/distance/` | Pilotage manuel à distance : homme mort, vitesse plafond, voyant-buzzer, priorité à l'armoire, journal |
 | `vidange/mode.py` | Mode de la machine (production, lavage, UV-ozone), gardé dans un fichier, changé machine au repos |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) |
-| `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran) |
+| `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran, caméras, pilotage à distance) |
 | `reglages/fluidnc.yaml` | Cartes FluidNC (numéro de série USB) et réglages de leur liaison |
 | `reglages/simulateur.yaml` | Machine imaginaire du simulateur : vitesses des axes, délai du Go, capteurs qui changent (**exemple**) |
 | `secrets.exemple.yaml` | Modèle **vide** du fichier de secrets |
@@ -60,6 +63,7 @@ Pas encore de vrai module de la machine.
 | `systeme/essai-entrees-sorties.md` | Essai des entrées/sorties sur le vrai matériel, pas à pas |
 | `systeme/essai-fiabilite.md` | Essai de la fiabilité sur le vrai matériel (coupures, chien de garde...), pas à pas |
 | `systeme/essai-page-web.md` | Essai de la page web sur le vrai Pi (téléphone, Tailscale), pas à pas |
+| `systeme/essai-distance.md` | Essai des caméras et du pilotage à distance sur le vrai Pi, pas à pas |
 | `systeme/essai-ecran.md` | Essai de l'écran Nextion sur le vrai Pi (câblage, UART, chaque page), pas à pas |
 | `tests/` | Tests (pytest) |
 

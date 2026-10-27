@@ -1,7 +1,8 @@
 """Faux FluidNC : une carte imaginaire pour les tests et le simulateur.
 
 Il répond comme une vraie carte : « ok » / « error:N » à chaque ligne, rapport d'état à « ? »,
-pause « ! », reprise « ~ », réinitialisation Ctrl-X, alarmes, déblocage « $X ».
+pause « ! », reprise « ~ », réinitialisation Ctrl-X, alarmes, déblocage « $X », déplacements
+manuels « $J= » et leur annulation (0x85).
 Les positions avancent avec le temps, à la vitesse demandée (F, ou la vitesse rapide pour G0),
 en ligne droite et sans accélération.
 
@@ -39,6 +40,8 @@ class _Bloc:
     vitesse_mm_min: float = 0.0
     duree_s: float = 0.0
     prise_origine: bool = False
+    # Déplacement manuel (« $J= ») : annulable par 0x85.
+    manuel: bool = False
 
 
 class _ErreurLigne(Exception):
@@ -190,7 +193,7 @@ class FauxFluidnc:
                 if utilise is None:
                     break
                 reste -= utilise
-            if not self._file and self.etat in ("Run", "Home"):
+            if not self._file and self.etat in ("Run", "Home", "Jog"):
                 self.etat = "Idle"
                 self._vitesse_actuelle = 0.0
 
@@ -202,7 +205,7 @@ class FauxFluidnc:
         if not self._file or self.en_pause or self.etat == "Alarm":
             return None
         bloc = self._file[0]
-        self.etat = "Home" if bloc.prise_origine else "Run"
+        self.etat = "Home" if bloc.prise_origine else "Jog" if bloc.manuel else "Run"
         if bloc.cible is None:
             self._vitesse_actuelle = 0.0
             utilise = min(duree, bloc.duree_s)
@@ -304,7 +307,9 @@ class FauxFluidnc:
 
     def _commande_dollar(self, ligne: str) -> None:
         commande = ligne.upper()
-        if commande == protocole.DEBLOCAGE:
+        if commande.startswith(protocole.DEPLACEMENT_MANUEL):
+            self._deplacement_manuel(commande.removeprefix(protocole.DEPLACEMENT_MANUEL))
+        elif commande == protocole.DEBLOCAGE:
             if self.etat == "Alarm":
                 self.etat = "Idle"
                 self._sorties.append("[MSG:Caution: Unlocked]")
@@ -324,6 +329,38 @@ class FauxFluidnc:
             # Les autres commandes « $ » (réglages, aide) : acceptées sans rien faire.
             self._sorties.append("ok")
 
+    def _deplacement_manuel(self, texte: str) -> None:
+        """« $J=G53 X10 F600 » : seulement au repos ou pendant un autre déplacement manuel."""
+        if self.etat not in ("Idle", "Jog") or self.en_pause:
+            raise _ErreurLigne(8)
+        texte = _COMMENTAIRE.sub("", texte).replace(" ", "")
+        mots = _MOT.findall(texte)
+        if "".join(lettre + nombre for lettre, nombre in mots) != texte:
+            raise _ErreurLigne(2)
+        absolu, vitesse, cible = True, None, {}
+        for lettre, nombre in mots:
+            valeur = float(nombre)
+            if lettre == "G" and valeur in (53, 90, 21):
+                pass
+            elif lettre == "G" and valeur == 91:
+                absolu = False
+            elif lettre == "F" and valeur > 0:
+                vitesse = valeur
+            elif lettre in self.axes:
+                cible[lettre] = valeur
+            else:
+                raise _ErreurLigne(20)
+        if vitesse is None:
+            raise _ErreurLigne(22)
+        depart = dict(self.positions)
+        for bloc in self._file:
+            if bloc.cible is not None:
+                depart = dict(bloc.cible)
+        for axe, valeur in cible.items():
+            depart[axe] = valeur if absolu else depart[axe] + valeur
+        self._file.append(_Bloc(cible=depart, vitesse_mm_min=vitesse, manuel=True))
+        self._sorties.append("ok")
+
     def _temps_reel(self, caractere: str) -> None:
         if caractere == "?":
             self.avancer()
@@ -333,6 +370,15 @@ class FauxFluidnc:
                 self.en_pause = True
         elif caractere == "~":
             self.en_pause = False
+        elif caractere == "\x85":
+            # Annulation des déplacements manuels : arrêt sur place, position gardée.
+            manuels = [bloc for bloc in self._file if bloc.manuel]
+            if manuels:
+                self._file = deque(bloc for bloc in self._file if not bloc.manuel)
+                self.en_pause = False
+                if not self._file:
+                    self.etat = "Idle"
+                    self._vitesse_actuelle = 0.0
         elif caractere == "\x18":
             if self._file and self.etat != "Alarm":
                 # Arrêt brutal pendant un mouvement : la position n'est plus sûre.
@@ -353,7 +399,7 @@ class FauxFluidnc:
         self._attente_ok = None
         self.en_pause = False
         self._vitesse_actuelle = 0.0
-        if self.etat in ("Run", "Home"):
+        if self.etat in ("Run", "Home", "Jog"):
             self.etat = "Idle"
 
     def _rapport(self) -> str:

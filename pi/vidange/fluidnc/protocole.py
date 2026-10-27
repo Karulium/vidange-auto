@@ -19,13 +19,19 @@ DEMANDE_ETAT = b"?"
 PAUSE = b"!"
 REPRISE = b"~"
 REINITIALISATION = b"\x18"  # Ctrl-X : vide les files de la carte.
-CARACTERES_TEMPS_REEL = frozenset("?!~\x18")
+# Arrête tout de suite un déplacement manuel (« $J= ») et oublie ceux qui attendent, sans perdre
+# la position (contrairement à Ctrl-X).
+ANNULER_DEPLACEMENT = b"\x85"
+CARACTERES_TEMPS_REEL = frozenset("?!~\x18\x85")
 
 # Lignes de commande de FluidNC.
 DEBLOCAGE = "$X"
 PRISE_ORIGINE = "$H"
 # « Attendre 0 s » : la carte ne répond « ok » qu'une fois tous les mouvements d'avant finis.
 SYNCHRONISATION = "G4 P0"
+# Déplacement manuel (« jog ») : « $J=G53 X120.000 F1200 » va à une position machine (mm),
+# à la vitesse F (mm/min). Seulement depuis le repos ou un autre déplacement manuel.
+DEPLACEMENT_MANUEL = "$J="
 
 # Ordre des axes dans les positions envoyées par FluidNC (jusqu'à 6 axes).
 LETTRES_AXES = "XYZABC"

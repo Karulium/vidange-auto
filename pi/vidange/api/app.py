@@ -1,6 +1,8 @@
-"""API du Pi (FastAPI) : état, alarmes, Go, Pause, historique, photos ; et la page web.
+"""API du Pi (FastAPI) : état, alarmes, Go, Pause, historique, photos, vidéos, pilotage à
+distance ; et la page web.
 
-    services = Services(chef, registre, acquitter=bilans.acquitter, checklist=checklist.verifier)
+    services = Services(chef, registre, acquitter=bilans.acquitter, checklist=checklist.verifier,
+                        cameras=cameras, pilote=pilote)
     app = creer_app(services, reglages.programme.api, cle)
 
 Toutes les adresses « /api/... » demandent la clé (en-tête « Authorization: Bearer <clé> »).
@@ -10,8 +12,9 @@ Tailscale : voir programme.yaml) est refusée d'office, même avec la bonne clé
 
 Les ordres (Go, Pause, Reprise, acquittement) passent par le chef d'orchestre, comme ceux de
 l'écran de l'armoire : l'API ne commande jamais un axe elle-même. Chaque ordre est noté au
-journal avec l'adresse d'où il vient. Le pilotage à distance (tâche 12) aura ses propres
-garde-fous.
+journal avec l'adresse d'où il vient. Le pilotage à distance (tâche 12) passe par le pilote
+(vidange/distance), qui a ses propres garde-fous ; pendant ce pilotage, Go et Reprise sont
+refusés.
 """
 
 import hmac
@@ -23,10 +26,13 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from pydantic import BaseModel
 
 from vidange import __version__
+from vidange.cameras import Cameras, ErreurCamera
 from vidange.chef import Chef, ErreurChef
+from vidange.distance import ErreurDistance, PiloteDistance
 from vidange.fiabilite.constats import Constat, pire
 from vidange.journal import donner_journal
 from vidange.registre import ErreurRegistre, Registre
@@ -48,6 +54,18 @@ class Services:
     acquitter: Callable[[int, str], None]
     # La check-list de démarrage, refaite à la demande (CheckList.verifier).
     checklist: Callable[[], Iterable[Constat]]
+    # Vidéos et clips (None : pas de caméras), pilotage à distance (None : pas de pilote).
+    cameras: Cameras | None = None
+    pilote: PiloteDistance | None = None
+
+
+class Tenir(BaseModel):
+    """« Je tiens le bouton » : l'axe, le sens, et l'image que la page affiche en ce moment."""
+
+    axe: str
+    sens: int
+    camera: str
+    image: int
 
 
 def _adresse(requete: Request) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
@@ -74,6 +92,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
     # Pas de pages de documentation automatiques : elles montreraient l'API sans clé.
     app = FastAPI(title="Vidange automatique", docs_url=None, redoc_url=None, openapi_url=None)
     chef, registre = services.chef, services.registre
+    cameras, pilote = services.cameras, services.pilote
     reseaux = list(reglages.reseaux_autorises)
     cle_attendue = cle.encode()
 
@@ -102,6 +121,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
 
     @app.exception_handler(ErreurChef)
     @app.exception_handler(ErreurRegistre)
+    @app.exception_handler(ErreurDistance)
     async def refus(_: Request, erreur: Exception) -> JSONResponse:
         # Un ordre impossible maintenant (pas de Go attendu, alarme déjà acquittée...).
         return JSONResponse({"detail": str(erreur)}, status_code=409)
@@ -127,6 +147,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             "attendent_go": etat_chef.attendent_go,
             "alarmes_ouvertes": registre.alarmes_ouvertes(),
             "rafraichir_s": reglages.rafraichir_s,
+            "distance": pilote is not None and pilote.actif,
         }
 
     @app.get("/api/checklist", dependencies=protege)
@@ -146,15 +167,21 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         chef.pause()
         return {"en_pause": True}
 
+    def pas_pendant_le_pilotage(ordre: str) -> None:
+        if pilote is not None and pilote.actif:
+            raise ErreurDistance(f"{ordre} refusé : quitter d'abord le pilotage à distance")
+
     @app.post("/api/reprendre", dependencies=protege)
     def reprendre(requete: Request) -> dict[str, Any]:
         journal.info("Reprise demandée par la %s", _qui(requete))
+        pas_pendant_le_pilotage("Reprise")
         chef.reprendre()
         return {"en_pause": False}
 
     @app.post("/api/go/{module}", dependencies=protege)
     def go(module: str, requete: Request) -> dict[str, Any]:
         journal.info("Go pour « %s » demandé par la %s", module, _qui(requete))
+        pas_pendant_le_pilotage("Go")
         chef.donner_go(module)
         return {"go": module}
 
@@ -283,5 +310,100 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         if not fichier.is_relative_to(registre.dossier_photos.resolve()) or not fichier.is_file():
             raise HTTPException(404, f"fichier de la photo n° {numero} introuvable")
         return FileResponse(fichier)
+
+    # ------------------------------------------------------------ vidéos et clips
+
+    def les_cameras() -> Cameras:
+        if cameras is None:
+            raise HTTPException(404, "pas de caméras (programme.yaml → cameras)")
+        return cameras
+
+    def jpeg(donnees: bytes, entetes: dict[str, str] | None = None) -> Response:
+        return Response(
+            donnees,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-store", **(entetes or {})},
+        )
+
+    @app.get("/api/cameras", dependencies=protege)
+    def liste_cameras() -> dict[str, Any]:
+        if cameras is None:
+            return {"cameras": [], "images_par_s": 0}
+        return {"cameras": cameras.decrire(), "images_par_s": cameras.reglages.page_images_par_s}
+
+    @app.get("/api/cameras/{nom}/image", dependencies=protege)
+    def image_camera(nom: str) -> Response:
+        """La dernière image ; son numéro est dans l'en-tête « X-Image » (pilotage à distance)."""
+        try:
+            image = les_cameras().derniere(nom)
+        except ErreurCamera as erreur:
+            raise HTTPException(404, str(erreur)) from None
+        if image is None:
+            raise HTTPException(503, f"caméra « {nom} » : pas encore d'image")
+        return jpeg(image.donnees, {"X-Image": str(image.numero)})
+
+    @app.get("/api/clips", dependencies=protege)
+    def clips(
+        limite: int | None = Query(default=None, ge=1), avant: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Les clips des alarmes, du plus récent au plus ancien."""
+        return les_cameras().lister_clips(limiter(limite), avant)
+
+    @app.get("/api/clips/{clip}/{camera}", dependencies=protege)
+    def index_clip(clip: str, camera: str) -> dict[str, Any]:
+        try:
+            index = les_cameras().index_du_clip(clip, camera)
+        except ErreurCamera as erreur:
+            raise HTTPException(404, str(erreur)) from None
+        return {"clip": clip, "camera": camera, "heures": [heure for *_, heure in index]}
+
+    @app.get("/api/clips/{clip}/{camera}/{rang}", dependencies=protege)
+    def image_clip(clip: str, camera: str, rang: int) -> Response:
+        try:
+            return jpeg(les_cameras().image_du_clip(clip, camera, rang))
+        except ErreurCamera as erreur:
+            raise HTTPException(404, str(erreur)) from None
+
+    # ------------------------------------------------------------ pilotage à distance
+
+    def le_pilote() -> PiloteDistance:
+        if pilote is None:
+            raise HTTPException(404, "pas de pilotage à distance sur ce programme")
+        return pilote
+
+    @app.get("/api/distance", dependencies=protege)
+    def distance() -> dict[str, Any]:
+        return le_pilote().etat()
+
+    @app.post("/api/distance/activer", dependencies=protege)
+    def activer(requete: Request) -> dict[str, Any]:
+        le_pilote().activer(_qui(requete))
+        return le_pilote().etat()
+
+    @app.post("/api/distance/quitter", dependencies=protege)
+    def quitter(requete: Request) -> dict[str, Any]:
+        le_pilote().quitter(_qui(requete))
+        return le_pilote().etat()
+
+    @app.post("/api/distance/tenir", dependencies=protege)
+    def tenir(ordre: Tenir, requete: Request) -> dict[str, Any]:
+        le_pilote().tenir(_qui(requete), ordre.axe, ordre.sens, ordre.camera, ordre.image)
+        return le_pilote().etat()
+
+    @app.post("/api/distance/lacher", dependencies=protege)
+    def lacher(requete: Request) -> dict[str, Any]:
+        le_pilote().lacher(_qui(requete))
+        return le_pilote().etat()
+
+    @app.get("/api/distance/journal", dependencies=protege)
+    def journal_distance(
+        limite: int | None = Query(default=None, ge=1),
+        avant: int | None = Query(default=None, ge=1),
+    ) -> list[dict[str, Any]]:
+        """Les dernières actions du pilotage à distance (qui, quand, quoi)."""
+        return registre.lire(
+            "SELECT * FROM actions_distance WHERE (? IS NULL OR id < ?) ORDER BY id DESC LIMIT ?",
+            (avant, avant, limiter(limite)),
+        )
 
     return app

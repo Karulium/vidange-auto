@@ -13,6 +13,9 @@ jamais un axe lui-même. Pause : tout de suite. Go, Reprise et changement de mod
 
 Une nouvelle alarme fait venir la page d'alarme (quoi faire, en 2 lignes, avec « Suite »
 si le texte est plus long). Les autres pages reviennent seules à la page d'état.
+
+Pendant un pilotage à distance (tâche 12), le bandeau le dit, et la main est à l'armoire : le
+premier appui sur n'importe quel bouton arrête le pilotage à distance (et ne fait rien d'autre).
 """
 
 import threading
@@ -22,6 +25,7 @@ from datetime import date
 
 from vidange.chef import Chef, ErreurChef
 from vidange.chef.chef import EtatChef, EtatModule
+from vidange.distance import PiloteDistance
 from vidange.ecran.liaison import LiaisonEcran
 from vidange.ecran.pages import ALARME, COMPTEURS, CONFIRMER, ETAT, MODE, Page
 from vidange.ecran.protocole import Appui, couleur_565, preparer_texte
@@ -98,6 +102,7 @@ class Ecran:
         mode: ModeMachine,
         horloge: Callable[[], float] = time.monotonic,
         aujourdhui: Callable[[], date] = date.today,
+        pilote: PiloteDistance | None = None,
     ) -> None:
         self.reglages = reglages
         self.liaison = liaison
@@ -105,6 +110,7 @@ class Ecran:
         self.registre = registre
         self.acquitter = acquitter
         self.mode = mode
+        self.pilote = pilote
         self._horloge = horloge
         self._aujourdhui = aujourdhui
         self._page: Page = ETAT
@@ -130,6 +136,12 @@ class Ecran:
         for trame in self.liaison.tour():
             if isinstance(trame, Appui):
                 self._depuis = self._horloge()
+                if self.pilote is not None and self.pilote.actif:
+                    # Priorité à l'armoire : l'appui reprend la main, sans rien faire d'autre.
+                    journal.warning("Écran : appui pendant le pilotage à distance, il s'arrête")
+                    self.pilote.reprendre_la_main(QUI)
+                    self._dire("Pilotage à distance arrêté : la main est à l'armoire.")
+                    continue
                 try:
                     self.appuyer(trame.bouton)
                 except (ErreurChef, ErreurRegistre, ErreurMode) as erreur:
@@ -299,7 +311,9 @@ class Ecran:
         etat = self.chef.etat()
         en_cours = [m for m in etat.modules if m.statut == "en_cours"]
         nombre_alarmes = len(alarmes) or len(etat.alarmes)
-        if nombre_alarmes:
+        if self.pilote is not None and self.pilote.actif:
+            page.mettre("b_bandeau", "À DISTANCE : TOUCHER = STOP", "distance")
+        elif nombre_alarmes:
             page.mettre("b_bandeau", f"ALARME ({nombre_alarmes}) : TOUCHER ICI", "alarme")
         elif etat.en_pause:
             page.mettre("b_bandeau", "EN PAUSE", "pause")
@@ -327,7 +341,10 @@ class Ecran:
         else:
             page.mettre("t_module", "Aucun cycle en cours")
             page.mettre("t_attend", "")
-        page.mettre("t_info", self._message_actuel())
+        info = self._message_actuel()
+        if not info and self.pilote is not None and self.pilote.actif:
+            info = "Pilotage à distance en cours. Toucher un bouton pour l'arrêter."
+        page.mettre("t_info", info)
         if etat.en_pause:
             page.mettre("b_pause", "REPRENDRE", "marche")
         else:
