@@ -166,7 +166,35 @@ _VERSION_1 = (
 # de l'alarme : positions, capteurs, état des cartes...), relatif au dossier des données.
 _VERSION_2 = ("ALTER TABLE alarmes ADD COLUMN bilan TEXT",)
 
+# Version 3 (tâche 10) : la file d'envoi vers l'extérieur (logiciel de culture, copie de secours
+# de la maison). Une ligne = une chose à envoyer ; elle reste jusqu'à ce que l'envoi réussisse.
+_VERSION_3 = (
+    """
+    CREATE TABLE envois (
+        id INTEGER PRIMARY KEY,
+        -- Clé unique de l'envoi (UUID), la même à chaque essai : le destinataire reconnaît
+        -- ainsi un envoi déjà reçu (coupure pendant l'envoi, base remise depuis une copie...).
+        cle TEXT NOT NULL UNIQUE,
+        -- culture : logiciel de culture (Django) ; secours : copie de secours de la maison.
+        destination TEXT NOT NULL CHECK (destination IN ('culture', 'secours')),
+        -- cycle : objet = numéro du cycle ; fichier : objet = chemin relatif au dossier
+        -- des données (un fichier ou un dossier).
+        sorte TEXT NOT NULL CHECK (sorte IN ('cycle', 'fichier')),
+        objet TEXT NOT NULL,
+        cree_le TEXT NOT NULL,
+        -- attente : à envoyer ; envoye : reçu par le destinataire ; refuse : le destinataire
+        -- dit que les données sont fausses (on ne réessaie plus tout seul).
+        statut TEXT NOT NULL DEFAULT 'attente' CHECK (statut IN ('attente', 'envoye', 'refuse')),
+        essais INTEGER NOT NULL DEFAULT 0,
+        dernier_essai TEXT,
+        derniere_erreur TEXT,
+        envoye_le TEXT
+    )
+    """,
+    "CREATE INDEX envois_statut ON envois (statut, destination)",
+)
+
 # Montée n° i (en partant de 1) : ce qui fait passer la base de la version i - 1 à la version i.
-MONTEES: tuple[tuple[str, ...], ...] = (_VERSION_1, _VERSION_2)
+MONTEES: tuple[tuple[str, ...], ...] = (_VERSION_1, _VERSION_2, _VERSION_3)
 
 VERSION = len(MONTEES)

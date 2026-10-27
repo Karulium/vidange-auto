@@ -65,7 +65,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   compteurs, mode (production / lavage / UV-ozone), grands boutons, code couleur (46 à 48). Écrire dans
   `nextion/pages.md` chaque page, bouton par bouton (nom, position, taille), pour que Karulium la monte dans Nextion Editor.
 
-- [ ] **10. File d'envoi vers l'extérieur** — Modèle : Sonnet.
+- [x] **10. File d'envoi vers l'extérieur** — Modèle : Sonnet.
   File durable (dans SQLite) avec reprise, pour le logiciel de culture et la copie de secours.
   Écrire dans `docs/django.md` le format exact des données d'un cycle que l'app « machine » recevra.
   Ne pas toucher au dépôt Django.

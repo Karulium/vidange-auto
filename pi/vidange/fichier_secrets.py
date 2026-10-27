@@ -23,6 +23,8 @@ class Secrets(Modele):
 
     # Clé que l'API du Pi demandera (tâche 8). SecretStr : jamais écrite dans le journal.
     cle_api: SecretStr | None = Field(default=None)
+    # Jeton du logiciel de culture (Django REST Framework, « Token ») pour lui envoyer les cycles.
+    jeton_culture: SecretStr | None = Field(default=None)
 
     @field_validator("*", mode="before")
     @classmethod

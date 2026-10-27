@@ -7,6 +7,7 @@ quel réglage, et ce qui ne va pas. Toutes les erreurs sont listées d'un coup.
 
 from pathlib import Path
 from typing import Annotated, Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 from pydantic import (
@@ -342,6 +343,74 @@ class ReglagesEcran(Modele):
         return self
 
 
+class EnvoiCulture(Modele):
+    """Envoi des cycles au logiciel de culture (Django), format dans docs/django.md."""
+
+    # Adresse de l'app « machine » qui reçoit les cycles ; vide : pas encore prête, les cycles
+    # attendent dans la file (rien n'est perdu).
+    adresse: str = ""
+    # Nom de cette machine, envoyé avec chaque cycle.
+    machine: str = Field(min_length=1)
+    # Le logiciel de culture compte en heure locale sans fuseau (USE_TZ = False) : les heures
+    # lui sont envoyées dans ce fuseau.
+    fuseau_horaire: str = Field(min_length=1)
+    # Sans réponse après ce temps (s), l'essai est raté. Court : l'arrêt du programme l'attend.
+    delai_reponse_s: float = Field(gt=0, le=10)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "EnvoiCulture":
+        if self.adresse and not self.adresse.startswith(("http://", "https://")):
+            raise ValueError(f"adresse « {self.adresse} » : doit commencer par http:// ou https://")
+        try:
+            ZoneInfo(self.fuseau_horaire)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError(
+                f"fuseau horaire inconnu « {self.fuseau_horaire} » (exemple : America/Guadeloupe)"
+            ) from None
+        return self
+
+
+class EnvoiSecours(Modele):
+    """Copie de secours vers la maison (par Tailscale)."""
+
+    # Commande qui copie un fichier ou un dossier vers la maison ; « {chemin} » y est remplacé
+    # par ce qu'il faut copier. Vide : pas encore prête, les copies attendent dans la file.
+    commande: list[Annotated[str, StringConstraints(min_length=1)]] = Field(default_factory=list)
+    # La commande est arrêtée si elle dure plus que ça (s).
+    duree_max_s: float = Field(gt=0)
+    # Envoyer aussi, chaque jour, le dossier des photos (seules les nouvelles partent avec rsync).
+    photos: bool
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "EnvoiSecours":
+        if self.commande and not any("{chemin}" in morceau for morceau in self.commande):
+            raise ValueError("commande : il manque « {chemin} » (ce qu'il faut copier)")
+        return self
+
+
+class ReglagesEnvois(Modele):
+    """File d'envoi vers l'extérieur (tâche 10). La machine n'attend jamais le réseau."""
+
+    # La file est regardée tous les (s).
+    periode_s: float = Field(gt=0, le=3600)
+    # Après un essai raté vers une destination, on attend ce temps (s), doublé à chaque nouvel
+    # échec, sans dépasser « attente_max_min ».
+    attente_premier_echec_s: float = Field(gt=0)
+    attente_max_min: float = Field(gt=0)
+    # Un envoi qui attend depuis plus que ça (h) est signalé dans la check-list.
+    signaler_apres_h: float = Field(gt=0)
+    # Les envois réussis restent visibles ce nombre de jours, puis sont effacés de la file.
+    garder_envoyes_jours: int = Field(ge=1)
+    culture: EnvoiCulture
+    secours: EnvoiSecours
+
+    @model_validator(mode="after")
+    def _verifier_attentes(self) -> "ReglagesEnvois":
+        if self.attente_max_min * 60 < self.attente_premier_echec_s:
+            raise ValueError("attente_max_min doit être plus long que attente_premier_echec_s")
+        return self
+
+
 class Programme(Modele):
     """programme.yaml : réglages du programme lui-même (pas de la machine)."""
 
@@ -351,6 +420,7 @@ class Programme(Modele):
     fiabilite: ReglagesFiabilite
     api: ReglagesApi
     ecran: ReglagesEcran
+    envois: ReglagesEnvois
 
 
 # ---------------------------------------------------------------- fluidnc.yaml

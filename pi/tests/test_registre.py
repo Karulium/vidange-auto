@@ -349,8 +349,9 @@ def test_alarme_avec_son_bilan_et_alarmes_ouvertes(registre: Registre):
     assert ouvertes[0]["bilan"] == "bilans/a.json"
 
 
-def test_montee_de_la_version_1_a_la_version_2(tmp_path: Path):
-    """Une base de la tâche 6 (version 1) reçoit la colonne « bilan » sans rien perdre."""
+def test_montee_de_la_version_1_a_la_derniere(tmp_path: Path):
+    """Une base de la tâche 6 (version 1) reçoit la colonne « bilan » (version 2) et la file
+    d'envoi (version 3) sans rien perdre."""
     chemin = tmp_path / "registre.sqlite"
     with sqlite3.connect(chemin) as cnx:
         for requete in montees.MONTEES[0]:
@@ -362,8 +363,9 @@ def test_montee_de_la_version_1_a_la_version_2(tmp_path: Path):
     cnx.close()
     registre = Registre(chemin, tmp_path / "photos")
     try:
-        assert registre.version == 2
+        assert registre.version == montees.VERSION == 3
         assert registre.alarmes_ouvertes()[0]["message"] == "avant"
         assert registre.alarmes_ouvertes()[0]["bilan"] is None
+        assert registre.compter()["envois"] == 0
     finally:
         registre.fermer()

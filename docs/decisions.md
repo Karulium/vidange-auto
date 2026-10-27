@@ -71,6 +71,15 @@ si l'une pose problème, elle le dit dans sa PR.
   2. Le **mode** (production / lavage / UV-ozone) est seulement affiché, gardé et refusé pendant un cycle. Les
      modules (Poste du fût, Lavage, Nettoyage) le liront quand on écrira leurs gestes. La sécurité UV et ozone
      reste câblée.
+- **Réponses aux questions de la PR n° 12** (file d'envoi) :
+  1. Ordinateur qui reçoit la copie de secours : **à confirmer par Karulium**. En attendant, `envois.secours.commande`
+     reste vide (rien ne part, rien n'est perdu : les copies restent sur le SSD du Pi).
+  2. Photos envoyées au logiciel de culture : décidé avec la tâche Vision (n° 22) ; pour l'instant seule leur
+     description part avec le cycle.
+  3. Dossier des photos envoyé chaque jour à la copie de secours : **oui** (`photos: true`).
+- **Préhension figée** (27/10/2026) : capteur inductif M8 24 V ; capteur de vide sur l'ADS1115 **en 3,3 V**
+  (pas de pont diviseur) ; pour poser ou prendre un bocal sur le porte-bocal, la tête est orientée à ± 3°
+  (grâce aux méplats) et ne tourne pas entre les mors.
 
 ## Accès à distance et mises à jour (Karulium, 26/10/2026)
 
@@ -113,6 +122,6 @@ Les chiffres ci-dessous vont dans `pi/reglages/machine.yaml`, jamais dans le cod
 
 ## État des modules (26/10/2026)
 
-- **Figés** (on peut coder leurs gestes) : Poste du fût, Lavage, Griffe (Transfert), Porte-bocal, Mycélium, Guidage caméra, écran Nextion.
-- **Pas encore figés** (case vide seulement) : Remplissage, Stockage, Portique, Préhension, Nettoyage, Spray, Micropore, Fermeture des seaux, Air comprimé, Entonnoir.
+- **Figés** (on peut coder leurs gestes) : Poste du fût, Lavage, Griffe (Transfert), Porte-bocal, Mycélium, Guidage caméra, Préhension, écran Nextion.
+- **Pas encore figés** (case vide seulement) : Remplissage, Stockage, Portique, Nettoyage, Spray, Micropore, Fermeture des seaux, Air comprimé, Entonnoir.
 - Références encore à choisir : fins de course du Remplissage, microrupteurs du Stockage.

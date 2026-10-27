@@ -35,6 +35,7 @@ Pas encore de vrai module de la machine.
 | `vidange/registre/montees.py` | Tables de la base et leurs montées de version |
 | `vidange/registre/sauvegarde.py` | Copie de secours quotidienne de la base |
 | `vidange/registre/outil.py` | Commande `vidange-registre` (état de la base, copie à la main) |
+| `vidange/envois/` | File d'envoi : cycles vers le logiciel de culture, copies vers la maison ; commande `vidange-envois` |
 | `vidange/quoi_faire.py` | **Catalogue des « quoi faire »** de chaque alarme (cartes FluidNC, câble, capteur muet...) |
 | `vidange/fiabilite/chien_de_garde.py` | Chien de garde : surveille les cartes et le chef, dit « je vis » à systemd, battement |
 | `vidange/fiabilite/checklist.py` | Check-list de démarrage : tout ce qui empêche de lancer la production |
@@ -241,6 +242,25 @@ registre.lire("SELECT * FROM cycles WHERE fin IS NULL")  # pour les écrans et l
   sous le nom `registre.sqlite`, relancer.
 - `vidange-registre etat` : version et nombre de lignes de chaque table ; `vidange-registre sauvegarder` :
   copie tout de suite (par exemple avant une mise à jour). Peut tourner pendant que le programme tourne.
+
+## File d'envoi vers l'extérieur (tâche 10)
+
+Tout ce qui doit partir du Pi attend dans la table `envois` du registre (elle survit aux coupures), et un fil
+(le « facteur », `vidange/envois/facteur.py`) l'envoie dès que le destinataire répond. La machine n'attend jamais.
+
+- **Logiciel de culture** : chaque cycle fini (`registre.finir_cycle`) entre dans la file, dans la même écriture.
+  Il part en JSON (`POST`, jeton `jeton_culture` du fichier de secrets) vers `envois.culture.adresse`. Format
+  exact et réponses attendues : `docs/django.md`. Adresse vide (l'app « machine » n'existe pas encore) : les
+  cycles attendent.
+- **Copie de secours de la maison** : chaque copie quotidienne de la base (et le dossier des photos) entre dans
+  la file, et part par la commande `envois.secours.commande` (rsync par Tailscale, voir
+  `systeme/installation.md`). Une copie plus récente remplace celle qui attendait encore.
+- Un envoi raté (réseau, serveur éteint) : nouvel essai après 1 min, puis 2, 4... sans dépasser 1 h. Un envoi
+  refusé (données fausses, réponse 400) est mis de côté ; les suivants partent. La check-list le signale.
+- Chaque envoi a une **clé** (UUID) qui ne change pas d'un essai à l'autre : un envoi fait deux fois (coupure
+  pendant l'envoi) est reconnu par le destinataire.
+- `vidange-envois etat` (ce qui attend, les erreurs), `vidange-envois montrer <n° de cycle>` (le JSON envoyé),
+  `vidange-envois renvoyer <n° d'envoi>`, `vidange-envois essayer` (une tournée tout de suite).
 
 ## API et page web (tâche 8)
 

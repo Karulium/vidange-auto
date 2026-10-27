@@ -117,12 +117,40 @@ La page web est servie par le programme lui-même, sur le port réglé dans `pro
 - Seuls le réseau local et Tailscale sont acceptés (`reseaux_autorises` dans `programme.yaml`) ; toute autre
   adresse est refusée, même avec la clé.
 
-## 9. Essais à faire sur le vrai Pi
+## 9. Envois vers l'extérieur : copie de secours à la maison, logiciel de culture
+
+Tant que ces réglages sont vides, rien ne part et rien ne se perd : tout attend dans la file du Pi.
+
+**Copie de secours à la maison** (par Tailscale, aucun port ouvert). Il faut à la maison un ordinateur toujours
+allumé (ou souvent), relié à Tailscale, avec SSH et rsync (Linux, Mac, NAS ; sous Windows : WSL). Exemple avec
+un compte `vidange` sur la machine `maison` :
+```
+# Sur le Pi, une seule fois : une clé SSH pour le compte du programme (sans mot de passe).
+sudo -u vidange ssh-keygen -t ed25519 -N "" -f /home/vidange/.ssh/id_ed25519
+sudo cat /home/vidange/.ssh/id_ed25519.pub     # à copier dans ~/.ssh/authorized_keys du compte vidange à la maison
+# Premier essai (accepter l'empreinte de la maison en tapant « yes ») :
+sudo -u vidange ssh vidange@maison mkdir -p sauvegardes-vidange
+sudo apt install rsync
+```
+Puis dans `/opt/vidange-auto/pi/reglages/programme.yaml`, partie `envois` → `secours` :
+```
+    commande: [rsync, -a, --partial, --timeout=60, "{chemin}", "vidange@maison:sauvegardes-vidange/"]
+```
+rsync n'efface jamais rien à la maison, et n'envoie que les photos nouvelles.
+
+**Logiciel de culture** (quand l'app « machine » existera, tâche 44) : mettre son adresse dans
+`programme.yaml` (`envois` → `culture` → `adresse`) et son jeton dans `/etc/vidange/secrets.yaml`
+(`jeton_culture`), puis `sudo systemctl restart vidange`.
+
+Essai : voir `essai-envois.md`.
+
+## 10. Essais à faire sur le vrai Pi
 
 Essai des capteurs et des relais : voir `essai-entrees-sorties.md`.
 Essai de la fiabilité (programme figé, coupure de courant, onduleur...) : voir `essai-fiabilite.md`.
 Essai de la page web (téléphone, Tailscale) : voir `essai-page-web.md`.
 Essai de l'écran de l'armoire (câblage, UART n° 2 du Pi 5) : voir `essai-ecran.md`.
+Essai de la file d'envoi (copie à la maison, coupure du réseau) : voir `essai-envois.md`.
 
 Cocher chaque essai réussi.
 
