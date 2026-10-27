@@ -1,0 +1,45 @@
+# Simulateur de cycle (jumeau numérique, version 0) : la machine imaginaire sur laquelle le vrai
+# chef d'orchestre rejoue un module, pour sortir le planning (qui fait quoi, quand) et le temps total.
+# Lancer : vidange-simulateur exemple   (voir pi/README.md, partie « Simulateur de cycle »)
+#
+# ATTENTION : tout ce fichier est un EXEMPLE (valeurs inventées), comme machine.yaml.
+# Plus tard, vitesses et accélérations viendront des réglages des cartes (fluidnc/) et les
+# durées seront recalées sur les vrais temps mesurés. Quand le fichier sera vrai, passer
+# « exemple » à false.
+#
+# Vérifié au démarrage : un axe ou une position absents de machine.yaml, un nombre mal écrit.
+# Vérifié au lancement d'une simulation : capteurs (docs/entrees-sorties.yaml) et étapes citées.
+
+exemple: true
+
+# La simulation saute d'un événement au suivant (fin d'un mouvement, Go, capteur) ;
+# elle n'avance jamais de plus que ce pas (s), pour voir les délais dépassés.
+pas_max_s: 1
+# Au-delà de ce temps simulé (s), on s'arrête : le cycle est bloqué (il attend quelque chose
+# qui n'arrive jamais).
+duree_max_s: 7200
+# Temps que met Karulium à donner le Go quand une étape le demande (s). 0 : tout de suite.
+delai_go_s: 20
+
+# Mouvement de chaque axe de machine.yaml : vitesse (m/s) et accélération (m/s²).
+# Un déplacement de plusieurs axes dure autant que celui de l'axe le plus long à arriver.
+axes:
+  exemple_x: {vitesse: 0.5, acceleration: 1.0}
+  exemple_y: {vitesse: 0.5, acceleration: 1.0}
+  exemple_z: {vitesse: 0.3, acceleration: 0.5}
+
+# Position (machine.yaml) des axes au départ. Sans « depart », chaque axe est au début de sa course.
+# depart: exemple_repos
+
+# Capteurs (entrées tout-ou-rien de docs/entrees-sorties.yaml) actionnés au départ.
+capteurs_actionnes: []
+
+# Ce qui change pendant le cycle : « attente_s » secondes après le début de l'étape « apres »
+# (module.etape ; sans « apres » : après le début de la simulation), le capteur est actionné
+# (actionne: true) ou ne l'est plus (false).
+evenements:
+  # Karulium ferme le panneau du poste du fût 10 s après le lancement du module d'exemple.
+  - apres: exemple.aller_au_repos
+    attente_s: 10
+    capteur: reed_panneau_poste_fut
+    actionne: true

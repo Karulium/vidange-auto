@@ -70,7 +70,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   Écrire dans `docs/django.md` le format exact des données d'un cycle que l'app « machine » recevra.
   Ne pas toucher au dépôt Django.
 
-- [ ] **11. Simulateur de cycle (jumeau, version 0)** — Modèle : Sonnet.
+- [x] **11. Simulateur de cycle (jumeau, version 0)** — Modèle : Sonnet.
   Rejouer un cycle complet du module d'exemple avec des durées réglables, sortir le planning (qui fait quoi, quand)
   et le temps total. Préparer la place pour le solveur OR-Tools.
 
