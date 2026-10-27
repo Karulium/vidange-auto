@@ -68,3 +68,34 @@ api:
   rafraichir_s: 2
   # Nombre de lignes rendues au plus d'un coup (historique, alarmes, photos).
   lignes_max: 200
+
+# Écran Nextion de la porte de l'armoire (pages décrites dans nextion/pages.md). Il est relié
+# au Pi par le signal « ecran_nextion » de docs/entrees-sorties.yaml (fichier de l'UART).
+ecran:
+  # Vitesse de la liaison : la même que « baud= » dans Program.s du projet Nextion Editor
+  # (115200 dans un projet neuf ; voir nextion/pages.md).
+  vitesse_bauds: 115200
+  # Le Pi lit les boutons et met l'écran à jour tous les (s).
+  periode_s: 0.2
+  # Il demande à l'écran s'il est là tous les (s) ; sans réponse depuis « silence_s », il le dit
+  # au journal et à la check-list (la machine tourne quand même).
+  presence_s: 2
+  silence_s: 6
+  # Port série impossible à ouvrir : nouvel essai tous les (s).
+  reconnexion_s: 5
+  # Sans appui depuis ce temps (s), l'écran revient à la page d'état (pas depuis la page
+  # d'alarme). Une question « Oui / Non » sans réponse est abandonnée après « confirmation_s ».
+  retour_accueil_s: 60
+  confirmation_s: 15
+  # Durée d'affichage d'un message (« Aucun Go attendu »...).
+  message_s: 8
+  # Code couleur (fonction 47) : « #RRGGBB », fond et texte.
+  couleurs:
+    marche: {fond: "#00A000", texte: "#FFFFFF"}   # vert : la machine travaille
+    go: {fond: "#FFD000", texte: "#000000"}       # jaune : elle attend ton Go
+    pause: {fond: "#FF8000", texte: "#000000"}    # orange : en pause
+    alarme: {fond: "#D00000", texte: "#FFFFFF"}   # rouge : alarme
+    repos: {fond: "#606060", texte: "#FFFFFF"}    # gris foncé : rien en cours
+    mode: {fond: "#0060D0", texte: "#FFFFFF"}     # bleu : mode lavage ou UV-ozone
+    bouton: {fond: "#E0E0E0", texte: "#000000"}   # bouton ordinaire
+    inactif: {fond: "#B0B0B0", texte: "#707070"}  # bouton sans effet pour l'instant

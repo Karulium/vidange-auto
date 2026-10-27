@@ -291,6 +291,57 @@ class ReglagesApi(Modele):
     lignes_max: int = Field(ge=1, le=10000)
 
 
+# Une couleur « #RRGGBB » (rouge, vert, bleu en hexadécimal), comme dans un logiciel de dessin.
+Couleur = Annotated[str, StringConstraints(pattern=r"^#[0-9A-Fa-f]{6}$")]
+
+
+class FondTexte(Modele):
+    fond: Couleur
+    texte: Couleur
+
+
+class CouleursEcran(Modele):
+    """Code couleur de l'écran (fonction 47)."""
+
+    marche: FondTexte
+    go: FondTexte
+    pause: FondTexte
+    alarme: FondTexte
+    repos: FondTexte
+    mode: FondTexte
+    bouton: FondTexte
+    inactif: FondTexte
+
+
+class ReglagesEcran(Modele):
+    """Écran Nextion de la porte de l'armoire (tâche 9)."""
+
+    vitesse_bauds: int = Field(gt=0)
+    # Le Pi lit les boutons et met l'écran à jour tous les (s).
+    periode_s: float = Field(gt=0, le=2)
+    # Il demande à l'écran s'il est là tous les (s) ; muet : sans réponse depuis « silence_s ».
+    presence_s: float = Field(gt=0)
+    silence_s: float = Field(gt=0)
+    # Port série impossible à ouvrir : nouvel essai tous les (s).
+    reconnexion_s: float = Field(gt=0)
+    # Retour à la page d'état sans appui depuis ce temps (s) ; une question « Oui / Non »
+    # sans réponse est abandonnée plus vite.
+    retour_accueil_s: float = Field(gt=0)
+    confirmation_s: float = Field(gt=0)
+    # Durée d'affichage d'un message (« Aucun Go attendu »...).
+    message_s: float = Field(gt=0)
+    couleurs: CouleursEcran
+
+    @model_validator(mode="after")
+    def _verifier_delais(self) -> "ReglagesEcran":
+        if self.silence_s < 2 * self.presence_s:
+            raise ValueError(
+                f"silence_s ({self.silence_s:g} s) doit valoir au moins 2 fois "
+                f"presence_s ({self.presence_s:g} s)"
+            )
+        return self
+
+
 class Programme(Modele):
     """programme.yaml : réglages du programme lui-même (pas de la machine)."""
 
@@ -299,6 +350,7 @@ class Programme(Modele):
     registre: ReglagesRegistre
     fiabilite: ReglagesFiabilite
     api: ReglagesApi
+    ecran: ReglagesEcran
 
 
 # ---------------------------------------------------------------- fluidnc.yaml
@@ -493,6 +545,8 @@ _MESSAGES = {
 def _message(detail: dict[str, Any]) -> str:
     sorte = detail["type"]
     contexte = detail.get("ctx", {})
+    if sorte == "string_pattern_mismatch" and str(contexte.get("pattern", "")).startswith("^#"):
+        return 'couleur à écrire « #RRGGBB » entre guillemets (exemple : "#00A000")'
     if sorte in _MESSAGES:
         return _MESSAGES[sorte]
     if sorte in ("too_short", "too_long") and detail["loc"] and detail["loc"][-1] == "course":
