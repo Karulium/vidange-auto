@@ -36,6 +36,7 @@ vidange-fluidnc = "vidange.fluidnc.outil:lancer"
 vidange-es = "vidange.materiel.outil:lancer"
 vidange-registre = "vidange.registre.outil:lancer"
 vidange-envois = "vidange.envois.outil:lancer"
+vidange-simulateur = "vidange.simulateur.outil:lancer"
 
 [tool.setuptools.packages.find]
 include = ["vidange*"]

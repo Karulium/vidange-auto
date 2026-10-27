@@ -479,6 +479,49 @@ class Fluidnc(Modele):
         return self
 
 
+# ------------------------------------------------------------- simulateur.yaml
+
+
+class MouvementSimule(Modele):
+    """Comment un axe bouge dans le simulateur : vitesse (m/s) et accélération (m/s²)."""
+
+    vitesse: float = Field(gt=0)
+    acceleration: float = Field(gt=0)
+
+
+class EvenementSimule(Modele):
+    """Un capteur qui change pendant la simulation (Karulium ferme un panneau...)."""
+
+    # Compté depuis le début de cette étape (« module.etape ») ; sans « apres » : depuis le
+    # début de la simulation.
+    apres: (
+        Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")] | None
+    ) = None
+    attente_s: float = Field(ge=0)
+    # Entrée tout-ou-rien de docs/entrees-sorties.yaml.
+    capteur: Nom
+    actionne: bool
+
+
+class ReglagesSimulateur(Modele):
+    """simulateur.yaml : la machine imaginaire du simulateur de cycle (jumeau, version 0)."""
+
+    exemple: bool = False
+    # La simulation saute d'un événement au suivant, sans jamais avancer de plus que ce pas (s).
+    pas_max_s: float = Field(gt=0, le=60)
+    # Au-delà de ce temps simulé (s), le cycle est déclaré bloqué.
+    duree_max_s: float = Field(gt=0)
+    # Temps que met Karulium à donner le Go quand une étape le demande (s).
+    delai_go_s: float = Field(ge=0)
+    # Axes de machine.yaml qui bougent dans la simulation.
+    axes: dict[Nom, MouvementSimule] = Field(default_factory=dict)
+    # Position de machine.yaml où sont les axes au départ ; les autres sont au début de leur course.
+    depart: Nom | None = None
+    # Capteurs actionnés au départ (les autres ne le sont pas).
+    capteurs_actionnes: list[Nom] = Field(default_factory=list)
+    evenements: list[EvenementSimule] = Field(default_factory=list)
+
+
 # --------------------------------------------------------------- l'ensemble
 
 
@@ -486,6 +529,7 @@ class Reglages(Modele):
     machine: Machine
     programme: Programme
     fluidnc: Fluidnc
+    simulateur: ReglagesSimulateur
 
 
 # Nom du fichier → (nom dans Reglages, modèle). Ajouter ici chaque nouveau fichier.
@@ -493,6 +537,7 @@ FICHIERS: dict[str, tuple[str, type[Modele]]] = {
     "machine.yaml": ("machine", Machine),
     "programme.yaml": ("programme", Programme),
     "fluidnc.yaml": ("fluidnc", Fluidnc),
+    "simulateur.yaml": ("simulateur", ReglagesSimulateur),
 }
 
 
@@ -542,6 +587,17 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
         for numero, geste in enumerate(machine.lieu_sur, start=1)
         if geste.prise_origine is not None and geste.prise_origine not in fluidnc.cartes
     ]
+    simulateur = valeurs["simulateur"]
+    assert isinstance(simulateur, ReglagesSimulateur)
+    erreurs += [
+        f"simulateur.yaml, axes → {nom} : axe absent de machine.yaml"
+        for nom in simulateur.axes
+        if nom not in machine.axes
+    ]
+    if simulateur.depart is not None and simulateur.depart not in machine.positions:
+        erreurs.append(
+            f"simulateur.yaml, depart : position « {simulateur.depart} » absente de machine.yaml"
+        )
     return erreurs
 
 

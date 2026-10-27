@@ -3,7 +3,7 @@
 Paquet Python `vidange` (Python 3.11, comme Raspberry Pi OS Bookworm).
 Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés, journal, secrets, liaison avec les cartes FluidNC (et faux FluidNC), entrées/sorties du Pi par leur nom (et faux capteurs), chef d'orchestre (moteur d'étapes) avec un module d'exemple, registre (base SQLite) avec copie de secours quotidienne, fiabilité (chien de garde, check-list de démarrage,
 reprise après coupure et retour en lieu sûr, arrêt propre sur onduleur, bilan de chaque alarme, santé du Pi),
-API et page web locale (état, alarmes, Go, Pause, historique, photos).
+API et page web locale (état, alarmes, Go, Pause, historique, photos), simulateur de cycle (jumeau, version 0).
 Pas encore de vrai module de la machine.
 
 ## Ce qu'il y a ici
@@ -35,6 +35,7 @@ Pas encore de vrai module de la machine.
 | `vidange/registre/montees.py` | Tables de la base et leurs montées de version |
 | `vidange/registre/sauvegarde.py` | Copie de secours quotidienne de la base |
 | `vidange/registre/outil.py` | Commande `vidange-registre` (état de la base, copie à la main) |
+| `vidange/simulateur/` | Simulateur de cycle : le vrai chef sur une machine imaginaire, planning et temps total ; commande `vidange-simulateur` |
 | `vidange/envois/` | File d'envoi : cycles vers le logiciel de culture, copies vers la maison ; commande `vidange-envois` |
 | `vidange/quoi_faire.py` | **Catalogue des « quoi faire »** de chaque alarme (cartes FluidNC, câble, capteur muet...) |
 | `vidange/fiabilite/chien_de_garde.py` | Chien de garde : surveille les cartes et le chef, dit « je vis » à systemd, battement |
@@ -52,6 +53,7 @@ Pas encore de vrai module de la machine.
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) |
 | `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran) |
 | `reglages/fluidnc.yaml` | Cartes FluidNC (numéro de série USB) et réglages de leur liaison |
+| `reglages/simulateur.yaml` | Machine imaginaire du simulateur : vitesses des axes, délai du Go, capteurs qui changent (**exemple**) |
 | `secrets.exemple.yaml` | Modèle **vide** du fichier de secrets |
 | `systeme/vidange.service` | Service qui démarre avec le Pi et se relance s'il plante |
 | `systeme/installation.md` | Installation sur le Pi, pas à pas |
@@ -185,6 +187,30 @@ chef.demarrer()  # puis : chef.donner_go("griffe"), chef.pause(), chef.reprendre
   l'étape. Les « quoi faire » communs sont dans `vidange/quoi_faire.py`.
 - Un module `exclusif=True` (comme « lieu_sur ») passe avant tous les autres : tant qu'il tourne, les autres
   attendent (« fin de « lieu_sur » ») et un Go qui leur est donné est refusé.
+
+## Simulateur de cycle (tâche 11)
+
+Le **vrai** chef d'orchestre rejoue un module sur une machine imaginaire, en temps simulé (une heure de cycle
+en une fraction de seconde), et sort le planning : chaque étape, quand elle commence, combien elle attend
+(Go, conditions, zones), quand son geste part et finit, ce qui bouge ; puis le temps total.
+
+```
+.venv/bin/vidange-simulateur exemple                 # planning du module d'exemple
+.venv/bin/vidange-simulateur exemple --delai-go 0    # si Karulium donnait le Go tout de suite
+.venv/bin/vidange-simulateur exemple --json p.json   # planning aussi en JSON
+```
+
+- **Durées réglables** dans `reglages/simulateur.yaml` : vitesse et accélération de chaque axe (un déplacement
+  dure autant que l'axe le plus long à arriver), temps avant le Go de Karulium, capteurs actionnés au départ et
+  capteurs qui changent « N s après le début de telle étape » (« Karulium ferme le panneau »...).
+- Une alarme (délai dépassé, position inconnue...) ou un blocage (rien ne bouge jusqu'à `duree_max_s`) arrête
+  la simulation ; le planning dit pourquoi (code de sortie 1).
+- Plusieurs modules peuvent être rejoués ensemble : ils se partagent zones et cartes comme sur la machine.
+- Un module reçoit des axes imaginaires (`simulateur.axes()`) à la place des vrais `Axes`, avec les mêmes noms ;
+  son code ne change pas. Pour qu'un nouveau module soit simulable, l'ajouter à `MODULES` dans
+  `vidange/simulateur/outil.py`.
+- **Place pour le solveur OR-Tools** (tâche 23) : `vidange/simulateur/solveur.py` tire du planning les tâches
+  (durée du geste, zones tenues, étape d'avant, Go demandé) ; `ordonner()` est à écrire.
 
 ## Fiabilité (tâche 7)
 
