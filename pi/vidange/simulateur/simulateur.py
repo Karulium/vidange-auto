@@ -47,6 +47,7 @@ class Simulateur:
     def __init__(
         self, reglages: Reglages, liste: EntreesSorties, scenario: str | None = None
     ) -> None:
+        self._tous = reglages
         self._reglages = reglages.simulateur
         self._machine = reglages.machine
         if scenario is None:
@@ -84,6 +85,16 @@ class Simulateur:
     def axes(self) -> AxesSimulees:
         """Axes imaginaires pour un module (un objet par module, comme les vrais Axes)."""
         return AxesSimulees(self._axes)
+
+    @property
+    def etat_axes(self) -> EtatAxes:
+        """Les positions de la machine imaginaire (pour la griffe, qui va à des positions
+        calculées : vidange.griffe.simulation)."""
+        return self._axes
+
+    @property
+    def reglages(self) -> Reglages:
+        return self._tous
 
     def poste_fut(self) -> PosteFut:
         """Le poste du fût sur le faux matériel, à l'heure du simulateur (toujours le même)."""
@@ -260,8 +271,23 @@ class Simulateur:
             if fin is not None:
                 fin = replace(fin, test=self._fin_suivie(module.nom, numero, fin))
             action = self._action_suivie(module.nom, numero, etape)
-            etapes.append(replace(etape, action=action, fin=fin))
+            ensuite = self._ensuite_suivi(module, numero, etape)
+            etapes.append(replace(etape, action=action, fin=fin, ensuite=ensuite))
         return replace(module, etapes=tuple(etapes))
+
+    def _ensuite_suivi(self, module: Module, numero: int, etape: Etape) -> Callable[[], str | None]:
+        """Appelée par le chef à la fin de l'étape : la ligne de l'étape suivante commence."""
+
+        def ensuite() -> str | None:
+            self._finir_etape(module.nom, numero)
+            suivante = etape.ensuite() if etape.ensuite is not None else None
+            if suivante is not None:
+                self._commencer_etape(module.nom, module.numero(suivante))
+            elif numero + 1 < len(module.etapes):
+                self._commencer_etape(module.nom, numero + 1)
+            return suivante
+
+        return ensuite
 
     def _action_suivie(self, nom: str, numero: int, etape: Etape) -> Callable[[], None]:
         def action() -> None:
@@ -288,11 +314,8 @@ class Simulateur:
 
     def _finir_etape(self, nom: str, numero: int) -> None:
         ligne = self._en_cours[nom]
-        if ligne.fin is not None:
-            return
-        ligne.fin = self.temps
-        if numero + 1 < len(self._modules[nom].etapes):
-            self._commencer_etape(nom, numero + 1)
+        if ligne.fin is None:
+            ligne.fin = self.temps
 
     def _commencer_etape(self, nom: str, numero: int) -> None:
         module = self._modules[nom]

@@ -160,7 +160,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   Simulateur : faux chariot, faux panneau, fausse pesée, et un scénario « échange de fût ». Tests.
   Procédure d'essai sur le vrai matériel (inductif, reed, pesée et étalonnage, prise débranchée) ;
   « testé sur le vrai matériel : non ».
-- [ ] **18. Griffe (transfert fût vers seau)** — Modèle : Opus, effort élevé.
+- [x] **18. Griffe (transfert fût vers seau)** — Modèle : Opus, effort élevé.
   Sources (recopiées ici le 28/10/2026) : fiche « Griffe sur mât » et fiche d'état du module, **gelé le
   25/10/2026**, plan de commande v221. Chiffres dans `pi/reglages/machine.yaml` (repère du portique, en mètres),
   jamais dans le code. Le Portique et le chariot de remplissage ne sont pas figés : leurs gestes restent des cases

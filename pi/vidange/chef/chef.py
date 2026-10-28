@@ -477,13 +477,14 @@ class Chef:
         self._zones.liberer(etape.liberer, d.nom)
         journal.info("« %s » : étape « %s » finie en %.1f s", d.nom, etape.nom, d.temps_etape)
         d.attend = ""
-        if d.numero + 1 >= len(d.module.etapes):
+        suivante = etape.ensuite() if etape.ensuite is not None else None
+        if suivante is None and d.numero + 1 >= len(d.module.etapes):
             d.statut = "fini"
             self._zones.liberer_tout(d.nom)
             journal.info("Module « %s » fini", d.nom)
             self._noter()
             return
-        d.numero += 1
+        d.numero = d.numero + 1 if suivante is None else d.module.numero(suivante)
         d.go_obligatoire = False
         d.go_recu = False
         d.temps_etape = 0.0

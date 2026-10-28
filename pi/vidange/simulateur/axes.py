@@ -75,10 +75,18 @@ class EtatAxes:
         """Demande le mouvement ; rend, par carte, l'heure (sans les pauses) de son arrivée."""
         if position not in self._machine.positions:
             raise ErreurEtape(f"position « {position} » absente de machine.yaml")
+        return self.aller_vers(position, self._machine.positions[position])
+
+    def aller_vers(
+        self, nom: str, cibles: dict[str, float], vitesses: dict[str, float] | None = None
+    ) -> dict[str, float]:
+        """Comme `aller`, vers des positions calculées (la griffe dans le fût...).
+
+        `vitesses` : vitesse plus lente pour certains axes (descente au contact...)."""
         maintenant = self._sans_pauses()
         trajets: dict[str, tuple[float, float]] = {}
         durees: dict[str, float] = {}
-        for nom_axe, cible in self._machine.positions[position].items():
+        for nom_axe, cible in cibles.items():
             carte = self._machine.axes[nom_axe].carte
             if carte is None:
                 raise ErreurEtape(f"axe « {nom_axe} » : pas de carte FluidNC dans machine.yaml")
@@ -89,7 +97,8 @@ class EtatAxes:
                 )
             depart = self.positions[nom_axe]
             trajets[nom_axe] = (depart, cible)
-            duree = duree_trajet(cible - depart, reglage.vitesse, reglage.acceleration)
+            vitesse = min(reglage.vitesse, (vitesses or {}).get(nom_axe, reglage.vitesse))
+            duree = duree_trajet(cible - depart, vitesse, reglage.acceleration)
             durees[carte] = max(durees.get(carte, 0.0), duree)
         arrivees = {}
         for carte, duree in durees.items():
@@ -99,13 +108,24 @@ class EtatAxes:
         decalage = self._horloge() - maintenant
         self.mouvements.append(
             Mouvement(
-                position=position,
+                position=nom,
                 axes=trajets,
                 debut=self._horloge(),
                 fin=max(arrivees.values(), default=maintenant) + decalage,
             )
         )
         return arrivees
+
+    def attendre(self, carte: str, duree: float) -> dict[str, float]:
+        """La carte ne fait rien pendant `duree` (s), après ses mouvements (pesée...)."""
+        maintenant = self._sans_pauses()
+        self._libre[carte] = max(maintenant, self._libre.get(carte, 0.0)) + duree
+        return {carte: self._libre[carte]}
+
+    def arreter(self, carte: str, positions: dict[str, float]) -> None:
+        """Les mouvements de la carte s'arrêtent tout de suite, aux positions données."""
+        self._libre[carte] = self._sans_pauses()
+        self.positions.update(positions)
 
     def arrives(self, arrivees: dict[str, float]) -> bool:
         maintenant = self._sans_pauses()

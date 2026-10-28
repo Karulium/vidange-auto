@@ -27,9 +27,28 @@ axes:
   exemple_x: {vitesse: 0.5, acceleration: 1.0}
   exemple_y: {vitesse: 0.5, acceleration: 1.0}
   exemple_z: {vitesse: 0.3, acceleration: 0.5}
+  # Griffe : ses vitesses plus lentes (machine.yaml → griffe → vitesses) passent avant celles-ci.
+  pont_x: {vitesse: 0.25, acceleration: 0.5}
+  chariot_y: {vitesse: 0.25, acceleration: 0.5}
+  griffe_z: {vitesse: 0.15, acceleration: 0.5}
+  griffe_a: {vitesse: 90, acceleration: 180}
+  griffe_b: {vitesse: 0.05, acceleration: 0.5}
 
 # Position (machine.yaml) des axes au départ. Sans « depart », chaque axe est au début de sa course.
-# depart: exemple_repos
+# Les axes que la position ne cite pas sont au début de leur course.
+depart: griffe_attente
+
+# Le substrat du fût imaginaire, pour la griffe : densité vraie (la griffe part de sa densité par
+# défaut et doit apprendre celle-ci), prises plus légères près de la paroi et au fond, part qui
+# retombe quand le godet s'entrouvre, charge pendue godet vide.
+griffe:
+  densite_kg_l: 0.62
+  paroi_rayon_m: 0.18
+  facteur_paroi: 0.8
+  fond_hauteur_m: 0.04
+  facteur_fond: 0.6
+  entrouvrir_rendu: 0.15
+  charge_vide_n: 120
 
 # Capteurs (entrées tout-ou-rien de docs/entrees-sorties.yaml) actionnés au départ.
 capteurs_actionnes: []
@@ -46,7 +65,8 @@ evenements:
     actionne: true
 
 # Scénarios nommés : ils remplacent « capteurs_actionnes » et « evenements » du haut.
-# Lancer : vidange-simulateur poste_fut   (scénario « echange_fut » par défaut).
+# Lancer : vidange-simulateur poste_fut   (scénario « echange_fut » par défaut),
+#         vidange-simulateur griffe      (scénario « vidange_fut » par défaut).
 scenarios:
   # Échange d'un fût au poste : le chariot du fût vide s'en va, le suivant arrive.
   echange_fut:
@@ -75,5 +95,19 @@ scenarios:
         capteur: bouton_pret_fut
         actionne: true
       - attente_s: 431
+        capteur: bouton_pret_fut
+        actionne: false
+  # Vidange d'un fût par la griffe : chariot au fond, panneau levé (production), 100 kg lus
+  # (60 kg de substrat), « Prêt » au bout de 5 s ; puis prises, couches, passe de fond, fût vide.
+  vidange_fut:
+    capteurs_actionnes: [chariot_fut_en_place, reed_panneau_poste_fut]
+    evenements:
+      - attente_s: 0
+        pesee: pesee_fut
+        kg: 100
+      - attente_s: 5
+        capteur: bouton_pret_fut
+        actionne: true
+      - attente_s: 6
         capteur: bouton_pret_fut
         actionne: false

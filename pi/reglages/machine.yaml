@@ -2,7 +2,8 @@
 # Unités : mètres. Repère : x vers le stockage, y vers l'allée, z vers le haut.
 #
 # ATTENTION : tout ce fichier est un EXEMPLE (valeurs inventées) pour montrer le format,
-# SAUF la partie « poste_fut » (chiffres vrais du module figé ; seule sa pesée est à étalonner).
+# SAUF la partie « poste_fut » (chiffres vrais du module figé ; seule sa pesée est à étalonner)
+# et les chiffres marqués « (fiche) » de la griffe et de ses axes (module gelé le 25/10/2026).
 # Les vrais axes, positions et zones arrivent avec les tâches des modules,
 # depuis docs/decisions.md. Quand le fichier sera vrai, passer « exemple » à false.
 #
@@ -14,28 +15,69 @@
 #     sur la même carte ;
 #   - chaque geste de « lieu_sur » cite une carte, une position et un délai qui existent ;
 #   - poste du fût : intervalles dans l'ordre, fond du fût sous son bord, pesée cohérente ;
+#   - griffe : ses 5 axes existent, ses hauteurs (trajet, vidage, essuyage) sont dans la course,
+#     table des volumes rangée, formats connus ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
 
 exemple: true
 
 # Pour chaque axe : sa carte FluidNC (nom dans fluidnc.yaml) et sa lettre sur cette carte.
 # Le zéro de l'axe ici est le zéro machine de la carte (positions FluidNC en mm = mètres × 1000).
+# Un axe tournant (« unite: deg ») est en degrés, comme dans FluidNC.
 axes:
+  # Axes d'EXEMPLE du module d'exemple (sur la carte « chariot », pas encore figée).
   exemple_x:
     longueur_rail: 2.0
     course: [0.0, 1.9]
-    carte: portique
+    carte: chariot
     lettre: X
   exemple_y:
     longueur_rail: 1.0
     course: [0.0, 0.9]
-    carte: portique
+    carte: chariot
     lettre: Y
   exemple_z:
     longueur_rail: 1.2
     course: [0.05, 1.1]
+    carte: chariot
+    lettre: Z
+  # Les 5 axes de la griffe, sur la carte n° 1 (portique). Le Portique n'est pas figé : la fin
+  # de course du pont et les rails sont des EXEMPLES ; les débuts et fins (fiche) viennent du plan
+  # de commande v221.
+  # Pont : x ≥ 0,223 (fiche). Le mât de la griffe est à pont − 0,175 en x.
+  pont_x:
+    longueur_rail: 2.6
+    course: [0.223, 2.5]
+    carte: portique
+    lettre: X
+  # Mât en y : 0,056 à 0,884 godet fermé (fiche).
+  chariot_y:
+    longueur_rail: 0.95
+    course: [0.056, 0.884]
+    carte: portique
+    lettre: Y
+  # Hauteur des axes de la tête : 0,375 à 1,29 (fiche). Régler FluidNC pour que sa position
+  # machine Z soit cette hauteur, en mm.
+  griffe_z:
+    longueur_rail: 1.29
+    course: [0.375, 1.29]
     carte: portique
     lettre: Z
+  # Rotation de la tête (°). EXEMPLE : un peu plus d'un tour de chaque côté (pas de collecteur
+  # tournant : les câbles limitent la rotation).
+  griffe_a:
+    unite: deg
+    longueur_rail: 400
+    course: [-370, 370]
+    carte: portique
+    lettre: A
+  # Vis à billes du godet (m) : le début de la course est « fermé », JAMAIS au-delà (le capot du
+  # boîtier de tête n'a que 4 mm de garde) ; la fin est « grand ouvert ». EXEMPLE : 30 mm de vis.
+  griffe_b:
+    longueur_rail: 0.03
+    course: [0.0, 0.03]
+    carte: portique
+    lettre: B
 
 positions:
   exemple_repos:
@@ -46,6 +88,14 @@ positions:
     exemple_x: 0.3
     exemple_y: 0.2
     exemple_z: 0.9
+  # La griffe en attente, hors de la zone du chariot du fût (griffe → attente), tête en haut,
+  # bras le long du pont, godet fermé.
+  griffe_attente:
+    pont_x: 1.035
+    chariot_y: 0.57
+    griffe_z: 1.29
+    griffe_a: 0
+    griffe_b: 0
 
 zones:
   exemple_zone_a:
@@ -58,6 +108,8 @@ zones:
 durees:
   exemple_deplacement_max: 30
   exemple_prise_origine_max: 90
+  # Un geste de la griffe (une prise, un trajet, un vidage...) : au plus 10 min.
+  griffe_geste_max: 600
 
 # Poste du fût. Ces chiffres-là sont VRAIS (fiche du module « Poste du fût », validée le
 # 23/10/2026, et plan de commande v221), sauf la partie « pesee » (à étalonner, voir plus bas).
@@ -115,6 +167,206 @@ poste_fut:
     # Somme des doses de la griffe contre baisse de la pesée : avertissement au-delà de 3 kg.
     ecart_doses_max_kg: 3
 
+# Griffe sur mât : transfert du fût vers le seau (module gelé le 25/10/2026, fiche « Griffe sur
+# mât », fiche d'état du module, plan de commande v221). Repère du portique, en mètres.
+# « z » = hauteur des axes de la tête ; « mât » = position du mât de la griffe (pont − 0,175 en x).
+# Les chiffres marqués (fiche) sont VRAIS ; les autres sont des EXEMPLES à régler aux essais ou à
+# recevoir du projet mécanique (voir les questions de la PR de la tâche 18).
+# Un verrou du logiciel ne protège que la machine : la sécurité des personnes reste câblée.
+griffe:
+  exemple: true
+  # Mât de la griffe = pont − 0,175 en x (fiche).
+  decalage_mat_x: -0.175
+  # Bas du godet = axes − 0,203 : bas du godet à 1,087 quand les axes sont en butée haute 1,29
+  # (fiche). Le bas de la tête est pris égal au bas du godet.
+  bas_godet_sous_axes: 0.203
+  pont_x_min: 0.223
+  # Rotation de la tête (fiche) : libre si axes ≤ 1,075 ; de 1,075 à 1,11 libre godet fermé et
+  # ±45° au plus godet ouvert ; au-dessus de 1,11 bloquée bras le long du pont, à 0° ou 180°.
+  # Pas de rotation quand le pont est au-delà de x 2,0.
+  rotation:
+    libre_z_max: 1.075
+    bloquee_z_min: 1.11
+    orientations_bloquees_deg: [0, 180]
+    ouvert_ecart_max_deg: 45
+    tolerance_deg: 0.5
+    pont_x_max: 2.0
+  # Mât en y godet grand ouvert : 0,11 à 0,83 (fiche). Godet fermé : course de chariot_y.
+  mat_y_grand_ouvert: [0.11, 0.83]
+  # Trajet fût ↔ poste de remplissage, jamais en diagonale (fiche) : d'abord en x, mât à
+  # y ≥ 0,36, puis en y seulement une fois le mât à x ≥ 0,86 ; retour dans l'ordre inverse.
+  # Hauteur des trajets : butée haute des axes (bas du godet à 1,087, au-dessus de l'ouverture
+  # du fût à 1,07).
+  trajet:
+    z: 1.29
+    mat_y_min: 0.36
+    mat_x_min_pour_y: 0.86
+  # Garage et glissière de l'agitateur du mycélium, volumes interdits à toute hauteur (fiche) :
+  # y minimum du mât godet fermé / à moitié ouvert / grand ouvert, par bande de x du mât.
+  garage_glissiere:
+    - {x: [0.15, 0.43], y_min: [0.23, 0.24, 0.28]}
+    - {x: [0.43, 0.77], y_min: [0.33, 0.345, 0.38]}
+    - {x: [0.77, 0.82], y_min: [0.24, 0.24, 0.27]}
+    - {x: [0.82, 0.85], y_min: [0.13, 0.13, 0.13]}
+    - {x: [0.85, 1.22], y_min: [0.10, 0.105, 0.14]}
+  # Pendant le dosage du mycélium : mât à x ≤ 0,78 ou y ≥ 0,40 (fiche).
+  dosage: {mat_x_max: 0.78, mat_y_min: 0.40}
+  # Boîtier de la caméra du bocal : mât x ≤ 0,96 tant que le bas de la tête est sous 1,08 et
+  # recouvre y 0,22-0,28 (fiche).
+  camera_bocal: {mat_x_max: 0.96, bas_z_max: 1.08, y: [0.22, 0.28]}
+  # Bout côté fût : mât sous x ≈ 0,12 → bas de la tête ≥ 0,85 hors du fût, ≥ 1,05 au-dessus
+  # de la paroi du fût (fiche).
+  bout_cote_fut: {mat_x_max: 0.12, bas_min_hors_fut: 0.85, bas_min_paroi: 1.05}
+  # Porte du coffret du spray ouverte : griffe interdite en x < 0,50 et y < 0,33 (fiche).
+  porte_spray: {x_max: 0.50, y_max: 0.33}
+  # Dans le fût : côté −x, le mât ne va qu'à 0,17 de l'axe du fût (fiche) ; ailleurs au plus
+  # 0,20 (EXEMPLE : à confirmer).
+  fut_rayon_mat_max_m: 0.20
+  fut_moins_x_max_m: 0.17
+  # Un mouvement est vérifié point par point, tous les 5 mm.
+  pas_verification_m: 0.005
+  # Raclette en silicone sur le côté de la tête : sa direction quand A = 0 (°, depuis +x ;
+  # EXEMPLE : côté fût, vers −x) et la distance du mât à la tranche de sa lame (0,11 : fiche,
+  # d'après l'essuyage).
+  raclette_angle_deg: 180
+  raclette_decalage_m: 0.11
+  # Vitesses maximales (m/s, °/s pour la rotation). EXEMPLES, à régler aux essais.
+  vitesses:
+    pont_x: 0.25
+    chariot_y: 0.25
+    griffe_z: 0.15
+    griffe_a: 90
+    griffe_b: 0.05
+    descente_lente: 0.01
+    plongee: 0.01
+    remontee_choc: 0.01
+  # 1. Descente : rapide jusqu'au dernier niveau connu + 3 cm (fiche), puis lente ; contact
+  # quand la charge baisse de plus de 15 N (EXEMPLE). Butée basse logicielle : bas du godet au
+  # plus 3,5 cm sous le fond (fiche).
+  descente:
+    marge_niveau_m: 0.03
+    seuil_contact_n: 15
+    butee_sous_fond_m: 0.035
+  # 2. Mâchouiller (fiche) : 3 à 5 bouchées, le godet se ferme à moitié et se rouvre ; entre deux,
+  # le mât l'enfonce d'≈ 5 mm, force limitée (40 N : EXEMPLE). Pas de mâchouillage pour le maïs.
+  machouiller:
+    bouchees: 4
+    fermeture: 0.5
+    enfoncement_m: 0.005
+    force_max_n: 40
+  # 3. et 4. Prendre (fiche) : ouverture choisie, enfoncement 1 cm, fermeture en plongée
+  # (1 cm de plus : EXEMPLE) ; remontée de 5 cm et arrêt 0,5 s pour la pesée ; au plus 3 L par
+  # prise. Tolérance, entrouverture, reprises et seuil du fût vide : EXEMPLES.
+  # Points de prise des couches : cercles autour de l'axe du fût (EXEMPLE, choix du logiciel).
+  prise:
+    enfoncement_m: 0.01
+    plongee_m: 0.01
+    remontee_m: 0.05
+    pesee_attente_s: 0.5
+    tolerance: 0.15
+    volume_max_l: 3
+    entrouvrir: 0.08
+    entrouvrir_essais_max: 3
+    reprises_max: 2
+    utile_min_kg: 0.15
+    rayons_m: [0.0, 0.09, 0.17]
+    points: [1, 4, 8]
+  # 6. Vidage (fiche) : axes = haut du seau + 0,23, le godet s'ouvre en grand en tournant de
+  # 45° au plus ; haut du seau au-dessus de 0,88 : vidage tête bloquée, sans tourner.
+  vidage:
+    au_dessus_haut_m: 0.23
+    rotation_deg: 45
+    rotation_haut_max_z: 0.88
+  # 7. Tassement : godet refermé à vide, appui ≈ 60 N (fiche) à quelques endroits pendant que le
+  # seau tourne (3 appuis, remontée 2 cm, 2 s : EXEMPLES).
+  tassement:
+    force_n: 60
+    appuis: 3
+    remontee_m: 0.02
+    attente_s: 2
+  # 8. Essuyage du bord (fiche) : mât à R_haut + 11 cm de l'axe du seau, axes à haut + 0,196.
+  # Direction du mât depuis l'axe du seau et durée d'un tour du seau : EXEMPLES.
+  essuyage:
+    decalage_m: 0.11
+    au_dessus_haut_m: 0.196
+    direction_deg: 0
+    duree_s: 8
+  # Raclage de la paroi du fût (fiche : la lame appuie d'≈ 8 mm, un tour dans chaque sens).
+  # Départ 18 cm sous le bord (EXEMPLE : plus haut, la tête ne peut pas tourner godet ouvert).
+  raclage:
+    appui_m: 0.008
+    depart_sous_bord_m: 0.18
+    points_par_tour: 24
+  # Passe de fond (fiche, sauf EXEMPLES : 12 kg, 6 cm, spirale, rayon de paroi, joue, 5 mm).
+  fond:
+    passe_kg: 12
+    passe_hauteur_m: 0.06
+    seuil_appui_n: 30
+    force_max_n: 50
+    spirale_pas_m: 0.09
+    spirale_rayon_max_m: 0.12
+    paroi_prises: 12
+    paroi_rayon_m: 0.20
+    paroi_ouverture_max: 0.2
+    joue_angle_deg: 90
+    chasse_neige_angle_deg: 20
+    chasse_neige_au_dessus_fond_m: 0.005
+    centre_prises: 3
+  # Pesée de la griffe : 80 mesures/s pendant les descentes (fiche) ; choc, pesée et silence :
+  # EXEMPLES.
+  force:
+    frequence_hz: 80
+    choc_n: 80
+    lectures_pesee: 20
+    silence_max_s: 0.5
+  # Volume pris (L) selon l'ouverture du godet (0 fermé, 1 grand ouvert) et l'enfoncement total
+  # sous le contact au moment de fermer (bouchées + prise + plongée, m).
+  # EXEMPLE : table par défaut, à mesurer (godet de 3 L).
+  volumes:
+    ouvertures: [0.2, 0.4, 0.6, 0.8, 1.0]
+    enfoncements_m: [0.0, 0.02, 0.04]
+    litres:
+      - [0.3, 0.4, 0.5]
+      - [0.8, 1.0, 1.2]
+      - [1.4, 1.7, 2.0]
+      - [2.0, 2.4, 2.7]
+      - [2.5, 2.8, 3.0]
+  # Apprendre les doses (fiche : densité apprise sur les 5 à 10 dernières prises du fût, table par
+  # défaut pour les 10 à 20 premières, corrections à part près de la paroi et du fond).
+  # Chiffres : EXEMPLES.
+  doses:
+    densite_defaut_kg_l: 0.7
+    prises_avant_apprentissage: 10
+    prises_apprises: 8
+    correction_paroi: 0.8
+    correction_fond: 0.7
+    prises_avant_correction: 3
+  # Table des formats : EXEMPLES (à recevoir du projet mécanique), sauf les 8 cm du 5 L (fiche).
+  formats:
+    seau_20l:
+      haut_z: 0.75
+      rayon_haut: 0.15
+      couches: 4
+      dose_kg: 2.0
+      tasser_chaque_couche: true
+      tassement_rayon_m: 0.06
+      tassement_bas_max_sous_bord_m: 0.30
+    # Seau de 5 L : tassement de la dernière couche seulement, tête centrée, bas du godet au plus
+    # 8 cm sous le bord (fiche).
+    seau_5l:
+      haut_z: 0.62
+      rayon_haut: 0.09
+      couches: 2
+      dose_kg: 1.0
+      tasser_chaque_couche: false
+      tassement_rayon_m: 0.0
+      tassement_bas_max_sous_bord_m: 0.08
+  format_par_defaut: seau_20l
+  # Axe du seau au poste de remplissage, en position du mât (EXEMPLE : Remplissage pas figé).
+  seau_remplissage: [0.95, 0.30]
+  # Fût vide : le mât attend ici, pont hors de la zone du chariot du fût (choix du logiciel).
+  attente: [0.86, 0.57]
+
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :
 #   - prise_origine: <carte>   prise d'origine ($H) d'une carte FluidNC (fluidnc.yaml) ;
@@ -122,7 +374,7 @@ poste_fut:
 # Chaque geste a son délai maximal (nom dans durees). L'ordre (quelle carte d'abord, quels axes
 # remontent avant de bouger) vient de la mécanique : il sera rempli avec les modules.
 lieu_sur:
-  - prise_origine: portique
+  - prise_origine: chariot
     delai: exemple_prise_origine_max
   - aller: exemple_repos
     delai: exemple_deplacement_max

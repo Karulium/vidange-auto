@@ -308,6 +308,10 @@ def test_pilotage_a_distance_puis_l_armoire_reprend_la_main(reglages, entrees_so
             "exemple_x",
             "exemple_y",
             "exemple_z",
+            "pont_x",
+            "chariot_y",
+            "griffe_z",
+            "griffe_b",
         ]
         attendre(lambda: nextion.texte("b_bandeau") == "À DISTANCE : TOUCHER = STOP")
         nextion.appuyer("b_pause")

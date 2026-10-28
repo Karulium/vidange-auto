@@ -18,7 +18,7 @@ from vidange.reglages import Machine
 
 journal = donner_journal("chef.axes")
 
-# machine.yaml est en mètres, FluidNC en millimètres.
+# machine.yaml est en mètres, FluidNC en millimètres (un axe tournant reste en degrés).
 MM_PAR_M = 1000
 
 
@@ -64,7 +64,8 @@ class Axes:
                 raise ErreurEtape(f"axe « {nom_axe} » : pas de carte FluidNC dans machine.yaml")
             if axe.carte not in self._liaisons:
                 raise ErreurEtape(f"axe « {nom_axe} » : carte « {axe.carte} » pas reliée")
-            mots.setdefault(axe.carte, []).append(f"{axe.lettre}{valeur * MM_PAR_M:.3f}")
+            facteur = MM_PAR_M if axe.unite == "m" else 1
+            mots.setdefault(axe.carte, []).append(f"{axe.lettre}{valeur * facteur:.3f}")
         self._commandes = []
         for carte, mots_carte in mots.items():
             liaison = self._liaisons[carte]

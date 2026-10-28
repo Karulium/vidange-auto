@@ -5,7 +5,9 @@ Un module = une liste d'étapes, faites dans l'ordre. Chaque étape :
 2. attend ses conditions d'entrée (« la griffe ne descend que si... »), puis réserve ses zones ;
 3. lance son action, une seule fois et sans attendre (envoyer du G-code, commander un relais) ;
 4. attend sa condition de fin, au plus son délai maximal (un nom de `durees` dans machine.yaml) ;
-5. libère les zones qu'elle doit libérer.
+5. libère les zones qu'elle doit libérer ;
+6. passe à l'étape suivante, ou à celle que dit `ensuite` (pour les gestes qui se répètent :
+   prise, seau, prise...).
 
 Une action doit être **rejouable** : après une alarme ou une coupure de courant, l'étape est
 refaite depuis le début (après le Go). « Aller à la position X » est rejouable ;
@@ -75,6 +77,9 @@ class Etape:
     liberer: tuple[str, ...] = ()
     # Attendre le « Go » de Karulium avant de commencer l'étape.
     demande_go: bool = False
+    # Appelée quand l'étape est finie : le nom de l'étape suivante, ou None pour celle qui suit
+    # dans la liste (après la dernière : le module est fini). Rapide, sans geste.
+    ensuite: Callable[[], str | None] | None = None
 
 
 @dataclass(frozen=True)

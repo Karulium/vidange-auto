@@ -56,6 +56,7 @@ Pas encore de vrai module de la machine.
 | `vidange/mises_a_jour/` | Mises à jour : cartes ESP32 (esptool, console FluidNC, copies de la mémoire), programme du Pi (git), fausse carte ; commande `vidange-maj` |
 | `vidange/accelerometre/` | Accéléromètre du chariot Z : copie de `accelerometre.yaml` dans le programme du RP2040 (`accelerometre/`) ; liaison par le fil série unique (chocs notés au registre, réglages envoyés), mise à jour de son programme par ce fil (chargeur, `fichier_programme.py`), faux RP2040 ; commande `vidange-accelerometre` |
 | `vidange/mode.py` | Mode de la machine (production, lavage, UV-ozone), gardé dans un fichier, changé machine au repos |
+| `vidange/griffe/` | Griffe sur mât : règles de position (`regles.py`), doses apprises (`doses.py`), bras sur la carte du portique et sa pesée (`bras.py`), gestes (`griffe.py`), module « griffe » (`module.py`), griffe du simulateur (`simulation.py`) |
 | `vidange/poste_fut/` | Poste du fût : état (absent, en place, prêt), bouton « Prêt » et voyant, pesée (HX711), mode permis par le panneau, verrous pour les autres modules, module « poste_fut » ; commande `vidange-pesee` (étalonnage) |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) ; poste du fût (chiffres **vrais**, pesée à étalonner) |
 | `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran, caméras, pilotage à distance, mises à jour) |
@@ -209,6 +210,7 @@ en une fraction de seconde), et sort le planning : chaque étape, quand elle com
 .venv/bin/vidange-simulateur exemple --delai-go 0    # si Karulium donnait le Go tout de suite
 .venv/bin/vidange-simulateur exemple --json p.json   # planning aussi en JSON
 .venv/bin/vidange-simulateur poste_fut               # échange d'un fût (scénario « echange_fut »)
+.venv/bin/vidange-simulateur griffe                  # vidange d'un fût par la griffe (« vidange_fut »)
 ```
 
 - **Durées réglables** dans `reglages/simulateur.yaml` : vitesse et accélération de chaque axe (un déplacement
@@ -360,3 +362,33 @@ poste.refus_griffe(x, y, z, mode)
 - **Verrous** (`vidange/poste_fut/regles.py`) : pour le pont, le chariot de remplissage, la griffe et la
   préhension en lavage ; ils rendent la raison du refus. Ils ne protègent que la machine.
 - Page web (`/api/poste-fut`, bouton PRÊT) et écran (page `poste_fut`, qui vient seule à l'arrivée du chariot).
+
+## Griffe (tâche 18)
+
+La griffe vide le fût dans les seaux, couche par couche, comme dans la fiche « Griffe sur mât » (module gelé
+le 25/10/2026). Tous les chiffres sont dans `reglages/machine.yaml` (partie `griffe` et axes `pont_x`,
+`chariot_y`, `griffe_z`, `griffe_a`, `griffe_b`) ; ceux marqués EXEMPLE sont à mesurer
+(`systeme/essai-griffe.md`).
+
+```python
+bras = BrasFluidnc(reglages.machine, liaison_portique, pesee_griffe)  # pesée : tâche 22 bis
+bras.demarrer(arret)  # lit la pesée 80 fois par seconde
+griffe = Griffe(reglages.machine, bras, poste, registre)
+chef.lancer(module_griffe(griffe, seau_pret=..., pont_libre=...))
+```
+
+- **Un geste = une suite de pas** (déplacements manuels `$J=` vers des positions absolues : rejouables,
+  arrêtables tout de suite sans perdre la position). Chaque pas est **vérifié point par point** avant de
+  partir (`ReglesGriffe` : rotation selon la hauteur, godet jamais au-delà de « fermé », garage et glissière,
+  dosage, caméra du bocal, poste du fût, porte du spray, trajet jamais en diagonale) ; un pas refusé met le
+  module en alarme sans bouger.
+- **Contact** : le fil de la pesée arrête la descente dès que la charge baisse ; **choc** pendant un trajet :
+  arrêt, alarme, remontée lente au Go suivant ; pesée muette : arrêt.
+- **Doses** : densité apprise sur les dernières prises du fût, corrections à part près de la paroi et au fond ;
+  chaque prise est notée dans le registre (table `prises_griffe`).
+- **Passe de fond** quand la pesée du fût annonce les derniers kilos : raclage, spirale au fond, paroi,
+  chasse-neige, centre ; puis `finir_vidange` au poste du fût.
+- Le chef sait maintenant **choisir l'étape suivante** (`Etape(ensuite=...)`) : prise, seau, prise...
+- Cases vides des modules pas écrits : `seau_pret`, `pont_libre`, `tourner_seau`, `couche_finie`,
+  `seau_fini`, `prochain_format`, `machouiller` (faux pour le maïs), `dosage_en_cours`, `porte_spray_ouverte`.
+

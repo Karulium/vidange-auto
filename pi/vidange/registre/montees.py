@@ -211,7 +211,40 @@ _VERSION_4 = (
     "CREATE INDEX actions_distance_quand ON actions_distance (quand)",
 )
 
+# Version 5 (tâche 18) : chaque prise de la griffe, pour apprendre les doses (densité du fût,
+# corrections près de la paroi et du fond) et pour les essais.
+_VERSION_5 = (
+    """
+    CREATE TABLE prises_griffe (
+        id INTEGER PRIMARY KEY,
+        quand TEXT NOT NULL,
+        cycle_id INTEGER REFERENCES cycles (id),
+        fut_id INTEGER REFERENCES futs (id),
+        -- couche, paroi, fond.
+        lieu TEXT NOT NULL,
+        -- Ouverture du godet (0 fermé, 1 grand ouvert), enfoncement (m), nombre de bouchées.
+        ouverture REAL NOT NULL,
+        enfoncement_m REAL NOT NULL,
+        bouchees INTEGER NOT NULL,
+        -- Niveau du substrat (bas du godet au contact, m) et position du mât dans le fût (m).
+        niveau_z REAL,
+        x REAL NOT NULL,
+        y REAL NOT NULL,
+        -- Poids pesé (kg) et volume d'après la table (L).
+        poids_kg REAL NOT NULL,
+        volume_l REAL NOT NULL
+    )
+    """,
+    "CREATE INDEX prises_griffe_cycle ON prises_griffe (cycle_id)",
+)
+
 # Montée n° i (en partant de 1) : ce qui fait passer la base de la version i - 1 à la version i.
-MONTEES: tuple[tuple[str, ...], ...] = (_VERSION_1, _VERSION_2, _VERSION_3, _VERSION_4)
+MONTEES: tuple[tuple[str, ...], ...] = (
+    _VERSION_1,
+    _VERSION_2,
+    _VERSION_3,
+    _VERSION_4,
+    _VERSION_5,
+)
 
 VERSION = len(MONTEES)
