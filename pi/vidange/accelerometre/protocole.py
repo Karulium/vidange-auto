@@ -11,6 +11,9 @@ from vidange.reglages import LIGNE_MAX_LIAISON, ReglagesAccelerometre
 
 CODAGE = "utf-8"
 FIN = b"\n"
+# Plus longue trame du chargeur (accelerometre/src/liaison_trame.h, LIAISON_TRAME_MAX) : une page
+# de 256 octets du programme, en hexadécimal.
+LIGNE_MAX_CHARGEUR = 560
 
 # Les réglages que le Pi peut envoyer, dans l'ordre de la réponse REGLAGES.
 NOMS_REGLAGES = (
@@ -56,11 +59,11 @@ def crc(texte: bytes) -> int:
     return valeur
 
 
-def trame(texte: str) -> bytes:
+def trame(texte: str, taille_max: int = LIGNE_MAX_LIAISON) -> bytes:
     """La trame d'un texte, prête à partir sur le fil."""
     octets = texte.encode(CODAGE)
     resultat = octets + f"*{crc(octets):04X}".encode() + FIN
-    if len(resultat) > LIGNE_MAX_LIAISON:
+    if len(resultat) > taille_max:
         raise ErreurProtocole(f"trame trop longue ({len(resultat)} octets)")
     return resultat
 
@@ -86,14 +89,15 @@ def verifier_ligne(ligne: bytes) -> str | None:
 class Decodeur:
     """Assemble les octets reçus en lignes au contrôle bon."""
 
-    def __init__(self) -> None:
+    def __init__(self, taille_max: int = LIGNE_MAX_CHARGEUR) -> None:
         self._reste = b""
+        self._taille_max = taille_max
         self.refusees = 0
 
     def ajouter(self, octets: bytes) -> list[str]:
         self._reste += octets
         *lignes, self._reste = self._reste.split(FIN)
-        if len(self._reste) > LIGNE_MAX_LIAISON:
+        if len(self._reste) > self._taille_max:
             self._reste = b""
             self.refusees += 1
         textes = []

@@ -53,6 +53,45 @@ que le temps d'envoyer une réponse, le reste du temps elle écoute.
 
 Côté Pi : `pi/vidange/accelerometre/liaison.py` (et l'outil `vidange-accelerometre` des essais).
 
+## Le chargeur : mise à jour par le fil (tâche 16)
+
+Le RP2040 n'a pas, d'origine, de moyen de recevoir un programme par un fil série : seulement par
+l'USB (bouton BOOTSEL), ce qui demande de démonter le boîtier. Un **petit chargeur maison** est
+donc installé une fois à l'établi par l'USB, au début de la flash ; le programme vient après :
+
+| Place dans la flash | Contenu |
+|---|---|
+| 0 à 32 Kio | le chargeur (`src/chargeur.c`), jamais réécrit par le fil |
+| 32 à 36 Kio | la **fiche** du programme : taille, contrôle CRC-32, nom (`src/fiche.h`) |
+| après 36 Kio | le programme |
+
+(`plan_memoire.cmake`). À chaque démarrage, le chargeur vérifie la fiche et le contrôle du
+programme, écoute le fil 0,3 s (`chargeur → attente_demarrage_ms`), puis lance le programme.
+
+**Mise à jour** (page web du Pi, « Mises à jour », ou `vidange-accelerometre ecrire`) :
+1. le Pi vérifie le fichier `accelerometre.bin`, puis demande `CHARGEUR` au programme, qui
+   redémarre dans le chargeur ;
+2. il relit le programme présent et en garde une copie (pour revenir en arrière) ;
+3. il efface la fiche, écrit le programme page par page (chaque page est relue par le
+   chargeur), puis `FIN` : le chargeur calcule le contrôle et n'écrit la fiche que s'il est
+   juste. **Un programme à moitié écrit n'est jamais lancé** ;
+4. `LANCER`, et le Pi vérifie que le programme répond avec le bon nom et le bon contrôle.
+Si l'écriture rate, le Pi remet aussitôt la copie du programme d'avant. Environ une minute.
+
+Pendant tout ce temps, **« OK » est coupé** (sécurité positive) : la carte FluidNC n° 1 se met en
+alarme, à débloquer sur place après. C'est pourquoi la mise à jour se fait machine à l'arrêt.
+
+**Secours** :
+- programme qui ne répond plus (figé, fil muet) : `vidange-accelerometre ecrire
+  accelerometre.bin --attendre 30`, puis couper et remettre l'alimentation du boîtier : au
+  démarrage, le chargeur entend la demande et reste ;
+- programme absent ou abîmé (mise à jour coupée) : le chargeur reste de lui-même, voyant qui
+  clignote vite ; la check-list du Pi le dit ; refaire la mise à jour ;
+- chargeur abîmé, ou broches du fil changées dans `accelerometre.yaml` : boîtier démonté, par
+  l'USB-C, comme la première fois (`essai-etabli.md`, étape 3).
+
+Les questions et réponses du chargeur sont dans `src/chargeur_protocole.h`.
+
 Tous les chiffres (carte, broches, seuil, durées) sont dans
 [`pi/reglages/accelerometre.yaml`](../pi/reglages/accelerometre.yaml), vérifiés par le programme
 du Pi au démarrage et quand on fabrique le programme du RP2040.
@@ -66,16 +105,26 @@ du Pi au démarrage et quand on fabrique le programme du RP2040.
 | `src/reglages.c` | Les réglages de départ et leur vérification |
 | `src/console.c` | La fenêtre texte par l'USB : commandes et ligne d'état |
 | `src/liaison.c` | Le protocole du fil vers le Pi : trames, questions, réponses (essayé sur PC) |
+| `src/liaison_trame.c` | Les trames du fil (ligne de texte et contrôle CRC-16), pour les deux |
 | `src/un_fil.pio`, `src/un_fil.c` | Le fil unique : envoi et réception par deux machines PIO |
 | `src/main.c` | Le RP2040 : broches, bus I2C, chien de garde, les deux cœurs (mesure ; Pi et USB) |
+| `src/chargeur.c` | Le chargeur : démarrage, écriture de la flash, lancement du programme |
+| `src/chargeur_protocole.c` | Ce que le chargeur répond au Pi (aucun matériel, essayé sur PC) |
+| `src/fiche.c` | La fiche du programme (taille, contrôle, nom) |
+| `plan_memoire.cmake` | Le plan de la flash : chargeur, fiche, programme |
 | `tests/` | Les essais sur PC, avec un faux LIS3DH |
 | `reglages.cmake` | Copie `accelerometre.yaml` dans le programme (`reglages_genere.h`) |
 | `essai-etabli.md` | **Procédure d'essai à l'établi**, pas à pas |
 
 ## Fabriquer le programme
 
-GitHub Actions le fabrique à chaque PR : le fichier `accelerometre.uf2` se télécharge depuis la
-page de la vérification (voir `essai-etabli.md`, étape 1). Pour le fabriquer soi-même (Linux) :
+GitHub Actions le fabrique à chaque PR ; deux fichiers se téléchargent depuis la page de la
+vérification (voir `essai-etabli.md`, étape 1) :
+- `accelerometre-complet.uf2` : chargeur, fiche et programme, à copier par l'USB (première fois,
+  ou secours) ;
+- `accelerometre.bin` : la fiche et le programme, que le Pi envoie par le fil (mise à jour).
+
+Pour les fabriquer soi-même (Linux) :
 
 ```bash
 sudo apt install cmake gcc-arm-none-eabi libnewlib-arm-none-eabi python3-pydantic python3-yaml
@@ -85,7 +134,8 @@ cmake -S accelerometre -B accelerometre/build -DPICO_SDK_PATH=$HOME/pico-sdk
 cmake --build accelerometre/build
 ```
 
-Le programme est `accelerometre/build/accelerometre.uf2`.
+Les fichiers sont dans `accelerometre/build/`. Leur nom de version est le commit Git
+(« -modifie » s'il y avait des changements pas encore enregistrés).
 
 Essais sur PC (sans RP2040) :
 
@@ -99,6 +149,14 @@ ctest --test-dir accelerometre/build-essais --output-on-failure
 
 - **C avec le Pico SDK** de Raspberry Pi (gratuit, officiel) plutôt que MicroPython : temps de
   mesure régulier, chien de garde sûr, et le petit chargeur maison de la tâche 16 en a besoin.
+- **Chargeur** : écriture directe à la place du programme (pas de deuxième place « de
+  rechange » dans la flash) : plus simple, et sans risque, car le chargeur n'est jamais touché
+  et ne lance qu'un programme au contrôle juste ; le Pi garde les copies pour revenir en
+  arrière. Le programme est fabriqué pour tourner après la fiche (fichier d'édition de liens du
+  Pico SDK recopié avec une autre adresse) ; il garde les 256 octets du « boot2 » du SDK, que
+  le chargeur saute.
+- La liaison du chargeur reprend les mêmes trames que le programme (texte et CRC-16) ; une page
+  de 256 octets voyage en hexadécimal (trames de 530 octets au plus).
 - La mesure et la sortie « OK » tournent seules sur un cœur du RP2040 ; la liaison avec le Pi et
   la fenêtre USB sur l'autre : si l'une se bloque, la mesure continue. Les octets reçus du Pi
   sont rangés par une interruption : rien n'est perdu si la fenêtre USB est lente.

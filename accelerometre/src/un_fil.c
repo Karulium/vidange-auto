@@ -10,7 +10,7 @@
 #define PIO_FIL pio0
 #define MACHINE_TX 0
 #define MACHINE_RX 1
-#define TAILLE_RESERVE 512  // octets reçus en attente (plus de 4 trames)
+#define TAILLE_RESERVE 1024  // octets reçus en attente (une trame du chargeur, ou 4 du programme)
 
 static unsigned debut_rx;  // place du programme de réception dans la mémoire PIO
 static uint32_t temps_octet_us;

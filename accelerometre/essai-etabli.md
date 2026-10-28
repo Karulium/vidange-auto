@@ -1,12 +1,13 @@
-# Essai de l'accéléromètre à l'établi (tâches 14 et 15)
+# Essai de l'accéléromètre à l'établi (tâches 14, 15 et 16)
 
 Testé sur le vrai matériel : **non** (seulement sur PC et dans GitHub Actions, avec des faux).
 
 But : vérifier sur le vrai matériel que le RP2040 coupe bien le signal « OK » sur un choc, sur
 une panne du capteur, quand son programme se fige et sans courant ; puis choisir le seuil.
-La **partie 2** (à la fin) essaie le fil série unique entre le RP2040 et le Pi (tâche 15).
+La **partie 2** essaie le fil série unique entre le RP2040 et le Pi (tâche 15), la **partie 3**
+la mise à jour du programme par ce fil (tâche 16).
 
-Compter environ 1 h pour la partie 1, 45 min pour la partie 2. Rien ne bouge : l'essai se fait
+Compter environ 1 h pour la partie 1, 45 min pour la partie 2, 45 min pour la partie 3. Rien ne bouge : l'essai se fait
 sur la table, hors de la machine.
 
 ## Ce qu'il faut
@@ -19,10 +20,11 @@ sur la table, hors de la machine.
 
 ## 1. Récupérer le programme
 
-1. Sur GitHub, ouvrir la PR de la tâche 15 (ou la plus récente qui touche `accelerometre/`), onglet **Checks** (Vérifications), puis la ligne
+1. Sur GitHub, ouvrir la PR de la tâche 16 (ou la plus récente qui touche `accelerometre/`), onglet **Checks** (Vérifications), puis la ligne
    **Tests**.
 2. En bas de la page, partie **Artifacts**, cliquer sur **accelerometre** : un fichier zip
-   se télécharge. Le décompresser : il contient `accelerometre.uf2`.
+   se télécharge. Le décompresser : il contient `accelerometre-complet.uf2` (le chargeur et le
+   programme, pour l'USB) et `accelerometre.bin` (le programme seul, pour le Pi, partie 3).
 
 ## 2. Brancher (carte débranchée de l'USB)
 
@@ -45,7 +47,7 @@ Sortie « OK » (GPIO 2, `sortie_ok`) :
 ## 3. Charger le programme
 
 1. Tenir appuyé le bouton **BOOTSEL** de la carte, brancher l'USB, lâcher le bouton.
-2. Un disque nommé **RPI-RP2** apparaît sur le PC. Y copier `accelerometre.uf2`.
+2. Un disque nommé **RPI-RP2** apparaît sur le PC. Y copier `accelerometre-complet.uf2`.
 3. La carte redémarre toute seule (le disque disparaît) : c'est normal.
 
 ## 4. Ouvrir la fenêtre texte
@@ -182,3 +184,64 @@ si le fil se coupe.
 
 - Les essais n° 13 à 22 : bons ou pas (et ce qui s'affiche si ce n'est pas bon).
 - Plus tard : l'essai avec le vrai câble (n° 10).
+
+---
+
+# Partie 3 : la mise à jour par le fil (tâche 16)
+
+But : vérifier que le Pi remplace le programme du RP2040 par le fil série, sans l'USB ; qu'une
+mise à jour coupée en plein milieu ne laisse jamais un programme abîmé tourner ; et les secours.
+
+Le RP2040 a maintenant un **chargeur** au début de sa mémoire, installé par l'USB avec
+`accelerometre-complet.uf2` ; ensuite, le Pi peut écrire le programme par le fil
+(`accelerometre.bin`). Pendant une mise à jour, la sortie « OK » est **coupée** (LED éteinte)
+et le petit voyant de la carte **clignote vite** (8 fois par seconde).
+
+## Ce qu'il faut en plus
+
+- Le montage de la partie 2 (le fil vers le Pi), le Pi préparé (étape 8).
+- Les deux fichiers de l'étape 1 (même zip) : `accelerometre-complet.uf2` et `accelerometre.bin`.
+  Copier `accelerometre.bin` sur le Pi, par exemple dans `/tmp` :
+  `scp accelerometre.bin <compte>@<nom du Pi>:/tmp/`.
+
+## 11. Préparer
+
+1. Mettre le programme du Pi à la version de cette PR (avant qu'elle soit acceptée) :
+   ```
+   sudo systemctl stop vidange
+   cd /opt/vidange-auto && sudo -u vidange git fetch origin claude/vibrant-maxwell-9h4xam
+   sudo -u vidange git checkout FETCH_HEAD
+   cd pi && sudo -u vidange .venv/bin/pip install -e .
+   ```
+   (Après les essais, revenir à `main` : `sudo -u vidange git checkout main`.)
+2. Charger `accelerometre-complet.uf2` par l'USB (étape 3).
+3. Se placer dans un dossier où le Pi peut écrire les copies : `cd /tmp`.
+
+## 12. Les essais de la mise à jour
+
+| # | Faire | Attendu |
+|---|---|---|
+| 23 | Après l'étape 11, regarder la LED « OK » et taper `aide` dans la fenêtre texte | La LED s'allume moins d'une seconde après le démarrage ; la fenêtre texte est comme avant (essais 1 et 3 de la partie 1 toujours bons) |
+| 24 | `vidange-accelerometre version` | `VERSION nom=... taille=... crc=...` (le nom = le début du commit de la PR) |
+| 25 | `vidange-accelerometre ecrire /tmp/accelerometre.bin` | Les étapes défilent : « redémarre dans le chargeur », « Copie du programme présent », « Écriture : 25 % »… « Programme écrit et vérifié », « Le programme répond », « Fini » (environ une minute). La LED « OK » s'éteint, le voyant clignote vite, puis la LED se rallume. Un fichier `copie-accelerometre-....bin` est apparu dans `/tmp` |
+| 26 | Refaire le n° 25 et, pendant « Écriture : 25 % », débrancher l'USB du RP2040 ; attendre que le Pi dise « Mise à jour ratée » (environ 15 s), puis rebrancher | Le Pi dit « Mise à jour ratée : pas de réponse… ; programme d'avant pas remis non plus » ; au rebranchement, la LED « OK » reste **éteinte** et le voyant clignote vite (le chargeur a vu que le programme est incomplet et ne le lance pas) |
+| 27 | `vidange-accelerometre etat` | « Le RP2040 est dans son chargeur » |
+| 28 | `vidange-accelerometre ecrire /tmp/copie-accelerometre-....bin` (la copie du n° 25) | « Fini » ; la LED « OK » se rallume ; `vidange-accelerometre etat` répond `OK` |
+| 29 | Secours (programme muet) : débrancher l'USB du RP2040, lancer `vidange-accelerometre ecrire /tmp/accelerometre.bin --attendre 30`, puis rebrancher l'USB dans les 30 s | Au rebranchement, le chargeur entend la demande pendant son court moment d'écoute et reste : la mise à jour se fait comme au n° 25 |
+| 30 | `vidange-accelerometre question CHARGEUR`, puis ne rien faire pendant 70 s | `CHARGEUR redemarre` ; LED « OK » éteinte, voyant qui clignote vite ; au bout d'environ 60 s (`chargeur → abandon_s`), le programme repart seul : LED allumée |
+| 31 | Relancer le programme du Pi (`sudo systemctl start vidange`), ouvrir la page web, vue **Mises à jour** : envoyer `accelerometre.bin`, puis dans la partie « Accéléromètre », **Écrire ce programme** | Les étapes s'affichent ; à la fin : réussie ; une copie apparaît sous « Copies de son programme » ; **Revenir à cette copie** marche aussi |
+
+Si le n° 25 dit « le chargeur du RP2040 ne répond pas » :
+- vérifier que c'est bien `accelerometre-complet.uf2` qui a été chargé (et pas un ancien
+  `accelerometre.uf2`, sans chargeur) ;
+- vérifier que le fil marche (essai n° 13) ;
+- `vidange-accelerometre question CHARGEUR` doit rendre `CHARGEUR redemarre`, puis la même
+  question `CHARGEUR pret ...`.
+
+Si un jour le chargeur lui-même ne répond plus (ou si on change la broche `fil_serie`) :
+boîtier démonté, recharger `accelerometre-complet.uf2` par l'USB-C (étape 3).
+
+## Résultat à donner dans la PR (partie 3)
+
+- Les essais n° 23 à 31 : bons ou pas (et ce qui s'affiche si ce n'est pas bon).
+- La durée de la mise à jour du n° 25.

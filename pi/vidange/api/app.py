@@ -469,6 +469,16 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         les_mises_a_jour().revenir_carte(carte, choix.copie, _qui(requete))
         return les_mises_a_jour().etat()
 
+    @app.post("/api/mises-a-jour/accelerometre/programme", dependencies=protege)
+    def programme_accelerometre(choix: ChoixProgramme, requete: Request) -> dict[str, Any]:
+        les_mises_a_jour().ecrire_accelerometre(choix.fichier, _qui(requete))
+        return les_mises_a_jour().etat()
+
+    @app.post("/api/mises-a-jour/accelerometre/revenir", dependencies=protege)
+    def revenir_accelerometre(choix: ChoixCopie, requete: Request) -> dict[str, Any]:
+        les_mises_a_jour().revenir_accelerometre(choix.copie, _qui(requete))
+        return les_mises_a_jour().etat()
+
     @app.post("/api/mises-a-jour/pi/chercher", dependencies=protege)
     def chercher_pi(requete: Request) -> dict[str, Any]:
         les_mises_a_jour().chercher_pi(_qui(requete))

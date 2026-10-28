@@ -116,6 +116,11 @@ Page web → onglet « **Mises à jour** ».
 - [ ] **Sans Internet** : couper Internet, « Chercher » → la page dit que le téléchargement a raté ; la machine
       continue de tourner normalement.
 
+## L'accéléromètre (tâche 16)
+
+Son programme se met à jour depuis la même page (partie « Accéléromètre »), par son fil série :
+voir `accelerometre/essai-etabli.md`, partie 3.
+
 ## Secours
 
 **Une carte ne répond plus du tout** (même après « Revenir ») :

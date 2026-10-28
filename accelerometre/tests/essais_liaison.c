@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include "essai.h"
+#include "fiche.h"
 #include "liaison.h"
 
 // Un faux programme : ce que la liaison lit, et les réglages qu'elle lui envoie.
@@ -10,6 +11,7 @@ typedef struct {
     int reglages_recus;
     reglages_t recus;
     bool refuser;
+    int vers_chargeur;
 } faux_programme_t;
 
 static void faux_lire(void *contexte, liaison_donnees_t *donnees, bool remettre_max) {
@@ -27,6 +29,11 @@ static bool faux_regler(void *contexte, const reglages_t *r, char *message, size
     p->reglages_recus++;
     p->recus = *r;
     return true;
+}
+
+static void faux_vers_chargeur(void *contexte) {
+    faux_programme_t *p = contexte;
+    p->vers_chargeur++;
 }
 
 static reglages_t reglages_essai(void) {
@@ -49,7 +56,13 @@ static reglages_t reglages_essai(void) {
 static void faux_preparer(faux_programme_t *p, liaison_programme_t *programme) {
     memset(p, 0, sizeof *p);
     p->donnees.reglages = reglages_essai();
-    *programme = (liaison_programme_t){faux_lire, faux_regler, p};
+    *programme = (liaison_programme_t){
+        .lire = faux_lire,
+        .regler = faux_regler,
+        .vers_chargeur = faux_vers_chargeur,
+        .contexte = p,
+        .fiche = NULL,
+    };
 }
 
 // Rend le texte de la réponse à « question » (sans le contrôle), après avoir vérifié la trame.
@@ -80,10 +93,10 @@ static void controle_et_trames(void) {
     snprintf(attendu, sizeof attendu, "ETAT*%04X\n", liaison_crc("ETAT", 4));
     VERIFIER(strcmp(trame, attendu) == 0);
     VERIFIER(liaison_trame("ETAT", trame, 8) == 0);  // pas la place
-    char long_texte[LIAISON_LIGNE_MAX];
+    char long_texte[LIAISON_TRAME_MAX];
     memset(long_texte, 'x', sizeof long_texte - 1);
     long_texte[sizeof long_texte - 1] = '\0';
-    char grande[2 * LIAISON_LIGNE_MAX];
+    char grande[2 * LIAISON_TRAME_MAX];
     VERIFIER(liaison_trame(long_texte, grande, sizeof grande) == 0);  // trop longue
 }
 
@@ -112,7 +125,7 @@ static void reception_des_questions(void) {
     VERIFIER(recevoir_texte(&l, "\n\n", question) == 0);
     VERIFIER(l.refusees == 3);
     // Trop longue : oubliée, et la suivante est bien lue.
-    for (int i = 0; i < 400; i++) {
+    for (int i = 0; i < LIAISON_TRAME_MAX + 10; i++) {
         liaison_recevoir(&l, 'x', question, sizeof question);
     }
     VERIFIER(!liaison_recevoir(&l, '\n', question, sizeof question));
@@ -206,6 +219,27 @@ static void regler_mal_ecrit(void) {
     VERIFIER(p.reglages_recus == 0);
 }
 
+static void reponse_version_et_chargeur(void) {
+    faux_programme_t p;
+    liaison_programme_t programme;
+    faux_preparer(&p, &programme);
+    VERIFIER(strcmp(repondre(&programme, "VERSION"), "VERSION fiche=absente") == 0);
+    uint8_t octets[FICHE_TAILLE];
+    fiche_t fiche = {.adresse = 0x10009000, .taille = 51828, .crc = 0xAC5112A5, .nom = "574befc"};
+    fiche_ecrire(&fiche, octets);
+    programme.fiche = octets;
+    VERIFIER(strcmp(repondre(&programme, "VERSION"),
+                    "VERSION nom=574befc taille=51828 crc=AC5112A5") == 0);
+    octets[30] ^= 1;  // fiche abîmée
+    VERIFIER(strcmp(repondre(&programme, "VERSION"), "VERSION fiche=absente") == 0);
+
+    VERIFIER(p.vers_chargeur == 0);
+    VERIFIER(strcmp(repondre(&programme, "CHARGEUR"), "CHARGEUR redemarre") == 0);
+    VERIFIER(p.vers_chargeur == 1);
+    VERIFIER(strcmp(repondre(&programme, "CHARGEUR 2"), "ERREUR commande inconnue") == 0);
+    VERIFIER(p.vers_chargeur == 1);
+}
+
 void essais_liaison(void) {
     LANCER(controle_et_trames);
     LANCER(reception_des_questions);
@@ -213,4 +247,5 @@ void essais_liaison(void) {
     LANCER(reponse_choc);
     LANCER(reponse_reglages_et_regler);
     LANCER(regler_mal_ecrit);
+    LANCER(reponse_version_et_chargeur);
 }

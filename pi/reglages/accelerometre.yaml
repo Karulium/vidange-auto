@@ -1,9 +1,9 @@
 # Accéléromètre du chariot Z (RP2040 + LIS3DH) : détection des chocs horizontaux et signal « OK ».
 # Le programme du RP2040 est dans accelerometre/ ; ces réglages y sont copiés quand on le
 # fabrique (voir accelerometre/README.md). Changer une valeur = refabriquer le programme et
-# le recharger dans le RP2040 ; ou bien, pour les sections capteur, choc et panne (sauf
-# l'adresse, la vitesse I2C et le chien de garde), le Pi les envoie lui-même par le fil série
-# quand ceux du RP2040 sont différents (voir « liaison » à la fin).
+# le recharger dans le RP2040 (par le Pi : page web, Mises à jour) ; ou bien, pour les
+# sections capteur, choc et panne (sauf l'adresse, la vitesse I2C et le chien de garde), le Pi
+# les envoie lui-même par le fil série quand ceux du RP2040 sont différents (voir « liaison »).
 #
 # Le signal « OK » protège la MACHINE (les chocs), jamais les personnes.
 # Il est en sécurité positive : la sortie est au 3,3 V seulement quand tout va bien ;
@@ -101,3 +101,25 @@ liaison:
   # (après une modification de ce fichier, ou un seuil changé à la fenêtre USB).
   # Une autre pleine échelle ou vitesse de mesure coupe « OK » le temps de l'autotest.
   envoyer_reglages: true
+
+# Chargeur (tâche 16) : le petit programme installé une fois par l'USB au début de la flash du
+# RP2040, qui permet au Pi de mettre le programme à jour par le fil série (accelerometre/README.md).
+# Les trois premiers réglages sont dans le chargeur lui-même : les changer demande de le
+# réinstaller par l'USB (accelerometre-complet.uf2).
+chargeur:
+  # À chaque démarrage, le chargeur écoute le fil ce temps (ms) avant de lancer le programme :
+  # un Pi qui demande le chargeur à ce moment le garde (secours si le programme ne répond plus).
+  attente_demarrage_ms: 300
+  # Dans le chargeur, sans question du Pi pendant ce temps (s), il relance le programme
+  # (s'il est bon). Un programme absent ou abîmé : il attend le Pi sans limite.
+  abandon_s: 60
+  # Chien de garde du chargeur (ms) : plus long que celui du programme, car effacer un
+  # morceau de flash prend jusqu'à 0,4 s. De 1000 à 8000.
+  chien_de_garde_ms: 2000
+  # Côté Pi : attente en plus du temps de transmission pour une réponse qui écrit dans la
+  # flash (ms).
+  attente_ecriture_ms: 1000
+  # Côté Pi : attente du chargeur après la demande de redémarrage (s).
+  redemarrage_s: 5
+  # Côté Pi : une question sans réponse est reposée jusqu'à ce nombre de fois.
+  essais: 5

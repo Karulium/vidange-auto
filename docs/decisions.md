@@ -112,6 +112,11 @@ si l'une pose problème, elle le dit dans sa PR.
 - **Réponse à la question de la PR n° 17** (accéléromètre, partie 2) : le fil série de l'accéléromètre arrive sur le
   Pi en **GPIO 14 (broche n° 8, par 1 kΩ) et GPIO 15 (broche n° 10)**, reliées au même conducteur (UART n° 0,
   `/dev/ttyAMA0`). Gardé, et transmis au projet mécanique pour le plan de câblage de l'armoire.
+- **Réponses aux questions de la PR n° 18** (accéléromètre, partie 3), recommandations suivies :
+  1. Après une mise à jour de l'accéléromètre, la carte FluidNC n° 1 est en alarme (« OK » coupé pendant la mise à
+     jour) et se débloque **sur place** : accepté (mises à jour rares, machine à l'arrêt ; pas de `$X` à distance).
+  2. Le chargeur relance seul un programme bon si le Pi ne dit plus rien pendant **60 s** (`chargeur → abandon_s`).
+  3. Le RP2040 attend **0,3 s** à chaque démarrage avant de lancer le programme (`chargeur → attente_demarrage_ms`).
 - **Préhension figée** (27/10/2026) : capteur inductif M8 24 V ; capteur de vide sur l'ADS1115 **en 3,3 V**
   (pas de pont diviseur) ; pour poser ou prendre un bocal sur le porte-bocal, la tête est orientée à ± 3°
   (grâce aux méplats) et ne tourne pas entre les mors.

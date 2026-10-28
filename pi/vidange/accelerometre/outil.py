@@ -4,6 +4,13 @@
   vidange-accelerometre suivre        l'état chaque seconde, et chaque choc (Ctrl-C pour finir)
   vidange-accelerometre envoyer       envoie les réglages de accelerometre.yaml au RP2040
   vidange-accelerometre question ETAT pose une question telle quelle (voir liaison.h)
+  vidange-accelerometre version       le nom et le contrôle du programme du RP2040
+  vidange-accelerometre ecrire accelerometre.bin
+                                      met le programme à jour par le fil (tâche 16) ; le
+                                      programme d'avant est gardé dans le dossier courant
+  vidange-accelerometre ecrire accelerometre.bin --attendre 30
+                                      secours : attend le chargeur 30 s, le temps de couper et
+                                      remettre l'alimentation du boîtier
 
 Options : --port /dev/ttyUSB0 (un autre port que celui de entrees-sorties.yaml),
 --faux (avec un faux RP2040, pour voir sans matériel).
@@ -16,8 +23,12 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import datetime
+from pathlib import Path
 
+from vidange.accelerometre.chargeur import ChargeurAccelerometre, ErreurChargeur
 from vidange.accelerometre.faux import FauxRp2040
+from vidange.accelerometre.fichier_programme import ErreurFichier, Fiche
 from vidange.accelerometre.liaison import (
     SIGNAL,
     LiaisonAccelerometre,
@@ -36,6 +47,11 @@ from vidange.demarrage import DOSSIER_PI, _chemin
 from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.journal import configurer_journal
 from vidange.reglages import ErreurReglages, ReglagesAccelerometre, charger_reglages
+
+DANS_LE_CHARGEUR = (
+    "Le RP2040 est dans son chargeur (« OK » coupé) : programme absent, abîmé ou mise à jour "
+    "en cours ; sinon refaire « vidange-accelerometre ecrire »."
+)
 
 
 def decrire(etat: EtatRp2040) -> str:
@@ -64,6 +80,9 @@ def montrer_etat(liaison: LiaisonAccelerometre) -> int:
     reponse = liaison.demander("ETAT")
     if reponse is None:
         print("Pas de réponse : voir accelerometre/essai-etabli.md (câblage du fil, vitesse).")
+        return 1
+    if reponse.startswith("ERREUR chargeur"):
+        print(DANS_LE_CHARGEUR)
         return 1
     try:
         print(decrire(EtatRp2040.lire(reponse)))
@@ -95,7 +114,10 @@ def suivre(liaison: LiaisonAccelerometre, arret: threading.Event) -> int:
             maximum = max(maximum, etat.max_mg)
         if dernier is None or time.monotonic() - dernier >= 1:
             dernier = time.monotonic()
-            print("pas de réponse" if etat is None else decrire(replace(etat, max_mg=maximum)))
+            if liaison.en_chargeur:
+                print(DANS_LE_CHARGEUR)
+            else:
+                print("pas de réponse" if etat is None else decrire(replace(etat, max_mg=maximum)))
             maximum = 0
         if arret.wait(liaison.reglages.liaison.periode_ms / 1000):
             return 0
@@ -105,6 +127,44 @@ def envoyer(liaison: LiaisonAccelerometre) -> int:
     reponse = liaison.demander(question_regler(reglages_pour_rp2040(liaison.reglages)))
     print(reponse or "Pas de réponse.")
     return 0 if reponse == "REGLER ok" else 1
+
+
+def ecrire(
+    reglages: ReglagesAccelerometre,
+    ouvrir: Callable[[], PortAccelerometre],
+    fichier: str,
+    attendre_s: float | None,
+    dossier_copies: Path,
+) -> int:
+    try:
+        contenu = Path(fichier).read_bytes()
+    except OSError as erreur:
+        print(f"Fichier illisible : {erreur}")
+        return 1
+
+    def garder(copie: bytes) -> None:
+        try:
+            nom = Fiche.lire(copie).nom
+        except ErreurFichier:
+            nom = "inconnu"
+        chemin = dossier_copies / f"copie-accelerometre-{datetime.now():%Y%m%d-%H%M%S}-{nom}.bin"
+        chemin.write_bytes(copie)
+        print(f"Programme d'avant gardé dans {chemin}")
+
+    if attendre_s:
+        print(
+            f"Couper puis remettre l'alimentation du boîtier maintenant ({attendre_s:g} s) : "
+            "le Pi demande le chargeur pendant ce temps."
+        )
+    try:
+        resultat = ChargeurAccelerometre(reglages, ouvrir).mettre_a_jour(
+            contenu, print, garder, attendre_s
+        )
+    except ErreurChargeur as erreur:
+        print(f"Mise à jour ratée : {erreur}")
+        return 1
+    print(f"Fini : {resultat.message} (avant : {resultat.avant}).")
+    return 0
 
 
 def preparer_port(
@@ -147,6 +207,18 @@ def main(arguments: list[str] | None = None, arret: threading.Event | None = Non
     sous.add_parser("envoyer", help="envoie les réglages de accelerometre.yaml")
     question = sous.add_parser("question", help="pose une question telle quelle")
     question.add_argument("texte", nargs="+", help="exemple : ETAT, ou CHOC 1")
+    sous.add_parser("version", help="le nom et le contrôle du programme du RP2040")
+    mise_a_jour = sous.add_parser("ecrire", help="met le programme à jour par le fil")
+    mise_a_jour.add_argument("fichier", help="accelerometre.bin (fabriqué par GitHub)")
+    mise_a_jour.add_argument(
+        "--attendre",
+        type=float,
+        metavar="S",
+        help="secours : attendre le chargeur S secondes (couper puis remettre l'alimentation)",
+    )
+    mise_a_jour.add_argument(
+        "--copies", default=".", help="dossier où garder le programme d'avant (défaut : ici)"
+    )
     options = lecteur.parse_args(arguments)
 
     configurer_journal()
@@ -160,14 +232,17 @@ def main(arguments: list[str] | None = None, arret: threading.Event | None = Non
     if isinstance(ouvrir, str):
         print(ouvrir)
         return 2
+    if options.action == "ecrire":
+        return ecrire(reglages, ouvrir, options.fichier, options.attendre, Path(options.copies))
     liaison = LiaisonAccelerometre(reglages, ouvrir)
     try:
         if options.action == "etat":
             return montrer_etat(liaison)
         if options.action == "envoyer":
             return envoyer(liaison)
-        if options.action == "question":
-            reponse = liaison.demander(" ".join(options.texte))
+        if options.action in ("question", "version"):
+            texte = "VERSION" if options.action == "version" else " ".join(options.texte)
+            reponse = liaison.demander(texte)
             print(reponse or "Pas de réponse.")
             return 0 if reponse else 1
         try:

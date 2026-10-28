@@ -9,6 +9,7 @@ int main(void) {
     essais_detecteur();
     essais_console();
     essais_liaison();
+    essais_chargeur();
     if (essai_echecs) {
         printf("%d échec(s)\n", essai_echecs);
         return 1;

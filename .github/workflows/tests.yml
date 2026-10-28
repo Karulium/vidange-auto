@@ -65,8 +65,10 @@ jobs:
         run: |
           cmake -S accelerometre -B accelerometre/build -DPICO_SDK_PATH="$PWD/pico-sdk"
           cmake --build accelerometre/build -j 4
-      - name: Programme à télécharger (accelerometre.uf2)
+      - name: Programme à télécharger (accelerometre-complet.uf2 et accelerometre.bin)
         uses: actions/upload-artifact@v4
         with:
           name: accelerometre
-          path: accelerometre/build/accelerometre.uf2
+          path: |
+            accelerometre/build/accelerometre-complet.uf2
+            accelerometre/build/accelerometre.bin

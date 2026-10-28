@@ -18,13 +18,18 @@ et lui envoie ceux de accelerometre.yaml s'ils sont différents (`envoyer_reglag
 Le Pi entend aussi ce qu'il envoie (son TX et son RX sont sur le même fil) : il ne garde que
 la ligne qui répond à sa question. Le RP2040 ne parle jamais sans question.
 
+Pendant une mise à jour du programme du RP2040 (chargeur.py), la liaison prête le fil
+(`preter_le_fil`) : elle se tait et ferme son port. Un RP2040 resté dans son chargeur répond
+« ERREUR chargeur » : c'est dit dans la check-list.
+
 Rien de tout cela ne protège : la sortie « OK » du RP2040 va directement à l'ESP32 n° 1.
 Le Pi enregistre et informe seulement ; un Pi absent ne change rien aux chocs.
 """
 
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Any, Protocol
 
@@ -86,6 +91,7 @@ class LiaisonAccelerometre:
         self.reglages = reglages
         self._liaison = reglages.liaison
         self._ouvrir = ouvrir
+        self.ouvrir = ouvrir  # aussi pour la mise à jour par le chargeur (chargeur.py)
         self._registre = registre
         self._horloge = horloge
         self._heure = heure
@@ -104,6 +110,8 @@ class LiaisonAccelerometre:
         self._reglages_refuses: str | None = None
         self._niveau_max_mg = 0
         self._debut_niveau: float | None = None
+        self.en_chargeur = False  # il répond, mais depuis son chargeur
+        self._fil_prete = False
 
     # ------------------------------------------------------------ questions
 
@@ -161,13 +169,34 @@ class LiaisonAccelerometre:
     def demarrer(self, arret: threading.Event) -> threading.Thread:
         return lancer_boucle("accelerometre", self._liaison.periode_ms / 1000, self.tour, arret)
 
+    @contextmanager
+    def preter_le_fil(self) -> Iterator[None]:
+        """Laisse le fil à la mise à jour : la liaison se tait et ferme son port."""
+        with self._verrou:
+            self._fil_prete = True
+            self.fermer()
+        try:
+            yield
+        finally:
+            with self._verrou:
+                self._fil_prete = False
+                # Le RP2040 a redémarré : on revoit tout (chocs, réglages).
+                self._reglages_a_voir = True
+                self._derniere_ouverture = None
+
     def tour(self) -> None:
         """Demande l'état, note les nouveaux chocs, la vibration, et envoie les réglages."""
         with self._verrou:
+            if self._fil_prete:
+                return
             reponse = self._demander("ETAT")
             if reponse is None:
                 self._silence()
                 return
+            if reponse.startswith("ERREUR chargeur"):
+                self._dans_le_chargeur()
+                return
+            self.en_chargeur = False
             try:
                 etat = EtatRp2040.lire(reponse)
             except ErreurProtocole as erreur:
@@ -188,6 +217,17 @@ class LiaisonAccelerometre:
             journal.warning(
                 "Accéléromètre : il ne répond pas (fil série, alimentation du boîtier ?)"
             )
+
+    def _dans_le_chargeur(self) -> None:
+        self._sans_reponse = 0
+        self._muet_signale = False
+        if not self.en_chargeur:
+            journal.warning(
+                "Accéléromètre : le RP2040 est dans son chargeur (programme absent, ou mise à "
+                "jour pas finie) : « OK » coupé"
+            )
+        self.en_chargeur = True
+        self.etat = None
 
     def _recevoir_etat(self, etat: EtatRp2040) -> None:
         # Le dernier état reçu, même avant un silence : on sait ainsi si le RP2040 a redémarré.
@@ -359,6 +399,18 @@ class LiaisonAccelerometre:
             "Vérifier l'alimentation du boîtier et le fil série (accelerometre/essai-etabli.md), "
             "puis lire le journal. La détection des chocs ne dépend pas du Pi."
         )
+        if self._fil_prete:
+            return [Constat(SUJET, "inconnu", "mise à jour du programme en cours")]
+        if self.en_chargeur:
+            return [
+                Constat(
+                    SUJET,
+                    "attention",
+                    "le RP2040 est dans son chargeur (« OK » coupé)",
+                    "Refaire la mise à jour de l'accéléromètre (page web, Mises à jour). Un "
+                    "programme bon est relancé seul après « chargeur → abandon_s ».",
+                )
+            ]
         if etat is None:
             if self._port is None and self._erreur_ouverture is not None:
                 texte = f"port série fermé ({self._erreur_ouverture})"

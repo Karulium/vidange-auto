@@ -63,6 +63,9 @@ def rediger_entete(reglages: ReglagesAccelerometre) -> str:
         "CHIEN_DE_GARDE_MS": panne.chien_de_garde_ms,
         "PERIODE_AFFICHAGE_MS": reglages.console.periode_affichage_ms,
         "VITESSE_FIL_BAUDS": reglages.liaison.vitesse_bauds,
+        "CHARGEUR_ATTENTE_DEMARRAGE_MS": reglages.chargeur.attente_demarrage_ms,
+        "CHARGEUR_ABANDON_S": reglages.chargeur.abandon_s,
+        "CHARGEUR_CHIEN_DE_GARDE_MS": reglages.chargeur.chien_de_garde_ms,
         "EXEMPLE": int(reglages.exemple),
     }
     lignes = [
