@@ -157,6 +157,13 @@ si l'une pose problème, elle le dit dans sa PR.
   8. Seau commencé quand le fût est vide : gardé tel quel et signalé ; le Remplissage décidera à son gel.
   9. Raclette côté fût (vers −x) quand la tête est bloquée en haut, essuyage du bord côté stockage (mât à +x du
      seau) : confirmé par la fiche ; l'angle exact de A se mesure à l'essai (étape 1).
+- **Réponses aux questions de la PR n° 24** (marges de la tête de griffe) :
+  1. Essuyage du bord du seau : **côté allée** (mât à +y du seau, tête tournée d'un quart de tour,
+     `essuyage → direction_deg: 90`), car à +x la tête toucherait le boîtier de la caméra du bocal (seaux A et B).
+     Le seau tourne, donc tout le bord est essuyé. Demandé au projet mécanique de le vérifier sur la maquette 3D ;
+     si la 3D donne raison à l'essuyage à +x, remettre `direction_deg: 0`.
+  2. Largeur de la tête en travers du bras : **0,085** de chaque côté du mât (déduit de la fiche), modèle en
+     rectangle, gardé en attendant la cote du fil Griffe (demandée avec le rayon balayé godet grand ouvert).
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr

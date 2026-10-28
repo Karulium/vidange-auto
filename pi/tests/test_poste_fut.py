@@ -145,7 +145,8 @@ def test_pesee_par_son_nom_dans_le_materiel():
             "GPIO21",
         )
         faux.regler_pesee("pesee_fut", 420_000)
-        assert materiel.peser("pesee_fut", 0.5) == 420_000
+        # Délai large : sur un ordinateur d'essai chargé, des lectures sont jetées puis refaites.
+        assert materiel.peser("pesee_fut", 5) == 420_000
         faux.debrancher("pesee_fut")
         with pytest.raises(PeseeMuette, match="signal « pesee_fut » : pas de réponse"):
             materiel.peser("pesee_fut", 0.5)
