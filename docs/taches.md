@@ -100,7 +100,66 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
 
 Avant chaque tâche, le projet recopie ici les gestes, positions et règles du module.
 
-- [ ] 17. Poste du fût
+- [ ] **17. Poste du fût** — Modèle : Opus, effort moyen.
+  Sources (recopiées ici le 28/10/2026) : fiche du module « Poste du fût », **validé définitivement le 23/10/2026**,
+  et plan de commande v221 du projet mécanique. Les chiffres vont dans `pi/reglages/machine.yaml` et
+  `docs/entrees-sorties.yaml`, jamais dans le code.
+
+  *Ce qui est à la main (rien ne bouge seul au poste du fût).* Karulium roule le chariot jusqu'aux 2 butées
+  d'angle du fond, freine, branche la prise magnétique de la pesée, enlève la soupape du couvercle (trou bouché),
+  rabat le grand volet du dessus. Le retournement du fût (3 coups de 60° au cliquet, goupille, sangles) se fait
+  **hors de la machine**, sous le pont roulant : dans la machine, le fût est toujours debout.
+
+  *Signaux* (à ajouter à `docs/entrees-sorties.yaml`, marqués `exemple: true` tant que le plan de câblage
+  n'est pas arrivé) :
+  - `chariot_fut_en_place` : détecteur inductif M12, PNP, contact ouvert au repos, 24 V, dans la butée d'angle
+    côté portique ; il voit le bout du châssis à 4 mm quand le chariot est au fond.
+  - `reed_panneau_poste_fut` (existe déjà) : contact fermé = panneau long levé = **production permise** ;
+    ouvert = rabattu ou entre les deux = production refusée, **lavage permis seulement contact ouvert**.
+  - `pesee_fut` : une carte HX711 sur le chariot lit les 2 capteurs de pesage (150/200 kg chacun) ; elle pèse
+    berceau + fût + contenu. Câble de 10 m à prise magnétique (alimentation, DT, SCK) jusqu'au Pi. La prise est
+    souvent débranchée (≈ 800 fois par an, un oubli ne casse rien) : pas de réponse = « pesée débranchée »,
+    jamais une erreur qui arrête le Pi.
+  - `bouton_pret_fut` et son voyant : bouton lumineux « Prêt » (plan de commande). Il n'est pas encore dans la
+    fiche du module : ligne d'exemple ; les boutons « Prêt » de l'écran et de la page web font la même chose.
+  - Il n'y a **pas** de capteur de goupille ni de capteur du volet du dessus : ne pas les inventer.
+
+  *États du poste* (affichés à l'écran et sur la page web) : chariot absent ; chariot en place mais pas prêt ;
+  prêt. « Prêt » = chariot en place + pesée qui répond avec un poids plausible (bornes réglées) + signaux stables
+  depuis 2 s + appui sur « Prêt ». Avant le « Prêt », l'écran rappelle les gestes à la main (liste ci-dessus) ;
+  ce n'est qu'un rappel, rien n'est vérifié par capteur. Voyant du bouton : clignote tant que ce n'est pas prêt.
+  Si un signal tombe pendant la vidange : le mouvement en cours s'arrête, le pont se retire hors de la zone du
+  chariot, alerte. Un verrou du logiciel ne protège que la machine : la sécurité des personnes reste câblée.
+
+  *Zones et positions* (repère du portique, en mètres) :
+  - Centre du fût au poste (0,29 ; 0,57). Ouverture du dessus Ø 0,60 à z 1,07. Fût : Ø intérieur 0,565,
+    profondeur intérieure 0,86, fond intérieur ≈ 0,1825, bord ≈ 1,0425 (le fond est trouvé au toucher par la
+    griffe : tâche 18).
+  - Chariot absent ou en mouvement : pont hors de x 0 à 0,80 (le chariot monte à 1,06, le chariot X du pont
+    descend à 1,11). Tant que « chariot en place » manque, le chariot de remplissage reste au poste ou aux files
+    1 et 2 (bout à y ≤ 0,875), jamais devant la 3e file, pour laisser passer le chariot du fût en biais.
+    Le tiroir du bas du stockage reste rentré pendant l'échange du fût (Stockage pas figé : seulement une
+    condition nommée, case vide).
+  - Griffe : bas de la tête ≥ 1,13 quand elle passe au-dessus de la poignée du volet (x 0,50 à 0,63,
+    y 1,005 à 1,015) ; volet relevé : pas de griffe au-dessus du fût (sans capteur du volet : volet considéré
+    relevé en mode lavage, contact du panneau ouvert ; le dire dans la PR).
+  - Préhension en lavage : pour passer la paroi côté stockage, fond du seau ≥ 0,84 et axe y ≤ 0,86.
+
+  *Pesée* : zéro et étalonnage avec un poids connu (procédure pour Karulium) ; tare « berceau + fût vide » réglée ;
+  poids net du substrat = mesure − tare. Lire seulement quand la griffe n'est pas dans le fût. Au « Prêt » : poids
+  du fût plein dans le registre ; pendant la vidange : poids restant ; à la fin : poids total vidé (alerte « fût
+  vide, nombre de seaux, poids total »). Contrôle : la somme des doses de la griffe doit suivre la baisse de la
+  pesée ; un écart plus grand que le seuil réglé donne un avertissement, pas un arrêt. Les poids partent dans le
+  cycle envoyé au logiciel de culture (`mesures[]`, objet `fut`, voir `docs/django.md`).
+  Lecture du HX711 directement par le Pi : vérifier qu'elle reste fiable (impulsions d'horloge courtes, filtre
+  des valeurs aberrantes) ; si ce n'est pas sûr, le dire dans les questions de la PR.
+
+  *Mode production / lavage* : production seulement contact du panneau fermé, lavage seulement contact ouvert ;
+  entre les deux, le Pi refuse de lancer l'un ou l'autre et dit pourquoi.
+
+  Simulateur : faux chariot, faux panneau, fausse pesée, et un scénario « échange de fût ». Tests.
+  Procédure d'essai sur le vrai matériel (inductif, reed, pesée et étalonnage, prise débranchée) ;
+  « testé sur le vrai matériel : non ».
 - [ ] 18. Griffe (transfert fût vers seau)
 - [ ] 19. Mycélium (dosage)
 - [ ] 20. Porte-bocal
