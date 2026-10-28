@@ -25,3 +25,4 @@ void essais_lis3dh(void);
 void essais_detecteur(void);
 void essais_console(void);
 void essais_liaison(void);
+void essais_chargeur(void);

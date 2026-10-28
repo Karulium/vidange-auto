@@ -7,6 +7,8 @@
     maj.ecrire_programme("portique", "fluidnc-3.9.5.bin", qui)
     maj.envoyer_reglages("portique", qui)        # fluidnc/portique.yaml
     maj.revenir_carte("portique", None, qui)     # la dernière copie de sa mémoire
+    maj.ecrire_accelerometre("accelerometre-3f2a9c1.bin", qui)   # par le fil série (tâche 16)
+    maj.revenir_accelerometre(None, qui)         # la dernière copie de son programme
     maj.chercher_pi(qui) / maj.installer_pi(qui) / maj.revenir_pi(qui)
     maj.etat()                                   # pour la page web
 
@@ -25,12 +27,21 @@ import os
 import re
 import threading
 from collections.abc import Callable, Mapping
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import Any
 
+from vidange.accelerometre.chargeur import ChargeurAccelerometre, ErreurChargeur
+from vidange.accelerometre.fichier_programme import (
+    ErreurFichier,
+    Fiche,
+    est_programme_accelerometre,
+    lire_fichier,
+)
+from vidange.accelerometre.liaison import LiaisonAccelerometre
 from vidange.chef import Chef
 from vidange.fluidnc import Liaison
 from vidange.fluidnc.ports import ouvrir_port_usb, trouver_port
@@ -47,6 +58,7 @@ journal = donner_journal("mises_a_jour")
 DOSSIER = "mises-a-jour"
 DOSSIER_COPIES = "copies"
 DOSSIER_PROGRAMMES = "programmes"
+DOSSIER_ACCELEROMETRE = "accelerometre"  # dans « copies »
 # États de FluidNC où un axe bouge. « Hold:1 » : pause en train de ralentir ; « Hold:0 » (pause
 # finie, axes arrêtés) ne gêne pas : la pause du chef y met aussi les cartes au repos.
 EN_MOUVEMENT = ("Run", "Jog", "Home", "Hold:1")
@@ -106,6 +118,8 @@ class MisesAJour:
         registre: Registre | None = None,
         pilote: Any = None,
         redemarrer: Callable[[], object] | None = None,
+        accelerometre: ChargeurAccelerometre | None = None,
+        liaison_accelerometre: LiaisonAccelerometre | None = None,
     ) -> None:
         self.reglages = reglages
         self.dossier = dossier
@@ -118,6 +132,9 @@ class MisesAJour:
         # Le pilote à distance (PiloteDistance) : seul « actif » sert ici.
         self.pilote = pilote
         self._redemarrer = redemarrer
+        # Le RP2040 de l'accéléromètre, mis à jour par son fil série (None : pas ici).
+        self.accelerometre = accelerometre
+        self.liaison_accelerometre = liaison_accelerometre
         self._verrou = threading.Lock()
         self._travail: Travail | None = None
         self._dernier: Travail | None = None
@@ -171,16 +188,7 @@ class MisesAJour:
             key=lambda f: f.stat().st_mtime,
             reverse=True,
         )
-        return [
-            {
-                "nom": f.name,
-                "taille": f.stat().st_size,
-                "quand": datetime.fromtimestamp(f.stat().st_mtime)
-                .astimezone()
-                .isoformat(timespec="seconds"),
-            }
-            for f in fichiers
-        ]
+        return [{**_decrire_fichier(f), "pour": _pour_quelle_carte(f)} for f in fichiers]
 
     def etat(self) -> dict[str, Any]:
         travail, dernier = self._travail, self._dernier
@@ -206,6 +214,9 @@ class MisesAJour:
             ],
             "programmes": self.programmes(),
             "pi": pi,
+            "accelerometre": None
+            if self.accelerometre is None
+            else {"copies": self.copies_accelerometre()},
         }
 
     # ------------------------------------------------------------ fichiers de programme
@@ -217,7 +228,13 @@ class MisesAJour:
                 f"nom de fichier refusé « {nom} » : lettres, chiffres, « . », « - », « _ », "
                 "et finir par « .bin »"
             )
-        verifier_contenu_programme(nom, contenu, self.reglages.cartes)
+        if est_programme_accelerometre(contenu):
+            try:
+                lire_fichier(contenu)
+            except ErreurFichier as erreur:
+                raise ErreurMiseAJour(f"« {nom} » : {erreur}") from None
+        else:
+            verifier_contenu_programme(nom, contenu, self.reglages.cartes)
         dossier = self.dossier / DOSSIER_PROGRAMMES
         dossier.mkdir(parents=True, exist_ok=True)
         provisoire = dossier / f"{nom}.provisoire"
@@ -382,6 +399,87 @@ class MisesAJour:
             lambda etape: esp32.revenir(nom_copie, etape),
         )
 
+    # ------------------------------------------------------------ accéléromètre (RP2040)
+
+    def _dossier_accelerometre(self) -> Path:
+        return self.dossier / DOSSIER_COPIES / DOSSIER_ACCELEROMETRE
+
+    def copies_accelerometre(self) -> list[dict[str, Any]]:
+        """Les copies du programme de l'accéléromètre (une avant chaque changement)."""
+        dossier = self._dossier_accelerometre()
+        fichiers = sorted(
+            (f for f in dossier.glob("*.bin") if f.is_file()),
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,
+        )
+        copies = []
+        for fichier in fichiers:
+            try:
+                version = Fiche.lire(fichier.read_bytes()).nom
+            except (OSError, ErreurFichier):
+                version = None
+            copies.append({**_decrire_fichier(fichier), "version": version})
+        return copies
+
+    def _garder_copie_accelerometre(self, contenu: bytes) -> None:
+        dossier = self._dossier_accelerometre()
+        dossier.mkdir(parents=True, exist_ok=True)
+        nom = f"{datetime.now():%Y%m%d-%H%M%S}-{Fiche.lire(contenu).nom}.bin"
+        provisoire = dossier / f"{nom}.provisoire"
+        provisoire.write_bytes(contenu)
+        os.replace(provisoire, dossier / nom)
+        for vieille in self.copies_accelerometre()[self.reglages.cartes.copies_gardees :]:
+            (dossier / vieille["nom"]).unlink(missing_ok=True)
+
+    def _changer_accelerometre(self, quoi: str, qui: str, chemin: Path) -> None:
+        if self.accelerometre is None:
+            raise ErreurMiseAJour("pas d'accéléromètre à mettre à jour ici")
+        chargeur = self.accelerometre
+        liaison = self.liaison_accelerometre
+
+        def faire(etape: Callable[[str], None]) -> str:
+            try:
+                contenu = chemin.read_bytes()
+            except OSError as erreur:
+                raise ErreurMiseAJour(f"fichier illisible : {erreur}") from None
+            with liaison.preter_le_fil() if liaison is not None else nullcontext():
+                etape("Liaison ordinaire avec l'accéléromètre arrêtée")
+                try:
+                    resultat = chargeur.mettre_a_jour(
+                        contenu, etape, self._garder_copie_accelerometre
+                    )
+                except ErreurChargeur as erreur:
+                    raise ErreurMiseAJour(f"accéléromètre : {erreur}") from None
+            etape(
+                "« OK » a été coupé pendant la mise à jour : la carte FluidNC n° 1 est sans doute "
+                "en alarme, la débloquer sur place"
+            )
+            self._noter(
+                qui, "accéléromètre", "programme", resultat.avant, resultat.apres, resultat.message
+            )
+            return resultat.message
+
+        self._lancer(quoi, qui, faire)
+
+    def ecrire_accelerometre(self, fichier: str, qui: str) -> None:
+        chemin = self.dossier / DOSSIER_PROGRAMMES / fichier
+        if not NOM_PROGRAMME.match(fichier) or not chemin.is_file():
+            raise ErreurMiseAJour(f"pas de fichier de programme « {fichier} » sur le Pi")
+        if _pour_quelle_carte(chemin) != "accelerometre":
+            raise ErreurMiseAJour(f"« {fichier} » n'est pas un programme de l'accéléromètre")
+        self._changer_accelerometre(f"programme « {fichier} » → accéléromètre", qui, chemin)
+
+    def revenir_accelerometre(self, copie: str | None, qui: str) -> None:
+        copies = [c["nom"] for c in self.copies_accelerometre()]
+        if not copies or (copie is not None and copie not in copies):
+            raise ErreurMiseAJour(f"pas de copie « {copie or 'récente'} » de l'accéléromètre")
+        nom_copie = copie or copies[0]
+        self._changer_accelerometre(
+            f"accéléromètre : retour à la copie {nom_copie}",
+            qui,
+            self._dossier_accelerometre() / nom_copie,
+        )
+
     # ------------------------------------------------------------ programme du Pi
 
     def _le_pi(self) -> ProgrammePi:
@@ -428,3 +526,22 @@ class MisesAJour:
             "retour à la version d'avant du programme du Pi",
             lambda: self._le_pi().revenir(qui),
         )
+
+
+def _decrire_fichier(fichier: Path) -> dict[str, Any]:
+    etat = fichier.stat()
+    return {
+        "nom": fichier.name,
+        "taille": etat.st_size,
+        "quand": datetime.fromtimestamp(etat.st_mtime).astimezone().isoformat(timespec="seconds"),
+    }
+
+
+def _pour_quelle_carte(fichier: Path) -> str:
+    """« accelerometre » (programme du RP2040) ou « esp32 »."""
+    try:
+        with fichier.open("rb") as f:
+            debut = f.read(4)
+    except OSError:
+        return "esp32"
+    return "accelerometre" if est_programme_accelerometre(debut) else "esp32"

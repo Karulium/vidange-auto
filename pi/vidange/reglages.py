@@ -768,6 +768,19 @@ class LiaisonAccelerometre(Modele):
         return self
 
 
+class ChargeurAccelerometre(Modele):
+    """Le chargeur du RP2040 : mise à jour du programme par le fil série (tâche 16)."""
+
+    # Dans le chargeur (le réinstaller par l'USB pour les changer).
+    attente_demarrage_ms: int = Field(ge=50, le=5000)
+    abandon_s: int = Field(ge=5, le=3600)
+    chien_de_garde_ms: int = Field(ge=1000, le=8000)
+    # Côté Pi.
+    attente_ecriture_ms: int = Field(ge=100, le=10000)
+    redemarrage_s: float = Field(gt=0, le=60)
+    essais: int = Field(ge=1, le=20)
+
+
 class ReglagesAccelerometre(Modele):
     """accelerometre.yaml : le programme du RP2040 qui surveille les chocs du chariot Z."""
 
@@ -780,6 +793,7 @@ class ReglagesAccelerometre(Modele):
     panne: PanneAccelerometre
     console: ConsoleAccelerometre
     liaison: LiaisonAccelerometre
+    chargeur: ChargeurAccelerometre
 
     @model_validator(mode="after")
     def _verifier_ensemble(self) -> "ReglagesAccelerometre":

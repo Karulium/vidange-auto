@@ -170,16 +170,18 @@
       <div id="maj-etat"></div>
       <h2>Programme du Pi</h2>
       <div id="maj-pi"></div>
-      <h2>Cartes ESP32 (FluidNC)</h2>
+      <h2>Cartes ESP32 (FluidNC) et accéléromètre</h2>
       <div class="carte">
         <strong>Envoyer un programme au Pi</strong>
-        <p class="doux">Le fichier « firmware.bin » d'une version de FluidNC, renommé avec sa version
-          (exemple : « fluidnc-3.9.5.bin »). Il est seulement gardé sur le Pi : on choisit ensuite
-          la carte où l'écrire.</p>
+        <p class="doux">Pour une carte ESP32 : le fichier « firmware.bin » d'une version de FluidNC,
+          renommé avec sa version (exemple : « fluidnc-3.9.5.bin »). Pour l'accéléromètre : le
+          fichier « accelerometre.bin » fabriqué par GitHub. Il est seulement gardé sur le Pi : on
+          choisit ensuite où l'écrire.</p>
         <input id="maj-fichier" type="file" accept=".bin">
         <button id="maj-envoyer" class="petit">Envoyer au Pi</button>
       </div>
       <div id="maj-cartes"></div>
+      <div id="maj-accelerometre"></div>
     </section>
 
     <p class="doux">Version <span id="version">?</span> ·
@@ -848,14 +850,17 @@ function afficherMaj(etat) {
   }
 
   // Cartes.
+  const pourEsp32 = etat.programmes.filter((p) => p.pour !== "accelerometre");
+  const pourAccelerometre = etat.programmes.filter((p) => p.pour === "accelerometre");
+  const listeProgrammes = (programmes) => el("select", {}, ...programmes.map((p) =>
+    el("option", { value: p.nom }, p.nom + " (" + Math.round(p.taille / 1024) + " ko, " + heure(p.quand) + ")")));
   remplir("maj-cartes", ...etat.cartes.map((c) => {
-    const choix = el("select", {}, ...etat.programmes.map((p) =>
-      el("option", { value: p.nom }, p.nom + " (" + Math.round(p.taille / 1024) + " ko, " + heure(p.quand) + ")")));
+    const choix = listeProgrammes(pourEsp32);
     return el("div", { classe: "carte" },
       el("strong", {}, "Carte « " + c.nom + " »"),
-      el("div", {}, etat.programmes.length ? choix : el("span", { classe: "doux" }, "Aucun programme envoyé au Pi."),
+      el("div", {}, pourEsp32.length ? choix : el("span", { classe: "doux" }, "Aucun programme envoyé au Pi."),
         " ",
-        etat.programmes.length > 0 && el("button", { classe: "petit", disabled: libre ? null : "",
+        pourEsp32.length > 0 && el("button", { classe: "petit", disabled: libre ? null : "",
           surclick: () => ordreMaj("/api/mises-a-jour/cartes/" + c.nom + "/programme", { fichier: choix.value },
             "Écrire « " + choix.value + " » dans la carte « " + c.nom + " » ? Sa mémoire est d'abord copiée sur le Pi (plusieurs minutes en tout).") },
           "Écrire ce programme")),
@@ -872,6 +877,29 @@ function afficherMaj(etat) {
             "Remettre dans la carte « " + c.nom + " » sa mémoire du " + heure(copie.quand) + " ?") },
           "Revenir à cette copie"))));
   }));
+
+  // Accéléromètre (RP2040), par son fil série.
+  const acc = etat.accelerometre;
+  if (!acc) { remplir("maj-accelerometre"); return; }
+  const choixAcc = listeProgrammes(pourAccelerometre);
+  remplir("maj-accelerometre", el("div", { classe: "carte" },
+    el("strong", {}, "Accéléromètre (RP2040, par son fil série)"),
+    el("p", { classe: "doux" }, "Environ une minute. « OK » est coupé pendant ce temps : la carte FluidNC n° 1 "
+      + "se met en alarme, à débloquer sur place après."),
+    el("div", {}, pourAccelerometre.length ? choixAcc
+        : el("span", { classe: "doux" }, "Aucun programme de l'accéléromètre envoyé au Pi."),
+      " ",
+      pourAccelerometre.length > 0 && el("button", { classe: "petit", disabled: libre ? null : "",
+        surclick: () => ordreMaj("/api/mises-a-jour/accelerometre/programme", { fichier: choixAcc.value },
+          "Écrire « " + choixAcc.value + " » dans l'accéléromètre ? Son programme actuel est d'abord copié sur le Pi.") },
+        "Écrire ce programme")),
+    el("div", { classe: "doux" }, acc.copies.length ? "Copies de son programme sur le Pi :" : "Aucune copie de son programme sur le Pi."),
+    ...acc.copies.map((copie) => el("div", {},
+      heure(copie.quand) + " — version " + (copie.version || "inconnue") + " ",
+      el("button", { classe: "petit", disabled: libre ? null : "",
+        surclick: () => ordreMaj("/api/mises-a-jour/accelerometre/revenir", { copie: copie.nom },
+          "Remettre dans l'accéléromètre son programme du " + heure(copie.quand) + " ?") },
+        "Revenir à cette copie")))));
 }
 
 $("maj-envoyer").addEventListener("click", async () => {

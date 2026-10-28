@@ -92,7 +92,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   Mesures vers le Pi, réglages vers le RP2040 (half-duplex, voir `docs/decisions.md`). Côté Pi : lecture et
   enregistrement des chocs. Procédure d'essai à l'établi.
 
-- [ ] **16. Accéléromètre, partie 3 : chargeur série et mise à jour depuis le Pi** — Modèle : Opus.
+- [x] **16. Accéléromètre, partie 3 : chargeur série et mise à jour depuis le Pi** — Modèle : Opus.
   Petit chargeur maison (le RP2040 n'en a pas d'origine), installé une fois à l'établi par USB ; mise à jour
   par la liaison un seul fil ; secours par USB-C. Procédure d'essai à l'établi.
 

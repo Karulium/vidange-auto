@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from vidange import __version__
+from vidange.accelerometre.chargeur import ChargeurAccelerometre
 from vidange.accelerometre.liaison import SIGNAL as SIGNAL_ACCELEROMETRE
 from vidange.accelerometre.liaison import LiaisonAccelerometre, PortAccelerometre
 from vidange.accelerometre.liaison import ouvrir_port as ouvrir_port_accelerometre
@@ -443,6 +444,9 @@ def principal(
             dossier_maj,
             jeton_github.get_secret_value() if jeton_github else None,
         )
+    accelerometre = preparer_accelerometre(
+        reglages, entrees_sorties, raccords.accelerometre, registre
+    )
     mises_a_jour = MisesAJour(
         reglages.programme.mises_a_jour,
         dossier_maj,
@@ -454,6 +458,10 @@ def principal(
         registre,
         pilote,
         redemarrer=lambda: demander_arret(RAISON_MISE_A_JOUR),
+        accelerometre=None
+        if accelerometre is None
+        else ChargeurAccelerometre(reglages.accelerometre, accelerometre.ouvrir),
+        liaison_accelerometre=accelerometre,
     )
     # Le fil des bilans s'arrête après le chef : il finit les bilans des dernières alarmes.
     arret_bilans = threading.Event()
@@ -461,9 +469,6 @@ def principal(
     serveur: ServeurApi | None = None
     mode = ModeMachine(dossier_donnees / NOM_MODE, chef, registre)
     liaison_ecran = preparer_ecran(reglages, entrees_sorties, raccords.ecran)
-    accelerometre = preparer_accelerometre(
-        reglages, entrees_sorties, raccords.accelerometre, registre
-    )
     # L'écran s'arrête en premier, comme l'API : plus d'ordre pendant l'arrêt.
     arret_ecran = threading.Event()
     fil_ecran: threading.Thread | None = None

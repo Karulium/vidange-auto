@@ -4,12 +4,15 @@
 // Cœur 1 : la liaison avec le Pi (fil série unique) et la fenêtre texte sur l'USB (essais à
 // l'établi). S'il se bloque, la mesure continue.
 //
+// Le programme est lancé par le chargeur (chargeur.c), qui est au début de la flash.
+//
 // Sécurité positive : la sortie « OK » est à 3,3 V seulement quand le détecteur le dit.
 // Au démarrage, pendant un redémarrage par le chien de garde ou sans courant, la broche
 // n'est pas commandée : une résistance de tirage vers la masse doit alors la tenir à 0 V
 // (voir accelerometre/essai-etabli.md).
 #include <stdio.h>
 
+#include "chargeur_protocole.h"
 #include "console.h"
 #include "detecteur.h"
 #include "hardware/gpio.h"
@@ -40,6 +43,7 @@ static int reponse_demande;          // 1 : accepté, -1 : refusé, 0 : pas enco
 static volatile bool essai_chien;    // le cœur 1 demande de figer le cœur 0
 static bool redemarre_par_chien;     // ce démarrage vient du chien de garde
 static char message_reglages[96];   // réglages faux : pourquoi
+static bool vers_le_chargeur;        // le Pi demande le chargeur (cœur 1)
 
 // --------------------------------------------------------------- bus I2C
 
@@ -231,7 +235,29 @@ static bool regler_pour_le_pi(void *contexte, const reglages_t *nouveaux, char *
     return true;
 }
 
-static const liaison_programme_t pour_le_pi = {lire_pour_le_pi, regler_pour_le_pi, NULL};
+static void chargeur_pour_le_pi(void *contexte) {
+    (void)contexte;
+    vers_le_chargeur = true;
+}
+
+// Redémarre dans le chargeur (pour une mise à jour par le fil) : « OK » coupé jusqu'au retour.
+static void __attribute__((noreturn)) aller_au_chargeur(void) {
+    gpio_put(REGLAGE_BROCHE_SORTIE_OK, 0);
+    watchdog_hw->scratch[0] = CHARGEUR_MAGIE;
+    watchdog_hw->scratch[1] = ~CHARGEUR_MAGIE;
+    watchdog_reboot(0, 0, 0);
+    for (;;) {
+        tight_loop_contents();
+    }
+}
+
+static const liaison_programme_t pour_le_pi = {
+    .lire = lire_pour_le_pi,
+    .regler = regler_pour_le_pi,
+    .vers_chargeur = chargeur_pour_le_pi,
+    .contexte = NULL,
+    .fiche = (const uint8_t *)PLAN_ADRESSE_FICHE,
+};
 
 static void ecouter_le_pi(liaison_lecteur_t *lecteur) {
     uint8_t octet;
@@ -242,6 +268,9 @@ static void ecouter_le_pi(liaison_lecteur_t *lecteur) {
             size_t n = liaison_repondre(question, &pour_le_pi, reponse, sizeof reponse);
             if (n > 0) {
                 un_fil_envoyer(reponse, n);
+            }
+            if (vers_le_chargeur) {
+                aller_au_chargeur();
             }
         }
     }

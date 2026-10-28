@@ -3,10 +3,7 @@
 // Le Pi pose une question, le RP2040 répond ; le RP2040 ne parle jamais sans question.
 // Ainsi les deux ne parlent jamais en même temps sur le fil.
 //
-// Une trame = une ligne de texte, avec à la fin un « * », le contrôle CRC-16 du texte
-// (4 chiffres hexadécimaux) et un retour à la ligne :
-//   « ETAT*F09B\n »
-// Une question au CRC faux (fil abîmé, parasite) est oubliée sans réponse : le Pi redemande.
+// Les trames (une ligne de texte avec son contrôle CRC-16) sont dans liaison_trame.h.
 //
 // Questions du Pi et réponses (temps en ms depuis le démarrage du RP2040, forces en mg) :
 //   ETAT        → ETAT t_ms=… ok=1 choc=0 pannes=0 vues=0 max_mg=… chocs=… perdues=… chien=0
@@ -16,6 +13,11 @@
 //   REGLAGES    → REGLAGES pleine_echelle_g=8 mesures_par_seconde=400 axes=yz seuil_mg=1500 …
 //   REGLER pleine_echelle_g=8 … (tous les réglages de REGLAGES)
 //               → REGLER ok        ou    REGLER refuse <pourquoi>
+//   VERSION     → VERSION nom=3f2a9c1 taille=… crc=…   (la fiche du programme, en flash)
+//                 VERSION fiche=absente
+//   CHARGEUR    → CHARGEUR redemarre   puis le RP2040 redémarre dans son chargeur, pour une
+//                 mise à jour par le fil (chargeur_protocole.h). « OK » est coupé jusqu'au
+//                 retour du programme.
 //   autre       → ERREUR commande inconnue
 //
 // Ce fichier ne touche à aucun matériel : il est essayé sur PC (et le Pi a le même en Python,
@@ -28,28 +30,11 @@
 
 #include "console.h"
 #include "detecteur.h"
+#include "liaison_trame.h"
 #include "reglages.h"
 
-// Plus longue trame (texte, contrôle et fin de ligne compris).
+// Plus longue trame du programme (texte, contrôle et fin de ligne compris).
 #define LIAISON_LIGNE_MAX 256
-
-// Contrôle CRC-16 (CCITT : polynôme 0x1021, départ 0xFFFF) du texte.
-uint16_t liaison_crc(const char *texte, size_t n);
-
-// Écrit la trame du texte (texte, « * », contrôle, « \n »). Rend sa longueur (0 : trop longue).
-size_t liaison_trame(const char *texte, char *trame, size_t taille);
-
-// Assemble les octets reçus en lignes.
-typedef struct {
-    char texte[LIAISON_LIGNE_MAX];
-    size_t n;
-    bool trop_longue;
-    uint32_t refusees;  // lignes oubliées (CRC faux, mal formées, trop longues)
-} liaison_lecteur_t;
-
-// Ajoute un octet reçu. Rend true quand une question complète, au contrôle bon, est prête :
-// son texte (sans le contrôle) est alors dans « question ».
-bool liaison_recevoir(liaison_lecteur_t *l, uint8_t octet, char *question, size_t taille);
 
 // Ce que le Pi peut savoir.
 typedef struct {
@@ -67,7 +52,11 @@ typedef struct {
     void (*lire)(void *contexte, liaison_donnees_t *donnees, bool remettre_max);
     // Applique les réglages envoyés par le Pi. false (et « message ») s'ils sont refusés.
     bool (*regler)(void *contexte, const reglages_t *reglages, char *message, size_t taille);
+    // Le Pi demande le chargeur : le programme y passe après avoir envoyé la réponse.
+    void (*vers_chargeur)(void *contexte);
     void *contexte;
+    // La fiche du programme (FICHE_TAILLE octets, dans la flash), ou NULL.
+    const uint8_t *fiche;
 } liaison_programme_t;
 
 // Répond à une question : écrit la trame de la réponse dans « reponse », rend sa longueur.

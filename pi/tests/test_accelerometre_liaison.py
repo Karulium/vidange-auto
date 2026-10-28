@@ -93,7 +93,7 @@ def test_le_decodeur_assemble_les_morceaux_et_refuse_les_lignes_abimees():
     assert decodeur.ajouter(octets[:3]) == []
     assert decodeur.ajouter(octets[3:]) == ["ETAT", "CHOC 1"]
     assert decodeur.refusees == 1
-    assert decodeur.ajouter(b"x" * 300) == []
+    assert decodeur.ajouter(b"x" * 600) == []
     assert decodeur.refusees == 2
 
 
