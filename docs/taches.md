@@ -246,10 +246,11 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   (tâche 21), le bain et le garage UV des têtes (Nettoyage, pas figé : position nommée vide), le remplissage des
   bocaux par l'entonnoir (avec l'Entonnoir, pas figé), l'ordre des variétés dans un fût (tâche 23).
 
-  *Capteur de force* : FluidNC ne sait pas lire un HX711. Le chemin de la mesure jusqu'au Pi n'est pas encore
-  fixé par le projet mécanique (le plan de câblage l'envoie vers la carte n° 1) : écrire la lecture derrière une
-  interface simple (comme la pesée du fût), la tester avec une fausse pesée, et le dire dans les questions de la
-  PR. Contact : lecture rapide (80 mesures/s) pendant les descentes ; le Pi arrête la descente (feed hold) dès
+  *Capteur de force* : FluidNC ne sait pas lire un HX711. Choix du projet mécanique (28/10, voir
+  `docs/decisions.md`) : une petite carte RP2040 près du HX711 de la griffe le lit et répond sur un bus RS485
+  dédié aux pesées (`rs485_pesee`), que le Pi interroge. Côté Pi dans cette tâche : la lecture derrière une
+  interface simple, testée avec une fausse pesée ; le programme de la carte RP2040 est une tâche à part
+  (ajoutée en Partie 2). Contact : lecture rapide (80 mesures/s) pendant les descentes ; le Pi arrête la descente (feed hold) dès
   que la charge baisse. Choc (force inattendue pendant un trajet) : arrêt immédiat de Z et du pont, remontée
   lente, alerte avec photo.
 
@@ -261,6 +262,11 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 - [ ] 20. Porte-bocal
 - [ ] 21. Lavage
 - [ ] 22. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage
+- [ ] 22 bis. Cartes de pesée RS485 (RP2040 + HX711) : griffe, préhension, plateau du remplissage — Modèle : Opus.
+  Programme C (Pico SDK, comme l'accéléromètre) : lecture du HX711 en 3,3 V, jusqu'à 80 mesures/s, réponse sur le
+  bus RS485 `rs485_pesee` quand le Pi l'interroge (une adresse par carte, contrôle CRC), mise à jour depuis le Pi
+  si c'est simple. Côté Pi : lecture des 3 cartes à tour de rôle, 115 200 bauds, adaptateur USB-RS485 reconnu par
+  son numéro de série. Procédure d'essai à l'établi ; « testé sur le vrai matériel : non ».
 - [ ] 23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi
 
 ## Partie 3 : fonctions en plus, voir `docs/fonctionnalites.md`

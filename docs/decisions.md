@@ -127,6 +127,13 @@ si l'une pose problème, elle le dit dans sa PR.
   3. Panneau du poste : **un seul contact** gardé (contact ouvert et stable = lavage permis) ; un 2ᵉ contact
      « panneau rabattu » seulement si le projet mécanique le juge utile.
   4. Poids plausible au « Prêt » : 20 à 400 kg (berceau + fût + contenu), à resserrer après les premières pesées.
+- **Lecture des pesées embarquées** (projet mécanique, fil Implantation, 28/10/2026) : FluidNC ne lit pas le
+  HX711. Une carte RP2040 près de chaque HX711 embarqué (griffe, préhension, plateau du remplissage) lit le HX711
+  en 3,3 V et répond sur un **bus RS485 dédié aux pesées**, relié au Pi par un 2ᵉ adaptateur USB-RS485
+  (`rs485_pesee`, FT232 ou CP2102N, reconnu par son numéro de série), séparé du Modbus des transmetteurs d'ozone.
+  Les fils DT et SCK des câbles deviennent A et B du bus. Le Pi interroge les 3 cartes à tour de rôle, à
+  115 200 bauds ; protocole libre (au choix du logiciel). La griffe doit tenir 80 mesures/s. La pesée du chariot
+  du fût reste en direct sur 2 GPIO du Pi (tâche 17). Cahier CDC-PESEE-485 du projet mécanique.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
