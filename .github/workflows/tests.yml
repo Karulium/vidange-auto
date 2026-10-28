@@ -28,3 +28,45 @@ jobs:
         run: pytest
       - name: Vérification des réglages du dépôt
         run: vidange --verifier
+
+  # Programme du RP2040 de l'accéléromètre : essais sur PC, puis fabrication du vrai programme.
+  accelerometre:
+    runs-on: ubuntu-latest
+    env:
+      PICO_SDK_VERSION: "2.1.1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installation
+        run: |
+          # Lecture et vérification de pi/reglages/accelerometre.yaml (par le code du Pi).
+          pip install "pydantic>=2.5,<3" "PyYAML>=6.0,<7"
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
+      - name: Essais sur PC
+        run: |
+          cmake -S accelerometre/tests -B accelerometre/build-essais
+          cmake --build accelerometre/build-essais
+          ctest --test-dir accelerometre/build-essais --output-on-failure
+      - name: Pico SDK (gardé d'une fois sur l'autre)
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: pico-sdk
+          key: pico-sdk-${{ env.PICO_SDK_VERSION }}
+      - name: Téléchargement du Pico SDK
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 -b "$PICO_SDK_VERSION" https://github.com/raspberrypi/pico-sdk.git
+          git -C pico-sdk submodule update --init --depth 1 lib/tinyusb
+      - name: Fabrication du programme du RP2040
+        run: |
+          cmake -S accelerometre -B accelerometre/build -DPICO_SDK_PATH="$PWD/pico-sdk"
+          cmake --build accelerometre/build -j 4
+      - name: Programme à télécharger (accelerometre.uf2)
+        uses: actions/upload-artifact@v4
+        with:
+          name: accelerometre
+          path: accelerometre/build/accelerometre.uf2

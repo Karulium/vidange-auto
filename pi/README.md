@@ -54,11 +54,13 @@ Pas encore de vrai module de la machine.
 | `vidange/cameras/` | Caméras : vidéo lue depuis une commande (MJPEG), mémoire tournante, clips des alarmes, fausse caméra |
 | `vidange/distance/` | Pilotage manuel à distance : homme mort, vitesse plafond, voyant-buzzer, priorité à l'armoire, journal |
 | `vidange/mises_a_jour/` | Mises à jour : cartes ESP32 (esptool, console FluidNC, copies de la mémoire), programme du Pi (git), fausse carte ; commande `vidange-maj` |
+| `vidange/accelerometre/` | Accéléromètre du chariot Z : copie de `accelerometre.yaml` dans le programme du RP2040 (`accelerometre/`) |
 | `vidange/mode.py` | Mode de la machine (production, lavage, UV-ozone), gardé dans un fichier, changé machine au repos |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) |
 | `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran, caméras, pilotage à distance, mises à jour) |
 | `reglages/fluidnc.yaml` | Cartes FluidNC (numéro de série USB) et réglages de leur liaison |
 | `reglages/simulateur.yaml` | Machine imaginaire du simulateur : vitesses des axes, délai du Go, capteurs qui changent (**exemple**) |
+| `reglages/accelerometre.yaml` | Accéléromètre (RP2040 + LIS3DH) : carte, broches, seuil de choc, pannes (**exemple**) |
 | `secrets.exemple.yaml` | Modèle **vide** du fichier de secrets |
 | `systeme/vidange.service` | Service qui démarre avec le Pi et se relance s'il plante |
 | `systeme/installation.md` | Installation sur le Pi, pas à pas |

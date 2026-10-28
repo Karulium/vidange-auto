@@ -306,6 +306,11 @@ def principal(
             "programme.yaml : les commandes des caméras sont des EXEMPLES (cameras → exemple) : "
             "les vérifier sur le vrai Pi (pi/systeme/essai-distance.md)."
         )
+    if reglages.accelerometre.exemple:
+        journal.warning(
+            "accelerometre.yaml contient des valeurs d'EXEMPLE (exemple: true) : carte, broches "
+            "et seuil de choc à choisir à l'essai (accelerometre/essai-etabli.md)."
+        )
     exemples = entrees_sorties.exemples()
     if exemples:
         journal.warning(
