@@ -7,3 +7,8 @@ Les fichiers de réglages des cartes arrivent avec les tâches des modules (voir
 Côté Pi, la liaison avec ces cartes est dans `pi/vidange/fluidnc/` ; chaque carte y est reconnue par le numéro
 de série de son USB, écrit dans `pi/reglages/fluidnc.yaml`.
 Essai de la liaison sur une vraie carte, pas à pas : [`essai-liaison.md`](essai-liaison.md).
+
+Le Pi met à jour le programme et les réglages des cartes par leur câble USB (tâche 13, page web → « Mises à
+jour ») : le fichier `fluidnc/<carte>.yaml` devient `config.yaml` dans la carte. Avant chaque changement, toute
+la mémoire de la carte est copiée sur le Pi pour pouvoir revenir en arrière. Essai :
+[`pi/systeme/essai-mises-a-jour.md`](../pi/systeme/essai-mises-a-jour.md).

@@ -190,3 +190,34 @@ distance:
   voyant_apres_s: 10
   # Mode à distance sans mouvement depuis ce temps (min) : il se termine seul.
   inactivite_max_min: 15
+
+# Mises à jour (tâche 13), lancées depuis la page web (onglet « Mises à jour »), seulement
+# machine à l'arrêt. Essai pas à pas : pi/systeme/essai-mises-a-jour.md.
+mises_a_jour:
+  # Cartes ESP32 (FluidNC), par leur câble USB. Avant chaque changement, toute la mémoire de
+  # la carte (programme + réglages) est copiée sur le Pi : c'est elle qu'on remet pour revenir
+  # en arrière. Après chaque changement, la carte doit répondre ; sinon, la copie est remise.
+  cartes:
+    # Vitesse de l'USB pendant l'écriture (esptool). Si l'écriture échoue : essayer 460800.
+    vitesse_bauds: 921600
+    # Adresse du programme dans la mémoire de la carte : 0x10000 pour FluidNC (et pour un
+    # programme PlatformIO ordinaire). Ne pas changer sans savoir.
+    adresse_programme: 0x10000
+    # Nom du fichier de réglages de FluidNC dans la carte.
+    fichier_reglages: config.yaml
+    # Copies de la mémoire gardées par carte (environ 4 à 16 Mo chacune).
+    copies_gardees: 5
+    # Programmes (.bin) envoyés par la page web : on garde les derniers.
+    programmes_gardes: 5
+    taille_max_mo: 8
+    # Lecture ou écriture de toute la mémoire (s), au plus.
+    duree_max_esptool_s: 600
+    # Réponse de la carte à une ligne (s), et délai pour redémarrer et répondre (s).
+    delai_commande_s: 5
+    delai_reponse_s: 30
+  # Programme du Pi : les versions acceptées sur la branche « main » de GitHub.
+  pi:
+    depot: origin
+    branche: main
+    # Chaque étape (téléchargement, installation, vérification) dure au plus (s).
+    duree_max_s: 900

@@ -109,6 +109,7 @@
       <button data-vue="video">Vidéo</button>
       <button data-vue="photos">Photos</button>
       <button data-vue="checklist">Check-list</button>
+      <button data-vue="maj">Mises à jour</button>
     </nav>
   </header>
 
@@ -163,6 +164,22 @@
     <section id="vue-checklist">
       <button id="bouton-checklist" class="petit">Refaire la check-list</button>
       <div id="constats"></div>
+    </section>
+
+    <section id="vue-maj">
+      <div id="maj-etat"></div>
+      <h2>Programme du Pi</h2>
+      <div id="maj-pi"></div>
+      <h2>Cartes ESP32 (FluidNC)</h2>
+      <div class="carte">
+        <strong>Envoyer un programme au Pi</strong>
+        <p class="doux">Le fichier « firmware.bin » d'une version de FluidNC, renommé avec sa version
+          (exemple : « fluidnc-3.9.5.bin »). Il est seulement gardé sur le Pi : on choisit ensuite
+          la carte où l'écrire.</p>
+        <input id="maj-fichier" type="file" accept=".bin">
+        <button id="maj-envoyer" class="petit">Envoyer au Pi</button>
+      </div>
+      <div id="maj-cartes"></div>
     </section>
 
     <p class="doux">Version <span id="version">?</span> ·
@@ -278,6 +295,7 @@ function montrer(nom) {
   if (nom === "photos") chargerPhotos(true);
   if (nom === "video") ouvrirVideo(); else fermerVideo();
   if (nom === "checklist") chargerChecklist();
+  if (nom === "maj") chargerMaj(); else clearTimeout(minuterieMaj);
 }
 
 // ------------------------------------------------------------ état
@@ -287,7 +305,9 @@ let minuterie = null;
 
 function bandeau(etat) {
   const b = $("bandeau");
-  if (etat.distance) {
+  if (etat.mise_a_jour) {
+    b.className = "bleu"; b.textContent = "MISE À JOUR en cours (machine en pause)";
+  } else if (etat.distance) {
     b.className = "bleu"; b.textContent = "PILOTAGE À DISTANCE en cours (machine en pause)";
   } else if (etat.alarmes_ouvertes.length || etat.modules.some((m) => m.statut === "alarme")) {
     b.className = "rouge"; b.textContent = "ALARME : voir ci-dessous quoi faire";
@@ -744,6 +764,129 @@ async function chargerChecklist() {
   } catch (erreur) { if (!(erreur instanceof Refus)) remplir("constats", el("div", { classe: "carte alarme" }, erreur.message)); }
 }
 $("bouton-checklist").addEventListener("click", chargerChecklist);
+
+// ------------------------------------------------------------ mises à jour
+
+let minuterieMaj = null;
+
+async function chargerMaj() {
+  clearTimeout(minuterieMaj);
+  if (vue !== "maj") return;
+  try {
+    afficherMaj(await lire("/api/mises-a-jour"));
+  } catch (erreur) {
+    if (erreur instanceof Refus) return;
+    // Pendant le redémarrage du programme, le Pi ne répond plus un moment.
+    remplir("maj-etat", el("div", { classe: "carte attention" },
+      "Le Pi ne répond pas (le programme redémarre ?) : nouvel essai dans 2 s… (" + erreur.message + ")"));
+  }
+  minuterieMaj = setTimeout(chargerMaj, 2000);
+}
+
+async function ordreMaj(chemin, corps, question) {
+  if (question && !confirm(question)) return;
+  try {
+    await api(chemin, {
+      method: "POST",
+      headers: corps ? { "Content-Type": "application/json" } : {},
+      body: corps ? JSON.stringify(corps) : undefined,
+    });
+    dire("Lancé : suivre les étapes en haut de la page.", "vert");
+  } catch (erreur) {
+    if (!(erreur instanceof Refus)) dire("Refusé : " + erreur.message, "rouge");
+  }
+  chargerMaj();
+}
+
+function carteTravail(t, titre) {
+  const couleur = t.reussi === null ? "attention" : (t.reussi ? "ok" : "alarme");
+  return el("div", { classe: "carte " + couleur },
+    el("strong", {}, titre + " : " + t.quoi),
+    el("div", { classe: "doux" }, "par " + t.qui + ", " + heure(t.debut) + (t.fin ? " → " + heure(t.fin) : "")),
+    el("ol", {}, ...t.etapes.map((e) => el("li", {}, e))),
+    t.message && el("div", { classe: "quoi" }, el("strong", {}, t.reussi ? "Réussi : " : "Raté : "), t.message));
+}
+
+function afficherMaj(etat) {
+  const libre = etat.refus === null;
+  const occupe = etat.en_cours !== null;
+  remplir("maj-etat",
+    occupe ? carteTravail(etat.en_cours, "En cours")
+      : el("div", { classe: "carte " + (libre ? "ok" : "attention") },
+          libre ? "Machine à l'arrêt : les mises à jour sont possibles. Elles mettent la machine en pause."
+            : "Mises à jour impossibles maintenant : " + etat.refus + "."),
+    etat.dernier && carteTravail(etat.dernier, "Dernière mise à jour"));
+
+  // Programme du Pi.
+  const pi = etat.pi;
+  if (!pi) {
+    remplir("maj-pi", el("p", { classe: "doux" }, "Pas de mise à jour du programme du Pi ici."));
+  } else {
+    const v = pi.version;
+    const nouvelles = pi.nouvelles || [];
+    remplir("maj-pi", el("div", { classe: "carte" },
+      v.erreur ? el("div", {}, "Version installée illisible : " + v.erreur)
+        : el("div", {}, "Version installée : ", el("strong", {}, v.court), " du " + heure(v.date) + " — " + v.titre),
+      pi.avant && el("div", { classe: "doux" }, "Version d'avant : " + pi.avant.avant.slice(0, 7) +
+        " (mise à jour du " + heure(pi.avant.quand) + ")"),
+      pi.nouvelles === null ? el("div", { classe: "doux" }, "Pas encore cherché de nouvelle version.")
+        : nouvelles.length === 0 ? el("div", {}, "Le programme est à jour.")
+        : el("div", {}, el("strong", {}, nouvelles.length + " changement(s) acceptés sur « main » :"),
+            el("ul", {}, ...nouvelles.map((n) => el("li", {}, n.court + " du " + heure(n.date) + " — " + n.titre)))),
+      el("button", { classe: "petit", disabled: occupe ? "" : null,
+        surclick: () => ordreMaj("/api/mises-a-jour/pi/chercher") }, "Chercher une nouvelle version"),
+      " ",
+      nouvelles.length > 0 && el("button", { classe: "petit", disabled: libre ? null : "",
+        surclick: () => ordreMaj("/api/mises-a-jour/pi/installer", null,
+          "Installer la nouvelle version du programme du Pi ? Le programme redémarre ensuite (1 minute environ).") },
+        "Installer"),
+      " ",
+      pi.avant && el("button", { classe: "petit", disabled: libre ? null : "",
+        surclick: () => ordreMaj("/api/mises-a-jour/pi/revenir", null,
+          "Revenir à la version d'avant du programme du Pi ? Le programme redémarre ensuite.") },
+        "Revenir à la version d'avant")));
+  }
+
+  // Cartes.
+  remplir("maj-cartes", ...etat.cartes.map((c) => {
+    const choix = el("select", {}, ...etat.programmes.map((p) =>
+      el("option", { value: p.nom }, p.nom + " (" + Math.round(p.taille / 1024) + " ko, " + heure(p.quand) + ")")));
+    return el("div", { classe: "carte" },
+      el("strong", {}, "Carte « " + c.nom + " »"),
+      el("div", {}, etat.programmes.length ? choix : el("span", { classe: "doux" }, "Aucun programme envoyé au Pi."),
+        " ",
+        etat.programmes.length > 0 && el("button", { classe: "petit", disabled: libre ? null : "",
+          surclick: () => ordreMaj("/api/mises-a-jour/cartes/" + c.nom + "/programme", { fichier: choix.value },
+            "Écrire « " + choix.value + " » dans la carte « " + c.nom + " » ? Sa mémoire est d'abord copiée sur le Pi (plusieurs minutes en tout).") },
+          "Écrire ce programme")),
+      el("div", {}, el("button", { classe: "petit", disabled: libre && c.reglages ? null : "",
+        surclick: () => ordreMaj("/api/mises-a-jour/cartes/" + c.nom + "/reglages", null,
+          "Envoyer « " + c.fichier_reglages + " » à la carte « " + c.nom + " » ? Elle redémarre ensuite.") },
+        "Envoyer ses réglages (" + c.fichier_reglages + ")"),
+        !c.reglages && el("span", { classe: "doux" }, " pas encore de fichier dans le dépôt")),
+      el("div", { classe: "doux" }, c.copies.length ? "Copies de sa mémoire sur le Pi :" : "Aucune copie de sa mémoire sur le Pi."),
+      ...c.copies.map((copie) => el("div", {},
+        heure(copie.quand) + " — " + copie.raison + " (version " + (copie.version || "inconnue") + ") ",
+        el("button", { classe: "petit", disabled: libre ? null : "",
+          surclick: () => ordreMaj("/api/mises-a-jour/cartes/" + c.nom + "/revenir", { copie: copie.nom },
+            "Remettre dans la carte « " + c.nom + " » sa mémoire du " + heure(copie.quand) + " ?") },
+          "Revenir à cette copie"))));
+  }));
+}
+
+$("maj-envoyer").addEventListener("click", async () => {
+  const fichier = $("maj-fichier").files[0];
+  if (!fichier) { dire("Choisir d'abord un fichier .bin", "rouge"); return; }
+  try {
+    await api("/api/mises-a-jour/programmes?nom=" + encodeURIComponent(fichier.name), {
+      method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: fichier,
+    });
+    dire("Programme reçu par le Pi.", "vert");
+  } catch (erreur) {
+    if (!(erreur instanceof Refus)) dire("Refusé : " + erreur.message, "rouge");
+  }
+  chargerMaj();
+});
 
 // ------------------------------------------------------------ départ
 

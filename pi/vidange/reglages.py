@@ -482,6 +482,53 @@ class ReglagesDistance(Modele):
         return self
 
 
+class ReglagesMajCartes(Modele):
+    """Mises à jour des cartes ESP32 par leur câble USB (esptool, et la console de FluidNC)."""
+
+    # Vitesse de la liaison USB pendant l'écriture (esptool).
+    vitesse_bauds: int = Field(gt=0)
+    # Adresse du programme dans la mémoire de la carte.
+    adresse_programme: int = Field(ge=0)
+    # Nom du fichier de réglages de FluidNC dans la carte.
+    fichier_reglages: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_.-]+$")]
+    # Copies complètes de la mémoire gardées par carte (une avant chaque changement).
+    copies_gardees: int = Field(ge=1)
+    # Fichiers de programme envoyés par la page web, gardés sur le Pi.
+    programmes_gardes: int = Field(ge=1)
+    taille_max_mo: float = Field(gt=0)
+    # Durée maximale d'une lecture ou d'une écriture de toute la mémoire (esptool).
+    duree_max_esptool_s: float = Field(gt=0)
+    # Réponse d'une ligne de la console de FluidNC, au plus.
+    delai_commande_s: float = Field(gt=0)
+    # Après un changement, la carte doit redémarrer et répondre dans ce délai.
+    delai_reponse_s: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier_delais(self) -> "ReglagesMajCartes":
+        if self.delai_reponse_s < self.delai_commande_s:
+            raise ValueError(
+                f"delai_reponse_s ({self.delai_reponse_s:g} s) doit valoir au moins "
+                f"delai_commande_s ({self.delai_commande_s:g} s)"
+            )
+        return self
+
+
+class ReglagesMajPi(Modele):
+    """Mise à jour du programme du Pi depuis GitHub (versions acceptées par Karulium)."""
+
+    depot: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
+    branche: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
+    # Durée maximale de chaque commande (téléchargement, installation, vérification).
+    duree_max_s: float = Field(gt=0)
+
+
+class ReglagesMisesAJour(Modele):
+    """Mises à jour (tâche 13), seulement machine à l'arrêt."""
+
+    cartes: ReglagesMajCartes
+    pi: ReglagesMajPi
+
+
 class Programme(Modele):
     """programme.yaml : réglages du programme lui-même (pas de la machine)."""
 
@@ -494,6 +541,7 @@ class Programme(Modele):
     envois: ReglagesEnvois
     cameras: ReglagesCameras
     distance: ReglagesDistance
+    mises_a_jour: ReglagesMisesAJour
 
     @model_validator(mode="after")
     def _verifier_video(self) -> "Programme":

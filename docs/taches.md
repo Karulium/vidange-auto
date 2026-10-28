@@ -80,7 +80,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   priorité à l'armoire, journal des actions, **voyant-buzzer sur place avant et pendant tout mouvement lancé
   à distance** (49). Tests avec le faux FluidNC (coupure de connexion simulée).
 
-- [ ] **13. Mises à jour des cartes ESP32 et du Pi** — Modèle : Sonnet.
+- [x] **13. Mises à jour des cartes ESP32 et du Pi** — Modèle : Sonnet.
   Mise à jour des ESP32 par USB depuis le Pi (esptool), envoi des réglages FluidNC, retour à l'ancienne version,
   vérification après mise à jour ; mise à jour du programme du Pi depuis `main`. Seulement machine à l'arrêt.
   Lancement depuis la page web.

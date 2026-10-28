@@ -25,6 +25,9 @@ class Secrets(Modele):
     cle_api: SecretStr | None = Field(default=None)
     # Jeton du logiciel de culture (Django REST Framework, « Token ») pour lui envoyer les cycles.
     jeton_culture: SecretStr | None = Field(default=None)
+    # Jeton GitHub en lecture seule, pour la mise à jour du programme du Pi (tâche 13) quand le
+    # dépôt est privé.
+    jeton_github: SecretStr | None = Field(default=None)
 
     @field_validator("*", mode="before")
     @classmethod

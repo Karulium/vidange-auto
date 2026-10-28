@@ -161,6 +161,7 @@ Essai de la page web (téléphone, Tailscale) : voir `essai-page-web.md`.
 Essai de l'écran de l'armoire (câblage, UART n° 2 du Pi 5) : voir `essai-ecran.md`.
 Essai de la file d'envoi (copie à la maison, coupure du réseau) : voir `essai-envois.md`.
 Essai des caméras et du pilotage à distance (voyant-buzzer, homme mort) : voir `essai-distance.md`.
+Essai des mises à jour (cartes ESP32, programme du Pi) : voir `essai-mises-a-jour.md`.
 
 Cocher chaque essai réussi.
 
@@ -174,11 +175,12 @@ Cocher chaque essai réussi.
 - [ ] **Arrêt propre** : `sudo systemctl stop vidange`, le journal finit par « Arrêt demandé : arrêt propre. »
 - [ ] **Sans réseau** : débrancher le réseau, redémarrer le Pi : le service démarre quand même.
 
-## Mettre à jour plus tard (en attendant la tâche 13)
+## 11. Mises à jour (cartes ESP32 et programme du Pi)
 
-```
-sudo systemctl stop vidange
-cd /opt/vidange-auto && sudo -u vidange git pull
-sudo -u vidange pi/.venv/bin/pip install -e pi
-sudo systemctl start vidange
-```
+Elles se lancent depuis la page web, onglet « Mises à jour », seulement machine à l'arrêt : le programme du
+Pi depuis les versions acceptées sur `main`, le programme et les réglages des cartes FluidNC par leur câble
+USB. Si le dépôt GitHub est privé, mettre un jeton en lecture seule dans `jeton_github` du fichier de secrets.
+Essai pas à pas et secours : voir `essai-mises-a-jour.md`.
+
+À la main (programme arrêté), la même chose existe en ligne de commande : `vidange-maj` (voir son aide :
+`/opt/vidange-auto/pi/.venv/bin/vidange-maj --help`).

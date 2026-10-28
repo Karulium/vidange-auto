@@ -88,6 +88,13 @@ si l'une pose problème, elle le dit dans sa PR.
 - **Prise d'origine obligatoire à la mise sous tension** : les réglages de chaque carte FluidNC (dossier `fluidnc/`)
   gardent `start: must_home: true`. Une carte qui n'a pas fait sa prise d'origine reste en alarme : aucun
   déplacement manuel à distance ne peut partir d'une position fausse (et `$X` est interdit à distance).
+- **Réponses aux questions de la PR n° 15** (mises à jour) :
+  1. Le dépôt est privé : le Pi recevra un **jeton GitHub en lecture seule, limité à ce dépôt** (`jeton_github`
+     dans le fichier de secrets, jamais dans Git), créé avec Karulium à l'installation du Pi.
+  2. Pas de vérification des tests GitHub avant d'installer `main` pour l'instant (`main` ne reçoit que des PR au
+     vert, et le Pi revérifie ses réglages avant de redémarrer).
+  3. **Même version de FluidNC sur les 4 cartes**, variante **« noradio »** (les cartes parlent au Pi par USB ;
+     pas de Wi-Fi ouvert sur la machine). La version est notée à la première installation.
 - **Préhension figée** (27/10/2026) : capteur inductif M8 24 V ; capteur de vide sur l'ADS1115 **en 3,3 V**
   (pas de pont diviseur) ; pour poser ou prendre un bocal sur le porte-bocal, la tête est orientée à ± 3°
   (grâce aux méplats) et ne tourne pas entre les mors.
