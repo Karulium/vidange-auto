@@ -4,7 +4,8 @@ Paquet Python `vidange` (Python 3.11, comme Raspberry Pi OS Bookworm).
 Pour l'instant : démarrage, réglages et liste des entrées/sorties vérifiés, journal, secrets, liaison avec les cartes FluidNC (et faux FluidNC), entrées/sorties du Pi par leur nom (et faux capteurs), chef d'orchestre (moteur d'étapes) avec un module d'exemple, registre (base SQLite) avec copie de secours quotidienne, fiabilité (chien de garde, check-list de démarrage,
 reprise après coupure et retour en lieu sûr, arrêt propre sur onduleur, bilan de chaque alarme, santé du Pi),
 API et page web locale (état, alarmes, Go, Pause, historique, photos), simulateur de cycle (jumeau, version 0),
-vidéos des caméras (en direct et clips des alarmes) et pilotage manuel à distance avec ses garde-fous.
+vidéos des caméras (en direct et clips des alarmes) et pilotage manuel à distance avec ses garde-fous,
+mises à jour des cartes ESP32 (par USB) et du programme du Pi (depuis `main`), lancées depuis la page web.
 Pas encore de vrai module de la machine.
 
 ## Ce qu'il y a ici
@@ -52,9 +53,10 @@ Pas encore de vrai module de la machine.
 | `vidange/ecran/` | Écran Nextion de l'armoire : protocole série, liaison, pages et boutons, faux écran pour les tests |
 | `vidange/cameras/` | Caméras : vidéo lue depuis une commande (MJPEG), mémoire tournante, clips des alarmes, fausse caméra |
 | `vidange/distance/` | Pilotage manuel à distance : homme mort, vitesse plafond, voyant-buzzer, priorité à l'armoire, journal |
+| `vidange/mises_a_jour/` | Mises à jour : cartes ESP32 (esptool, console FluidNC, copies de la mémoire), programme du Pi (git), fausse carte ; commande `vidange-maj` |
 | `vidange/mode.py` | Mode de la machine (production, lavage, UV-ozone), gardé dans un fichier, changé machine au repos |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) |
-| `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran, caméras, pilotage à distance) |
+| `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran, caméras, pilotage à distance, mises à jour) |
 | `reglages/fluidnc.yaml` | Cartes FluidNC (numéro de série USB) et réglages de leur liaison |
 | `reglages/simulateur.yaml` | Machine imaginaire du simulateur : vitesses des axes, délai du Go, capteurs qui changent (**exemple**) |
 | `secrets.exemple.yaml` | Modèle **vide** du fichier de secrets |

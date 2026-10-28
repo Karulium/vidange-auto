@@ -14,7 +14,8 @@ Les ordres (Go, Pause, Reprise, acquittement) passent par le chef d'orchestre, c
 l'écran de l'armoire : l'API ne commande jamais un axe elle-même. Chaque ordre est noté au
 journal avec l'adresse d'où il vient. Le pilotage à distance (tâche 12) passe par le pilote
 (vidange/distance), qui a ses propres garde-fous ; pendant ce pilotage, Go et Reprise sont
-refusés.
+refusés. Les mises à jour (tâche 13) passent par MisesAJour (vidange/mises_a_jour) : seulement
+machine à l'arrêt ; pendant une mise à jour, Go, Reprise et pilotage à distance sont refusés.
 """
 
 import hmac
@@ -35,6 +36,7 @@ from vidange.chef import Chef, ErreurChef
 from vidange.distance import ErreurDistance, PiloteDistance
 from vidange.fiabilite.constats import Constat, pire
 from vidange.journal import donner_journal
+from vidange.mises_a_jour import ErreurMiseAJour, MisesAJour
 from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import ReglagesApi
 
@@ -57,6 +59,8 @@ class Services:
     # Vidéos et clips (None : pas de caméras), pilotage à distance (None : pas de pilote).
     cameras: Cameras | None = None
     pilote: PiloteDistance | None = None
+    # Mises à jour des cartes et du Pi (None : pas de mises à jour).
+    mises_a_jour: MisesAJour | None = None
 
 
 class Tenir(BaseModel):
@@ -66,6 +70,18 @@ class Tenir(BaseModel):
     sens: int
     camera: str
     image: int
+
+
+class ChoixProgramme(BaseModel):
+    """Le fichier de programme (déjà envoyé au Pi) à écrire dans une carte."""
+
+    fichier: str
+
+
+class ChoixCopie(BaseModel):
+    """La copie de la mémoire à remettre (None : la plus récente)."""
+
+    copie: str | None = None
 
 
 def _adresse(requete: Request) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
@@ -93,6 +109,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
     app = FastAPI(title="Vidange automatique", docs_url=None, redoc_url=None, openapi_url=None)
     chef, registre = services.chef, services.registre
     cameras, pilote = services.cameras, services.pilote
+    mises_a_jour = services.mises_a_jour
     reseaux = list(reglages.reseaux_autorises)
     cle_attendue = cle.encode()
 
@@ -122,6 +139,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
     @app.exception_handler(ErreurChef)
     @app.exception_handler(ErreurRegistre)
     @app.exception_handler(ErreurDistance)
+    @app.exception_handler(ErreurMiseAJour)
     async def refus(_: Request, erreur: Exception) -> JSONResponse:
         # Un ordre impossible maintenant (pas de Go attendu, alarme déjà acquittée...).
         return JSONResponse({"detail": str(erreur)}, status_code=409)
@@ -148,6 +166,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             "alarmes_ouvertes": registre.alarmes_ouvertes(),
             "rafraichir_s": reglages.rafraichir_s,
             "distance": pilote is not None and pilote.actif,
+            "mise_a_jour": mises_a_jour is not None and mises_a_jour.en_cours,
         }
 
     @app.get("/api/checklist", dependencies=protege)
@@ -170,6 +189,11 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
     def pas_pendant_le_pilotage(ordre: str) -> None:
         if pilote is not None and pilote.actif:
             raise ErreurDistance(f"{ordre} refusé : quitter d'abord le pilotage à distance")
+        pas_pendant_la_mise_a_jour(ordre)
+
+    def pas_pendant_la_mise_a_jour(ordre: str) -> None:
+        if mises_a_jour is not None and mises_a_jour.en_cours:
+            raise ErreurMiseAJour(f"{ordre} refusé : une mise à jour est en cours")
 
     @app.post("/api/reprendre", dependencies=protege)
     def reprendre(requete: Request) -> dict[str, Any]:
@@ -377,6 +401,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
 
     @app.post("/api/distance/activer", dependencies=protege)
     def activer(requete: Request) -> dict[str, Any]:
+        pas_pendant_la_mise_a_jour("Pilotage à distance")
         le_pilote().activer(_qui(requete))
         return le_pilote().etat()
 
@@ -405,5 +430,58 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             "SELECT * FROM actions_distance WHERE (? IS NULL OR id < ?) ORDER BY id DESC LIMIT ?",
             (avant, avant, limiter(limite)),
         )
+
+    # ------------------------------------------------------------ mises à jour
+
+    def les_mises_a_jour() -> MisesAJour:
+        if mises_a_jour is None:
+            raise HTTPException(404, "pas de mises à jour sur ce programme")
+        return mises_a_jour
+
+    @app.get("/api/mises-a-jour", dependencies=protege)
+    def etat_mises_a_jour() -> dict[str, Any]:
+        return les_mises_a_jour().etat()
+
+    @app.post("/api/mises-a-jour/programmes", dependencies=protege)
+    async def recevoir_programme(nom: str, requete: Request) -> dict[str, Any]:
+        """Un fichier de programme (.bin) envoyé tel quel dans le corps de la requête."""
+        maj = les_mises_a_jour()
+        taille_max = int(maj.reglages.cartes.taille_max_mo * 1024 * 1024)
+        annoncee = requete.headers.get("content-length", "")
+        if annoncee.isdigit() and int(annoncee) > taille_max:
+            raise HTTPException(413, f"fichier trop gros (plus de {taille_max} octets)")
+        contenu = await requete.body()
+        journal.info("Programme « %s » envoyé par la %s", nom, _qui(requete))
+        return maj.recevoir_programme(nom, contenu)
+
+    @app.post("/api/mises-a-jour/cartes/{carte}/programme", dependencies=protege)
+    def programme_carte(carte: str, choix: ChoixProgramme, requete: Request) -> dict[str, Any]:
+        les_mises_a_jour().ecrire_programme(carte, choix.fichier, _qui(requete))
+        return les_mises_a_jour().etat()
+
+    @app.post("/api/mises-a-jour/cartes/{carte}/reglages", dependencies=protege)
+    def reglages_carte(carte: str, requete: Request) -> dict[str, Any]:
+        les_mises_a_jour().envoyer_reglages(carte, _qui(requete))
+        return les_mises_a_jour().etat()
+
+    @app.post("/api/mises-a-jour/cartes/{carte}/revenir", dependencies=protege)
+    def revenir_carte(carte: str, choix: ChoixCopie, requete: Request) -> dict[str, Any]:
+        les_mises_a_jour().revenir_carte(carte, choix.copie, _qui(requete))
+        return les_mises_a_jour().etat()
+
+    @app.post("/api/mises-a-jour/pi/chercher", dependencies=protege)
+    def chercher_pi(requete: Request) -> dict[str, Any]:
+        les_mises_a_jour().chercher_pi(_qui(requete))
+        return les_mises_a_jour().etat()
+
+    @app.post("/api/mises-a-jour/pi/installer", dependencies=protege)
+    def installer_pi(requete: Request) -> dict[str, Any]:
+        les_mises_a_jour().installer_pi(_qui(requete))
+        return les_mises_a_jour().etat()
+
+    @app.post("/api/mises-a-jour/pi/revenir", dependencies=protege)
+    def revenir_pi(requete: Request) -> dict[str, Any]:
+        les_mises_a_jour().revenir_pi(_qui(requete))
+        return les_mises_a_jour().etat()
 
     return app

@@ -32,6 +32,10 @@ RestartSec=5
 # Code 2 = réglages faux, code 3 = base du registre abîmée : relancer ne servirait à rien,
 # on attend que Karulium corrige (le journal dit quoi faire).
 RestartPreventExitStatus=2 3
+# Code 4 = programme du Pi mis à jour depuis la page web : ce n'est pas une panne, et systemd
+# relance aussitôt la nouvelle version.
+SuccessExitStatus=4
+RestartForceExitStatus=4
 TimeoutStopSec=30
 
 [Install]

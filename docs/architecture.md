@@ -34,6 +34,7 @@ Chaque morceau peut planter sans faire tomber les autres.
 6. **Liens extérieurs** : vers le logiciel de culture (Django, serveur N97), vers le PC de bureau (calculs lourds, seulement sur demande de Karulium), vers la copie de secours de la maison (tunnel chiffré, aucun port ouvert). Tout passe par une **file d'envoi** : la machine ne dépend jamais du réseau.
 7. **Simulateur** : le même chef d'orchestre tourne contre une machine imaginaire (faux FluidNC, faux capteurs, durées réglables). C'est la base du jumeau numérique et des tests.
 8. **Fiabilité** : chien de garde (systemd relance un programme figé ; les cartes sont surveillées par leur liaison), check-list de démarrage, reprise après coupure (carnet, retour en lieu sûr, Go), arrêt propre sur onduleur, bilan de chaque alarme, santé du Pi.
+9. **Mises à jour**, machine à l'arrêt : cartes ESP32 par leur câble USB (copie de toute leur mémoire avant, vérification après, retour en arrière), programme du Pi depuis les versions acceptées sur `main`.
 
 ## Les fichiers de réglages
 

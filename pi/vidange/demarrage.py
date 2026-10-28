@@ -17,8 +17,10 @@
    tourne quand même, et la check-list le signale), et l'écran de l'armoire. Lance la file
    d'envoi (cycles vers le logiciel de culture, copies vers la maison), les caméras (vidéo en
    direct, clip à chaque alarme) et le pilotage à distance (qui attend qu'on l'active).
+   Prépare les mises à jour (cartes ESP32 et programme du Pi), lancées depuis la page web.
 8. Attend l'ordre d'arrêt, puis arrête tout proprement (machine en pause, état noté). Si l'ordre
-   vient de l'onduleur, éteint le Pi à la fin.
+   vient de l'onduleur, éteint le Pi à la fin. Après une mise à jour du programme du Pi, sort
+   avec le code CODE_REDEMARRER : systemd relance aussitôt le nouveau programme.
 
 Où trouver les fichiers (du plus fort au plus faible) : option de la ligne de
 commande, puis variable d'environnement (posée par le service systemd), puis
@@ -72,6 +74,8 @@ from vidange.fluidnc.ports import Port
 from vidange.journal import NOM_FICHIER, configurer_journal, donner_journal
 from vidange.materiel import Materiel
 from vidange.materiel.materiel import Fabrique
+from vidange.mises_a_jour import DOSSIER as DOSSIER_MISES_A_JOUR
+from vidange.mises_a_jour import CarteEsp32, MisesAJour, ProgrammePi, preparer_cartes
 from vidange.mode import ModeMachine
 from vidange.quoi_faire import COUPURE_COURANT, PLANTAGE
 from vidange.registre import (
@@ -88,6 +92,9 @@ CODE_OK = 0
 CODE_PLANTAGE = 1
 CODE_REGLAGES_FAUX = 2
 CODE_REGISTRE_ABIME = 3
+# Programme du Pi mis à jour : systemd relance (RestartForceExitStatus dans vidange.service).
+CODE_REDEMARRER = 4
+RAISON_MISE_A_JOUR = "mise à jour du programme du Pi"
 
 DOSSIER_PI = Path(__file__).resolve().parent.parent
 NOM_CARNET = "etat-cycle.json"
@@ -116,6 +123,10 @@ class Raccords:
     notifier: Callable[[str], bool] = notifier_systemd
     # Lance une commande du système (extinction du Pi par l'onduleur).
     lancer: Callable[[list[str]], object] = lancer_commande
+    # Cartes ESP32 à mettre à jour ; None : les vraies cartes de fluidnc.yaml.
+    cartes_maj: Mapping[str, CarteEsp32] | None = None
+    # Programme du Pi à mettre à jour ; None : la copie Git où tourne ce programme.
+    programme_pi: ProgrammePi | None = None
 
 
 def _chemin(option: str | None, variable: str, defaut: Path) -> Path:
@@ -378,6 +389,31 @@ def principal(
     gardien = ChienDeGarde(
         fiabilite.chien_de_garde, liaisons, chef, materiel, notifier=raccords.notifier
     )
+    dossier_maj = dossier_donnees / DOSSIER_MISES_A_JOUR
+    cartes_maj = raccords.cartes_maj
+    if cartes_maj is None:
+        cartes_maj = preparer_cartes(reglages, dossier_maj)
+    programme_pi = raccords.programme_pi
+    if programme_pi is None:
+        jeton_github = secrets.jeton_github
+        programme_pi = ProgrammePi(
+            reglages.programme.mises_a_jour.pi,
+            DOSSIER_PI.parent,
+            dossier_maj,
+            jeton_github.get_secret_value() if jeton_github else None,
+        )
+    mises_a_jour = MisesAJour(
+        reglages.programme.mises_a_jour,
+        dossier_maj,
+        cartes_maj,
+        programme_pi,
+        chef,
+        liaisons,
+        DOSSIER_PI.parent / "fluidnc",
+        registre,
+        pilote,
+        redemarrer=lambda: demander_arret(RAISON_MISE_A_JOUR),
+    )
     # Le fil des bilans s'arrête après le chef : il finit les bilans des dernières alarmes.
     arret_bilans = threading.Event()
     fil_bilans = bilans.demarrer(arret_bilans)
@@ -428,6 +464,7 @@ def principal(
                 checklist.verifier,
                 cameras=cameras,
                 pilote=pilote,
+                mises_a_jour=mises_a_jour,
             ),
         )
         if serveur is not None:
@@ -450,6 +487,11 @@ def principal(
         checklist.ecrire_au_journal(checklist.verifier())
         arret.wait()
         journal.info("Arrêt (%s) : arrêt propre.", raison_arret[0])
+        if mises_a_jour.en_cours:
+            journal.error(
+                "Arrêt pendant une mise à jour : vérifier la carte ensuite (page web, "
+                "« Mises à jour »)."
+            )
     finally:
         # Plus d'ordre de la page web ni de l'écran pendant l'arrêt.
         if serveur is not None:
@@ -484,6 +526,9 @@ def principal(
             raccords.lancer(fiabilite.onduleur.commande_arret)
         except Exception as erreur:
             journal.error("Extinction du Pi impossible : %s", erreur)
+    if raison_arret[0] == RAISON_MISE_A_JOUR:
+        journal.warning("Redémarrage du programme (nouvelle version).")
+        return CODE_REDEMARRER
     return CODE_OK
 
 

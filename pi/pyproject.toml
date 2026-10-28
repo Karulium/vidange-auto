@@ -19,6 +19,9 @@ dependencies = [
     # API du Pi et page web locale (tâche 8). uvicorn seul, sans les options « standard ».
     "fastapi>=0.110,<1",
     "uvicorn>=0.30,<1",
+    # Écriture du programme des cartes ESP32 par USB (tâche 13), l'outil officiel d'Espressif.
+    # Lancé à part (« python -m esptool ») : il n'est jamais chargé dans le programme lui-même.
+    "esptool>=5,<6",
 ]
 
 [project.optional-dependencies]
@@ -37,6 +40,7 @@ vidange-es = "vidange.materiel.outil:lancer"
 vidange-registre = "vidange.registre.outil:lancer"
 vidange-envois = "vidange.envois.outil:lancer"
 vidange-simulateur = "vidange.simulateur.outil:lancer"
+vidange-maj = "vidange.mises_a_jour.outil:lancer"
 
 [tool.setuptools.packages.find]
 include = ["vidange*"]

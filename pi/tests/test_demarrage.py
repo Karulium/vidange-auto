@@ -9,6 +9,7 @@ import urllib.request
 from vidange.cameras import FausseCamera
 from vidange.demarrage import (
     CODE_OK,
+    CODE_REDEMARRER,
     CODE_REGISTRE_ABIME,
     CODE_REGLAGES_FAUX,
     Raccords,
@@ -19,11 +20,13 @@ from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.fluidnc import FauxFluidnc
 from vidange.journal import NOM_FICHIER
 from vidange.materiel import FausseFabrique
+from vidange.mises_a_jour import CarteEsp32, FausseCarteEsp32, faux_programme
 from vidange.registre import Registre
 from vidange.reglages import charger_reglages
 
 from .conftest import DOSSIER_PI
 from .test_chef_exemple import attendre
+from .test_maj_gestion import FauxPi
 from .test_reglages import remplacer
 
 
@@ -316,3 +319,85 @@ def test_pilotage_a_distance_puis_l_armoire_reprend_la_main(reglages, entrees_so
     assert not fil.is_alive()
     journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
     assert "Pilotage à distance terminé (écran de l'armoire)" in journal
+
+
+# ---------------------------------------------------------------- tâche 13 : mises à jour
+
+
+def test_le_service_systemd_relance_apres_une_mise_a_jour():
+    service = configparser.ConfigParser(strict=False, interpolation=None)
+    service.optionxform = str
+    service.read(DOSSIER_PI / "systeme" / "vidange.service", encoding="utf-8")
+    assert service["Service"]["RestartForceExitStatus"] == str(CODE_REDEMARRER)
+    assert service["Service"]["SuccessExitStatus"] == str(CODE_REDEMARRER)
+
+
+def test_mise_a_jour_d_une_carte_puis_du_pi_depuis_la_page(reglages, entrees_sorties, tmp_path):
+    with socket.socket() as prise:
+        prise.bind(("127.0.0.1", 0))
+        port = prise.getsockname()[1]
+    remplacer(reglages / "programme.yaml", "adresse: 0.0.0.0", "adresse: 127.0.0.1")
+    remplacer(reglages / "programme.yaml", "port: 8080", f"port: {port}")
+    remplacer(reglages / "programme.yaml", "delai_commande_s: 5", "delai_commande_s: 0.05")
+    remplacer(reglages / "programme.yaml", "delai_reponse_s: 30", "delai_reponse_s: 0.5")
+    secrets = tmp_path / "secrets.yaml"
+    secrets.write_text("cle_api: une-cle-de-test-assez-longue\n", encoding="utf-8")
+    secrets.chmod(0o600)
+    raccords, messages, _ = raccords_faux(entrees_sorties)
+    faux = FausseCarteEsp32()
+    raccords.cartes_maj = {
+        "portique": CarteEsp32(
+            "portique",
+            charger_reglages(reglages).programme.mises_a_jour.cartes,
+            tmp_path / "copies",
+            faux.trouver_port,
+            faux.ouvrir,
+            faux.esptool,
+        )
+    }
+    # Jamais la vraie copie Git du dépôt dans un essai : un faux programme du Pi.
+    raccords.programme_pi = FauxPi()
+    arguments = [*options(reglages, tmp_path), "--entrees-sorties", str(entrees_sorties)]
+    resultat = []
+    arret = threading.Event()
+    fil = threading.Thread(target=lambda: resultat.append(principal(arguments, arret, raccords)))
+    fil.start()
+
+    def demander(chemin: str, methode: str = "GET", corps: bytes | None = None, json_=None):
+        if json_ is not None:
+            corps = json.dumps(json_).encode()
+        demande = urllib.request.Request(
+            f"http://127.0.0.1:{port}{chemin}",
+            data=corps,
+            method=methode,
+            headers={
+                "Authorization": "Bearer une-cle-de-test-assez-longue",
+                "Content-Type": "application/json"
+                if json_ is not None
+                else "application/octet-stream",
+            },
+        )
+        with urllib.request.urlopen(demande, timeout=5) as reponse:
+            return json.loads(reponse.read())
+
+    def dernier():
+        return demander("/api/mises-a-jour")["dernier"]
+
+    try:
+        attendre(lambda: "READY=1" in messages)
+        # Le retour en lieu sûr attend le Go de sa première étape : rien n'a bougé.
+        assert demander("/api/mises-a-jour")["refus"] is None
+        demander("/api/mises-a-jour/programmes?nom=v5.bin", "POST", faux_programme("3.9.5"))
+        demander("/api/mises-a-jour/cartes/portique/programme", "POST", json_={"fichier": "v5.bin"})
+        attendre(lambda: (dernier() or {}).get("reussi") is True)
+        assert faux.version == "3.9.5"
+        # La liaison ordinaire avec la carte est repartie.
+        assert demander("/api/etat")["mise_a_jour"] is False
+        demander("/api/mises-a-jour/pi/installer", "POST")
+        fil.join(10)
+    finally:
+        arret.set()
+        fil.join(10)
+    assert resultat == [CODE_REDEMARRER]
+    journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
+    assert "Redémarrage du programme (nouvelle version)." in journal
