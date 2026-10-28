@@ -88,7 +88,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
 - [x] **14. Accéléromètre (RP2040 + LIS3DH), partie 1 : mesure du choc et signal « OK »** — Modèle : Opus.
   Seuil réglable, sortie « OK » en sécurité positive (coupée sur choc ou panne). Livrer la procédure d'essai à l'établi.
 
-- [ ] **15. Accéléromètre, partie 2 : liaison série un seul fil (PIO)** — Modèle : Opus.
+- [x] **15. Accéléromètre, partie 2 : liaison série un seul fil (PIO)** — Modèle : Opus.
   Mesures vers le Pi, réglages vers le RP2040 (half-duplex, voir `docs/decisions.md`). Côté Pi : lecture et
   enregistrement des chocs. Procédure d'essai à l'établi.
 

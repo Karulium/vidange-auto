@@ -1,0 +1,30 @@
+; Liaison série sur un seul fil (half-duplex) vers le Pi : 8 bits, sans parité, 1 bit d'arrêt.
+; Deux petites machines PIO sur la même broche, 8 temps de machine par bit.
+;
+; Au repos, le fil est en entrée (le RP2040 ne le tient pas) : il reste haut grâce à la
+; résistance de 1 kΩ côté Pi (sortie TX du Pi, haute au repos) et au tirage interne.
+
+.program un_fil_tx
+.side_set 1 opt pindirs
+; Le fil n'est pris (sortie) que le temps d'envoyer un octet.
+    pull block          side 0      ; fil rendu (entrée), on attend un octet
+    set pins, 0         side 1 [6]  ; prend le fil : bit de départ (8 temps avec le suivant)
+    set x, 7
+bits:
+    out pins, 1                [6]  ; un bit de données, le plus faible d'abord
+    jmp x-- bits                    ; (8 temps avec le out)
+    set pins, 1                [7]  ; bit d'arrêt (8 temps), puis le fil est rendu
+
+.program un_fil_rx
+; Attend un bit de départ, lit 8 bits au milieu de chacun, vérifie le bit d'arrêt.
+debut:
+    wait 0 pin 0
+    set x, 7                   [10] ; milieu du premier bit (12 temps avec le wait)
+bits:
+    in pins, 1
+    jmp x-- bits               [6]
+    jmp pin bon                     ; bit d'arrêt à 1 : octet bon
+    wait 1 pin 0                    ; sinon (parasite, fil coupé) : attendre le repos
+    jmp debut                       ; et oublier l'octet
+bon:
+    push

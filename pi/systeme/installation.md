@@ -23,6 +23,13 @@ Chaque commande se tape dans un terminal du Pi (ou par SSH). Ce qui suit `#` est
    ```
    sudo raspi-config nonint do_i2c 0
    ```
+5. Activer les deux liaisons série du Pi (écran Nextion sur GPIO 4/5, fil de l'accéléromètre sur GPIO 14/15) :
+   ajouter ces deux lignes à la fin de `/boot/firmware/config.txt`, puis redémarrer le Pi :
+   ```
+   dtoverlay=uart2-pi5
+   dtparam=uart0=on
+   ```
+   Après le redémarrage, `ls /dev/ttyAMA0 /dev/ttyAMA2` doit montrer les deux.
 
 ## 2. Copier le programme
 

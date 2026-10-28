@@ -8,6 +8,7 @@ int main(void) {
     essais_lis3dh();
     essais_detecteur();
     essais_console();
+    essais_liaison();
     if (essai_echecs) {
         printf("%d échec(s)\n", essai_echecs);
         return 1;

@@ -1,7 +1,9 @@
 # Accéléromètre du chariot Z (RP2040 + LIS3DH) : détection des chocs horizontaux et signal « OK ».
 # Le programme du RP2040 est dans accelerometre/ ; ces réglages y sont copiés quand on le
 # fabrique (voir accelerometre/README.md). Changer une valeur = refabriquer le programme et
-# le recharger dans le RP2040 (plus tard, avec la tâche 15, le Pi les enverra par le fil série).
+# le recharger dans le RP2040 ; ou bien, pour les sections capteur, choc et panne (sauf
+# l'adresse, la vitesse I2C et le chien de garde), le Pi les envoie lui-même par le fil série
+# quand ceux du RP2040 sont différents (voir « liaison » à la fin).
 #
 # Le signal « OK » protège la MACHINE (les chocs), jamais les personnes.
 # Il est en sécurité positive : la sortie est au 3,3 V seulement quand tout va bien ;
@@ -29,6 +31,9 @@ broches:
   i2c_scl: 5
   # Sortie « OK » vers l'ESP32 n° 1 : 3,3 V = OK, 0 V = choc ou panne.
   sortie_ok: 2
+  # Fil série unique vers le Pi (mesures vers le Pi, réglages vers le RP2040).
+  # Côté Pi : le signal « accelerometre_fil » de docs/entrees-sorties.yaml.
+  fil_serie: 0
   # Petit voyant de la carte (allumé = OK, éteint = choc, clignote = panne). null : pas de voyant.
   voyant: 25
 
@@ -75,3 +80,24 @@ panne:
 # Fenêtre texte sur le câble USB (pour les essais à l'établi) : une ligne d'état tous les ... (ms).
 console:
   periode_affichage_ms: 1000
+
+# Liaison série avec le Pi sur un seul fil (half-duplex, accelerometre/src/liaison.h).
+# Le Pi pose une question, le RP2040 répond : ils ne parlent jamais en même temps.
+liaison:
+  # Vitesse du fil (bauds), la même des deux côtés : 9600, 19200, 38400, 57600, 115200 ou 230400.
+  vitesse_bauds: 115200
+  # Le Pi demande l'état (et les nouveaux chocs) toutes les ... (ms).
+  periode_ms: 200
+  # Attente d'une réponse avant de redemander (ms).
+  attente_reponse_ms: 100
+  # Questions sans réponse de suite avant de dire « l'accéléromètre ne répond pas ».
+  sans_reponse_max: 5
+  # Port série du Pi impossible à ouvrir : nouvel essai toutes les ... (s).
+  reconnexion_s: 5
+  # Le Pi note au registre la plus forte vibration mesurée toutes les ... (s), pour aider à
+  # choisir le seuil. 0 : jamais.
+  niveau_max_s: 60
+  # true : le Pi envoie au RP2040 les réglages de ce fichier quand les siens sont différents
+  # (après une modification de ce fichier, ou un seuil changé à la fenêtre USB).
+  # Une autre pleine échelle ou vitesse de mesure coupe « OK » le temps de l'autotest.
+  envoyer_reglages: true

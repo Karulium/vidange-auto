@@ -149,7 +149,7 @@ cartes:
 #     les mêmes broches seulement s'ils sont sur le même type de bus et ont chacun leur adresse.
 #   module : un nom de la liste « modules » ci-dessus.
 #   appareil : pour un bus, l'appareil au bout (obligatoire en i2c) :
-#     sht31, ads1115, pcf8574, mcp23017, transmetteur_modbus, nextion.
+#     sht31, ads1115, pcf8574, mcp23017, transmetteur_modbus, nextion, accelerometre.
 #   fichier : pour un bus sur les broches du Pi, le fichier de Linux qui y donne accès
 #     (I2C des GPIO2/3 : /dev/i2c-1).
 #   unite, conversion : pour une mesure, son unité et deux points « tension lue → valeur »
@@ -166,6 +166,11 @@ cartes:
 # (tâche 9, écran de l'armoire) :
 #   ecran_nextion : liaison série vers l'écran Nextion ; son « fichier » est l'UART du Pi
 #     (GPIO 4/5 = /dev/ttyAMA2, avec « dtoverlay=uart2-pi5 » : voir pi/systeme/essai-ecran.md).
+# (tâche 15, accéléromètre) :
+#   accelerometre_fil : fil série unique vers le RP2040 de l'accéléromètre (half-duplex) ;
+#     TX du Pi par une résistance de 1 kΩ, RX directement, les deux sur le même fil.
+#     Son « fichier » est l'UART du Pi (GPIO 14/15 = /dev/ttyAMA0, avec « dtparam=uart0=on » :
+#     voir accelerometre/essai-etabli.md).
 signaux:
   reed_panneau_poste_fut:
     exemple: true
@@ -266,6 +271,16 @@ signaux:
     module: armoire
     appareil: nextion
     fichier: /dev/ttyAMA2
+  accelerometre_fil:
+    exemple: true
+    description: Fil série unique vers l'accéléromètre du chariot Z (RP2040)
+    carte: pi
+    broche: [GPIO14, GPIO15]
+    type: serie
+    tension: 3.3
+    module: portique
+    appareil: accelerometre
+    fichier: /dev/ttyAMA0
   relais_1_bus:
     exemple: true
     description: Liaison I2C vers la puce PCF8574 de la carte relais n° 1

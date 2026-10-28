@@ -268,6 +268,94 @@ static void changer_le_seuil(void) {
     VERIFIER(b.d.chocs == 0);
 }
 
+static void historique_des_chocs(void) {
+    banc_t b;
+    banc_demarrer(&b, reglages_essai());
+    banc_mesurer(&b, 100, true);
+    choc_t choc;
+    VERIFIER(!detecteur_choc(b.d.historique, b.d.chocs, 1, &choc));  // pas encore arrivé
+    b.mg[1] = 3000;  // choc de 3 g sur y pendant 20 ms
+    banc_mesurer(&b, 20, true);
+    VERIFIER(detecteur_choc(b.d.historique, b.d.chocs, 1, &choc));
+    VERIFIER(choc.numero == 1 && !choc.fini);
+    VERIFIER(choc.pic_mg >= 2990 && choc.pic_mg <= 3010);
+    VERIFIER(choc.duree_ms >= 17 && choc.duree_ms <= 20);
+    VERIFIER(choc.t_debut_us > 1000000);
+    b.mg[1] = 0;
+    banc_mesurer(&b, 600, true);
+    VERIFIER(detecteur_choc(b.d.historique, b.d.chocs, 1, &choc) && choc.fini);
+    VERIFIER(choc.duree_ms >= 17 && choc.duree_ms <= 20);  // la durée du dépassement
+    VERIFIER(!detecteur_choc(b.d.historique, b.d.chocs, 0, &choc));
+    VERIFIER(!detecteur_choc(b.d.historique, b.d.chocs, 2, &choc));
+    // 19 chocs de plus : seuls les 16 derniers restent.
+    for (int i = 0; i < 19; i++) {
+        b.mg[1] = 2000;
+        banc_mesurer(&b, 20, true);
+        b.mg[1] = 0;
+        banc_mesurer(&b, 600, true);
+    }
+    VERIFIER(b.d.chocs == 20);
+    VERIFIER(!detecteur_choc(b.d.historique, b.d.chocs, 4, &choc));
+    VERIFIER(detecteur_choc(b.d.historique, b.d.chocs, 5, &choc) && choc.numero == 5);
+    VERIFIER(detecteur_choc(b.d.historique, b.d.chocs, 20, &choc) && choc.fini);
+}
+
+static void panne_pendant_un_choc(void) {
+    banc_t b;
+    banc_demarrer(&b, reglages_essai());
+    banc_mesurer(&b, 100, true);
+    b.mg[0] = 2500;
+    banc_mesurer(&b, 20, true);
+    VERIFIER(b.d.en_choc);
+    detecteur_verification_faite(&b.d, b.t, PANNE_CAPTEUR);
+    choc_t choc;
+    VERIFIER(!b.d.en_choc);
+    VERIFIER(detecteur_choc(b.d.historique, b.d.chocs, 1, &choc) && choc.fini);
+}
+
+static void changer_les_reglages(void) {
+    banc_t b;
+    banc_demarrer(&b, reglages_essai());
+    banc_mesurer(&b, 100, true);
+    VERIFIER(detecteur_ok(&b.d));
+    // Un autre seuil et un autre maintien : la mesure continue, OK reste donné.
+    reglages_t r = reglages_essai();
+    r.seuil_mg = 2000;
+    r.maintien_ms = 800;
+    VERIFIER(detecteur_changer_reglages(&b.d, &r));
+    VERIFIER(b.d.reglages.seuil_mg == 2000 && b.d.reglages.maintien_ms == 800);
+    VERIFIER(detecteur_ok(&b.d));
+    VERIFIER(!detecteur_verification_due(&b.d, b.t));
+    // Des réglages faux : refusés, rien ne change.
+    r.seuil_mg = 9000;
+    VERIFIER(!detecteur_changer_reglages(&b.d, &r));
+    VERIFIER(b.d.reglages.seuil_mg == 2000);
+    // Une autre pleine échelle : le capteur est revérifié tout de suite.
+    r = reglages_essai();
+    r.pleine_echelle_g = 16;
+    VERIFIER(detecteur_changer_reglages(&b.d, &r));
+    VERIFIER(!detecteur_ok(&b.d));
+    VERIFIER(detecteur_verification_due(&b.d, b.t));
+    detecteur_verification_faite(&b.d, b.t, 0);
+    banc_mesurer(&b, 10, true);
+    VERIFIER(detecteur_ok(&b.d));
+}
+
+static void le_pi_corrige_des_reglages_faux(void) {
+    reglages_t r = reglages_essai();
+    r.seuil_mg = 9000;
+    banc_t b;
+    banc_demarrer(&b, r);
+    VERIFIER(b.d.pannes == PANNE_REGLAGES);
+    r.seuil_mg = 1500;
+    VERIFIER(detecteur_changer_reglages(&b.d, &r));
+    VERIFIER(b.d.pannes == 0);
+    VERIFIER(detecteur_verification_due(&b.d, b.t));
+    detecteur_verification_faite(&b.d, b.t, 0);
+    banc_mesurer(&b, 10, true);
+    VERIFIER(detecteur_ok(&b.d));
+}
+
 void essais_detecteur(void) {
     LANCER(ok_au_repos);
     LANCER(pas_de_ok_avant_la_verification_du_capteur);
@@ -285,4 +373,8 @@ void essais_detecteur(void) {
     LANCER(autotest_rate_puis_reussi);
     LANCER(reglages_faux_jamais_ok);
     LANCER(changer_le_seuil);
+    LANCER(historique_des_chocs);
+    LANCER(panne_pendant_un_choc);
+    LANCER(changer_les_reglages);
+    LANCER(le_pi_corrige_des_reglages_faux);
 }

@@ -41,6 +41,7 @@ vidange-registre = "vidange.registre.outil:lancer"
 vidange-envois = "vidange.envois.outil:lancer"
 vidange-simulateur = "vidange.simulateur.outil:lancer"
 vidange-maj = "vidange.mises_a_jour.outil:lancer"
+vidange-accelerometre = "vidange.accelerometre.outil:lancer"
 
 [tool.setuptools.packages.find]
 include = ["vidange*"]
