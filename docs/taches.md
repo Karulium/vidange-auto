@@ -85,7 +85,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
   vérification après mise à jour ; mise à jour du programme du Pi depuis `main`. Seulement machine à l'arrêt.
   Lancement depuis la page web.
 
-- [ ] **14. Accéléromètre (RP2040 + LIS3DH), partie 1 : mesure du choc et signal « OK »** — Modèle : Opus.
+- [x] **14. Accéléromètre (RP2040 + LIS3DH), partie 1 : mesure du choc et signal « OK »** — Modèle : Opus.
   Seuil réglable, sortie « OK » en sécurité positive (coupée sur choc ou panne). Livrer la procédure d'essai à l'établi.
 
 - [ ] **15. Accéléromètre, partie 2 : liaison série un seul fil (PIO)** — Modèle : Opus.

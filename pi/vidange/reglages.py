@@ -654,6 +654,122 @@ class ReglagesSimulateur(Modele):
     evenements: list[EvenementSimule] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------- accelerometre.yaml
+
+# Broches GPIO du RP2040.
+BrocheRp2040 = Annotated[int, Field(ge=0, le=29)]
+
+
+class BrochesAccelerometre(Modele):
+    i2c_sda: BrocheRp2040
+    i2c_scl: BrocheRp2040
+    sortie_ok: BrocheRp2040
+    voyant: BrocheRp2040 | None = None
+
+    @property
+    def bloc_i2c(self) -> int:
+        """Bloc I2C du RP2040 (0 ou 1) qui sort sur ces broches."""
+        return (self.i2c_sda // 2) % 2
+
+    @model_validator(mode="after")
+    def _verifier_broches(self) -> "BrochesAccelerometre":
+        erreurs = []
+        # Sur le RP2040, la broche n sort le bloc I2C (n // 2) % 2, en SDA si n est pair.
+        if self.i2c_sda % 2 != 0:
+            erreurs.append(f"i2c_sda ({self.i2c_sda}) doit être une broche paire")
+        if self.i2c_scl % 2 != 1:
+            erreurs.append(f"i2c_scl ({self.i2c_scl}) doit être une broche impaire")
+        if not erreurs and (self.i2c_sda // 2) % 2 != (self.i2c_scl // 2) % 2:
+            erreurs.append(
+                f"i2c_sda ({self.i2c_sda}) et i2c_scl ({self.i2c_scl}) ne sont pas du même "
+                "bloc I2C (I2C0 : SDA 0, 4, 8... SCL 1, 5, 9... ; I2C1 : SDA 2, 6, 10... "
+                "SCL 3, 7, 11...)"
+            )
+        deja_vues: dict[int, str] = {}
+        for nom, broche in self.model_dump().items():
+            if broche is None:
+                continue
+            autre = deja_vues.setdefault(broche, nom)
+            if autre != nom:
+                erreurs.append(f"la broche {broche} est prise deux fois ({autre} et {nom})")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class CapteurAccelerometre(Modele):
+    adresse_i2c: Literal[0x18, 0x19]
+    frequence_i2c_hz: Literal[100000, 400000]
+    pleine_echelle_g: Literal[2, 4, 8, 16]
+    mesures_par_seconde: Literal[1, 10, 25, 50, 100, 200, 400, 1344]
+    axes: list[Literal["x", "y", "z"]] = Field(min_length=1, max_length=3)
+
+    @model_validator(mode="after")
+    def _verifier_axes(self) -> "CapteurAccelerometre":
+        if len(set(self.axes)) != len(self.axes):
+            raise ValueError("axes : un axe est écrit deux fois")
+        return self
+
+
+class ChocAccelerometre(Modele):
+    seuil_g: float = Field(gt=0)
+    duree_min_ms: int = Field(ge=0, le=1000)
+    maintien_ms: int = Field(ge=10, le=60000)
+    constante_fond_ms: int = Field(ge=100, le=600000)
+
+
+class PanneAccelerometre(Modele):
+    sans_mesure_ms: int = Field(gt=0, le=10000)
+    erreurs_lecture_max: int = Field(ge=1, le=1000)
+    figee_ms: int = Field(gt=0, le=600000)
+    reessai_ms: int = Field(ge=100, le=600000)
+    # Le chien de garde du RP2040 ne compte pas plus loin que 8,3 s.
+    chien_de_garde_ms: int = Field(ge=10, le=8000)
+
+
+class ConsoleAccelerometre(Modele):
+    periode_affichage_ms: int = Field(ge=100, le=600000)
+
+
+class ReglagesAccelerometre(Modele):
+    """accelerometre.yaml : le programme du RP2040 qui surveille les chocs du chariot Z."""
+
+    exemple: bool = False
+    # Nom de la carte pour le Pico SDK (PICO_BOARD).
+    carte: Nom
+    broches: BrochesAccelerometre
+    capteur: CapteurAccelerometre
+    choc: ChocAccelerometre
+    panne: PanneAccelerometre
+    console: ConsoleAccelerometre
+
+    @model_validator(mode="after")
+    def _verifier_ensemble(self) -> "ReglagesAccelerometre":
+        erreurs = []
+        pleine_echelle = self.capteur.pleine_echelle_g
+        if self.choc.seuil_g >= pleine_echelle:
+            erreurs.append(
+                f"choc → seuil_g ({self.choc.seuil_g:g} g) doit être plus petit que "
+                f"capteur → pleine_echelle_g ({pleine_echelle} g) : le capteur ne mesure pas plus"
+            )
+        periode_ms = 1000 / self.capteur.mesures_par_seconde
+        regles = [
+            ("panne → sans_mesure_ms", self.panne.sans_mesure_ms, 3),
+            ("panne → figee_ms", self.panne.figee_ms, 20),
+            ("choc → constante_fond_ms", self.choc.constante_fond_ms, 10),
+        ]
+        for nom, valeur, fois in regles:
+            if valeur < fois * periode_ms:
+                erreurs.append(
+                    f"{nom} ({valeur} ms) doit valoir au moins {fois} fois le temps entre deux "
+                    f"mesures ({periode_ms:g} ms avec {self.capteur.mesures_par_seconde} "
+                    "mesures par seconde)"
+                )
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 # --------------------------------------------------------------- l'ensemble
 
 
@@ -662,6 +778,7 @@ class Reglages(Modele):
     programme: Programme
     fluidnc: Fluidnc
     simulateur: ReglagesSimulateur
+    accelerometre: ReglagesAccelerometre
 
 
 # Nom du fichier → (nom dans Reglages, modèle). Ajouter ici chaque nouveau fichier.
@@ -670,6 +787,7 @@ FICHIERS: dict[str, tuple[str, type[Modele]]] = {
     "programme.yaml": ("programme", Programme),
     "fluidnc.yaml": ("fluidnc", Fluidnc),
     "simulateur.yaml": ("simulateur", ReglagesSimulateur),
+    "accelerometre.yaml": ("accelerometre", ReglagesAccelerometre),
 }
 
 

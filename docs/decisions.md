@@ -95,6 +95,20 @@ si l'une pose problème, elle le dit dans sa PR.
      vert, et le Pi revérifie ses réglages avant de redémarrer).
   3. **Même version de FluidNC sur les 4 cartes**, variante **« noradio »** (les cartes parlent au Pi par USB ;
      pas de Wi-Fi ouvert sur la machine). La version est notée à la première installation.
+- **Réponses aux questions de la PR n° 16** (accéléromètre, partie 1) :
+  1. Carte : **Waveshare RP2040-Zero** (déjà choisie par Karulium le 13/10, projet mécanique). À l'essai à l'établi,
+     mettre `carte: waveshare_rp2040_zero` et `voyant: null` dans `pi/reglages/accelerometre.yaml`.
+  2. Signal « OK » vers l'ESP32 n° 1 (réponse du fil Portique, 28/10/2026) : dans le boîtier, un optocoupleur
+     PC817 (sa LED sur la sortie du RP2040 par 220 Ω, son transistor entre le +24 V et le fil OK) ; à l'entrée de
+     l'armoire, 4,7 kΩ entre OK et 0 V. **24 V sur le fil = OK** ; carte éteinte, en redémarrage ou fil coupé =
+     « pas OK ». Sortie du RP2040 à 1 quand tout va bien, à 0 sur un choc (c'est ce que fait le programme).
+     Le boîtier est alimenté en 24 V (abaisseur 24 → 5 V type MP1584 dedans) ; câble à 4 fils : +24 V, 0 V, OK,
+     série.
+  3. Orientation (fil Portique) : carte à plat contre la face intérieure de la colonne de la griffe, flèche X du
+     LIS3DH vers le haut. X vertical ; Y horizontal le long du pont ; Z horizontal le long des rails. Donc
+     **`axes: [y, z]`** (le signe ne compte pas : seule la force horizontale est comparée au seuil).
+  4. « OK » revient tout seul après une panne quand l'autotest réussit, et 0,5 s après un choc : oui (la coupure met
+     FluidNC en alarme, une action est de toute façon nécessaire pour repartir).
 - **Préhension figée** (27/10/2026) : capteur inductif M8 24 V ; capteur de vide sur l'ADS1115 **en 3,3 V**
   (pas de pont diviseur) ; pour poser ou prendre un bocal sur le porte-bocal, la tête est orientée à ± 3°
   (grâce aux méplats) et ne tourne pas entre les mors.

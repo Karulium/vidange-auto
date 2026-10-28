@@ -11,3 +11,6 @@ __pycache__/
 
 # Données produites en essai (journal, base...)
 pi/donnees/
+
+# Programme de l'accéléromètre fabriqué (accelerometre/README.md)
+accelerometre/build*/

@@ -1,0 +1,77 @@
+# Accéléromètre du chariot Z (RP2040 + LIS3DH) : détection des chocs horizontaux et signal « OK ».
+# Le programme du RP2040 est dans accelerometre/ ; ces réglages y sont copiés quand on le
+# fabrique (voir accelerometre/README.md). Changer une valeur = refabriquer le programme et
+# le recharger dans le RP2040 (plus tard, avec la tâche 15, le Pi les enverra par le fil série).
+#
+# Le signal « OK » protège la MACHINE (les chocs), jamais les personnes.
+# Il est en sécurité positive : la sortie est au 3,3 V seulement quand tout va bien ;
+# un choc, une panne du capteur, un programme figé ou une coupure de courant la mettent à 0 V.
+#
+# ATTENTION : tout ce fichier est un EXEMPLE (carte, broches et seuils pas encore choisis).
+# Les seuils se choisissent à l'essai (accelerometre/essai-etabli.md, puis sur la machine).
+# Quand il sera vrai, passer « exemple » à false.
+#
+# Vérifié au démarrage du Pi et quand on fabrique le programme : une broche prise deux fois,
+# des broches I2C qui ne vont pas ensemble, un seuil plus fort que ce que le capteur peut
+# mesurer, des délais trop courts pour la vitesse de mesure.
+
+exemple: true
+
+# Carte RP2040 utilisée, avec le nom que lui donne le Pico SDK
+# (pico, waveshare_rp2040_zero, seeed_xiao_rp2040, adafruit_qtpy_rp2040...).
+carte: pico
+
+# Broches du RP2040 (numéros GPIO, de 0 à 29).
+broches:
+  # Bus I2C vers le LIS3DH. SDA : broche paire, SCL : broche impaire, du même bloc I2C
+  # (I2C0 : SDA 0, 4, 8... SCL 1, 5, 9... ; I2C1 : SDA 2, 6, 10... SCL 3, 7, 11...).
+  i2c_sda: 4
+  i2c_scl: 5
+  # Sortie « OK » vers l'ESP32 n° 1 : 3,3 V = OK, 0 V = choc ou panne.
+  sortie_ok: 2
+  # Petit voyant de la carte (allumé = OK, éteint = choc, clignote = panne). null : pas de voyant.
+  voyant: 25
+
+# Le capteur LIS3DH.
+capteur:
+  # 0x18 si sa broche SDO est à la masse, 0x19 si elle est au 3,3 V.
+  adresse_i2c: 0x18
+  # Vitesse du bus I2C (Hz) : 100000 ou 400000.
+  frequence_i2c_hz: 400000
+  # Plus forte accélération mesurée (g) : 2, 4, 8 ou 16. Au-delà, la mesure plafonne.
+  pleine_echelle_g: 8
+  # Mesures par seconde : 1, 10, 25, 50, 100, 200, 400 ou 1344.
+  mesures_par_seconde: 400
+  # Axes du capteur qui sont horizontaux une fois monté (les chocs à surveiller).
+  axes: [y, z]
+
+# Ce qui fait un choc.
+choc:
+  # Un choc = une accélération horizontale plus forte que ce seuil (g)...
+  seuil_g: 1.5
+  # ... pendant au moins cette durée (ms). 0 : une seule mesure suffit.
+  duree_min_ms: 5
+  # Après le dernier dépassement, « OK » reste coupé au moins ce temps (ms),
+  # pour que l'ESP32 le voie à coup sûr.
+  maintien_ms: 500
+  # Temps de réponse du « fond » lent qui est retiré de la mesure (ms) : une pente du
+  # capteur (pesanteur) ou une dérive lente ne compte pas comme un choc.
+  constante_fond_ms: 2000
+
+# Pannes : « OK » est coupé, puis le capteur est revérifié (et l'autotest refait).
+panne:
+  # Plus aucune mesure nouvelle depuis ce temps (ms) : capteur muet.
+  sans_mesure_ms: 50
+  # Lectures ratées de suite sur le bus I2C avant de déclarer la panne.
+  erreurs_lecture_max: 3
+  # Mêmes valeurs exactes sur les 3 axes pendant ce temps (ms) : capteur figé.
+  figee_ms: 1000
+  # Attente entre deux essais de revérification du capteur (ms).
+  reessai_ms: 2000
+  # Chien de garde du RP2040 (ms) : si son programme se fige plus longtemps, il redémarre
+  # (et « OK » est coupé pendant ce temps). Au plus 8000.
+  chien_de_garde_ms: 100
+
+# Fenêtre texte sur le câble USB (pour les essais à l'établi) : une ligne d'état tous les ... (ms).
+console:
+  periode_affichage_ms: 1000
