@@ -109,9 +109,9 @@ def test_garage_et_glissiere():
     assert refus(Pose(x=0.6, y=0.34, z=1.29, a=0, b=0)) is None
     # Grand ouvert : il faut y ≥ 0,38.
     assert "il faut y ≥ 0,38 m" in refus(Pose(x=0.6, y=0.34, z=1.29, a=0, b=1.0))
-    # Tête tournée, godet fermé : 0,33 + (0,137 − 0,111) ; godet ouvert : minimum grand ouvert.
+    # Tête tournée, godet fermé : 0,33 + (0,139 − 0,111) ; godet ouvert : minimum grand ouvert.
     tournee = Pose(x=0.6, y=0.35, z=1.0, a=90, b=0)
-    assert "il faut y ≥ 0,356 m" in refus(tournee)
+    assert "il faut y ≥ 0,358 m" in refus(tournee)
     assert refus(tournee.avec(y=0.36)) is None
     assert "il faut y ≥ 0,38 m" in refus(tournee.avec(y=0.36, b=0.3))
 
@@ -120,14 +120,14 @@ def test_encombrement_de_la_tete():
     # Bras le long du pont (A = 0), raclette côté fût (−x).
     corps, raclette = REGLES.encombrement(Pose(x=1.0, y=0.5, z=1.0, a=0, b=0))
     xs, ys = [x for x, _ in corps], [y for _, y in corps]
-    assert min(xs) == pytest.approx(0.915) and max(xs) == pytest.approx(1.085)
+    assert min(xs) == pytest.approx(0.914) and max(xs) == pytest.approx(1.086)
     assert min(ys) == pytest.approx(0.389) and max(ys) == pytest.approx(0.611)
     assert raclette[1] == pytest.approx((0.89, 0.5))
     # Godet ouvert : 0,165 le long du bras. Tête tournée de 90° : le bras est le long de x.
     corps, raclette = REGLES.encombrement(Pose(x=1.0, y=0.5, z=1.0, a=90, b=0.5))
     xs, ys = [x for x, _ in corps], [y for _, y in corps]
     assert min(xs) == pytest.approx(0.835) and max(xs) == pytest.approx(1.165)
-    assert min(ys) == pytest.approx(0.415) and max(ys) == pytest.approx(0.585)
+    assert min(ys) == pytest.approx(0.414) and max(ys) == pytest.approx(0.586)
     assert raclette[1] == pytest.approx((1.0, 0.39))
 
 
@@ -135,7 +135,7 @@ def test_dosage_et_porte_du_spray():
     seau = Pose(x=0.95, y=0.30, z=0.98, a=0, b=0)
     assert refus(seau) is None
     assert "dosage du mycélium" in refus(seau, Contexte(dosage_en_cours=True))
-    # La tête (0,085 en travers du bras) entre dans la zone de la porte, pas le mât.
+    # La tête (0,086 en travers du bras) entre dans la zone de la porte, pas le mât.
     devant = Pose(x=0.14, y=0.35, z=1.29, a=0, b=0)
     porte = Contexte(porte_spray_ouverte=True)
     assert refus(devant) is None
@@ -144,18 +144,24 @@ def test_dosage_et_porte_du_spray():
 
 
 def test_boitier_de_la_camera_du_bocal():
-    # Fiche : mât à x ≤ 0,96 (tête bras le long du pont, raclette côté fût).
-    devant = Pose(x=0.96, y=0.25, z=0.98, a=0, b=0)
+    # Fiche : mât à x ≤ 0,96 (tête bras le long du pont, raclette côté fût). Les bouts des
+    # goupilles sont à 0,086 du mât côté +x : 0,959 au plus.
+    devant = Pose(x=0.955, y=0.25, z=0.98, a=0, b=0)
     assert refus(devant) is None
-    assert "caméra du bocal" in refus(devant.avec(x=0.97))
+    assert "caméra du bocal" in refus(devant.avec(x=0.96))
+    # Axes à moins de 0,03 au-dessus du bas du boîtier (0,982) : godet grand ouvert, seuls les
+    # bras (0,117) comptent ; plus haut, les coquilles ouvertes (0,165) aussi.
+    ouvert = Pose(x=0.92, y=0.365, z=1.01, a=90, b=1.0)
+    assert refus(ouvert) is None
+    assert "caméra du bocal" in refus(ouvert.avec(z=1.02))
     # Le mât est hors de la bande y 0,22-0,28, mais la tête la recouvre.
     assert "caméra du bocal" in refus(Pose(x=1.0, y=0.14, z=0.98, a=0, b=0))
-    assert refus(Pose(x=1.0, y=0.22 - 0.111, z=0.98, a=0, b=0)) is None
+    assert refus(Pose(x=1.0, y=0.22 - 0.111, z=1.02, a=0, b=0)) is None
     # De l'autre côté du boîtier : permis si la tête ne le touche pas (raclette côté +x) ;
     # raclette côté fût, sa lame (0,11 du mât) y entrerait.
-    derriere = Pose(x=1.17, y=0.25, z=0.98, a=180, b=0)
+    derriere = Pose(x=1.175, y=0.25, z=0.98, a=180, b=0)
     assert refus(derriere) is None
-    assert "caméra du bocal" in refus(derriere.avec(x=1.165))
+    assert "caméra du bocal" in refus(derriere.avec(x=1.17))
     assert "caméra du bocal" in refus(derriere.avec(a=0))
     # Bas de la tête à 1,08 ou plus : la tête passe au-dessus. Bas compté à 1,077 en butée
     # haute (0,213 sous les axes) : elle ne passe pas au-dessus du boîtier.

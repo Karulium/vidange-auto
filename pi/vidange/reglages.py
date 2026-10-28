@@ -269,6 +269,10 @@ class TeteGriffe(Modele):
     demi_largeur: float = Field(gt=0)
     # Rayon balayé en tournant, godet fermé.
     rayon_balaye: float = Field(gt=0)
+    # Partie haute de la tête (tout ce qui est au-dessus de « axes − haut_sous_axes ») : seuls
+    # les bras dépassent du mât, de demi_longueur_haut le long du bras.
+    demi_longueur_haut: float = Field(gt=0)
+    haut_sous_axes: float = Field(ge=0)
 
     @model_validator(mode="after")
     def _verifier(self) -> "TeteGriffe":
@@ -281,11 +285,13 @@ class TeteGriffe(Modele):
 
 class CameraBocalGriffe(Modele):
     """Boîtier de la caméra du bocal, vu de dessus : la tête ne doit pas le toucher tant que
-    son bas est sous bas_z_max."""
+    son bas est sous bas_z_max. Quand seule la partie haute de la tête (voir TeteGriffe) arrive à
+    la hauteur du boîtier (au-dessus de z_bas), c'est elle seule qui compte."""
 
     x: Intervalle
     y: Intervalle
     bas_z_max: float
+    z_bas: float
 
 
 class BoutCoteFutGriffe(Modele):

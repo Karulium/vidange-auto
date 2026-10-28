@@ -183,15 +183,20 @@ griffe:
   bas_godet_sous_axes: 0.213
   # Encombrement de la tête vu de dessus, autour du mât (fiche, PR n° 23). Bras le long du pont :
   # 0,111 de chaque côté du mât le long du bras godet fermé, 0,165 dès qu'il est ouvert ; rayon
-  # balayé en tournant godet fermé 0,137 ; raclette à raclette_decalage_m du mât, en travers.
-  # demi_largeur (en travers du bras) : 0,085, DÉDUITE de la fiche (mât à 0,197 de l'axe du fût au
-  # plus pour les prises le long de la paroi de rayon 0,2825 ; mât à x ≤ 0,96 devant le boîtier de
-  # la caméra du bocal qui commence à 1,045) : à confirmer (question de la PR de la tâche 18 bis).
+  # balayé en tournant godet fermé 0,139 (vis du bras) ; raclette à raclette_decalage_m du mât, en
+  # travers. En travers du bras, la tête n'est pas symétrique (fil Griffe, griffe.json du 28/10) :
+  # 0,111 côté raclette (la lame, comptée à part par raclette_decalage_m), 0,086 de l'autre côté
+  # (bouts des goupilles) ; le corps est donc compté à ± 0,086. Godet grand ouvert, rayon balayé
+  # réel 0,174 : le rectangle 0,165 × 0,086 le couvre. Partie haute (au-dessus des axes et jusqu'à
+  # 0,03 sous eux) : 0,117 au plus le long du bras, godet ouvert ou fermé (les joues des coquilles
+  # ouvertes, à 0,165, sont 9 à 12 cm sous les axes).
   tete:
     demi_longueur_ferme: 0.111
     demi_longueur_ouvert: 0.165
-    demi_largeur: 0.085
-    rayon_balaye: 0.137
+    demi_largeur: 0.086
+    rayon_balaye: 0.139
+    demi_longueur_haut: 0.117
+    haut_sous_axes: 0.03
   pont_x_min: 0.223
   # Rotation de la tête (fiche) : libre si axes ≤ 1,075 ; de 1,075 à 1,11 libre godet fermé et
   # ±45° au plus godet ouvert ; au-dessus de 1,11 bloquée bras le long du pont, à 0° ou 180°.
@@ -228,8 +233,9 @@ griffe:
   # Boîtier de la caméra du bocal (x 1,045-1,085, y 0,22-0,28, z 0,982-1,062) : la tête ne le
   # touche pas tant que son bas est sous 1,08 (fiche : « mât x ≤ 0,96 », tête bras le long du
   # pont, raclette côté fût). Le boîtier est un obstacle : la tête ne passe pas non plus de
-  # l'autre côté en le touchant.
-  camera_bocal: {x: [1.045, 1.085], y: [0.22, 0.28], bas_z_max: 1.08}
+  # l'autre côté en le touchant. Si seule la partie haute de la tête (tete ci-dessus) arrive au-dessus
+  # du bas du boîtier (z_bas), elle seule compte (cotes du projet mécanique, 28/10).
+  camera_bocal: {x: [1.045, 1.085], y: [0.22, 0.28], bas_z_max: 1.08, z_bas: 0.982}
   # Bout côté fût : tête (son bord côté −x) sous x ≈ 0,12 → bas de la tête ≥ 0,85 hors du fût,
   # ≥ 1,05 au-dessus de la paroi du fût (fiche). Mât au-dessus de l'intérieur du fût : ce sont
   # les règles du fût qui comptent.

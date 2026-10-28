@@ -162,8 +162,14 @@ si l'une pose problème, elle le dit dans sa PR.
      `essuyage → direction_deg: 90`), car à +x la tête toucherait le boîtier de la caméra du bocal (seaux A et B).
      Le seau tourne, donc tout le bord est essuyé. Demandé au projet mécanique de le vérifier sur la maquette 3D ;
      si la 3D donne raison à l'essuyage à +x, remettre `direction_deg: 0`.
-  2. Largeur de la tête en travers du bras : **0,085** de chaque côté du mât (déduit de la fiche), modèle en
-     rectangle, gardé en attendant la cote du fil Griffe (demandée avec le rayon balayé godet grand ouvert).
+  2. Largeur de la tête en travers du bras (réponse du projet mécanique, griffe.json du 28/10) : **pas
+     symétrique**, 0,111 côté raclette (la lame fixe) et **0,086** de l'autre côté (bouts des goupilles), la même
+     godet fermé ou ouvert. Rayon balayé autour du mât : **0,139** godet fermé, **0,174** godet grand ouvert
+     (joues des coquilles, 9 à 12 cm sous les axes). Modèle gardé : rectangle ± 0,086 en travers et ± 0,111 /
+     ± 0,165 le long du bras, plus la lame de la raclette à 0,111. Partie haute de la tête (au-dessus des axes et
+     jusqu'à 3 cm sous eux) : 0,117 au plus le long du bras ; quand seule elle arrive à la hauteur du boîtier de
+     la caméra du bocal (bas à z 0,982), c'est elle seule qui compte. Avec la cote de 0,086, le mât reste à
+     x ≤ 0,959 devant le boîtier (la fiche disait 0,96). L'essuyage côté allée passe pour les 4 formats.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr

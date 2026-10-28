@@ -102,10 +102,12 @@ class ReglesGriffe:
     def ecart_bloquee(self, a: float) -> float:
         return min(ecart_angle(a, c) for c in self.griffe.rotation.orientations_bloquees_deg)
 
-    def encombrement(self, pose: Pose) -> tuple[Forme, Forme]:
-        """La tête vue de dessus : son corps (rectangle) et la lame de la raclette (segment)."""
+    def encombrement(self, pose: Pose, longueur: float | None = None) -> tuple[Forme, Forme]:
+        """La tête vue de dessus : son corps (rectangle) et la lame de la raclette (segment).
+        longueur : demi-longueur le long du bras, si on ne regarde qu'une partie de la tête."""
         tete = self.griffe.tete
-        longueur = tete.demi_longueur_ouvert if pose.b > _EGAL else tete.demi_longueur_ferme
+        if longueur is None:
+            longueur = tete.demi_longueur_ouvert if pose.b > _EGAL else tete.demi_longueur_ferme
         largeur = tete.demi_largeur
         angle = math.radians(self.griffe.raclette_angle_deg + pose.a)
         # u : en travers du bras, vers la raclette ; v : le long du bras.
@@ -127,8 +129,14 @@ class ReglesGriffe:
         raclette = [point(0, largeur), point(0, self.griffe.raclette_decalage_m)]
         return corps, raclette
 
-    def _touche(self, pose: Pose, x: tuple[float, float], y: tuple[float, float]) -> bool:
-        return any(touche_rectangle(forme, x, y) for forme in self.encombrement(pose))
+    def _touche(
+        self,
+        pose: Pose,
+        x: tuple[float, float],
+        y: tuple[float, float],
+        longueur: float | None = None,
+    ) -> bool:
+        return any(touche_rectangle(forme, x, y) for forme in self.encombrement(pose, longueur))
 
     def _classe_ouverture(self, b: float) -> int:
         """0 : fermé ; 1 : à moitié ouvert au plus ; 2 : plus ouvert."""
@@ -185,7 +193,12 @@ class ReglesGriffe:
                 f"y ≥ {_m(g.dosage.mat_y_min)} m"
             )
         camera = g.camera_bocal
-        if bas < camera.bas_z_max - _EGAL and self._touche(pose, camera.x, camera.y):
+        # Seule la partie haute de la tête (les bras) arrive à la hauteur du boîtier : elle seule
+        # peut le toucher.
+        haut_seul = (
+            g.tete.demi_longueur_haut if pose.z - g.tete.haut_sous_axes <= camera.z_bas else None
+        )
+        if bas < camera.bas_z_max - _EGAL and self._touche(pose, camera.x, camera.y, haut_seul):
             return (
                 f"la tête toucherait le boîtier de la caméra du bocal (x {_m(camera.x[0])} à "
                 f"{_m(camera.x[1])}, y {_m(camera.y[0])} à {_m(camera.y[1])} m) : bas de la "
