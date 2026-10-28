@@ -160,7 +160,103 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   Simulateur : faux chariot, faux panneau, fausse pesée, et un scénario « échange de fût ». Tests.
   Procédure d'essai sur le vrai matériel (inductif, reed, pesée et étalonnage, prise débranchée) ;
   « testé sur le vrai matériel : non ».
-- [ ] 18. Griffe (transfert fût vers seau)
+- [ ] **18. Griffe (transfert fût vers seau)** — Modèle : Opus, effort élevé.
+  Sources (recopiées ici le 28/10/2026) : fiche « Griffe sur mât » et fiche d'état du module, **gelé le
+  25/10/2026**, plan de commande v221. Chiffres dans `pi/reglages/machine.yaml` (repère du portique, en mètres),
+  jamais dans le code. Le Portique et le chariot de remplissage ne sont pas figés : leurs gestes restent des cases
+  vides ; la griffe ne fait qu'utiliser des positions nommées et des zones.
+
+  *La machine.* Un mât descend dans le fût (axe Z de la griffe, NEMA 23 à frein) ; il porte un godet de 3 L à
+  2 coquilles (axe B, fermeture par vis à billes, NEMA 23 à frein, ouverture connue par le codeur) et tourne
+  sur lui-même (axe A). Les 3 axes sont sur la carte FluidNC n° 1 (portique). Une pesée (capteur 50 kg + HX711)
+  dans la suspension du mât mesure le poids pendu : poids de la prise, et contact (la charge baisse quand le
+  godet appuie). Une raclette en silicone est fixée sur le côté de la tête. « Hauteur des axes » = hauteur des
+  axes de la tête ; mât de la griffe = pont − 0,175 en x.
+
+  *Une couche (godet unique).*
+  1. Tête au-dessus du fût, godet ouvert. Descente rapide jusqu'au dernier niveau connu + 3 cm (le capteur de
+     distance de la tête peut donner le niveau), puis lente ; au contact (la charge baisse), arrêt, hauteur notée.
+  2. Mâchouiller : le godet se ferme à moitié et se rouvre 3 à 5 fois (≈ 0,6 s par bouchée) ; entre deux bouchées,
+     le mât l'enfonce d'≈ 5 mm, force limitée. Pas de mâchouillage pour le maïs.
+  3. Prendre : le godet prend l'ouverture choisie pour la dose, s'enfonce d'1 cm et se ferme, en plongée (le mât
+     descend encore pendant la fermeture).
+  4. Le mât remonte de 5 cm et s'arrête 0,5 s : pesée de la prise ; le Pi note ouverture, enfoncement, nombre de
+     bouchées, niveau, position dans le fût et poids. Trop léger : reprendre à côté sans faire le voyage. Trop
+     lourd : s'entrouvrir au-dessus du fût jusqu'au bon poids. En remontant, la tête se tourne bras le long du pont
+     avant de sortir du fût.
+  5. Trajet vers le seau (voir les règles de trajet), tête bloquée bras le long du pont.
+  6. Vidage : la tête descend à 2 cm au-dessus du bord (axes = haut du seau + 0,23, réglé par format), le godet
+     s'ouvre en grand en tournant (±45° au plus, voir la rotation) : la couche tombe en couronne. Si le haut du seau
+     dépasse 0,88, vidage tête bloquée, sans tourner.
+  7. Tassement : godet refermé à vide, son fond descend sur la couche et appuie à quelques endroits (≈ 60 N) pendant
+     que le seau tourne. Seau de 5 L : seulement la dernière couche (tête centrée, bas du godet au plus 8 cm sous
+     le bord).
+  8. À la dernière couche : essuyage du bord, raclette posée sur le bord du seau qui tourne, godet ouvert dehors
+     (mât à R_haut + 11 cm de l'axe du seau, axes à haut + 0,196).
+  9. Retour au fût. Dose par couche, nombre de prises (au plus 3 L par prise) et formats : table des formats.
+
+  *Hygiène* (règle de Karulium) : la griffe ne touche **jamais une couche de mycélium découverte**. Elle tasse
+  juste après avoir vidé le substrat, avant l'ajout du mycélium, et essuie le bord après la dernière couche de
+  substrat.
+
+  *Préparer une prise pendant les temps morts* (oui de Karulium) : pendant l'agitation du mycélium, le clipsage et
+  la sortie du seau, la griffe prend et pèse la dose suivante, puis attend godet fermé, dans le fût, au-dessus du
+  substrat. Seulement si la préhension n'a pas besoin du pont (les deux mâts sont sur le même chariot).
+
+  *Apprendre les doses* : poids ≈ densité × volume pris ; volume tiré d'une table (ouverture, enfoncement) ;
+  densité apprise sur les 5 à 10 dernières prises du fût ; corrections à part pour les prises près de la paroi ou
+  du fond. Table par défaut pour les 10 à 20 premières prises. Tout est noté dans le registre (SQLite).
+
+  *Fond du fût et passe de fond.* Fond trouvé au toucher, sans cote fixe : en fin de fût, descente lente ; quand la
+  charge baisse de 30 à 50 N, le godet est en appui : arrêt, prise. Butée basse logicielle 3,5 cm sous le fond
+  (secours). Poussée vers le bas limitée à 30 à 50 N pour ne pas marquer le fond. La passe de fond se lance quand
+  la pesée du fût annonce les derniers kilos (tâche 17) : (1) prises en appui au fond, en spirale depuis le centre,
+  le godet se ferme en gardant une légère poussée ; (2) une douzaine de prises le long de la paroi, joue du godet
+  parallèle à la paroi, ouverture limitée à un cinquième ; (3) reste une bande de 3 à 4 cm ; (4) un tour de
+  raclette en chasse-neige, godet fermé, lame inclinée de 20° par rapport au rayon ; (5) deux ou trois prises au
+  centre. Côté −x, le mât ne va qu'à 0,17 de l'axe du fût : prises de paroi −x tête orientée vers la paroi.
+  Fût vide : le mât arrive au fond sans prise utile ; dire `finir_vidange` au poste du fût.
+
+  *Raclage de la paroi du fût* : godet ouvert, la tranche de la lame appuie d'≈ 8 mm contre la paroi ; la tête
+  fait le tour en descendant et tourne pour garder le plan de la lame passant par l'axe du fût. Pas de collecteur
+  tournant : un tour dans un sens, puis un tour dans l'autre. Pendant les prises, raclette orientée vers le
+  centre du fût.
+
+  *Règles de position* (plan de commande ; chiffres dans `machine.yaml`) :
+  - Rotation de la tête : libre si axes ≤ 1,075 ; de 1,075 à 1,11, libre godet fermé et ±45° au plus godet
+    ouvert ; au-dessus de 1,11, **orientation bloquée** (bras le long du pont, raclette côté fût), à 0° ou 180°.
+    Le Pi choisit l'orientation avant de monter. Pas de rotation quand le pont est au-delà de x 2,0.
+  - Godet **jamais au-delà de « fermé »** (le capot du boîtier de tête n'a que 4 mm de garde).
+  - Course des axes 0,375 à 1,29 ; bas du godet en butée haute 1,087. Mât en y : 0,056 à 0,884 godet fermé,
+    0,11 à 0,83 grand ouvert (en position haute, tête bloquée). Pont x ≥ 0,223.
+  - Trajet fût ↔ poste de remplissage **jamais en diagonale** : aller d'abord en x, mât à y ≥ 0,36, puis en y
+    seulement une fois le mât à x ≥ 0,86 ; retour dans l'ordre inverse.
+  - Garage et glissière de l'agitateur du mycélium : volumes interdits à toute hauteur. Y minimum du mât, godet
+    fermé / à moitié ouvert / grand ouvert : mât x 0,15-0,43 → y ≥ 0,23 / 0,24 / 0,28 ; x 0,43-0,77 →
+    y ≥ 0,33 / 0,345 / 0,38 ; x 0,77-0,82 → y ≥ 0,24 / 0,24 / 0,27 ; x 0,82-0,85 → y ≥ 0,13 ; x 0,85-1,22 →
+    y ≥ 0,10 / 0,105 / 0,14. Pendant le dosage, mât à x ≤ 0,78 ou y ≥ 0,40.
+  - Boîtier de la caméra du bocal : mât x ≤ 0,96 tant que le bas de la tête est sous 1,08 et recouvre y 0,22-0,28.
+  - Poste du fût (tâche 17) : bas de la tête ≥ 1,13 au-dessus de la poignée du volet ; pas au-dessus du fût en mode
+    lavage. Bout côté fût : quand le mât est sous x ≈ 0,12, bas de la tête ≥ 0,85 hors du fût, ≥ 1,05 au-dessus de
+    la paroi du fût.
+  - Porte du coffret du spray ouverte : griffe interdite en x < 0,50 et y < 0,33.
+  Une règle douteuse ou incomplète va dans les questions de la PR, sans inventer de chiffre.
+
+  *Ce qui n'est pas dans cette tâche* : le demi-tour de la tête en mode lavage et en mode « couvercle dans le fût »
+  (tâche 21), le bain et le garage UV des têtes (Nettoyage, pas figé : position nommée vide), le remplissage des
+  bocaux par l'entonnoir (avec l'Entonnoir, pas figé), l'ordre des variétés dans un fût (tâche 23).
+
+  *Capteur de force* : FluidNC ne sait pas lire un HX711. Le chemin de la mesure jusqu'au Pi n'est pas encore
+  fixé par le projet mécanique (le plan de câblage l'envoie vers la carte n° 1) : écrire la lecture derrière une
+  interface simple (comme la pesée du fût), la tester avec une fausse pesée, et le dire dans les questions de la
+  PR. Contact : lecture rapide (80 mesures/s) pendant les descentes ; le Pi arrête la descente (feed hold) dès
+  que la charge baisse. Choc (force inattendue pendant un trajet) : arrêt immédiat de Z et du pont, remontée
+  lente, alerte avec photo.
+
+  Lien avec la tâche 17 : lancer le module `poste_fut`, faire la vidange sous `poste.surveillance`, appeler
+  `noter_dose` après chaque dose (griffe sortie du fût) et `finir_vidange` à la fin ; si l'alarme du poste se
+  déclenche, sortir le pont de la zone du chariot.
+  Simulateur : un cycle complet d'un fût (prises, couches, passe de fond, fût vide). Tests.
 - [ ] 19. Mycélium (dosage)
 - [ ] 20. Porte-bocal
 - [ ] 21. Lavage
