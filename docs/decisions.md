@@ -117,6 +117,21 @@ si l'une pose problème, elle le dit dans sa PR.
      jour) et se débloque **sur place** : accepté (mises à jour rares, machine à l'arrêt ; pas de `$X` à distance).
   2. Le chargeur relance seul un programme bon si le Pi ne dit plus rien pendant **60 s** (`chargeur → abandon_s`).
   3. Le RP2040 attend **0,3 s** à chaque démarrage avant de lancer le programme (`chargeur → attente_demarrage_ms`).
+- **Réponses aux questions de la PR n° 20** (Poste du fût), recommandations suivies :
+  1. Pesée : **lecture directe du HX711 par le Pi** gardée ; on regarde le journal des lectures refaites pendant les
+     premiers jours. Passage au pilote de Linux (overlay) seulement si l'essai montre des lectures souvent
+     interrompues.
+  2. Câble de 10 m et prise magnétique de la pesée : 4 contacts utilisés (3,3 V, 0 V, DT, SCK), carte HX711
+     **alimentée en 3,3 V** (sinon la broche du Pi grille), câble blindé, blindage au 0 V côté armoire seulement.
+     Transmis au projet mécanique pour le plan de câblage.
+  3. Panneau du poste : **un seul contact** gardé (contact ouvert et stable = lavage permis) ; un 2ᵉ contact
+     « panneau rabattu » seulement si le projet mécanique le juge utile.
+  4. Poids plausible au « Prêt » : 20 à 400 kg (berceau + fût + contenu), à resserrer après les premières pesées.
+- **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
+  fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
+  n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
+  (recul sur alerte). Vaut pour le solveur (tâche 23 : OR-Tools CP-SAT, cycles calculés à l'avance puis joués par
+  le Pi) et pour la montée en vitesse (tâche 30).
 - **Préhension figée** (27/10/2026) : capteur inductif M8 24 V ; capteur de vide sur l'ADS1115 **en 3,3 V**
   (pas de pont diviseur) ; pour poser ou prendre un bocal sur le porte-bocal, la tête est orientée à ± 3°
   (grâce aux méplats) et ne tourne pas entre les mors.
