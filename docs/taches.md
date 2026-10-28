@@ -266,7 +266,79 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   l'agitateur. Vérifier l'essuyage du bord du seau (mât à +x du seau, axes à haut + 0,196) contre le boîtier de
   la caméra du bocal (x 1,045-1,085, y 0,22-0,28, z 0,982-1,062) ; s'il y a contact, le dire dans les questions
   de la PR avec une proposition. Tests.
-- [ ] 19. Mycélium (dosage)
+- [ ] **19. Mycélium (dosage)** — Modèle : Opus, effort moyen.
+  Sources (recopiées ici le 28/10/2026) : fiche du module « Mycélium », **validé définitivement le 24/10/2026**
+  (option B : tout le module relevé de 12 mm, garage à x 0,565), fiche des pièces v8 et plan de commande v221.
+  Les chiffres vont dans `pi/reglages/machine.yaml` et `docs/entrees-sorties.yaml`, jamais dans le code.
+
+  *Ce que fait le module.* Un « agitateur » porte le bocal de semence (mycélium en grains) sur une glissière
+  horizontale au-dessus du poste de remplissage. Au dosage, le bocal est tête en bas au-dessus du seau ; une
+  manivelle le secoue de haut en bas et les grains tombent par les trous du couvercle. La balance du chariot de
+  remplissage pèse ce qui tombe : on arrête de secouer quand la dose est atteinte.
+
+  *Moteurs et capteurs* (tous sur la carte 3 ; à ajouter à `docs/entrees-sorties.yaml` et `fluidnc/`, marqués
+  `exemple: true` tant que le plan de câblage n'est pas arrivé) :
+  - Glissière : NEMA 17 en boucle fermée (codeur 1000 lignes), courroie GT2. 2 fins de course, l'un au garage,
+    l'autre au dosage ; les arrêts entre les deux (demi-tour) se font au codeur.
+  - Manivelle : NEMA 34 à codeur, pilote HBS86H en 48 V. Elle fait monter et descendre le bocal. Le codeur sert à
+    s'arrêter pile « manivelle en haut » ou « manivelle en bas ». Vitesse d'agitation : réglage (la fiche compte
+    jusqu'à 300 tr/min ; valeur à trouver aux essais).
+  - La course (4, 7 ou 10 cm) se choisit **à la main**, en mettant la bielle dans un des 3 trous de la manivelle.
+    Le Pi ne la change pas : c'est un réglage déclaré (`course_agitation_m`) que Karulium tient à jour.
+  - Le demi-tour du bocal (moteur JGY370 et son verrou) et les mors appartiennent au Porte-bocal (tâche 20) :
+    ici, on les appelle derrière une interface simple (`retourner_tete_en_bas`, `remettre_debout`) avec un faux ;
+    la tâche 20 la remplit.
+
+  *Positions* (repère du portique, en mètres) :
+  - Garage x 0,565 ; demi-tour x 0,865 ; dosage x 0,925 (axe du seau). Course de la glissière 0,36.
+  - Au dosage, le seau est arrêté par le chariot de remplissage à y 0,155.
+  - Axe de la manivelle z 0,762 (module relevé de 12 mm le 24/10).
+  - Plateau du chariot pendant le dosage : min(0,78 − h ; 0,575), h lu dans la table des formats (bord du seau à
+    0,78 m, 0,775 pour le 5 L). C'est le chariot (tâche du Remplissage) qui le règle ; ici on vérifie seulement
+    qu'il est à cette hauteur avant de doser.
+
+  *Déroulé d'un dosage* (pour chaque seau, après chaque couche versée et tassée par la griffe) :
+  1. Le bocal attend au garage, manivelle en haut. Le chariot de remplissage s'écarte à y ≥ 0,375.
+  2. L'agitateur roule jusqu'au demi-tour x 0,865 ; le bocal est retourné tête en bas (Porte-bocal).
+  3. Il roule jusqu'au dosage x 0,925 ; manivelle en bas.
+  4. Le chariot revient avec le seau à y 0,155, plateau à la hauteur du dosage.
+  5. Agiter en lisant la balance du chariot ; arrêter quand la dose de la couche est atteinte (dose lue dans la
+     table des formats ; tolérance et temps maximal : réglages). La manivelle s'arrête toujours pile en bas ou
+     pile en haut, jamais entre les deux ; ici, en bas.
+  6. Le chariot repart (vers la griffe ou le stockage). Puis manivelle en haut, retour au demi-tour, bocal remis
+     debout (rien ne coule debout), retour au garage.
+  Le plan de commande dit aussi : « l'agitateur remonte son bocal de 7 cm, quitte son garage ». Si la session
+  trouve que cela contredit « manivelle en haut au garage », elle le dit dans les questions de la PR.
+
+  *Verrous avec le chariot de remplissage* (règles du projet mécanique, 24/10 ; elles protègent la machine, pas
+  les personnes) :
+  - L'agitateur ne roule que si le chariot de remplissage est à y ≥ 0,375.
+  - Le chariot de remplissage ne roule que si l'agitateur est au garage manivelle en haut, ou au dosage manivelle
+    en bas. Ce verrou est une fonction que le module du chariot appellera (le chariot n'est pas fait ici).
+  - Au garage, la manivelle ne tourne pas si la course déclarée est de 10 cm (le fond du bocal toucherait la
+    marche du poste du fût à z 0,88) : 7 cm au plus au garage.
+  - La caméra du dosage ne pivote vers le seau que si l'agitateur est garé (x ≤ 0,62) : règle déjà dans
+    `docs/decisions.md`, à brancher ici sous forme de verrou.
+
+  *Un bocal pour deux petits seaux* (décision de Karulium, 26/10) : pour les petits seaux, un bocal peut servir
+  à 2 seaux au plus, de la **même variété**. Entre les deux, le bocal reste dans le porte-bocal : remis debout au
+  demi-tour, retour au garage pendant que le chariot change de seau, puis nouveau demi-tour pour le 2e seau.
+  La « casse du bloc » (agitation plus forte au début, pour casser le mycélium pris en bloc dans le bocal) ne se
+  fait qu'au 1er seau ; sa durée est un réglage.
+
+  *Surveillance pendant l'agitation* :
+  - Saut de poids brutal sur la balance du chariot (lue à 80 mesures/s) = bocal ou couvercle cassé, ou bocal
+    tombé : arrêt de la manivelle, alerte avec photo. Le seuil est un réglage.
+  - Poids qui ne monte plus (bocal vide ou couvercle bouché) au bout du temps maximal : arrêt, alerte, le seau
+    n'est pas rangé comme bon (le registre le marque).
+  - Le registre reçoit, pour chaque seau : QR du bocal, dose réelle de chaque couche, variété.
+
+  *Ce qui n'est pas dans cette tâche* : le demi-tour et les mors (tâche 20), la lecture des QR (tâche 22), la
+  lecture de la balance du chariot par sa carte RS485 (tâche 22 bis : ici, une fausse pesée derrière la même
+  interface que la griffe), le perçage des couvercles (sera choisi sur la machine réelle : rien à coder).
+
+  Simulateur : un seau de format A dosé en 4 couches, puis 2 petits seaux B avec un seul bocal. Tests, dont les
+  verrous avec le chariot et la casse du bocal.
 - [ ] 20. Porte-bocal
 - [ ] 21. Lavage
 - [ ] 22. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage
