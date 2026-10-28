@@ -22,7 +22,7 @@ def test_entete_pour_le_programme(reglages: Path, tmp_path: Path):
     assert main([str(reglages / "accelerometre.yaml"), str(sortie)]) == 0
     entete = (sortie / "reglages_genere.h").read_text(encoding="utf-8")
     assert "#define REGLAGE_SEUIL_MG 1500\n" in entete
-    assert "#define REGLAGE_AXES 3\n" in entete  # x et y
+    assert "#define REGLAGE_AXES 6\n" in entete  # y et z
     assert "#define REGLAGE_ADRESSE_LIS3DH 0x18\n" in entete
     assert "#define REGLAGE_BROCHE_VOYANT 25\n" in entete
     assert 'set(PICO_BOARD "pico")' in (sortie / "reglages_genere.cmake").read_text()
@@ -30,7 +30,7 @@ def test_entete_pour_le_programme(reglages: Path, tmp_path: Path):
     # Sans voyant, le seuil en g arrondi au mg, l'axe z en plus.
     remplacer(reglages / "accelerometre.yaml", "voyant: 25", "voyant: null")
     remplacer(reglages / "accelerometre.yaml", "seuil_g: 1.5", "seuil_g: 2.0004")
-    remplacer(reglages / "accelerometre.yaml", "axes: [x, y]", "axes: [x, y, z]")
+    remplacer(reglages / "accelerometre.yaml", "axes: [y, z]", "axes: [x, y, z]")
     assert main([str(reglages / "accelerometre.yaml"), str(sortie)]) == 0
     entete = (sortie / "reglages_genere.h").read_text(encoding="utf-8")
     assert "#define REGLAGE_BROCHE_VOYANT -1\n" in entete
@@ -64,8 +64,8 @@ def test_entete_mauvais_arguments(capsys):
         ("adresse_i2c: 0x18", "adresse_i2c: 0x20", "adresse_i2c : doit être l'un de"),
         ("pleine_echelle_g: 8", "pleine_echelle_g: 6", "pleine_echelle_g : doit être l'un de"),
         ("mesures_par_seconde: 400", "mesures_par_seconde: 500", "mesures_par_seconde"),
-        ("axes: [x, y]", "axes: [x, x]", "axes : un axe est écrit deux fois"),
-        ("axes: [x, y]", "axes: []", "axes : ne doit pas être vide"),
+        ("axes: [y, z]", "axes: [x, x]", "axes : un axe est écrit deux fois"),
+        ("axes: [y, z]", "axes: []", "axes : ne doit pas être vide"),
         (
             "mesures_par_seconde: 400",
             "mesures_par_seconde: 10",
