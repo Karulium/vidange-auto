@@ -53,7 +53,9 @@ BROCHES_DES_PUCES: dict[str, tuple[str, ...]] = {
 }
 # Puces qui donnent des entrées/sorties tout-ou-rien (les autres donnent des mesures).
 PUCES_TOUT_OU_RIEN = ("pcf8574", "mcp23017")
-Appareil = Literal["sht31", "ads1115", "pcf8574", "mcp23017", "transmetteur_modbus", "nextion"]
+Appareil = Literal[
+    "sht31", "ads1115", "pcf8574", "mcp23017", "transmetteur_modbus", "nextion", "accelerometre"
+]
 Texte = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 
 

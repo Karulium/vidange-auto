@@ -664,6 +664,7 @@ class BrochesAccelerometre(Modele):
     i2c_sda: BrocheRp2040
     i2c_scl: BrocheRp2040
     sortie_ok: BrocheRp2040
+    fil_serie: BrocheRp2040
     voyant: BrocheRp2040 | None = None
 
     @property
@@ -731,6 +732,42 @@ class ConsoleAccelerometre(Modele):
     periode_affichage_ms: int = Field(ge=100, le=600000)
 
 
+# Plus longue trame de la liaison (accelerometre/src/liaison.h, LIAISON_LIGNE_MAX).
+LIGNE_MAX_LIAISON = 256
+
+
+class LiaisonAccelerometre(Modele):
+    """Le fil série unique entre le Pi et le RP2040 (half-duplex)."""
+
+    vitesse_bauds: Literal[9600, 19200, 38400, 57600, 115200, 230400]
+    periode_ms: int = Field(ge=20, le=60000)
+    attente_reponse_ms: int = Field(ge=5, le=10000)
+    sans_reponse_max: int = Field(ge=1, le=100)
+    reconnexion_s: float = Field(gt=0, le=3600)
+    niveau_max_s: float = Field(ge=0, le=86400)
+    envoyer_reglages: bool
+
+    @model_validator(mode="after")
+    def _verifier_delais(self) -> "LiaisonAccelerometre":
+        erreurs = []
+        # Une question et sa réponse, les plus longues possible (10 bits par octet).
+        aller_retour_ms = 2 * LIGNE_MAX_LIAISON * 10 * 1000 / self.vitesse_bauds
+        if self.attente_reponse_ms < aller_retour_ms:
+            erreurs.append(
+                f"attente_reponse_ms ({self.attente_reponse_ms} ms) doit valoir au moins "
+                f"{aller_retour_ms:.0f} ms : le temps d'une question et d'une réponse à "
+                f"{self.vitesse_bauds} bauds"
+            )
+        if self.periode_ms < self.attente_reponse_ms:
+            erreurs.append(
+                f"periode_ms ({self.periode_ms} ms) doit valoir au moins attente_reponse_ms "
+                f"({self.attente_reponse_ms} ms)"
+            )
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class ReglagesAccelerometre(Modele):
     """accelerometre.yaml : le programme du RP2040 qui surveille les chocs du chariot Z."""
 
@@ -742,6 +779,7 @@ class ReglagesAccelerometre(Modele):
     choc: ChocAccelerometre
     panne: PanneAccelerometre
     console: ConsoleAccelerometre
+    liaison: LiaisonAccelerometre
 
     @model_validator(mode="after")
     def _verifier_ensemble(self) -> "ReglagesAccelerometre":

@@ -1,7 +1,8 @@
 // Programme du RP2040 de l'accéléromètre (chariot Z) : mesure des chocs et signal « OK ».
 //
 // Cœur 0 : la mesure et la sortie « OK », rien d'autre (il ne doit jamais attendre).
-// Cœur 1 : la fenêtre texte sur l'USB (essais à l'établi). S'il se bloque, la mesure continue.
+// Cœur 1 : la liaison avec le Pi (fil série unique) et la fenêtre texte sur l'USB (essais à
+// l'établi). S'il se bloque, la mesure continue.
 //
 // Sécurité positive : la sortie « OK » est à 3,3 V seulement quand le détecteur le dit.
 // Au démarrage, pendant un redémarrage par le chien de garde ou sans courant, la broche
@@ -14,6 +15,7 @@
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
 #include "hardware/watchdog.h"
+#include "liaison.h"
 #include "lis3dh.h"
 #include "pico/critical_section.h"
 #include "pico/multicore.h"
@@ -21,6 +23,7 @@
 #include "pico/stdlib.h"
 #include "reglages.h"
 #include "reglages_genere.h"
+#include "un_fil.h"
 
 #define I2C (REGLAGE_BLOC_I2C ? i2c1 : i2c0)
 
@@ -28,8 +31,12 @@
 
 static critical_section_t verrou;
 static etat_t partage;               // écrit par le cœur 0, lu par le cœur 1
-static uint32_t seuil_demande_mg;    // 0 : rien de demandé
-static int seuil_reponse;            // 1 : accepté, -1 : refusé, 0 : pas encore lu
+static uint32_t niveau_max_pi_mg;    // le plus fort depuis la dernière question ETAT du Pi
+static reglages_t reglages_actuels;  // écrit par le cœur 0
+static choc_t historique[HISTORIQUE_CHOCS];
+static reglages_t reglages_demandes;
+static bool demande;                 // le cœur 1 demande de changer les réglages
+static int reponse_demande;          // 1 : accepté, -1 : refusé, 0 : pas encore lu
 static volatile bool essai_chien;    // le cœur 1 demande de figer le cœur 0
 static bool redemarre_par_chien;     // ce démarrage vient du chien de garde
 static char message_reglages[96];   // réglages faux : pourquoi
@@ -118,12 +125,36 @@ static void afficher_debut(void) {
     if (redemarre_par_chien) {
         printf("ATTENTION : ce démarrage vient du chien de garde (le programme s'était figé).\n");
     }
-    if (message_reglages[0]) {
+    if (message_reglages[0] && (copie.pannes & PANNE_REGLAGES)) {
         printf("RÉGLAGES FAUX : %s. OK ne sera jamais donné.\n", message_reglages);
     }
     printf("Autotest du capteur, écarts x y z : %d %d %d (bon : de 17 à 360)\n",
            copie.autotest_ecart[0], copie.autotest_ecart[1], copie.autotest_ecart[2]);
     printf("Tapez « aide » pour la liste des commandes.\n");
+}
+
+// Demande au cœur 0 de changer les réglages ; rend 1 (accepté), -1 (refusé) ou 0 (pas de
+// réponse).
+static int demander_reglages(const reglages_t *nouveaux) {
+    critical_section_enter_blocking(&verrou);
+    reponse_demande = 0;
+    reglages_demandes = *nouveaux;
+    demande = true;
+    critical_section_exit(&verrou);
+    int reponse = 0;
+    // Le cœur 0 répond au tour suivant (au pire après une vérification du capteur).
+    for (int i = 0; i < 1000 && reponse == 0; i++) {
+        sleep_ms(1);
+        critical_section_enter_blocking(&verrou);
+        reponse = reponse_demande;
+        critical_section_exit(&verrou);
+    }
+    if (reponse == 0) {
+        critical_section_enter_blocking(&verrou);
+        demande = false;
+        critical_section_exit(&verrou);
+    }
+    return reponse;
 }
 
 static void traiter_ligne(const char *ligne) {
@@ -141,17 +172,10 @@ static void traiter_ligne(const char *ligne) {
         case COMMANDE_SEUIL:
             if (seuil_mg) {
                 critical_section_enter_blocking(&verrou);
-                seuil_reponse = 0;
-                seuil_demande_mg = seuil_mg;
+                reglages_t nouveaux = reglages_actuels;
                 critical_section_exit(&verrou);
-                int reponse = 0;
-                // Le cœur 0 répond au tour suivant (au pire après une vérification du capteur).
-                for (int i = 0; i < 1000 && reponse == 0; i++) {
-                    sleep_ms(1);
-                    critical_section_enter_blocking(&verrou);
-                    reponse = seuil_reponse;
-                    critical_section_exit(&verrou);
-                }
+                nouveaux.seuil_mg = seuil_mg;
+                int reponse = demander_reglages(&nouveaux);
                 if (reponse > 0) {
                     printf("Seuil changé (jusqu'au prochain redémarrage).\n");
                 } else if (reponse < 0) {
@@ -174,8 +198,59 @@ static void traiter_ligne(const char *ligne) {
     }
 }
 
+// ------------------------------------------------- liaison avec le Pi (cœur 1)
+
+static void lire_pour_le_pi(void *contexte, liaison_donnees_t *donnees, bool remettre_max) {
+    (void)contexte;
+    donnees->t_ms = time_us_64() / 1000;
+    donnees->redemarre_par_chien = redemarre_par_chien;
+    critical_section_enter_blocking(&verrou);
+    donnees->etat = partage;
+    donnees->etat.niveau_max_mg = niveau_max_pi_mg;
+    if (remettre_max) {
+        niveau_max_pi_mg = 0;
+    }
+    donnees->reglages = reglages_actuels;
+    for (int i = 0; i < HISTORIQUE_CHOCS; i++) {
+        donnees->historique[i] = historique[i];
+    }
+    critical_section_exit(&verrou);
+}
+
+static bool regler_pour_le_pi(void *contexte, const reglages_t *nouveaux, char *message,
+                              size_t taille) {
+    (void)contexte;
+    if (!reglages_verifier(nouveaux, message, taille)) {
+        return false;
+    }
+    int reponse = demander_reglages(nouveaux);
+    if (reponse <= 0) {
+        snprintf(message, taille, "%s", reponse < 0 ? "refusés" : "pas de réponse de la mesure");
+        return false;
+    }
+    return true;
+}
+
+static const liaison_programme_t pour_le_pi = {lire_pour_le_pi, regler_pour_le_pi, NULL};
+
+static void ecouter_le_pi(liaison_lecteur_t *lecteur) {
+    uint8_t octet;
+    char question[LIAISON_LIGNE_MAX];
+    char reponse[LIAISON_LIGNE_MAX + 1];
+    while (un_fil_lire(&octet)) {
+        if (liaison_recevoir(lecteur, octet, question, sizeof question)) {
+            size_t n = liaison_repondre(question, &pour_le_pi, reponse, sizeof reponse);
+            if (n > 0) {
+                un_fil_envoyer(reponse, n);
+            }
+        }
+    }
+}
+
 static void coeur1(void) {
     stdio_init_all();
+    un_fil_demarrer(REGLAGE_BROCHE_FIL_SERIE, REGLAGE_VITESSE_FIL_BAUDS);
+    liaison_lecteur_t lecteur = {0};
     char ligne[64];
     size_t n = 0;
     bool etait_branche = false;
@@ -189,7 +264,8 @@ static void coeur1(void) {
         }
         etait_branche = branche;
 
-        int c = getchar_timeout_us(10000);
+        ecouter_le_pi(&lecteur);
+        int c = getchar_timeout_us(1000);
         if (c == '\r' || c == '\n') {
             ligne[n] = '\0';
             n = 0;
@@ -225,6 +301,7 @@ int main(void) {
     reglages_verifier(&reglages, message_reglages, sizeof message_reglages);
     detecteur_t detecteur;
     detecteur_demarrer(&detecteur, &reglages);
+    reglages_actuels = reglages;
 
     critical_section_init(&verrou);
     multicore_launch_core1(coeur1);
@@ -240,7 +317,8 @@ int main(void) {
             preparer_bus();
             lis3dh_resultat_t r =
                 lis3dh_demarrer(&capteur, &bus, REGLAGE_ADRESSE_LIS3DH,
-                                reglages.pleine_echelle_g, reglages.mesures_par_seconde);
+                                detecteur.reglages.pleine_echelle_g,
+                                detecteur.reglages.mesures_par_seconde);
             uint32_t panne = 0;
             if (r == LIS3DH_ABSENT || r == LIS3DH_MAUVAISE_PUCE) {
                 panne = PANNE_CAPTEUR;
@@ -278,6 +356,9 @@ int main(void) {
         if (detecteur.niveau_mg > partage.niveau_max_mg) {
             partage.niveau_max_mg = detecteur.niveau_mg;
         }
+        if (detecteur.niveau_mg > niveau_max_pi_mg) {
+            niveau_max_pi_mg = detecteur.niveau_mg;
+        }
         partage.chocs = detecteur.chocs;
         partage.pic_choc_mg = detecteur.pic_choc_mg;
         partage.seuil_mg = detecteur.reglages.seuil_mg;
@@ -286,9 +367,13 @@ int main(void) {
         for (int axe = 0; axe < 3; axe++) {
             partage.autotest_ecart[axe] = capteur.autotest_ecart[axe];
         }
-        if (seuil_demande_mg) {
-            seuil_reponse = detecteur_changer_seuil(&detecteur, seuil_demande_mg) ? 1 : -1;
-            seuil_demande_mg = 0;
+        if (demande) {
+            reponse_demande = detecteur_changer_reglages(&detecteur, &reglages_demandes) ? 1 : -1;
+            demande = false;
+        }
+        reglages_actuels = detecteur.reglages;
+        for (int i = 0; i < HISTORIQUE_CHOCS; i++) {
+            historique[i] = detecteur.historique[i];
         }
         critical_section_exit(&verrou);
 

@@ -45,6 +45,7 @@ def rediger_entete(reglages: ReglagesAccelerometre) -> str:
         "BROCHE_I2C_SCL": broches.i2c_scl,
         "BLOC_I2C": broches.bloc_i2c,
         "BROCHE_SORTIE_OK": broches.sortie_ok,
+        "BROCHE_FIL_SERIE": broches.fil_serie,
         "BROCHE_VOYANT": -1 if broches.voyant is None else broches.voyant,
         "ADRESSE_LIS3DH": f"0x{capteur.adresse_i2c:02X}",
         "FREQUENCE_I2C_HZ": capteur.frequence_i2c_hz,
@@ -61,6 +62,7 @@ def rediger_entete(reglages: ReglagesAccelerometre) -> str:
         "REESSAI_MS": panne.reessai_ms,
         "CHIEN_DE_GARDE_MS": panne.chien_de_garde_ms,
         "PERIODE_AFFICHAGE_MS": reglages.console.periode_affichage_ms,
+        "VITESSE_FIL_BAUDS": reglages.liaison.vitesse_bauds,
         "EXEMPLE": int(reglages.exemple),
     }
     lignes = [

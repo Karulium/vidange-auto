@@ -21,7 +21,11 @@ add_executable(accelerometre
   src/detecteur.c
   src/lis3dh.c
   src/reglages.c
-  src/console.c)
+  src/console.c
+  src/liaison.c
+  src/un_fil.c)
+# Le fil série unique vers le Pi (deux petites machines PIO).
+pico_generate_pio_header(accelerometre ${CMAKE_CURRENT_LIST_DIR}/src/un_fil.pio)
 target_include_directories(accelerometre PRIVATE src "${DOSSIER_GENERE}")
 target_compile_options(accelerometre PRIVATE -Wall -Wextra)
 target_link_libraries(accelerometre
@@ -29,9 +33,10 @@ target_link_libraries(accelerometre
   pico_multicore
   pico_sync
   hardware_i2c
+  hardware_pio
   hardware_watchdog)
 
-# Fenêtre texte par l'USB (pas par l'UART : ses broches restent libres pour le fil vers le Pi).
+# Fenêtre texte par l'USB (le fil vers le Pi passe par une broche PIO, voir src/un_fil.pio).
 pico_enable_stdio_usb(accelerometre 1)
 pico_enable_stdio_uart(accelerometre 0)
 pico_add_extra_outputs(accelerometre)

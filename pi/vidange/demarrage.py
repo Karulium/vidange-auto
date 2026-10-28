@@ -16,7 +16,8 @@
    Lance l'API et la page web, si le fichier de secrets donne une clé (sinon la machine
    tourne quand même, et la check-list le signale), et l'écran de l'armoire. Lance la file
    d'envoi (cycles vers le logiciel de culture, copies vers la maison), les caméras (vidéo en
-   direct, clip à chaque alarme) et le pilotage à distance (qui attend qu'on l'active).
+   direct, clip à chaque alarme), le pilotage à distance (qui attend qu'on l'active) et la
+   liaison avec l'accéléromètre (chocs notés au registre).
    Prépare les mises à jour (cartes ESP32 et programme du Pi), lancées depuis la page web.
 8. Attend l'ordre d'arrêt, puis arrête tout proprement (machine en pause, état noté). Si l'ordre
    vient de l'onduleur, éteint le Pi à la fin. Après une mise à jour du programme du Pi, sort
@@ -38,6 +39,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from vidange import __version__
+from vidange.accelerometre.liaison import SIGNAL as SIGNAL_ACCELEROMETRE
+from vidange.accelerometre.liaison import LiaisonAccelerometre, PortAccelerometre
+from vidange.accelerometre.liaison import ouvrir_port as ouvrir_port_accelerometre
 from vidange.api import ServeurApi, Services, constats_api, creer_app
 from vidange.cameras import Cameras, Flux
 from vidange.chef import Carnet, Chef, ErreurChef, Module
@@ -118,6 +122,8 @@ class Raccords:
     sondes: Sondes | None = None
     # Ouverture du port de l'écran ; None : l'UART du signal « ecran_nextion ».
     ecran: Callable[[], PortEcran] | None = None
+    # Ouverture du fil de l'accéléromètre ; None : l'UART du signal « accelerometre_fil ».
+    accelerometre: Callable[[], PortAccelerometre] | None = None
     # Nom de caméra → ouverture de sa vidéo ; None : les commandes de programme.yaml.
     cameras: Mapping[str, Callable[[], Flux]] | None = None
     notifier: Callable[[str], bool] = notifier_systemd
@@ -255,6 +261,36 @@ def preparer_ecran(
             return None
         ouvrir = ouvrir_port_ecran(signal.fichier, reglages.programme.ecran.vitesse_bauds)
     return LiaisonEcran(reglages.programme.ecran, ouvrir)
+
+
+def constats_accelerometre(liaison: LiaisonAccelerometre | None) -> list[Constat]:
+    """Pour la check-list. Jamais bloquant : la sortie « OK » va directement à l'ESP32 n° 1."""
+    if liaison is None:
+        texte = f"pas de signal « {SIGNAL_ACCELEROMETRE} » dans entrees-sorties.yaml"
+        return [Constat("accéléromètre", "attention", texte)]
+    return liaison.constats()
+
+
+def preparer_accelerometre(
+    reglages: Reglages,
+    liste: EntreesSorties,
+    ouvrir: Callable[[], PortAccelerometre] | None,
+    registre: Registre,
+) -> LiaisonAccelerometre | None:
+    """La liaison avec l'accéléromètre, ou None si la liste des entrées/sorties n'en a pas."""
+    if ouvrir is None:
+        signal = liste.signaux.get(SIGNAL_ACCELEROMETRE)
+        if signal is None or signal.fichier is None:
+            journal.warning(
+                "Pas de signal « %s » (avec son « fichier ») dans entrees-sorties.yaml : "
+                "les chocs ne sont pas notés au registre.",
+                SIGNAL_ACCELEROMETRE,
+            )
+            return None
+        ouvrir = ouvrir_port_accelerometre(
+            signal.fichier, reglages.accelerometre.liaison.vitesse_bauds
+        )
+    return LiaisonAccelerometre(reglages.accelerometre, ouvrir, registre)
 
 
 def principal(
@@ -425,6 +461,9 @@ def principal(
     serveur: ServeurApi | None = None
     mode = ModeMachine(dossier_donnees / NOM_MODE, chef, registre)
     liaison_ecran = preparer_ecran(reglages, entrees_sorties, raccords.ecran)
+    accelerometre = preparer_accelerometre(
+        reglages, entrees_sorties, raccords.accelerometre, registre
+    )
     # L'écran s'arrête en premier, comme l'API : plus d'ordre pendant l'arrêt.
     arret_ecran = threading.Event()
     fil_ecran: threading.Thread | None = None
@@ -440,6 +479,8 @@ def principal(
             gardien.demarrer(arret),
             pilote.demarrer(arret),
         ]
+        if accelerometre is not None:
+            fils.append(accelerometre.demarrer(arret))
         checklist = CheckList(
             {
                 "réglages": lambda: constats_reglages(reglages, entrees_sorties),
@@ -457,6 +498,7 @@ def principal(
                 "écran": lambda: constats_ecran(liaison_ecran),
                 "envois": facteur.constats,
                 "caméras": cameras.constats,
+                "accéléromètre": lambda: constats_accelerometre(accelerometre),
             }
         )
         serveur = preparer_api(
@@ -523,6 +565,8 @@ def principal(
             materiel.fermer()
         if liaison_ecran is not None:
             liaison_ecran.fermer()
+        if accelerometre is not None:
+            accelerometre.fermer()
         registre.fermer()
         marche.noter_arret(raison_arret[0])
     if raison_arret[0] == RAISON_ARRET:

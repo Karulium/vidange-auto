@@ -1,7 +1,7 @@
 # Programme du RP2040 (accéléromètre LIS3DH)
 
 Détecte les chocs horizontaux sur le chariot Z et coupe un signal « OK » vers l'ESP32 n° 1.
-Plus tard (tâche 15), il enverra aussi ses mesures au Pi par un fil série (3,3 V, 115 200).
+Il répond aussi au Pi par un fil série unique (3,3 V, 115 200 bauds) : état, chocs, réglages.
 
 **Le signal « OK » protège la machine (les chocs), jamais les personnes** : la sécurité des
 personnes est câblée en dur (arrêt d'urgence, portes, relais de sécurité).
@@ -30,6 +30,29 @@ personnes est câblée en dur (arrêt d'urgence, portes, relais de sécurité).
 - Sur le câble USB, une fenêtre texte montre une ligne d'état par seconde (le plus fort niveau
   mesuré, le seuil, le nombre de chocs) et permet de changer le seuil pour les essais.
 
+## La liaison avec le Pi (un seul fil)
+
+Un seul conducteur du câble sert dans les deux sens (half-duplex). Côté Pi : sa sortie TX par
+une résistance de 1 kΩ et son entrée RX, sur le même fil. Côté RP2040 : une broche
+(`fil_serie`), menée par deux petites machines PIO (`src/un_fil.pio`) ; la broche n'est tenue
+que le temps d'envoyer une réponse, le reste du temps elle écoute.
+
+- **Le Pi pose une question, le RP2040 répond** ; il ne parle jamais sans question : les deux
+  ne parlent jamais en même temps.
+- Une trame = une ligne de texte avec un contrôle CRC-16 : `ETAT*F09B`. Une ligne abîmée par un
+  parasite est oubliée, le Pi redemande. Les questions : `ETAT`, `CHOC n`, `REGLAGES`,
+  `REGLER ...` (détail dans `src/liaison.h`).
+- Le RP2040 garde ses **16 derniers chocs** (heure, durée, pic) : le Pi les lit un par un et les
+  note au registre. Un Pi arrêté un moment ne fait rien perdre.
+- **Réglages envoyés par le Pi** : seuil, durées, pannes, axes, pleine échelle, vitesse de
+  mesure. Ils sont vérifiés par le RP2040 comme au démarrage (refusés s'ils sont faux) et durent
+  jusqu'à son redémarrage ; le Pi les renvoie alors. Une autre pleine échelle ou vitesse de mesure
+  refait l'autotest du capteur (« OK » coupé un court instant).
+- La mesure et la sortie « OK » ne dépendent jamais de la liaison : fil coupé ou Pi absent, rien
+  ne change pour les chocs.
+
+Côté Pi : `pi/vidange/accelerometre/liaison.py` (et l'outil `vidange-accelerometre` des essais).
+
 Tous les chiffres (carte, broches, seuil, durées) sont dans
 [`pi/reglages/accelerometre.yaml`](../pi/reglages/accelerometre.yaml), vérifiés par le programme
 du Pi au démarrage et quand on fabrique le programme du RP2040.
@@ -42,7 +65,9 @@ du Pi au démarrage et quand on fabrique le programme du RP2040.
 | `src/lis3dh.c` | Le capteur : reconnaissance, autotest, réglages, lecture des mesures |
 | `src/reglages.c` | Les réglages de départ et leur vérification |
 | `src/console.c` | La fenêtre texte par l'USB : commandes et ligne d'état |
-| `src/main.c` | Le RP2040 : broches, bus I2C, chien de garde, les deux cœurs |
+| `src/liaison.c` | Le protocole du fil vers le Pi : trames, questions, réponses (essayé sur PC) |
+| `src/un_fil.pio`, `src/un_fil.c` | Le fil unique : envoi et réception par deux machines PIO |
+| `src/main.c` | Le RP2040 : broches, bus I2C, chien de garde, les deux cœurs (mesure ; Pi et USB) |
 | `tests/` | Les essais sur PC, avec un faux LIS3DH |
 | `reglages.cmake` | Copie `accelerometre.yaml` dans le programme (`reglages_genere.h`) |
 | `essai-etabli.md` | **Procédure d'essai à l'établi**, pas à pas |
@@ -74,9 +99,12 @@ ctest --test-dir accelerometre/build-essais --output-on-failure
 
 - **C avec le Pico SDK** de Raspberry Pi (gratuit, officiel) plutôt que MicroPython : temps de
   mesure régulier, chien de garde sûr, et le petit chargeur maison de la tâche 16 en a besoin.
-- La mesure et la sortie « OK » tournent seules sur un cœur du RP2040 ; la fenêtre USB sur
-  l'autre : si l'USB se bloque, la mesure continue.
+- La mesure et la sortie « OK » tournent seules sur un cœur du RP2040 ; la liaison avec le Pi et
+  la fenêtre USB sur l'autre : si l'une se bloque, la mesure continue. Les octets reçus du Pi
+  sont rangés par une interruption : rien n'est perdu si la fenêtre USB est lente.
 - Pas de passe-haut dans la puce : le fond lent est calculé dans le programme, ce qui permet de
   le geler pendant un choc (le choc ne s'y fond pas).
 - Le seuil changé à la console ne dure que jusqu'au redémarrage : la vraie valeur est celle de
-  `accelerometre.yaml` (plus tard, le Pi l'enverra par le fil série, tâche 15).
+  `accelerometre.yaml`, que le Pi renvoie quand il voit une différence (`envoyer_reglages`).
+- Liaison en texte plutôt qu'en binaire : on peut la lire avec n'importe quel terminal série ;
+  un peu plus lente, mais une question et sa réponse tiennent en 45 ms au plus à 115 200 bauds.

@@ -6,6 +6,7 @@ import socket
 import threading
 import urllib.request
 
+from vidange.accelerometre.faux import FauxRp2040
 from vidange.cameras import FausseCamera
 from vidange.demarrage import (
     CODE_OK,
@@ -46,7 +47,7 @@ def test_verifier_des_reglages_corrects(reglages, tmp_path, capsys):
     sortie = capsys.readouterr().err
     assert "Réglages corrects" in sortie
     assert "valeurs d'EXEMPLE" in sortie
-    assert "entrees-sorties.yaml : 18 lignes d'EXEMPLE" in sortie
+    assert "entrees-sorties.yaml : 19 lignes d'EXEMPLE" in sortie
     # La simple vérification n'écrit pas de journal sur le disque.
     assert not (tmp_path / "donnees").exists()
 
@@ -135,6 +136,7 @@ def raccords_faux(entrees_sorties):
         notifier=lambda message: messages.append(message) or True,
         lancer=commandes.append,
         ecran=FauxNextion().ouvrir,
+        accelerometre=FauxRp2040(reglages.accelerometre).ouvrir,
         cameras={nom: FausseCamera(nom).ouvrir for nom in reglages.programme.cameras.liste},
     )
     return raccords, messages, commandes
@@ -401,3 +403,32 @@ def test_mise_a_jour_d_une_carte_puis_du_pi_depuis_la_page(reglages, entrees_sor
     assert resultat == [CODE_REDEMARRER]
     journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
     assert "Redémarrage du programme (nouvelle version)." in journal
+
+
+# ---------------------------------------------------------------- tâche 15 : accéléromètre
+
+
+def test_un_choc_de_l_accelerometre_est_note_au_registre(reglages, entrees_sorties, tmp_path):
+    rp2040 = FauxRp2040(charger_reglages(reglages).accelerometre)
+    rp2040.choc(3.2, duree_ms=12)
+    raccords, messages, _ = raccords_faux(entrees_sorties)
+    raccords.accelerometre = rp2040.ouvrir
+    arguments = [*options(reglages, tmp_path), "--entrees-sorties", str(entrees_sorties)]
+    arret = threading.Event()
+    fil = threading.Thread(target=lambda: principal(arguments, arret, raccords))
+    fil.start()
+    try:
+        attendre(lambda: "READY=1" in messages)
+        attendre(lambda: "CHOC 1" in rp2040.questions)
+    finally:
+        arret.set()
+        fil.join(10)
+    assert not fil.is_alive()
+    registre = Registre(tmp_path / "donnees" / "registre.sqlite", tmp_path / "donnees" / "photos")
+    try:
+        chocs = registre.lire("SELECT valeur, unite, capteur FROM mesures WHERE nom = 'choc'")
+    finally:
+        registre.fermer()
+    assert chocs == [{"valeur": 3.2, "unite": "g", "capteur": "accelerometre_fil"}]
+    journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
+    assert "Accéléromètre : CHOC n° 1 de 3.20 g pendant 12 ms" in journal

@@ -5,12 +5,23 @@
 
 #define US_PAR_MS 1000ull
 
+static choc_t *choc_en_cours(detecteur_t *d) {
+    return &d->historique[(d->chocs - 1) % HISTORIQUE_CHOCS];
+}
+
+static void finir_choc(detecteur_t *d) {
+    if (d->en_choc) {
+        choc_en_cours(d)->fini = true;
+    }
+    d->en_choc = false;
+}
+
 static void oublier_mesures(detecteur_t *d) {
+    finir_choc(d);
     d->fond_pret = false;
     d->erreurs_suite = 0;
     d->niveau_mg = 0;
     d->en_depassement = false;
-    d->en_choc = false;
 }
 
 static void tomber_en_panne(detecteur_t *d, uint64_t t_us, uint32_t panne) {
@@ -33,11 +44,38 @@ void detecteur_demarrer(detecteur_t *d, const reglages_t *reglages) {
 bool detecteur_changer_seuil(detecteur_t *d, uint32_t seuil_mg) {
     reglages_t essai = d->reglages;
     essai.seuil_mg = seuil_mg;
+    return detecteur_changer_reglages(d, &essai);
+}
+
+bool detecteur_changer_reglages(detecteur_t *d, const reglages_t *reglages) {
     char message[96];
-    if (!reglages_verifier(&essai, message, sizeof message)) {
+    if (!reglages_verifier(reglages, message, sizeof message)) {
         return false;
     }
-    d->reglages = essai;
+    bool revoir_capteur = (d->pannes & PANNE_REGLAGES) ||
+                          reglages->pleine_echelle_g != d->reglages.pleine_echelle_g ||
+                          reglages->mesures_par_seconde != d->reglages.mesures_par_seconde;
+    d->reglages = *reglages;
+    d->pannes &= ~PANNE_REGLAGES;
+    if (revoir_capteur) {
+        // Le capteur doit être redémarré avec ses nouveaux réglages : tout de suite.
+        d->pret = false;
+        d->t_reessai_us = 0;
+        oublier_mesures(d);
+    }
+    return true;
+}
+
+bool detecteur_choc(const choc_t historique[HISTORIQUE_CHOCS], uint32_t chocs, uint32_t numero,
+                    choc_t *choc) {
+    if (numero == 0 || numero > chocs) {
+        return false;
+    }
+    const choc_t *trouve = &historique[(numero - 1) % HISTORIQUE_CHOCS];
+    if (trouve->numero != numero) {
+        return false;
+    }
+    *choc = *trouve;
     return true;
 }
 
@@ -138,6 +176,12 @@ void detecteur_mesure(detecteur_t *d, uint64_t t_us, const int32_t mg[3]) {
             d->chocs++;
             d->t_dernier_us = t_us;
             d->pic_choc_mg = d->pic_depassement_mg;
+            *choc_en_cours(d) = (choc_t){.numero = d->chocs, .t_debut_us = d->t_depassement_us};
+        }
+        if (d->en_choc) {
+            choc_t *choc = choc_en_cours(d);
+            choc->pic_mg = d->pic_choc_mg;
+            choc->duree_ms = (uint32_t)((t_us - choc->t_debut_us) / US_PAR_MS);
         }
         // Pendant un dépassement, le fond ne suit pas (le choc ne doit pas s'y fondre).
         return;
@@ -153,7 +197,7 @@ void detecteur_mesure(detecteur_t *d, uint64_t t_us, const int32_t mg[3]) {
         d->fond[axe] += part * ((float)mg[axe] - d->fond[axe]);
     }
     if (d->en_choc && t_us - d->t_dernier_us >= r->maintien_ms * US_PAR_MS) {
-        d->en_choc = false;
+        finir_choc(d);
     }
 }
 

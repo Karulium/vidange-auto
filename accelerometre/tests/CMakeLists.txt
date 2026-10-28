@@ -13,11 +13,13 @@ add_executable(essais
   essais_lis3dh.c
   essais_detecteur.c
   essais_console.c
+  essais_liaison.c
   faux_lis3dh.c
   ../src/detecteur.c
   ../src/lis3dh.c
   ../src/reglages.c
-  ../src/console.c)
+  ../src/console.c
+  ../src/liaison.c)
 target_include_directories(essais PRIVATE . ../src "${DOSSIER_GENERE}")
 target_compile_options(essais PRIVATE -Wall -Wextra -Werror -fsanitize=address,undefined)
 target_link_options(essais PRIVATE -fsanitize=address,undefined)
