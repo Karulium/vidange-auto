@@ -10,6 +10,7 @@ Deux sortes de pièces :
   c'est ce qui permet de choisir plus tard comment brancher les relais et les entrées 24 V.
 - `BusI2c` : un bus I2C, sur lequel parlent les puces. Le vrai passe par Linux (smbus2),
   le faux (`vidange.materiel.faux`) imite les puces.
+- `BrochesHx711` : les 2 broches d'une carte de pesée HX711 (DT, SCK), lue par `Hx711`.
 """
 
 import errno
@@ -312,3 +313,128 @@ class Sht31(PuceI2c):
         temperature = -45 + 175 * int.from_bytes(octets[0:2], "big") / 65535
         humidite = 100 * int.from_bytes(octets[3:5], "big") / 65535
         return temperature, humidite
+
+
+# ---------------------------------------------------------- pesée (HX711)
+
+
+class BrochesHx711(Protocol):
+    """Les 2 broches d'une carte de pesée HX711. Niveau électrique : True = haut."""
+
+    def dt(self) -> bool: ...
+
+    def sck(self, haut: bool) -> None: ...
+
+    def fermer(self) -> None: ...
+
+
+class BrochesHx711Gpio:
+    """Les vraies broches, par libgpiod : DT en entrée (tirage haut), SCK en sortie (à 0).
+
+    Le tirage haut fait qu'une prise débranchée se voit : DT reste à 1, « pas prête » pour toujours.
+    """
+
+    def __init__(self, fichier: str, dt: str, sck: str) -> None:
+        import gpiod
+        from gpiod.line import Bias, Direction, Value
+
+        self._dt, self._sck = dt, sck
+        self._valeurs = (Value.INACTIVE, Value.ACTIVE)
+        config = {
+            dt: gpiod.LineSettings(direction=Direction.INPUT, bias=Bias.PULL_UP),
+            sck: gpiod.LineSettings(direction=Direction.OUTPUT, output_value=Value.INACTIVE),
+        }
+        try:
+            self._requete = gpiod.request_lines(fichier, consumer="vidange-pesee", config=config)
+        except (OSError, ValueError) as erreur:
+            raise ErreurMateriel(
+                f"broches {dt}, {sck} de {fichier} impossibles à prendre ({erreur}) : "
+                "nom de broche juste ? déjà prise par un autre programme ?"
+            ) from None
+
+    def dt(self) -> bool:
+        return self._requete.get_value(self._dt) == self._valeurs[1]
+
+    def sck(self, haut: bool) -> None:
+        self._requete.set_value(self._sck, self._valeurs[haut])
+
+    def fermer(self) -> None:
+        self._requete.release()
+
+
+class LectureInterrompue(ErreurMateriel):
+    """Une impulsion d'horloge a duré trop longtemps : la lecture est jetée (à refaire)."""
+
+
+class PeseeMuette(ErreurMateriel):
+    """La carte de pesée ne dit jamais « mesure prête » : prise débranchée (ou carte éteinte)."""
+
+
+class Hx711:
+    """Carte de pesée HX711 (voie A, gain 128), lue directement par le Pi.
+
+    Fiche technique : quand une mesure est prête, DT passe à 0. Le Pi envoie alors 25 impulsions
+    sur SCK : 24 pour les 24 bits de la mesure (le plus fort d'abord), 1 de plus pour garder la
+    voie A au gain 128 ; DT remonte à 1 après la 25ᵉ. Une impulsion haute de plus de 60 µs met la
+    puce en sommeil et la mesure est perdue.
+
+    Linux peut interrompre le programme n'importe quand : chaque impulsion est donc chronométrée
+    (du début de la montée à la fin de la descente, donc plus long que l'impulsion elle-même),
+    et une lecture où l'une a duré trop longtemps est jetée (LectureInterrompue : la refaire).
+    """
+
+    BITS = 24
+    # La 25ᵉ impulsion : voie A, gain 128 pour la mesure suivante.
+    IMPULSIONS = 25
+    # Sous les 60 µs de la fiche technique, avec de la marge.
+    IMPULSION_MAX_NS = 50_000
+    ATTENTE_S = 0.001
+    # Mesures hors échelle : la puce les bloque à ces valeurs.
+    BUTEES = (-(1 << 23), (1 << 23) - 1)
+
+    def __init__(
+        self,
+        broches: BrochesHx711,
+        horloge_ns: Callable[[], int] = time.perf_counter_ns,
+        horloge: Callable[[], float] = time.monotonic,
+        dormir: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self.broches = broches
+        self._horloge_ns = horloge_ns
+        self._horloge = horloge
+        self._dormir = dormir
+
+    def lire(self, delai_s: float) -> int:
+        """Une mesure brute (nombre signé de 24 bits). Lève ErreurMateriel sans réponse."""
+        broches = self.broches
+        fin = self._horloge() + delai_s
+        while broches.dt():
+            if self._horloge() >= fin:
+                raise PeseeMuette(
+                    f"pas de réponse de la carte de pesée en {delai_s:g} s (prise débranchée ?)"
+                )
+            self._dormir(self.ATTENTE_S)
+        valeur = 0
+        plus_longue = 0
+        for numero in range(self.IMPULSIONS):
+            debut = self._horloge_ns()
+            broches.sck(True)
+            bit = broches.dt()
+            broches.sck(False)
+            plus_longue = max(plus_longue, self._horloge_ns() - debut)
+            if numero < self.BITS:
+                valeur = valeur << 1 | bit
+        if plus_longue > self.IMPULSION_MAX_NS:
+            raise LectureInterrompue(
+                f"impulsion d'horloge de {plus_longue / 1000:.0f} µs (programme interrompu "
+                "par Linux) : mesure jetée"
+            )
+        if not broches.dt():
+            raise ErreurMateriel("le fil DT reste à 0 après la lecture : fil à la masse ?")
+        if valeur & 1 << (self.BITS - 1):
+            valeur -= 1 << self.BITS
+        if valeur in self.BUTEES:
+            raise ErreurMateriel(
+                "mesure hors échelle : capteur de pesage abîmé, mal branché ou trop chargé ?"
+            )
+        return valeur

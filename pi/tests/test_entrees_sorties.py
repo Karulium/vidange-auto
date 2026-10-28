@@ -91,13 +91,13 @@ def test_module_inconnu(entrees_sorties):
 def test_trop_d_entrees_sur_une_carte(entrees_sorties):
     remplacer(entrees_sorties, "entrees: 8", "entrees: 2")
     message = erreur_de(entrees_sorties)
-    assert "carte « entrees_24v_1 » : 3 entrées branchées pour 2 disponibles" in message
+    assert "carte « entrees_24v_1 » : 5 entrées branchées pour 2 disponibles" in message
 
 
 def test_trop_de_sorties_sur_une_carte(entrees_sorties):
     remplacer(entrees_sorties, "sorties: 8", "sorties: 0")
     message = erreur_de(entrees_sorties)
-    assert "carte « relais_1 » : 1 sorties branchées pour 0 disponibles" in message
+    assert "carte « relais_1 » : 2 sorties branchées pour 0 disponibles" in message
 
 
 def test_24_volts_sans_isolement(entrees_sorties):

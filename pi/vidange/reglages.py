@@ -83,6 +83,117 @@ class GesteLieuSur(Modele):
         return self
 
 
+class Rectangle(Modele):
+    """Un rectangle vu de dessus, dans le repère du portique (m)."""
+
+    x: Intervalle
+    y: Intervalle
+
+    @model_validator(mode="after")
+    def _dans_l_ordre(self) -> "Rectangle":
+        for axe, (debut, fin) in (("x", self.x), ("y", self.y)):
+            if debut >= fin:
+                raise ValueError(f"sur {axe}, aller du plus petit au plus grand")
+        return self
+
+    def contient(self, x: float, y: float) -> bool:
+        return self.x[0] <= x <= self.x[1] and self.y[0] <= y <= self.y[1]
+
+
+class PeseeFut(Modele):
+    """Pesée du chariot du fût (carte HX711 lue par le Pi)."""
+
+    # Vrai tant que l'étalonnage et la tare n'ont pas été faits sur la vraie pesée.
+    exemple: bool = False
+    # Étalonnage (pi/systeme/essai-poste-fut.md) : mesure brute à vide, et nombre de points
+    # de la mesure brute par kilogramme posé.
+    zero_brut: int
+    brut_par_kg: float
+    # Poids du berceau + fût vide (kg) : poids net du substrat = poids lu − tare.
+    tare_kg: float = Field(ge=0)
+    # Poids lu (berceau + fût + contenu) plausible quand un fût est en place (kg).
+    plausible_kg: Intervalle
+    # Une pesée = la médiane de plusieurs lectures ; une lecture qui s'en écarte de plus de
+    # « ecart_aberrant_kg » est jetée ; il en faut au moins « lectures_valides_min ».
+    lectures: int = Field(ge=1, le=50)
+    lectures_valides_min: int = Field(ge=1)
+    ecart_aberrant_kg: float = Field(gt=0)
+    # Attente maximale de la carte à chaque lecture (s) : au-delà, « pesée débranchée ».
+    delai_reponse_s: float = Field(gt=0)
+    # Une pesée tous les combien (s), sur la machine.
+    periode_s: float = Field(gt=0)
+    # Écart permis entre la somme des doses de la griffe et la baisse de la pesée (kg) :
+    # au-delà, un avertissement (pas un arrêt).
+    ecart_doses_max_kg: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "PeseeFut":
+        erreurs = []
+        if self.brut_par_kg == 0:
+            erreurs.append("brut_par_kg ne peut pas valoir 0")
+        if self.plausible_kg[0] >= self.plausible_kg[1]:
+            erreurs.append("plausible_kg : aller du plus petit au plus grand")
+        if self.lectures_valides_min > self.lectures:
+            erreurs.append("lectures_valides_min ne peut pas dépasser lectures")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class PosteFut(Modele):
+    """Poste du fût (module figé le 23/10/2026) : géométrie, zones, signaux stables, pesée.
+
+    Repère du portique, en mètres. Rien ne bouge seul au poste : ces chiffres servent aux
+    verrous des autres modules (pont, chariot de remplissage, griffe, préhension) et à l'état
+    du poste. La sécurité des personnes reste câblée.
+    """
+
+    # Le fût (toujours debout dans la machine).
+    centre_fut: tuple[float, float]
+    ouverture_diametre: float = Field(gt=0)
+    ouverture_z: float
+    fut_diametre_interieur: float = Field(gt=0)
+    fut_profondeur_interieure: float = Field(gt=0)
+    # Fond intérieur et bord, à peu près : le fond est trouvé au toucher par la griffe.
+    fut_fond_interieur_z: float
+    fut_bord_z: float
+    # Chariot du fût absent ou en mouvement : le pont reste hors de cet intervalle de x
+    # (le chariot monte à 1,06, le chariot X du pont descend à 1,11).
+    pont_interdit_x: Intervalle
+    # Pendant ce temps, le bout du chariot de remplissage reste à y ≤ cette valeur
+    # (poste ou files 1 et 2, jamais devant la 3ᵉ file).
+    remplissage_y_bout_max: float
+    # Griffe au-dessus de la poignée du volet : le bas de sa tête reste à z ≥ cette valeur.
+    poignee_volet: Rectangle
+    griffe_bas_min_poignee_z: float
+    # Préhension en lavage, pour passer la paroi côté stockage : fond du seau à z ≥ ... et
+    # axe à y ≤ ...
+    lavage_paroi_fond_seau_min_z: float
+    lavage_paroi_axe_y_max: float
+    # Les signaux du poste doivent être stables depuis ce temps (s) pour compter.
+    stabilite_s: float = Field(ge=0)
+    # Le poste relit ses signaux tous les combien (s).
+    periode_s: float = Field(gt=0)
+    # Voyant du bouton « Prêt » : demi-période du clignotement (s).
+    clignotement_s: float = Field(gt=0)
+    pesee: PeseeFut
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "PosteFut":
+        erreurs = []
+        if self.pont_interdit_x[0] >= self.pont_interdit_x[1]:
+            erreurs.append("pont_interdit_x : aller du plus petit au plus grand")
+        if self.fut_fond_interieur_z >= self.fut_bord_z:
+            erreurs.append("le fond du fût (fut_fond_interieur_z) doit être sous son bord")
+        if self.fut_diametre_interieur > self.ouverture_diametre:
+            erreurs.append(
+                "fut_diametre_interieur plus grand que l'ouverture du dessus : chiffre faux ?"
+            )
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -100,6 +211,8 @@ class Machine(Modele):
     durees: dict[Nom, Annotated[float, Field(gt=0)]] = Field(default_factory=dict)
     # Retour en lieu sûr (après une coupure, ou à la mise en route) : gestes faits dans l'ordre.
     lieu_sur: list[GesteLieuSur] = Field(default_factory=list)
+    # Poste du fût (None : pas de poste du fût, pour des réglages d'essai).
+    poste_fut: PosteFut | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -622,7 +735,8 @@ class MouvementSimule(Modele):
 
 
 class EvenementSimule(Modele):
-    """Un capteur qui change pendant la simulation (Karulium ferme un panneau...)."""
+    """Un capteur qui change pendant la simulation (Karulium ferme un panneau...),
+    ou une pesée qui change (poids posé, prise débranchée)."""
 
     # Compté depuis le début de cette étape (« module.etape ») ; sans « apres » : depuis le
     # début de la simulation.
@@ -630,9 +744,33 @@ class EvenementSimule(Modele):
         Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")] | None
     ) = None
     attente_s: float = Field(ge=0)
-    # Entrée tout-ou-rien de docs/entrees-sorties.yaml.
-    capteur: Nom
-    actionne: bool
+    # Entrée tout-ou-rien de docs/entrees-sorties.yaml, actionnée ou non...
+    capteur: Nom | None = None
+    actionne: bool | None = None
+    # ... ou pesée (signal de type pesee) : poids lu en kg, ou prise débranchée.
+    pesee: Nom | None = None
+    kg: float | None = None
+    debranchee: bool = False
+
+    @model_validator(mode="after")
+    def _une_seule_chose(self) -> "EvenementSimule":
+        capteur = self.capteur is not None and self.actionne is not None
+        pesee = self.pesee is not None and (self.kg is not None) != self.debranchee
+        reste_capteur = self.capteur is not None or self.actionne is not None
+        reste_pesee = self.pesee is not None or self.kg is not None or self.debranchee
+        if not ((capteur and not reste_pesee) or (pesee and not reste_capteur)):
+            raise ValueError(
+                "écrire « capteur » et « actionne », ou « pesee » avec « kg » ou "
+                "« debranchee: true » (une seule chose par événement)"
+            )
+        return self
+
+
+class ScenarioSimule(Modele):
+    """Un scénario : capteurs actionnés au départ et événements, à la place de ceux du haut."""
+
+    capteurs_actionnes: list[Nom] = Field(default_factory=list)
+    evenements: list[EvenementSimule] = Field(default_factory=list)
 
 
 class ReglagesSimulateur(Modele):
@@ -652,6 +790,8 @@ class ReglagesSimulateur(Modele):
     # Capteurs actionnés au départ (les autres ne le sont pas).
     capteurs_actionnes: list[Nom] = Field(default_factory=list)
     evenements: list[EvenementSimule] = Field(default_factory=list)
+    # Scénarios nommés (« echange_fut »...), choisis au lancement du simulateur.
+    scenarios: dict[Nom, ScenarioSimule] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------- accelerometre.yaml

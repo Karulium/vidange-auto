@@ -121,6 +121,7 @@
       <button id="bouton-reprendre" class="gros vert" hidden>REPRENDRE</button>
       <div id="gos"></div>
       <div id="alarmes"></div>
+      <div id="poste-fut"></div>
       <h2>Modules</h2>
       <div id="modules"></div>
       <button id="bouton-anciennes" class="petit">Voir les dernières alarmes (même acquittées)</button>
@@ -355,6 +356,8 @@ function afficherEtat(etat) {
         },
       }, "J'ai corrigé : acquitter"))));
 
+  afficherPosteFut(etat.poste_fut);
+
   remplir("modules", ...(etat.modules.length ? etat.modules.map((m) =>
     el("div", { classe: "carte " + (m.statut === "alarme" ? "alarme" : m.attend ? "attention" : "ok") },
       el("strong", {}, m.module), " — " + (STATUTS[m.statut] || m.statut),
@@ -365,6 +368,32 @@ function afficherEtat(etat) {
 
   clearTimeout(minuterie);
   minuterie = setTimeout(rafraichir, (etat.rafraichir_s || 2) * 1000);
+}
+
+function kg(valeur) { return valeur === null ? "?" : valeur.toFixed(1).replace(".", ",") + " kg"; }
+
+function afficherPosteFut(poste) {
+  if (!poste) { remplir("poste-fut"); return; }
+  const pret = poste.etat === "pret";
+  const classe = pret ? "ok" : poste.etat === "en_place" ? "attention" : "";
+  const poids = poste.pesee
+    ? "Pesée : " + poste.pesee
+    : "Substrat : " + kg(poste.poids_net_kg) + " (lu : " + kg(poste.poids_lu_kg) + ")";
+  remplir("poste-fut",
+    el("h2", {}, "Poste du fût"),
+    el("div", { classe: "carte " + classe },
+      el("strong", {}, poste.libelle),
+      el("div", {}, poids + (poste.exemple_pesee ? " — pesée pas encore étalonnée" : "")),
+      poste.cycle !== null && el("div", { classe: "doux" },
+        "Fût plein : " + kg(poste.poids_plein_kg) + " · doses de la griffe : " + kg(poste.doses_kg)),
+      !pret && el("div", {}, el("strong", {}, "À faire à la main : "), poste.gestes.join(" ; ") + "."),
+      poste.manque.length ? el("div", { classe: "quoi" },
+        el("strong", {}, "Il manque : "), poste.manque.join(" ; ") + ".") : null,
+      ...poste.messages.slice(-3).map((m) => el("div", { classe: "doux" }, m)),
+      poste.etat === "en_place" && el("button", {
+        classe: "gros vert",
+        surclick: () => ordre("/api/poste-fut/pret", "Poste du fût prêt."),
+      }, "PRÊT")));
 }
 
 async function rafraichir() {

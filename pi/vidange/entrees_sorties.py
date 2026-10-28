@@ -38,10 +38,14 @@ from vidange.reglages import (
 ENTREES = ("contact", "pnp", "npn", "mesure")
 SORTIES = ("relais", "logique")
 BUS = ("i2c", "serie")
+# Carte de pesée HX711 lue directement par 2 broches du Pi : [DT, SCK] (données, horloge).
+PESEE = "pesee"
 # Types qui ont un état au repos (contact ouvert ou fermé).
 AVEC_REPOS = ("contact", "pnp", "npn", "relais")
 
-TypeSignal = Literal["contact", "pnp", "npn", "mesure", "relais", "logique", "i2c", "serie"]
+TypeSignal = Literal[
+    "contact", "pnp", "npn", "mesure", "relais", "logique", "i2c", "serie", "pesee"
+]
 # Entrées et sorties tout-ou-rien (pas les mesures).
 TOUT_OU_RIEN = ("contact", "pnp", "npn", "relais", "logique")
 
@@ -226,6 +230,11 @@ class Signal(Modele):
                 erreurs.append(f"« {champ} » ne sert qu'aux bus (i2c, serie)")
         if self.au_demarrage is not None and self.type not in ("contact", "pnp", "npn"):
             erreurs.append("« au_demarrage » ne sert qu'aux entrées contact, pnp ou npn")
+        if self.type == PESEE and len(self.broche) != 2:
+            erreurs.append(
+                "une pesée (HX711) a 2 broches, dans cet ordre : [DT, SCK] "
+                "(exemple : [GPIO20, GPIO21])"
+            )
         if self.conversion is not None and self.type != "mesure":
             erreurs.append("« conversion » ne sert qu'aux signaux de type mesure")
         if self.appareil == "transmetteur_modbus":
@@ -458,8 +467,8 @@ class EntreesSorties(Modele):
             if puce == "ads1115":
                 permis = ("mesure",)
             elif directe:
-                # Le Pi lui-même : pas d'entrée analogique, mais ses bus.
-                permis = (*TOUT_OU_RIEN, *BUS)
+                # Le Pi lui-même : pas d'entrée analogique, mais ses bus et la pesée (HX711).
+                permis = (*TOUT_OU_RIEN, *BUS, PESEE)
             else:
                 permis = TOUT_OU_RIEN
             if signal.type not in permis:

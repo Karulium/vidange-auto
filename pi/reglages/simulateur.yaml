@@ -36,10 +36,44 @@ capteurs_actionnes: []
 
 # Ce qui change pendant le cycle : « attente_s » secondes après le début de l'étape « apres »
 # (module.etape ; sans « apres » : après le début de la simulation), le capteur est actionné
-# (actionne: true) ou ne l'est plus (false).
+# (actionne: true) ou ne l'est plus (false). Une pesée peut aussi changer :
+# « pesee: pesee_fut » avec « kg: 160 » (poids lu) ou « debranchee: true ».
 evenements:
   # Karulium ferme le panneau du poste du fût 10 s après le lancement du module d'exemple.
   - apres: exemple.aller_au_repos
     attente_s: 10
     capteur: reed_panneau_poste_fut
     actionne: true
+
+# Scénarios nommés : ils remplacent « capteurs_actionnes » et « evenements » du haut.
+# Lancer : vidange-simulateur poste_fut   (scénario « echange_fut » par défaut).
+scenarios:
+  # Échange d'un fût au poste : le chariot du fût vide s'en va, le suivant arrive.
+  echange_fut:
+    # Au départ, le chariot du fût vide est au fond, pesée branchée.
+    capteurs_actionnes: [chariot_fut_en_place]
+    evenements:
+      - attente_s: 0
+        pesee: pesee_fut
+        kg: 42
+      # Karulium débranche la pesée et sort le chariot.
+      - attente_s: 30
+        pesee: pesee_fut
+        debranchee: true
+      - attente_s: 40
+        capteur: chariot_fut_en_place
+        actionne: false
+      # Fût plein retourné sous le pont roulant, chariot roulé au fond 5 min plus tard.
+      - attente_s: 340
+        capteur: chariot_fut_en_place
+        actionne: true
+      # Freiné, prise de la pesée branchée, soupape enlevée, volet rabattu, puis « Prêt ».
+      - attente_s: 400
+        pesee: pesee_fut
+        kg: 165
+      - attente_s: 430
+        capteur: bouton_pret_fut
+        actionne: true
+      - attente_s: 431
+        capteur: bouton_pret_fut
+        actionne: false

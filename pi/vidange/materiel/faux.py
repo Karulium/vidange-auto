@@ -9,8 +9,10 @@ soit testé lui aussi. Seules les broches GPIO du Pi sont imitées plus haut (`F
     faux.actionner("reed_panneau_poste_fut", True)   # le capteur est actionné
     faux.regler("vide_venturi", -40)                  # dans l'unité du signal
     faux.regler_ambiance("sht31_armoire", 28.5, 70)
+    faux.regler_pesee("pesee_fut", 1_234_567)        # mesure brute de la carte HX711
     faux.commande("voyant_buzzer")                    # ce qu'a fait le programme
     faux.debrancher("sht31_armoire")                  # la puce ne répond plus
+    faux.debrancher("pesee_fut")                      # prise de la pesée débranchée
 
 Le faux suit le même plan que le vrai (niveau actif, contact au repos, tirage), à l'envers.
 """
@@ -21,7 +23,7 @@ from collections.abc import Mapping
 from vidange.entrees_sorties import BROCHES_DES_PUCES, EntreesSorties, LiaisonUsbSerie
 from vidange.materiel.materiel import Branchement, tracer_branchements
 from vidange.materiel.modbus import crc_modbus
-from vidange.materiel.puces import Ads1115, BusI2c, Tirage, crc_sht31
+from vidange.materiel.puces import Ads1115, BusI2c, Hx711, Tirage, crc_sht31
 
 
 def _pas_de_reponse() -> OSError:
@@ -213,6 +215,63 @@ class FauxMcp23017(FauxAppareilI2c):
         return bytes(octets)
 
 
+# ------------------------------------------------------------- pesée (HX711)
+
+
+class FauxHx711:
+    """Une carte HX711 au bout de ses 2 broches : une mesure toujours prête, envoyée bit par bit
+    à chaque impulsion de SCK (le plus fort d'abord), DT à 1 après la 25ᵉ impulsion.
+    Débranchée : DT reste à 1 (tirage haut du Pi), comme une prise de pesée débranchée.
+
+    Elle a sa propre horloge, qui n'avance que quand le lecteur attend (`dormir`) : une prise
+    débranchée ne fait pas attendre les tests ni le simulateur."""
+
+    def __init__(self) -> None:
+        self.temps = 0.0
+        self.brut = 0
+        self.debranche = False
+        self.ferme = False
+        self.lectures = 0
+        self._impulsions = 0
+        self._sck = False
+        self._apres_lecture = False
+
+    def _bit(self) -> bool:
+        if self._impulsions == 0 or self._impulsions > 24:
+            return False
+        mot = self.brut & 0xFFFFFF
+        return bool(mot >> (24 - self._impulsions) & 1)
+
+    def horloge(self) -> float:
+        return self.temps
+
+    def dormir(self, duree_s: float) -> None:
+        self.temps += duree_s
+
+    def dt(self) -> bool:
+        if self.debranche:
+            return True
+        if self._apres_lecture:
+            # La puce garde DT à 1 jusqu'à la mesure suivante : prête au coup d'après ici,
+            # une fois SCK redescendu.
+            if not self._sck:
+                self._apres_lecture = False
+            return True
+        return self._bit()
+
+    def sck(self, haut: bool) -> None:
+        if haut and not self._sck and not self.debranche:
+            self._impulsions += 1
+            if self._impulsions == 25:
+                self._impulsions = 0
+                self._apres_lecture = True
+                self.lectures += 1
+        self._sck = haut
+
+    def fermer(self) -> None:
+        self.ferme = True
+
+
 # ---------------------------------------------------------------------- RS485
 
 
@@ -291,6 +350,7 @@ class FausseFabrique:
         self.gpios: dict[str, FauxGpio] = {}
         self.bus: dict[str, FauxBusI2c] = {}
         self.rs485: dict[str, FauxRs485] = {}
+        self.balances: dict[str, FauxHx711] = {}
         classes = {
             "sht31": FauxSht31,
             "ads1115": FauxAds1115,
@@ -301,6 +361,8 @@ class FausseFabrique:
             ressource = branchement.ressource
             if ressource[0] == "gpio":
                 self.gpios.setdefault(ressource[1], FauxGpio())
+            elif ressource[0] == "hx711":
+                self.balances.setdefault(branchement.nom, FauxHx711())
             elif ressource[0] == "i2c":
                 bus = self.bus.setdefault(ressource[1], FauxBusI2c())
                 if ressource[2] not in bus.appareils:
@@ -330,6 +392,13 @@ class FausseFabrique:
                 return rs485.ouvrir()
         raise OSError(f"faux : aucun adaptateur n° « {liaison.numero_serie_usb} »")
 
+    def hx711(self, fichier: str, dt: str, sck: str) -> Hx711:
+        for nom, branchement in self.branchements.items():
+            if branchement.ressource == ("hx711", fichier, dt, sck):
+                faux = self.balances[nom]
+                return Hx711(faux, horloge=faux.horloge, dormir=faux.dormir)
+        raise OSError(f"faux : aucune carte de pesée sur {dt}, {sck}")
+
     # ------------------------------------------------ réglage par les noms
 
     def _branchement(self, nom: str, *sortes: str) -> Branchement:
@@ -342,6 +411,8 @@ class FausseFabrique:
         ressource = branchement.ressource
         if ressource[0] == "gpio":
             return self.gpios[ressource[1]]
+        if ressource[0] == "hx711":
+            return self.balances[branchement.nom]
         if ressource[0] == "i2c":
             return self.bus[ressource[1]].appareils[ressource[2]]
         signal = self.liste.signaux[branchement.nom]
@@ -377,9 +448,16 @@ class FausseFabrique:
         appareil.temperature_c = temperature_c
         appareil.humidite_pct = humidite_pct
 
+    def regler_pesee(self, nom: str, brut: int) -> None:
+        """Mesure brute de la carte de pesée (nombre signé de 24 bits)."""
+        self._appareil(self._branchement(nom, "pesee")).brut = brut
+
     def debrancher(self, nom: str, debranche: bool = True) -> None:
-        """La puce I2C ou le transmetteur du signal ne répond plus (ou de nouveau)."""
-        branchement = self._branchement(nom, "mesure", "modbus", "ambiance", "entree", "sortie")
+        """La puce I2C, le transmetteur ou la carte de pesée du signal ne répond plus
+        (ou de nouveau)."""
+        branchement = self._branchement(
+            nom, "mesure", "modbus", "ambiance", "entree", "sortie", "pesee"
+        )
         if branchement.ressource[0] == "gpio":
             raise KeyError("faux : une broche GPIO du Pi ne se débranche pas")
         self._appareil(branchement).debranche = debranche

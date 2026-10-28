@@ -180,6 +180,21 @@ Les champs :
 | `photos[]` | les photos prises pendant le cycle : `numero` (sur le Pi), `quand`, `camera`, `fichier` (chemin sur le Pi, relatif au dossier des photos), `remarque`, et l'objet photographié. **Seulement leur description pour l'instant** : l'envoi des fichiers des photos choisies viendra plus tard (question n° 2 de la PR de la tâche 10) |
 | `alarmes[]` | les alarmes du cycle : `numero` (sur le Pi), `quand`, `module`, `etape`, `message`, `quoi_faire`, `acquittee_le`, `acquittee_par` (`null` si pas encore acquittée) |
 
+### Les poids du fût (tâche 17, poste du fût)
+
+Un cycle `vidange` commence quand Karulium appuie sur « Prêt » au poste du fût. La pesée du chariot y
+ajoute ces `mesures` (`unite` : `kg`, `capteur` : `pesee_fut`, objet : `fut`, le code du fût s'il est
+connu, sinon `null`) :
+
+| `nom` | Ce que c'est |
+|---|---|
+| `poids_fut_plein` | substrat dans le fût au « Prêt » (poids lu − tare du berceau et du fût vide) |
+| `poids_fut_restant` | substrat encore dans le fût, après chaque dose de la griffe, et à la fin |
+| `poids_fut_vide_total` | substrat sorti du fût pendant le cycle (plein − restant) ; absent si la pesée était débranchée à la fin |
+
+Un cycle `vidange` peut finir `abandonne` si le chariot est retiré avant la fin (fût pas vide).
+L'app peut s'en servir pour le rendement d'un fût (seaux faits, poids vidé) ; rien n'est obligatoire.
+
 ### Ce que l'app « machine » en fera (rappel, voir plus haut)
 
 - Chaque élément de `seaux` → un nouveau `Blocs` dont le `contenant` est le seau du QR.

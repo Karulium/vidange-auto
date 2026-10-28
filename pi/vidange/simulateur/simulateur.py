@@ -16,7 +16,11 @@ zones), quand son geste part et finit, ce qui bouge ; et le temps total. Une ala
 arrête la simulation, et le planning dit pourquoi.
 
 Les modules sont écrits comme pour la vraie machine ; ils reçoivent des axes imaginaires
-(`simulateur.axes()`) à la place des vrais.
+(`simulateur.axes()`) à la place des vrais, et un poste du fût sur le faux matériel
+(`simulateur.poste_fut()`).
+
+Un scénario nommé de simulateur.yaml (« echange_fut »...) remplace les capteurs du départ et les
+événements du haut du fichier : `Simulateur(reglages, liste, scenario="echange_fut")`.
 """
 
 from collections.abc import Callable, Iterable
@@ -26,6 +30,7 @@ from vidange.chef import Chef, Condition, Etape, EtatChef, Module
 from vidange.chef.chef import ATTENTE_GO
 from vidange.entrees_sorties import EntreesSorties
 from vidange.materiel import FausseFabrique, Materiel
+from vidange.poste_fut import Pesee, PosteFut
 from vidange.reglages import EvenementSimule, Reglages
 from vidange.simulateur.axes import AxesSimulees, EtatAxes
 from vidange.simulateur.planning import LignePlanning, Planning
@@ -39,8 +44,22 @@ class ErreurSimulation(Exception):
 
 
 class Simulateur:
-    def __init__(self, reglages: Reglages, liste: EntreesSorties) -> None:
+    def __init__(
+        self, reglages: Reglages, liste: EntreesSorties, scenario: str | None = None
+    ) -> None:
         self._reglages = reglages.simulateur
+        self._machine = reglages.machine
+        if scenario is None:
+            depart, self._evenements = self._reglages.capteurs_actionnes, self._reglages.evenements
+        elif scenario in self._reglages.scenarios:
+            choisi = self._reglages.scenarios[scenario]
+            depart, self._evenements = choisi.capteurs_actionnes, choisi.evenements
+        else:
+            connus = ", ".join(self._reglages.scenarios) or "aucun"
+            raise ErreurSimulation(
+                f"scénario « {scenario} » absent de simulateur.yaml (scénarios : {connus})"
+            )
+        self._poste: PosteFut | None = None
         self.temps = 0.0
         self.fabrique = FausseFabrique(liste)
         self.materiel = Materiel(liste, self.fabrique)
@@ -56,7 +75,7 @@ class Simulateur:
         self._a_venir: list[tuple[float, EvenementSimule]] = []
         self._faits: list[tuple[float, str]] = []
         self._joue = False
-        for capteur in self._reglages.capteurs_actionnes:
+        for capteur in depart:
             self._actionner(capteur, True, "capteurs_actionnes")
 
     def _horloge(self) -> float:
@@ -65,6 +84,19 @@ class Simulateur:
     def axes(self) -> AxesSimulees:
         """Axes imaginaires pour un module (un objet par module, comme les vrais Axes)."""
         return AxesSimulees(self._axes)
+
+    def poste_fut(self) -> PosteFut:
+        """Le poste du fût sur le faux matériel, à l'heure du simulateur (toujours le même)."""
+        if self._machine.poste_fut is None:
+            raise ErreurSimulation("machine.yaml n'a pas de partie « poste_fut »")
+        if self._poste is None:
+            self._poste = PosteFut(
+                self._machine.poste_fut,
+                self.materiel,
+                horloge=self._horloge,
+                lecture_directe=True,
+            )
+        return self._poste
 
     # ------------------------------------------------------------ jouer
 
@@ -77,7 +109,7 @@ class Simulateur:
         if not modules:
             raise ErreurSimulation("aucun module à simuler")
         self._verifier_evenements(modules)
-        for evenement in self._reglages.evenements:
+        for evenement in self._evenements:
             if evenement.apres is None:
                 self._a_venir.append((evenement.attente_s, evenement))
         for module in modules:
@@ -170,10 +202,33 @@ class Simulateur:
             if heure > self.temps:
                 restent.append((heure, evenement))
                 continue
-            self._actionner(evenement.capteur, evenement.actionne, "evenements")
-            etat = "actionné" if evenement.actionne else "relâché"
-            self._faits.append((self.temps, f"capteur « {evenement.capteur} » {etat}"))
+            if evenement.capteur is not None:
+                self._actionner(evenement.capteur, bool(evenement.actionne), "evenements")
+                etat = "actionné" if evenement.actionne else "relâché"
+                self._faits.append((self.temps, f"capteur « {evenement.capteur} » {etat}"))
+            else:
+                self._faits.append((self.temps, self._peser(evenement)))
         self._a_venir = restent
+
+    def _peser(self, evenement: EvenementSimule) -> str:
+        """La fausse pesée change : un poids (kg, comme lu par le poste) ou prise débranchée."""
+        nom = evenement.pesee
+        assert nom is not None
+        if self._machine.poste_fut is None:
+            raise ErreurSimulation("simulateur.yaml, evenements : pesée sans « poste_fut »")
+        try:
+            self.fabrique.debrancher(nom, evenement.debranchee)
+            if evenement.kg is not None:
+                pesee = Pesee(self._machine.poste_fut.pesee, self.materiel)
+                self.fabrique.regler_pesee(nom, pesee.brut(evenement.kg))
+        except KeyError:
+            raise ErreurSimulation(
+                f"simulateur.yaml, evenements : « {nom} » n'est pas une pesée "
+                "de docs/entrees-sorties.yaml"
+            ) from None
+        if evenement.debranchee:
+            return f"pesée « {nom} » débranchée"
+        return f"pesée « {nom} » : {evenement.kg:g} kg"
 
     def _actionner(self, capteur: str, actionne: bool, ou: str) -> None:
         try:
@@ -189,7 +244,7 @@ class Simulateur:
         erreurs = [
             f"simulateur.yaml, evenements n° {numero} : étape « {evenement.apres} » inconnue "
             "(écrire module.etape)"
-            for numero, evenement in enumerate(self._reglages.evenements, start=1)
+            for numero, evenement in enumerate(self._evenements, start=1)
             if evenement.apres is not None and evenement.apres not in etapes
         ]
         if erreurs:
@@ -251,7 +306,7 @@ class Simulateur:
         )
         self._lignes.append(ligne)
         self._en_cours[nom] = ligne
-        for evenement in self._reglages.evenements:
+        for evenement in self._evenements:
             if evenement.apres == f"{nom}.{etape.nom}":
                 self._a_venir.append((self.temps + evenement.attente_s, evenement))
 

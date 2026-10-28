@@ -115,4 +115,19 @@ CONFIRMER = Page(
     ),
 )
 
-PAGES: dict[str, Page] = {page.nom: page for page in (ETAT, ALARME, COMPTEURS, MODE, CONFIRMER)}
+POSTE_FUT = Page(
+    "poste_fut",
+    5,
+    (
+        _texte("t_titre", 30),
+        _texte("t_poids", 40),
+        _texte("t_gestes", 100),
+        _texte("t_manque", 140),
+        _bouton("b_pret", 10),
+        _bouton("b_retour", 10),
+    ),
+)
+
+PAGES: dict[str, Page] = {
+    page.nom: page for page in (ETAT, ALARME, COMPTEURS, MODE, CONFIRMER, POSTE_FUT)
+}
