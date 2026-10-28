@@ -72,11 +72,13 @@ Pour chaque ouverture de la table (0,2 ; 0,4 ; 0,6 ; 0,8 ; 1) et chaque enfoncem
 2. Rejouer d'abord sur le PC : `vidange-simulateur griffe` (le cycle doit aller au bout).
 3. Fût au poste, « Prêt », Karulium à l'arrêt d'urgence. Regarder chaque geste : descente au contact,
    bouchées, prise, pesée, trajet (d'abord en x, puis en y), vidage en couronne, tassement, essuyage.
-4. Vérifier dans le journal que la somme des doses suit la pesée du fût (pas d'avertissement « écart »).
-5. Essayer un choc, **machine fermée, personne dedans** : poser un carton vide sur le trajet du godet,
+4. Pendant l'essuyage et le vidage, regarder le jeu entre la tête et le boîtier de la caméra du bocal
+   (au moins 1 cm) ; s'il est plus petit, arrêter et le dire (réglages `griffe → tete`, `camera_bocal`).
+5. Vérifier dans le journal que la somme des doses suit la pesée du fût (pas d'avertissement « écart »).
+6. Essayer un choc, **machine fermée, personne dedans** : poser un carton vide sur le trajet du godet,
    vitesses lentes. Au contact, la griffe doit s'arrêter, alarme ; enlever le carton, acquitter, Go :
    elle remonte d'abord lentement.
-6. Essayer la perte du chariot **sans bouger le chariot** : pendant une prise, débrancher la prise du
+7. Essayer la perte du chariot **sans bouger le chariot** : pendant une prise, débrancher la prise du
    détecteur du chariot (M12). Alarme : la griffe remonte et le pont sort de la zone du chariot.
    Rebrancher, « Prêt », acquitter, Go.
-7. Quand tout est bon : remettre les vitesses, passer `griffe → exemple` à `false`.
+8. Quand tout est bon : remettre les vitesses, passer `griffe → exemple` à `false`.

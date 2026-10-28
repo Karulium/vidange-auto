@@ -11,8 +11,10 @@ Les modules qui s'en serviront ne sont pas encore écrits (Portique, Remplissage
 Préhension, Stockage) : ils appelleront ces verrous avant chaque geste.
 """
 
+from collections.abc import Sequence
 from math import hypot
 
+from vidange.geometrie import Forme, touche_rectangle
 from vidange.reglages import PosteFut
 
 
@@ -49,15 +51,26 @@ def au_dessus_du_fut(reglages: PosteFut, x: float, y: float) -> bool:
 
 
 def refus_griffe(
-    reglages: PosteFut, x: float, y: float, bas_tete_z: float, volet_releve: bool
+    reglages: PosteFut,
+    x: float,
+    y: float,
+    bas_tete_z: float,
+    volet_releve: bool,
+    tete: Sequence[Forme] = (),
 ) -> str | None:
     """Griffe en (x, y), bas de sa tête à bas_tete_z.
 
+    `tete` : l'encombrement de la tête vu de dessus (formes convexes) ; sans lui, seul le mât
+    compte.
     `volet_releve` : il n'y a pas de capteur du volet du dessus. Le volet est considéré relevé
     en mode lavage, contact du panneau ouvert (`PosteFut.volet_considere_releve`).
     """
     minimum = reglages.griffe_bas_min_poignee_z
-    if reglages.poignee_volet.contient(x, y) and bas_tete_z < minimum:
+    poignee = reglages.poignee_volet
+    au_dessus = poignee.contient(x, y) or any(
+        touche_rectangle(forme, poignee.x, poignee.y) for forme in tete
+    )
+    if au_dessus and bas_tete_z < minimum:
         return (
             f"griffe trop basse au-dessus de la poignée du volet : bas de la tête à "
             f"{_m(bas_tete_z)} m, il faut au moins {_m(minimum)} m"
