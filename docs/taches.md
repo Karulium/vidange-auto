@@ -258,7 +258,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   `noter_dose` après chaque dose (griffe sortie du fût) et `finir_vidange` à la fin ; si l'alarme du poste se
   déclenche, sortir le pont de la zone du chariot.
   Simulateur : un cycle complet d'un fût (prises, couches, passe de fond, fût vide). Tests.
-- [ ] **18 bis. Griffe : marges de la tête** — Modèle : Opus, effort moyen.
+- [x] **18 bis. Griffe : marges de la tête** — Modèle : Opus, effort moyen.
   Les règles de position de la griffe (`pi/vidange/griffe/regles.py`) sont vérifiées sur le mât seul. Ajouter
   l'encombrement de la tête (`docs/decisions.md`, réponses de la PR n° 23 : 0,111 / 0,165 de chaque côté selon
   l'ouverture, rayon balayé 0,137, raclette à 0,111, bas du godet à 0,213 sous les axes) pour les règles où

@@ -1,6 +1,7 @@
 """Griffe : réglages, règles de position, doses, gestes au simulateur, bras sur le faux FluidNC."""
 
 import logging
+import math
 import threading
 import time
 
@@ -108,17 +109,93 @@ def test_garage_et_glissiere():
     assert refus(Pose(x=0.6, y=0.34, z=1.29, a=0, b=0)) is None
     # Grand ouvert : il faut y ≥ 0,38.
     assert "il faut y ≥ 0,38 m" in refus(Pose(x=0.6, y=0.34, z=1.29, a=0, b=1.0))
+    # Tête tournée, godet fermé : 0,33 + (0,137 − 0,111) ; godet ouvert : minimum grand ouvert.
+    tournee = Pose(x=0.6, y=0.35, z=1.0, a=90, b=0)
+    assert "il faut y ≥ 0,356 m" in refus(tournee)
+    assert refus(tournee.avec(y=0.36)) is None
+    assert "il faut y ≥ 0,38 m" in refus(tournee.avec(y=0.36, b=0.3))
 
 
-def test_dosage_camera_et_porte_du_spray():
+def test_encombrement_de_la_tete():
+    # Bras le long du pont (A = 0), raclette côté fût (−x).
+    corps, raclette = REGLES.encombrement(Pose(x=1.0, y=0.5, z=1.0, a=0, b=0))
+    xs, ys = [x for x, _ in corps], [y for _, y in corps]
+    assert min(xs) == pytest.approx(0.915) and max(xs) == pytest.approx(1.085)
+    assert min(ys) == pytest.approx(0.389) and max(ys) == pytest.approx(0.611)
+    assert raclette[1] == pytest.approx((0.89, 0.5))
+    # Godet ouvert : 0,165 le long du bras. Tête tournée de 90° : le bras est le long de x.
+    corps, raclette = REGLES.encombrement(Pose(x=1.0, y=0.5, z=1.0, a=90, b=0.5))
+    xs, ys = [x for x, _ in corps], [y for _, y in corps]
+    assert min(xs) == pytest.approx(0.835) and max(xs) == pytest.approx(1.165)
+    assert min(ys) == pytest.approx(0.415) and max(ys) == pytest.approx(0.585)
+    assert raclette[1] == pytest.approx((1.0, 0.39))
+
+
+def test_dosage_et_porte_du_spray():
     seau = Pose(x=0.95, y=0.30, z=0.98, a=0, b=0)
     assert refus(seau) is None
     assert "dosage du mycélium" in refus(seau, Contexte(dosage_en_cours=True))
-    assert "caméra du bocal" in refus(Pose(x=1.0, y=0.25, z=0.98, a=0, b=0))
-    assert refus(Pose(x=1.0, y=0.25, z=1.29, a=0, b=0)) is None
-    devant = Pose(x=0.14, y=0.30, z=1.29, a=0, b=0)
+    # La tête (0,085 en travers du bras) entre dans la zone de la porte, pas le mât.
+    devant = Pose(x=0.14, y=0.35, z=1.29, a=0, b=0)
+    porte = Contexte(porte_spray_ouverte=True)
     assert refus(devant) is None
-    assert "porte du coffret du spray" in refus(devant, Contexte(porte_spray_ouverte=True))
+    assert "porte du coffret du spray" in refus(devant, porte)
+    assert refus(devant.avec(y=0.45), porte) is None
+
+
+def test_boitier_de_la_camera_du_bocal():
+    # Fiche : mât à x ≤ 0,96 (tête bras le long du pont, raclette côté fût).
+    devant = Pose(x=0.96, y=0.25, z=0.98, a=0, b=0)
+    assert refus(devant) is None
+    assert "caméra du bocal" in refus(devant.avec(x=0.97))
+    # Le mât est hors de la bande y 0,22-0,28, mais la tête la recouvre.
+    assert "caméra du bocal" in refus(Pose(x=1.0, y=0.14, z=0.98, a=0, b=0))
+    assert refus(Pose(x=1.0, y=0.22 - 0.111, z=0.98, a=0, b=0)) is None
+    # De l'autre côté du boîtier : permis si la tête ne le touche pas (raclette côté +x) ;
+    # raclette côté fût, sa lame (0,11 du mât) y entrerait.
+    derriere = Pose(x=1.17, y=0.25, z=0.98, a=180, b=0)
+    assert refus(derriere) is None
+    assert "caméra du bocal" in refus(derriere.avec(x=1.165))
+    assert "caméra du bocal" in refus(derriere.avec(a=0))
+    # Bas de la tête à 1,08 ou plus : la tête passe au-dessus. Bas compté à 1,077 en butée
+    # haute (0,213 sous les axes) : elle ne passe pas au-dessus du boîtier.
+    assert refus(Pose(x=1.0, y=0.25, z=1.08 + 0.213, a=0, b=0)) is not None  # hors course
+    assert "caméra du bocal" in refus(Pose(x=1.0, y=0.25, z=1.29, a=0, b=0))
+
+
+def test_poignee_du_volet():
+    # Mât à y 0,884 (bout de sa course) : bras le long du pont, la tête reste à y ≤ 0,995, sous
+    # la poignée (y ≥ 1,005) ; tournée, elle balaie jusqu'à y ≈ 1,02.
+    pres = Pose(x=0.55, y=0.884, z=1.0, a=0, b=0)
+    assert refus(pres) is None
+    assert "poignée du volet" in refus(pres.avec(a=45))
+
+
+def essuyage(nom_format: str, direction_deg: float) -> Pose:
+    """La pose de l'essuyage du bord : raclette sur le bord du seau, godet ouvert dehors."""
+    seau = GRIFFE.formats[nom_format]
+    x, y = GRIFFE.seau_remplissage
+    distance = seau.rayon_haut + GRIFFE.essuyage.decalage_m
+    angle = math.radians(direction_deg)
+    return Pose(
+        x=x + distance * math.cos(angle),
+        y=y + distance * math.sin(angle),
+        z=seau.haut_z + GRIFFE.essuyage.au_dessus_haut_m,
+        a=direction_deg + 180 - GRIFFE.raclette_angle_deg,
+        b=1.0,
+    )
+
+
+def test_essuyage_contre_le_boitier_de_la_camera():
+    # Mât à +x du seau (fiche) : la tête toucherait le boîtier pour les seaux A et B.
+    for nom in ("seau_a", "seau_b"):
+        assert "caméra du bocal" in refus(essuyage(nom, 0))
+    for nom in ("seau_c", "seau_d"):
+        assert refus(essuyage(nom, 0)) is None
+    # Réglage en attendant la réponse : mât côté allée (+y), tête tournée d'un quart de tour.
+    assert GRIFFE.essuyage.direction_deg == 90
+    for nom in GRIFFE.formats:
+        assert refus(essuyage(nom, 90)) is None
 
 
 def test_dans_le_fut():
@@ -130,9 +207,20 @@ def test_dans_le_fut():
 
 
 def test_bout_cote_fut():
-    # Mât sous x 0,12, hors du fût : bas de la tête ≥ 0,85.
+    # Tête sous x 0,12, hors du fût : bas de la tête ≥ 0,85 (axes ≥ 1,063).
     assert "hors du fût" in refus(Pose(x=0.10, y=0.15, z=1.0, a=0, b=0))
-    assert refus(Pose(x=0.10, y=0.15, z=1.06, a=0, b=0)) is None
+    assert refus(Pose(x=0.10, y=0.15, z=1.07, a=0, b=0)) is None
+    # Le mât est à x 0,22, mais la raclette (côté −x) va jusqu'à 0,11 ; sa tête est au-dessus
+    # de la paroi du fût. Raclette côté +x : la tête reste à x ≥ 0,135.
+    loin = Pose(x=0.22, y=0.24, z=1.2, a=0, b=0)
+    assert "tête sous x 0,12 m au-dessus de la paroi du fût" in refus(loin)
+    assert refus(loin.avec(a=180)) is None
+    # Mât hors du fût, mais la tête au-dessus de sa paroi : bas ≥ 1,05.
+    paroi = Pose(x=0.10, y=0.57 - 0.36, z=1.2, a=0, b=0)
+    assert "au-dessus de la paroi du fût" in refus(paroi)
+    assert refus(paroi.avec(z=1.05 + 0.213)) is None
+    # Mât au-dessus de l'intérieur du fût : les règles du fût comptent (prises côté −x).
+    assert refus(Pose(x=0.12, y=0.57, z=0.5, a=180, b=0)) is None
 
 
 def test_trajet_jamais_en_diagonale():

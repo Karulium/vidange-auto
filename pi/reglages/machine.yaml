@@ -177,9 +177,21 @@ griffe:
   exemple: true
   # Mât de la griffe = pont − 0,175 en x (fiche).
   decalage_mat_x: -0.175
-  # Bas du godet = axes − 0,203 : bas du godet à 1,087 quand les axes sont en butée haute 1,29
-  # (fiche). Le bas de la tête est pris égal au bas du godet.
-  bas_godet_sous_axes: 0.203
+  # Bas du godet sous les axes (STEP de la tête, PR n° 23) : 0,203 fermé, 0,211 à 10°, 0,213 à
+  # 20° (le plus bas), 0,204 grand ouvert. On prend 0,213 partout, par prudence : en butée haute
+  # (axes à 1,29), le bas est compté à 1,077. Le bas de la tête est pris égal au bas du godet.
+  bas_godet_sous_axes: 0.213
+  # Encombrement de la tête vu de dessus, autour du mât (fiche, PR n° 23). Bras le long du pont :
+  # 0,111 de chaque côté du mât le long du bras godet fermé, 0,165 dès qu'il est ouvert ; rayon
+  # balayé en tournant godet fermé 0,137 ; raclette à raclette_decalage_m du mât, en travers.
+  # demi_largeur (en travers du bras) : 0,085, DÉDUITE de la fiche (mât à 0,197 de l'axe du fût au
+  # plus pour les prises le long de la paroi de rayon 0,2825 ; mât à x ≤ 0,96 devant le boîtier de
+  # la caméra du bocal qui commence à 1,045) : à confirmer (question de la PR de la tâche 18 bis).
+  tete:
+    demi_longueur_ferme: 0.111
+    demi_longueur_ouvert: 0.165
+    demi_largeur: 0.085
+    rayon_balaye: 0.137
   pont_x_min: 0.223
   # Rotation de la tête (fiche) : libre si axes ≤ 1,075 ; de 1,075 à 1,11 libre godet fermé et
   # ±45° au plus godet ouvert ; au-dessus de 1,11 bloquée bras le long du pont, à 0° ou 180°.
@@ -195,14 +207,16 @@ griffe:
   mat_y_grand_ouvert: [0.11, 0.83]
   # Trajet fût ↔ poste de remplissage, jamais en diagonale (fiche) : d'abord en x, mât à
   # y ≥ 0,36, puis en y seulement une fois le mât à x ≥ 0,86 ; retour dans l'ordre inverse.
-  # Hauteur des trajets : butée haute des axes (bas du godet à 1,087, au-dessus de l'ouverture
+  # Hauteur des trajets : butée haute des axes (bas du godet à 1,077, au-dessus de l'ouverture
   # du fût à 1,07).
   trajet:
     z: 1.29
     mat_y_min: 0.36
     mat_x_min_pour_y: 0.86
   # Garage et glissière de l'agitateur du mycélium, volumes interdits à toute hauteur (fiche) :
-  # y minimum du mât godet fermé / à moitié ouvert / grand ouvert, par bande de x du mât.
+  # y minimum du mât godet fermé / à moitié ouvert / grand ouvert, par bande de x du mât, tête
+  # bras le long du pont. Tête tournée : godet fermé, y minimum « fermé » + (rayon balayé −
+  # demi-longueur fermé) ; godet ouvert, y minimum « grand ouvert ».
   garage_glissiere:
     - {x: [0.15, 0.43], y_min: [0.23, 0.24, 0.28]}
     - {x: [0.43, 0.77], y_min: [0.33, 0.345, 0.38]}
@@ -211,13 +225,17 @@ griffe:
     - {x: [0.85, 1.22], y_min: [0.10, 0.105, 0.14]}
   # Pendant le dosage du mycélium : mât à x ≤ 0,78 ou y ≥ 0,40 (fiche).
   dosage: {mat_x_max: 0.78, mat_y_min: 0.40}
-  # Boîtier de la caméra du bocal : mât x ≤ 0,96 tant que le bas de la tête est sous 1,08 et
-  # recouvre y 0,22-0,28 (fiche).
-  camera_bocal: {mat_x_max: 0.96, bas_z_max: 1.08, y: [0.22, 0.28]}
-  # Bout côté fût : mât sous x ≈ 0,12 → bas de la tête ≥ 0,85 hors du fût, ≥ 1,05 au-dessus
-  # de la paroi du fût (fiche).
-  bout_cote_fut: {mat_x_max: 0.12, bas_min_hors_fut: 0.85, bas_min_paroi: 1.05}
-  # Porte du coffret du spray ouverte : griffe interdite en x < 0,50 et y < 0,33 (fiche).
+  # Boîtier de la caméra du bocal (x 1,045-1,085, y 0,22-0,28, z 0,982-1,062) : la tête ne le
+  # touche pas tant que son bas est sous 1,08 (fiche : « mât x ≤ 0,96 », tête bras le long du
+  # pont, raclette côté fût). Le boîtier est un obstacle : la tête ne passe pas non plus de
+  # l'autre côté en le touchant.
+  camera_bocal: {x: [1.045, 1.085], y: [0.22, 0.28], bas_z_max: 1.08}
+  # Bout côté fût : tête (son bord côté −x) sous x ≈ 0,12 → bas de la tête ≥ 0,85 hors du fût,
+  # ≥ 1,05 au-dessus de la paroi du fût (fiche). Mât au-dessus de l'intérieur du fût : ce sont
+  # les règles du fût qui comptent.
+  bout_cote_fut: {x_max: 0.12, bas_min_hors_fut: 0.85, bas_min_paroi: 1.05}
+  # Porte du coffret du spray ouverte : griffe (tête comprise) interdite en x < 0,50 et
+  # y < 0,33 (fiche).
   porte_spray: {x_max: 0.50, y_max: 0.33}
   # Dans le fût : côté −x, le mât ne va qu'à 0,17 de l'axe du fût ; ailleurs au plus 0,197
   # (prises le long de la paroi, fiche).
@@ -285,11 +303,14 @@ griffe:
     remontee_m: 0.02
     attente_s: 2
   # 8. Essuyage du bord (fiche) : mât à R_haut + 11 cm de l'axe du seau, axes à haut + 0,196.
-  # Direction du mât depuis l'axe du seau et durée d'un tour du seau : EXEMPLES.
+  # Durée d'un tour du seau : EXEMPLE. Direction du mât depuis l'axe du seau : la fiche dit +x
+  # (0°, côté stockage), mais la tête y toucherait le boîtier de la caméra du bocal (seaux A et
+  # B) : 90° (côté allée, tête tournée d'un quart de tour) EN ATTENDANT la réponse à la question
+  # de la PR de la tâche 18 bis.
   essuyage:
     decalage_m: 0.11
     au_dessus_haut_m: 0.196
-    direction_deg: 0
+    direction_deg: 90
     duree_s: 8
   # Raclage de la paroi du fût (fiche : la lame appuie d'≈ 8 mm, un tour dans chaque sens).
   # Départ 18 cm sous le bord (EXEMPLE : plus haut, la tête ne peut pas tourner godet ouvert).

@@ -9,6 +9,11 @@ godet b (0 fermé, 1 grand ouvert). Un mouvement va en ligne droite sur tous les
 (comme FluidNC) : il est vérifié point par point (`pas_verification_m`), plus les règles de
 trajet (jamais en diagonale entre le fût et le poste de remplissage).
 
+L'encombrement de la tête (`griffe → tete`) compte pour les obstacles : poignée du volet,
+boîtier de la caméra du bocal, bout côté fût, porte du spray, garage de l'agitateur (tête
+tournée). Vue de dessus, la tête est un rectangle autour du mât (le long du bras, en travers)
+plus la lame de la raclette (un segment en travers) ; en hauteur, elle va de son bas vers le haut.
+
 Tous les chiffres viennent de machine.yaml (`griffe`, `poste_fut`, courses des axes).
 Ces verrous ne protègent que la MACHINE : la sécurité des personnes reste câblée.
 """
@@ -16,11 +21,14 @@ Ces verrous ne protègent que la MACHINE : la sécurité des personnes reste câ
 import math
 from dataclasses import dataclass, replace
 
+from vidange.geometrie import Forme, touche_rectangle
 from vidange.poste_fut import regles as regles_poste
 from vidange.reglages import Machine
 
 # Écart sous lequel deux valeurs sont égales (m ou °).
 _EGAL = 1e-6
+# Assez loin pour une zone ouverte d'un côté (« x < 0,50 »), en m.
+_LOIN = 10.0
 
 
 @dataclass(frozen=True)
@@ -94,6 +102,34 @@ class ReglesGriffe:
     def ecart_bloquee(self, a: float) -> float:
         return min(ecart_angle(a, c) for c in self.griffe.rotation.orientations_bloquees_deg)
 
+    def encombrement(self, pose: Pose) -> tuple[Forme, Forme]:
+        """La tête vue de dessus : son corps (rectangle) et la lame de la raclette (segment)."""
+        tete = self.griffe.tete
+        longueur = tete.demi_longueur_ouvert if pose.b > _EGAL else tete.demi_longueur_ferme
+        largeur = tete.demi_largeur
+        angle = math.radians(self.griffe.raclette_angle_deg + pose.a)
+        # u : en travers du bras, vers la raclette ; v : le long du bras.
+        ux, uy = math.cos(angle), math.sin(angle)
+        vx, vy = -uy, ux
+
+        def point(le_long: float, en_travers: float) -> tuple[float, float]:
+            return (
+                pose.x + le_long * vx + en_travers * ux,
+                pose.y + le_long * vy + en_travers * uy,
+            )
+
+        corps = [
+            point(longueur, largeur),
+            point(-longueur, largeur),
+            point(-longueur, -largeur),
+            point(longueur, -largeur),
+        ]
+        raclette = [point(0, largeur), point(0, self.griffe.raclette_decalage_m)]
+        return corps, raclette
+
+    def _touche(self, pose: Pose, x: tuple[float, float], y: tuple[float, float]) -> bool:
+        return any(touche_rectangle(forme, x, y) for forme in self.encombrement(pose))
+
     def _classe_ouverture(self, b: float) -> int:
         """0 : fermé ; 1 : à moitié ouvert au plus ; 2 : plus ouvert."""
         if b <= _EGAL:
@@ -130,6 +166,14 @@ class ReglesGriffe:
                 )
         for bande in g.garage_glissiere:
             minimum = bande.y_min[classe]
+            if not self.bloquee(pose.a):
+                # Tête tournée : elle dépasse en y plus que bras le long du pont.
+                tete = g.tete
+                minimum = (
+                    bande.y_min[2]
+                    if classe
+                    else minimum + tete.rayon_balaye - tete.demi_longueur_ferme
+                )
             if bande.x[0] <= pose.x <= bande.x[1] and pose.y < minimum - _EGAL:
                 return (
                     f"garage ou glissière de l'agitateur : mât à x {_m(pose.x)}, "
@@ -141,19 +185,14 @@ class ReglesGriffe:
                 f"y ≥ {_m(g.dosage.mat_y_min)} m"
             )
         camera = g.camera_bocal
-        if (
-            bas < camera.bas_z_max
-            and camera.y[0] <= pose.y <= camera.y[1]
-            and pose.x > camera.mat_x_max + _EGAL
-        ):
+        if bas < camera.bas_z_max - _EGAL and self._touche(pose, camera.x, camera.y):
             return (
-                f"boîtier de la caméra du bocal : mât à x ≤ {_m(camera.mat_x_max)} m tant que le "
-                f"bas de la tête est sous {_m(camera.bas_z_max)} m"
+                f"la tête toucherait le boîtier de la caméra du bocal (x {_m(camera.x[0])} à "
+                f"{_m(camera.x[1])}, y {_m(camera.y[0])} à {_m(camera.y[1])} m) : bas de la "
+                f"tête à {_m(bas)} m, sous {_m(camera.bas_z_max)} m"
             )
-        if (
-            contexte.porte_spray_ouverte
-            and pose.x < g.porte_spray.x_max
-            and pose.y < g.porte_spray.y_max
+        if contexte.porte_spray_ouverte and self._touche(
+            pose, (-_LOIN, g.porte_spray.x_max), (-_LOIN, g.porte_spray.y_max)
         ):
             return (
                 f"porte du coffret du spray ouverte : griffe interdite en x < "
@@ -162,7 +201,9 @@ class ReglesGriffe:
         refus = self._refus_rotation(pose)
         if refus is not None:
             return refus
-        refus = regles_poste.refus_griffe(poste, pose.x, pose.y, bas, contexte.volet_releve)
+        refus = regles_poste.refus_griffe(
+            poste, pose.x, pose.y, bas, contexte.volet_releve, self.encombrement(pose)
+        )
         if refus is not None:
             return refus
         return self._refus_fut(pose, bas)
@@ -200,16 +241,19 @@ class ReglesGriffe:
                     "de l'axe du fût"
                 )
         bout = g.bout_cote_fut
-        if pose.x < bout.mat_x_max:
-            paroi = poste.fut_diametre_interieur / 2 <= distance <= poste.ouverture_diametre / 2
+        formes = self.encombrement(pose)
+        tete_x = min(x for forme in formes for x, _ in forme)
+        # Mât au-dessus de l'intérieur du fût : ce sont les règles du fût qui comptent.
+        if tete_x < bout.x_max - _EGAL and distance >= poste.fut_diametre_interieur / 2:
+            rayon = max(math.dist((x, y), (pose.x, pose.y)) for forme in formes for x, y in forme)
+            paroi = distance - rayon <= poste.ouverture_diametre / 2
             minimum = bout.bas_min_paroi if paroi else bout.bas_min_hors_fut
-            if not self.au_dessus_du_fut(pose.x, pose.y) or paroi:
-                if bas < minimum - _EGAL:
-                    ou = "au-dessus de la paroi du fût" if paroi else "hors du fût"
-                    return (
-                        f"mât sous x {_m(bout.mat_x_max)} m {ou} : bas de la tête à "
-                        f"{_m(bas)} m, il faut au moins {_m(minimum)} m"
-                    )
+            if bas < minimum - _EGAL:
+                ou = "au-dessus de la paroi du fût" if paroi else "hors du fût"
+                return (
+                    f"tête sous x {_m(bout.x_max)} m {ou} : bas de la tête à "
+                    f"{_m(bas)} m, il faut au moins {_m(minimum)} m"
+                )
         return None
 
     # ------------------------------------------------------------ un mouvement

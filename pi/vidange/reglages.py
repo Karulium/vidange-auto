@@ -258,20 +258,41 @@ class ZoneMatGriffe(Modele):
     mat_y_min: float
 
 
-class CameraBocalGriffe(Modele):
-    """Boîtier de la caméra du bocal : mât à x ≤ mat_x_max tant que le bas de la tête est sous
-    bas_z_max et que le mât est dans la bande y."""
+class TeteGriffe(Modele):
+    """Encombrement de la tête vu de dessus, autour du mât (m).
 
-    mat_x_max: float
-    bas_z_max: float
+    « Le long du bras » : le long du pont quand l'orientation est bloquée ; « en travers » : vers
+    la raclette."""
+
+    demi_longueur_ferme: float = Field(gt=0)
+    demi_longueur_ouvert: float = Field(gt=0)
+    demi_largeur: float = Field(gt=0)
+    # Rayon balayé en tournant, godet fermé.
+    rayon_balaye: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "TeteGriffe":
+        if self.demi_longueur_ouvert < self.demi_longueur_ferme:
+            raise ValueError("demi_longueur_ouvert doit être au moins demi_longueur_ferme")
+        if self.rayon_balaye < max(self.demi_longueur_ferme, self.demi_largeur):
+            raise ValueError("rayon_balaye doit être au moins la demi-longueur et la demi-largeur")
+        return self
+
+
+class CameraBocalGriffe(Modele):
+    """Boîtier de la caméra du bocal, vu de dessus : la tête ne doit pas le toucher tant que
+    son bas est sous bas_z_max."""
+
+    x: Intervalle
     y: Intervalle
+    bas_z_max: float
 
 
 class BoutCoteFutGriffe(Modele):
-    """Bout côté fût : mât sous x = mat_x_max → bas de la tête ≥ bas_min_hors_fut hors du fût,
+    """Bout côté fût : tête sous x = x_max → bas de la tête ≥ bas_min_hors_fut hors du fût,
     ≥ bas_min_paroi au-dessus de la paroi du fût."""
 
-    mat_x_max: float
+    x_max: float
     bas_min_hors_fut: float
     bas_min_paroi: float
 
@@ -498,6 +519,7 @@ class Griffe(Modele):
     decalage_mat_x: float
     # Bas du godet = hauteur des axes − bas_godet_sous_axes.
     bas_godet_sous_axes: float = Field(gt=0)
+    tete: TeteGriffe
     pont_x_min: float
     rotation: RotationGriffe
     # Mât en y godet grand ouvert (godet fermé : course de chariot_y).
