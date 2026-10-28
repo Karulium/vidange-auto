@@ -95,6 +95,18 @@ si l'une pose problème, elle le dit dans sa PR.
      vert, et le Pi revérifie ses réglages avant de redémarrer).
   3. **Même version de FluidNC sur les 4 cartes**, variante **« noradio »** (les cartes parlent au Pi par USB ;
      pas de Wi-Fi ouvert sur la machine). La version est notée à la première installation.
+- **Réponses aux questions de la PR n° 16** (accéléromètre, partie 1) :
+  1. Carte : **Waveshare RP2040-Zero** (déjà choisie par Karulium le 13/10, projet mécanique). À l'essai à l'établi,
+     mettre `carte: waveshare_rp2040_zero` et `voyant: null` dans `pi/reglages/accelerometre.yaml`.
+  2. Signal « OK » vers l'ESP32 n° 1 (entrées 24 V à optocoupleur, ≈ 10 m de câble) : un **petit étage de sortie
+     près du RP2040** donne **24 V = OK**, avec une résistance de tirage vers la masse (carte éteinte, en
+     redémarrage ou fil coupé = « pas OK »). Exigence transmise au projet mécanique et électrique.
+  3. Orientation : le boîtier est prévu sur la face intérieure de la colonne de la griffe (projet mécanique) ; si la
+     carte est posée à plat contre cette face verticale, l'axe z du LIS3DH est **horizontal**. `axes` dans
+     `accelerometre.yaml` liste les deux axes du capteur qui sont horizontaux une fois monté (à remplir d'après le
+     montage réel, à l'essai).
+  4. « OK » revient tout seul après une panne quand l'autotest réussit, et 0,5 s après un choc : oui (la coupure met
+     FluidNC en alarme, une action est de toute façon nécessaire pour repartir).
 - **Préhension figée** (27/10/2026) : capteur inductif M8 24 V ; capteur de vide sur l'ADS1115 **en 3,3 V**
   (pas de pont diviseur) ; pour poser ou prendre un bocal sur le porte-bocal, la tête est orientée à ± 3°
   (grâce aux méplats) et ne tourne pas entre les mors.
