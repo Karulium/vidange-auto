@@ -219,9 +219,9 @@ griffe:
   bout_cote_fut: {mat_x_max: 0.12, bas_min_hors_fut: 0.85, bas_min_paroi: 1.05}
   # Porte du coffret du spray ouverte : griffe interdite en x < 0,50 et y < 0,33 (fiche).
   porte_spray: {x_max: 0.50, y_max: 0.33}
-  # Dans le fût : côté −x, le mât ne va qu'à 0,17 de l'axe du fût (fiche) ; ailleurs au plus
-  # 0,20 (EXEMPLE : à confirmer).
-  fut_rayon_mat_max_m: 0.20
+  # Dans le fût : côté −x, le mât ne va qu'à 0,17 de l'axe du fût ; ailleurs au plus 0,197
+  # (prises le long de la paroi, fiche).
+  fut_rayon_mat_max_m: 0.197
   fut_moins_x_max_m: 0.17
   # Un mouvement est vérifié point par point, tous les 5 mm.
   pas_verification_m: 0.005
@@ -306,7 +306,7 @@ griffe:
     spirale_pas_m: 0.09
     spirale_rayon_max_m: 0.12
     paroi_prises: 12
-    paroi_rayon_m: 0.20
+    paroi_rayon_m: 0.197
     paroi_ouverture_max: 0.2
     joue_angle_deg: 90
     chasse_neige_angle_deg: 20
@@ -341,29 +341,52 @@ griffe:
     correction_paroi: 0.8
     correction_fond: 0.7
     prises_avant_correction: 3
-  # Table des formats : EXEMPLES (à recevoir du projet mécanique), sauf les 8 cm du 5 L (fiche).
+  # Table des formats (cotes mesurées par Karulium le 5/10/2026, plan de commande) :
+  # A Superlift 10,8 L (la grande majorité), B 5 L, C 10 L large et bas, D 10 L haut.
+  # haut_z : bord du seau au poste de remplissage, à 0,78 comme au dosage du mycélium (0,775 pour
+  # le 5 L, plateau plafonné à 0,575) : le plateau ne bouge pas entre griffe et mycélium (choix du
+  # 28/10, à revoir au gel du Remplissage). rayon_haut = Ø haut / 2.
+  # couches et dose_kg : EXEMPLES (godet de 3 L au plus par prise ; le poids visé par seau vient de
+  # la recette de Karulium, à régler aux essais).
   formats:
-    seau_20l:
-      haut_z: 0.75
-      rayon_haut: 0.15
+    seau_a:
+      haut_z: 0.78
+      rayon_haut: 0.1335
       couches: 4
-      dose_kg: 2.0
+      dose_kg: 1.7
       tasser_chaque_couche: true
       tassement_rayon_m: 0.06
       tassement_bas_max_sous_bord_m: 0.30
     # Seau de 5 L : tassement de la dernière couche seulement, tête centrée, bas du godet au plus
     # 8 cm sous le bord (fiche).
-    seau_5l:
-      haut_z: 0.62
-      rayon_haut: 0.09
+    seau_b:
+      haut_z: 0.775
+      rayon_haut: 0.115
       couches: 2
-      dose_kg: 1.0
+      dose_kg: 1.5
       tasser_chaque_couche: false
       tassement_rayon_m: 0.0
       tassement_bas_max_sous_bord_m: 0.08
-  format_par_defaut: seau_20l
-  # Axe du seau au poste de remplissage, en position du mât (EXEMPLE : Remplissage pas figé).
-  seau_remplissage: [0.95, 0.30]
+    seau_c:
+      haut_z: 0.78
+      rayon_haut: 0.1475
+      couches: 4
+      dose_kg: 1.6
+      tasser_chaque_couche: true
+      tassement_rayon_m: 0.06
+      tassement_bas_max_sous_bord_m: 0.30
+    seau_d:
+      haut_z: 0.78
+      rayon_haut: 0.1375
+      couches: 4
+      dose_kg: 1.6
+      tasser_chaque_couche: true
+      tassement_rayon_m: 0.06
+      tassement_bas_max_sous_bord_m: 0.30
+  format_par_defaut: seau_a
+  # Poste de vidage de la griffe (Transfert, 7/10, plan de commande) : mât en (0,925 ; 0,14),
+  # godet à 1 cm du centre du seau (seau au poste y 0,135). À revoir au gel du Remplissage.
+  seau_remplissage: [0.925, 0.14]
   # Fût vide : le mât attend ici, pont hors de la zone du chariot du fût (choix du logiciel).
   attente: [0.86, 0.57]
 

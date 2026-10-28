@@ -40,14 +40,14 @@ HAUT = Pose(x=0.29, y=0.57, z=1.29, a=0.0, b=0.0)
 def test_reglages_de_la_griffe_du_depot():
     assert GRIFFE.exemple
     assert MACHINE.axes["griffe_a"].unite == "deg"
-    assert set(GRIFFE.formats) == {"seau_20l", "seau_5l"}
-    assert GRIFFE.formats["seau_5l"].tassement_bas_max_sous_bord_m == 0.08
+    assert set(GRIFFE.formats) == {"seau_a", "seau_b", "seau_c", "seau_d"}
+    assert GRIFFE.formats["seau_b"].tassement_bas_max_sous_bord_m == 0.08
 
 
 def test_reglages_de_la_griffe_verifies(reglages):
     machine = reglages / "machine.yaml"
-    remplacer(machine, "format_par_defaut: seau_20l", "format_par_defaut: seau_99l")
-    remplacer(machine, "seau_remplissage: [0.95, 0.30]", "seau_remplissage: [0.70, 0.30]")
+    remplacer(machine, "format_par_defaut: seau_a", "format_par_defaut: seau_99l")
+    remplacer(machine, "seau_remplissage: [0.925, 0.14]", "seau_remplissage: [0.70, 0.14]")
     message = erreur_de(reglages)
     assert "format_par_defaut : « seau_99l » absent de formats" in message
     assert "seau_remplissage : mât à x 0.7, il faut x ≥ trajet → mat_x_min_pour_y" in message
@@ -59,9 +59,9 @@ def test_table_des_volumes_verifiee(reglages):
 
 
 def test_hauteurs_de_la_griffe_dans_la_course(reglages):
-    remplacer(reglages / "machine.yaml", "      haut_z: 0.75", "      haut_z: 1.20")
+    remplacer(reglages / "machine.yaml", "      haut_z: 0.775", "      haut_z: 1.20")
     message = erreur_de(reglages)
-    assert "griffe → formats → seau_20l (vidage) : axes à z 1.43 m, hors de la course" in message
+    assert "griffe → formats → seau_b (vidage) : axes à z 1.43 m, hors de la course" in message
 
 
 def test_axe_de_la_griffe_manquant(reglages):
@@ -123,7 +123,7 @@ def test_dosage_camera_et_porte_du_spray():
 
 def test_dans_le_fut():
     assert refus(Pose(x=0.29, y=0.57, z=0.5, a=0, b=1)) is None
-    assert "au plus 0,2 m" in refus(Pose(x=0.29, y=0.80, z=0.5, a=0, b=0))
+    assert "au plus 0,197 m" in refus(Pose(x=0.29, y=0.80, z=0.5, a=0, b=0))
     assert "côté −x" in refus(Pose(x=0.11, y=0.57, z=0.5, a=0, b=0))
     # Mode lavage, volet relevé : pas de griffe au-dessus du fût.
     assert "volet est relevé" in refus(HAUT, Contexte(mode="lavage", volet_releve=True))
@@ -279,7 +279,7 @@ def test_hygiene_tasser_avant_le_mycelium_et_essuyer_a_la_fin():
 
 
 def test_seau_de_5_l_tasse_seulement_a_la_derniere_couche():
-    planning, griffe, _, _ = vider(prochain_format=lambda: "seau_5l")
+    planning, griffe, _, _ = vider(prochain_format=lambda: "seau_b")
     assert planning.fini, planning.probleme
     suite = etapes(planning)
     # 2 couches par seau de 5 L : un seul tassement par seau (la dernière couche).
