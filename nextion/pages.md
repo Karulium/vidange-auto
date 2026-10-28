@@ -8,7 +8,7 @@ Dans l'éditeur, on ne dessine donc que des cases vides avec le bon **nom**.
 Ce qui compte vraiment :
 
 1. le **nom** de chaque page et de chaque objet (exactement comme ici, en minuscules) ;
-2. l'**ordre** des pages (numéro 0 à 4) ;
+2. l'**ordre** des pages (numéro 0 à 5) ;
 3. le **code** de chaque bouton (deux lignes, plus bas) ;
 4. **txt_maxl** (nombre de caractères) au moins égal à celui du tableau.
 
@@ -215,6 +215,39 @@ Code des boutons :
 ```
 prints "@b_non",0
 prints "@b_oui",0
+```
+
+(chacun suivi de `printh FF FF FF`).
+
+## Page 5 : « poste_fut »
+
+Le poste du fût (tâche 17). Arrive toute seule quand le chariot du fût arrive au fond (depuis la
+page « etat »), et repart seule quand le poste est prêt ou que le chariot s'en va. Elle rappelle
+les gestes à faire à la main (rien n'est vérifié par un capteur, sauf le chariot et la pesée),
+puis dit ce qui manque pour « Prêt ».
+
+| Nom | Sorte | x | y | Largeur | Hauteur | Police | txt_maxl |
+|---|---|---|---|---|---|---|---|
+| `t_titre` | Texte | 0 | 0 | 480 | 44 | 2 | 30 |
+| `t_poids` | Texte | 4 | 46 | 472 | 22 | 0 | 40 |
+| `t_gestes` | Texte | 4 | 68 | 472 | 44 | 0 | 100 |
+| `t_manque` | Texte | 4 | 112 | 472 | 66 | 0 | 140 |
+| `b_pret` | Bouton | 4 | 182 | 234 | 86 | 2 | 10 |
+| `b_retour` | Bouton | 242 | 182 | 234 | 86 | 2 | 10 |
+
+- `t_titre` : « CHARIOT ABSENT » (gris), « EN PLACE, PAS PRÊT » (jaune), « PRÊT » (vert). Texte centré.
+- `t_poids` : « Substrat : 125,0 kg » ou « Pesée débranchée ».
+- `t_gestes` (2 lignes) : « À la main : butées du fond, frein, prise de la pesée, soupape enlevée,
+  volet rabattu. »
+- `t_manque` (3 lignes) : ce qui manque pour « Prêt », ou la réponse au dernier appui.
+- `b_pret` : « PRÊT » (vert quand l'appui est possible, gris pâle sinon). Fait comme le bouton
+  lumineux du poste et le bouton de la page web.
+
+Code des boutons :
+
+```
+prints "@b_pret",0
+prints "@b_retour",0
 ```
 
 (chacun suivi de `printh FF FF FF`).

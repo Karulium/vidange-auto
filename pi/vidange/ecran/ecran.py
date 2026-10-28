@@ -16,6 +16,10 @@ si le texte est plus long). Les autres pages reviennent seules à la page d'éta
 
 Pendant un pilotage à distance (tâche 12), le bandeau le dit, et la main est à l'armoire : le
 premier appui sur n'importe quel bouton arrête le pilotage à distance (et ne fait rien d'autre).
+
+Poste du fût (tâche 17) : quand le chariot arrive au fond, la page « poste_fut » vient seule
+(depuis la page d'état) : gestes à faire à la main, ce qui manque, bouton PRÊT. Elle repart
+seule quand le poste est prêt ou que le chariot s'en va.
 """
 
 import threading
@@ -27,17 +31,27 @@ from vidange.chef import Chef, ErreurChef
 from vidange.chef.chef import EtatChef, EtatModule
 from vidange.distance import PiloteDistance
 from vidange.ecran.liaison import LiaisonEcran
-from vidange.ecran.pages import ALARME, COMPTEURS, CONFIRMER, ETAT, MODE, Page
+from vidange.ecran.pages import ALARME, COMPTEURS, CONFIRMER, ETAT, MODE, POSTE_FUT, Page
 from vidange.ecran.protocole import Appui, couleur_565, preparer_texte
 from vidange.fiabilite.constats import lancer_boucle
 from vidange.journal import donner_journal
 from vidange.mode import MODES, ErreurMode, ModeMachine
+from vidange.poste_fut import ABSENT, EN_PLACE, PRET, ErreurPoste, EtatPoste, PosteFut
 from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import FondTexte, ReglagesEcran
 
 journal = donner_journal("ecran")
 
 QUI = "écran de l'armoire"
+# Rappel des gestes à la main au poste du fût (version courte de vidange.poste_fut.GESTES).
+GESTES_ECRAN = (
+    "À la main : butées du fond, frein, prise de la pesée, soupape enlevée, volet rabattu."
+)
+TITRES_POSTE = {
+    ABSENT: ("CHARIOT ABSENT", "repos"),
+    EN_PLACE: ("EN PLACE, PAS PRÊT", "go"),
+    PRET: ("PRÊT", "marche"),
+}
 
 
 def lisible(nom: str) -> str:
@@ -103,6 +117,7 @@ class Ecran:
         horloge: Callable[[], float] = time.monotonic,
         aujourdhui: Callable[[], date] = date.today,
         pilote: PiloteDistance | None = None,
+        poste: PosteFut | None = None,
     ) -> None:
         self.reglages = reglages
         self.liaison = liaison
@@ -111,6 +126,8 @@ class Ecran:
         self.acquitter = acquitter
         self.mode = mode
         self.pilote = pilote
+        self.poste = poste
+        self._etat_poste: EtatPoste | None = None
         self._horloge = horloge
         self._aujourdhui = aujourdhui
         self._page: Page = ETAT
@@ -144,10 +161,11 @@ class Ecran:
                     continue
                 try:
                     self.appuyer(trame.bouton)
-                except (ErreurChef, ErreurRegistre, ErreurMode) as erreur:
+                except (ErreurChef, ErreurRegistre, ErreurMode, ErreurPoste) as erreur:
                     journal.warning("Écran : %s", erreur)
                     self._dire(str(erreur))
         alarmes = self.registre.alarmes_ouvertes()
+        self._suivre_poste()
         self._suivre_alarmes(alarmes)
         self._revenir_seul()
         self.liaison.afficher(self._page, self.composer(alarmes))
@@ -178,6 +196,23 @@ class Ecran:
         elif self._alarme not in numeros:
             self._alarme = min(numeros) if numeros else None
             self._morceau = 0
+
+    def _suivre_poste(self) -> None:
+        """Chariot arrivé : la page du poste vient (depuis la page d'état) ; prêt ou chariot
+        parti : elle repart."""
+        if self.poste is None:
+            return
+        avant = self._etat_poste.etat if self._etat_poste is not None else ABSENT
+        self._etat_poste = self.poste.etat()
+        apres = self._etat_poste.etat
+        if apres == avant:
+            return
+        if apres == EN_PLACE and avant == ABSENT and self._page is ETAT:
+            self._aller(POSTE_FUT)
+        elif apres in (PRET, ABSENT) and self._page is POSTE_FUT:
+            if apres == PRET:
+                self._dire("Poste du fût prêt.")
+            self._aller(ETAT)
 
     def _revenir_seul(self) -> None:
         """Retour à la page d'état sans appui (jamais depuis la page d'alarme)."""
@@ -212,6 +247,8 @@ class Ecran:
             self._choisir_mode(bouton.removeprefix("b_"))
         elif page is CONFIRMER:
             self._repondre(bouton == "b_oui")
+        elif page is POSTE_FUT and self.poste is not None:
+            self.poste.appuyer_pret(QUI)
 
     def _appui_etat(self, bouton: str) -> None:
         if bouton == "b_bandeau":
@@ -303,6 +340,8 @@ class Ecran:
             self._composer_compteurs(page)
         elif self._page is MODE:
             self._composer_mode(page)
+        elif self._page is POSTE_FUT:
+            self._composer_poste(page)
         else:
             self._composer_question(page)
         return page.valeurs
@@ -344,6 +383,9 @@ class Ecran:
         info = self._message_actuel()
         if not info and self.pilote is not None and self.pilote.actif:
             info = "Pilotage à distance en cours. Toucher un bouton pour l'arrêter."
+        poste = self._etat_poste
+        if not info and poste is not None and poste.etat == EN_PLACE:
+            info = "Poste du fût : chariot en place, pas prêt."
         page.mettre("t_info", info)
         if etat.en_pause:
             page.mettre("b_pause", "REPRENDRE", "marche")
@@ -413,6 +455,25 @@ class Ecran:
         for mode, libelle in MODES.items():
             choisi = mode == self.mode.actuel
             page.mettre(f"b_{mode}", libelle.upper(), "mode" if choisi else "bouton")
+        page.mettre("b_retour", "RETOUR", "bouton")
+
+    def _composer_poste(self, page: _Composition) -> None:
+        poste = self._etat_poste
+        if poste is None:
+            return
+        titre, couleur = TITRES_POSTE[poste.etat]
+        page.mettre("t_titre", titre, couleur)
+        if poste.pesee:
+            page.mettre("t_poids", poste.pesee.capitalize())
+        elif poste.poids_net_kg is not None:
+            page.mettre("t_poids", f"Substrat : {poste.poids_net_kg:.1f} kg".replace(".", ","))
+        else:
+            page.mettre("t_poids", "")
+        page.mettre("t_gestes", "" if poste.etat == PRET else GESTES_ECRAN)
+        manque = "Il manque : " + " ; ".join(poste.manque) + "." if poste.manque else ""
+        page.mettre("t_manque", self._message_actuel() or manque)
+        possible = poste.etat == EN_PLACE and not poste.manque
+        page.mettre("b_pret", "PRÊT", "marche" if possible else "inactif")
         page.mettre("b_retour", "RETOUR", "bouton")
 
     def _composer_question(self, page: _Composition) -> None:

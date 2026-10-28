@@ -31,6 +31,8 @@ def test_au_depart_rien_n_est_actionne_et_tout_est_au_repos(faux_et_materiel):
         "porte_spray": False,
         "fdc_stockage_haut": False,
         "onduleur_sur_batterie": False,
+        "chariot_fut_en_place": False,
+        "bouton_pret_fut": False,
     }
     assert materiel.lire("voyant_buzzer") is False
     assert faux.commande("voyant_buzzer") is False
@@ -101,12 +103,12 @@ def test_carte_relais_en_gpio_direct(entrees_sorties):
     relais_par(
         entrees_sorties,
         "    liaison:\n      type: gpio\n      fichier: /dev/gpiochip0\n"
-        "      broches:\n        K1: GPIO23\n",
+        "      broches:\n        K1: GPIO23\n        K2: GPIO24\n",
     )
     faux, materiel = ouvrir(entrees_sorties)
     gpio = faux.gpios["/dev/gpiochip0"]
     # GPIO12 : le battement du Pi, sur la carte « pi » elle-même.
-    assert gpio.sorties == {"GPIO12": False, "GPIO23": False}
+    assert gpio.sorties == {"GPIO12": False, "GPIO23": False, "GPIO24": False}
     materiel.ecrire("voyant_buzzer", True)
     assert gpio.niveau("GPIO23") is True
     assert faux.commande("voyant_buzzer") is True
@@ -116,7 +118,7 @@ def test_carte_relais_par_un_mcp23017(entrees_sorties):
     relais_par(
         entrees_sorties,
         "    liaison:\n      type: i2c\n      signal: relais_1_bus\n"
-        "      broches:\n        K1: B3\n      niveau_actif: bas\n",
+        "      broches:\n        K1: B3\n        K2: B4\n      niveau_actif: bas\n",
     )
     remplacer(entrees_sorties, "appareil: pcf8574", "appareil: mcp23017")
     faux, materiel = ouvrir(entrees_sorties)
@@ -132,7 +134,8 @@ def entrees_par_un_pcf8574(entrees_sorties):
     texte = re.sub(
         r"    # Exemple de liaison par GPIO direct\.\n.*?tirage: haut\n",
         "    liaison:\n      type: i2c\n      signal: entrees_bus\n"
-        "      broches:\n        E1: P0\n        E2: P1\n        E3: P2\n      niveau_actif: bas\n",
+        "      broches:\n        E1: P0\n        E2: P1\n        E3: P2\n        E4: P3\n"
+        "        E5: P4\n      niveau_actif: bas\n",
         texte,
         flags=re.DOTALL,
     )
@@ -217,7 +220,8 @@ def test_puce_absente_au_demarrage(entrees_sorties):
     liste = charger_entrees_sorties(entrees_sorties)
     faux = FausseFabrique(liste)
     faux.bus["/dev/i2c-1"].appareils[0x20].debranche = True
-    with pytest.raises(ErreurMateriel, match="puce I2C 0x20 .* \\(signaux voyant_buzzer\\)"):
+    attendu = "puce I2C 0x20 .* \\(signaux voyant_buzzer, voyant_pret_fut\\)"
+    with pytest.raises(ErreurMateriel, match=attendu):
         Materiel(liste, faux)
 
 

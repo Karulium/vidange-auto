@@ -100,7 +100,7 @@ Opus pour poser les bases et pour les tâches pointues ; Sonnet pour le reste.
 
 Avant chaque tâche, le projet recopie ici les gestes, positions et règles du module.
 
-- [ ] **17. Poste du fût** — Modèle : Opus, effort moyen.
+- [x] **17. Poste du fût** — Modèle : Opus, effort moyen.
   Sources (recopiées ici le 28/10/2026) : fiche du module « Poste du fût », **validé définitivement le 23/10/2026**,
   et plan de commande v221 du projet mécanique. Les chiffres vont dans `pi/reglages/machine.yaml` et
   `docs/entrees-sorties.yaml`, jamais dans le code.

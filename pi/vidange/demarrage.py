@@ -82,6 +82,7 @@ from vidange.materiel.materiel import Fabrique
 from vidange.mises_a_jour import DOSSIER as DOSSIER_MISES_A_JOUR
 from vidange.mises_a_jour import CarteEsp32, MisesAJour, ProgrammePi, preparer_cartes
 from vidange.mode import ModeMachine
+from vidange.poste_fut import PosteFut
 from vidange.quoi_faire import COUPURE_COURANT, PLANTAGE
 from vidange.registre import (
     DOSSIER_SAUVEGARDES,
@@ -348,6 +349,12 @@ def principal(
             "accelerometre.yaml contient des valeurs d'EXEMPLE (exemple: true) : carte, broches "
             "et seuil de choc à choisir à l'essai (accelerometre/essai-etabli.md)."
         )
+    poste_reglages = reglages.machine.poste_fut
+    if poste_reglages is not None and poste_reglages.pesee.exemple:
+        journal.warning(
+            "machine.yaml, poste_fut → pesee : zéro, pente et tare d'EXEMPLE : étalonner la "
+            "pesée (pi/systeme/essai-poste-fut.md), puis passer « exemple » à false."
+        )
     exemples = entrees_sorties.exemples()
     if exemples:
         journal.warning(
@@ -403,6 +410,10 @@ def principal(
     }
     fiabilite = reglages.programme.fiabilite
     chef = Chef(reglages.machine, reglages.programme.chef, carnet)
+    # Le poste du fût lit ses signaux en fond. Sans entrées/sorties ouvertes : pas de poste.
+    poste: PosteFut | None = None
+    if poste_reglages is not None and materiel is not None and erreur_materiel is None:
+        poste = PosteFut(poste_reglages, materiel, registre)
     sante = Sante(dossier_donnees, fiabilite.sante, registre, sauvegarde.copies, raccords.sondes)
     bilans = Bilans(
         dossier_donnees,
@@ -486,6 +497,8 @@ def principal(
         ]
         if accelerometre is not None:
             fils.append(accelerometre.demarrer(arret))
+        if poste is not None:
+            fils += poste.demarrer(arret)
         checklist = CheckList(
             {
                 "réglages": lambda: constats_reglages(reglages, entrees_sorties),
@@ -517,6 +530,7 @@ def principal(
                 cameras=cameras,
                 pilote=pilote,
                 mises_a_jour=mises_a_jour,
+                poste=poste,
             ),
         )
         if serveur is not None:
@@ -530,6 +544,7 @@ def principal(
                 bilans.acquitter,
                 mode,
                 pilote=pilote,
+                poste=poste,
             )
             fil_ecran = ecran.demarrer(arret_ecran)
         gardien.pret()

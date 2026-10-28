@@ -5,6 +5,7 @@
         materiel.ecrire("voyant_buzzer", True)   # True = relais commandé
         materiel.mesurer("vide_venturi")         # valeur dans son unité (kPa...)
         materiel.ambiance("sht31_armoire")       # Ambiance(temperature_c, humidite_pct)
+        materiel.peser("pesee_fut", 0.5)          # mesure brute d'une carte HX711
 
 Pour les tests et le simulateur : `Materiel(liste, FausseFabrique(liste))`.
 
@@ -28,6 +29,7 @@ from typing import Literal, NamedTuple, Protocol
 
 from vidange.entrees_sorties import (
     ENTREES,
+    PESEE,
     SORTIES,
     EntreesSorties,
     LiaisonGpio,
@@ -38,9 +40,11 @@ from vidange.journal import donner_journal
 from vidange.materiel.modbus import ClientModbus, PortSerie
 from vidange.materiel.puces import (
     Ads1115,
+    BrochesHx711Gpio,
     BusI2c,
     BusI2cLinux,
     ErreurMateriel,
+    Hx711,
     Lignes,
     LignesGpio,
     Mcp23017,
@@ -59,7 +63,8 @@ class Ambiance(NamedTuple):
 
 # --------------------------------------------- d'où vient chaque signal (le plan)
 
-# Une ressource : ("gpio", fichier), ("i2c", fichier, adresse, puce) ou ("serie", carte).
+# Une ressource : ("gpio", fichier), ("i2c", fichier, adresse, puce), ("serie", carte)
+# ou ("hx711", fichier, broche DT, broche SCK).
 Ressource = tuple
 
 
@@ -68,7 +73,7 @@ class Branchement:
     """Comment un signal arrive au Pi, tiré de la liste des entrées/sorties."""
 
     nom: str
-    sorte: Literal["entree", "sortie", "mesure", "ambiance", "modbus"]
+    sorte: Literal["entree", "sortie", "mesure", "ambiance", "modbus", "pesee"]
     ressource: Ressource
     # Broche tout-ou-rien (GPIO17, P0...) ou voie de l'ADS1115 (A0...).
     broche: str = ""
@@ -109,6 +114,10 @@ def tracer_branchements(liste: EntreesSorties) -> dict[str, Branchement]:
         if signal.type == "i2c" and signal.appareil == "sht31":
             branchements[nom] = Branchement(nom, "ambiance", _bus_i2c(signal))
             continue
+        if signal.type == PESEE and isinstance(liaison, LiaisonGpio):
+            dt, sck = signal.broche
+            branchements[nom] = Branchement(nom, "pesee", ("hx711", liaison.fichier, dt, sck))
+            continue
         if signal.type not in (*ENTREES, *SORTIES):
             continue
         broche = signal.broche[0]
@@ -145,6 +154,8 @@ class Fabrique(Protocol):
 
     def port_serie(self, liaison: LiaisonUsbSerie) -> PortSerie: ...
 
+    def hx711(self, fichier: str, dt: str, sck: str) -> Hx711: ...
+
 
 class VraieFabrique:
     def gpio(self, fichier: str) -> Lignes:
@@ -176,6 +187,9 @@ class VraieFabrique:
         port.open()
         return port
 
+    def hx711(self, fichier: str, dt: str, sck: str) -> Hx711:
+        return Hx711(BrochesHx711Gpio(fichier, dt, sck))
+
 
 # ------------------------------------------------------------------ le Materiel
 
@@ -205,6 +219,8 @@ class Materiel:
         self._lignes: dict[Ressource, Lignes] = {}
         self._puces: dict[Ressource, Ads1115 | Sht31] = {}
         self._clients: dict[str, ClientModbus] = {}
+        # Cartes de pesée : chacune son verrou (une lecture attend la puce jusqu'à 0,1 s).
+        self._balances: dict[str, tuple[Hx711, threading.Lock]] = {}
         try:
             self._preparer()
         except Exception:
@@ -230,6 +246,11 @@ class Materiel:
                 self._clients[carte] = ClientModbus(
                     lambda liaison=liaison: self.fabrique.port_serie(liaison), nom=carte
                 )
+                continue
+            if sorte == "hx711":
+                balance = self.fabrique.hx711(*ressource[1:])
+                for branchement in groupe:
+                    self._balances[branchement.nom] = (balance, threading.Lock())
                 continue
             if sorte == "i2c" and ressource[3] in ("ads1115", "sht31"):
                 classe = Ads1115 if ressource[3] == "ads1115" else Sht31
@@ -271,7 +292,8 @@ class Materiel:
         try:
             return action()
         except ErreurMateriel as erreur:
-            raise ErreurMateriel(f"signal « {nom} » : {erreur}") from None
+            # Même sorte d'erreur (LectureInterrompue reste LectureInterrompue).
+            raise type(erreur)(f"signal « {nom} » : {erreur}") from None
         except OSError as erreur:
             raise ErreurMateriel(f"signal « {nom} » : {erreur}") from None
 
@@ -333,6 +355,16 @@ class Materiel:
         with self._verrou:
             return Ambiance(*self._au_nom_de(nom, puce.mesurer))
 
+    def peser(self, nom: str, delai_s: float) -> int:
+        """Mesure brute d'une carte de pesée HX711 (sans unité : voir vidange.poste_fut).
+
+        Lève ErreurMateriel si la carte ne répond pas dans `delai_s` (prise débranchée) ou si
+        la lecture a été interrompue (LectureInterrompue : la refaire)."""
+        self._branchement(nom, "pesee")
+        balance, verrou = self._balances[nom]
+        with verrou:
+            return self._au_nom_de(nom, lambda: balance.lire(delai_s))
+
     def unite(self, nom: str) -> str:
         signal = self.liste.signaux[nom]
         if signal.unite:
@@ -367,7 +399,13 @@ class Materiel:
 
     def fermer(self) -> None:
         self.mettre_au_repos()
-        for objet in [*self._lignes.values(), *self._clients.values(), *self._bus.values()]:
+        balances = [balance.broches for balance, _ in self._balances.values()]
+        for objet in [
+            *self._lignes.values(),
+            *self._clients.values(),
+            *self._bus.values(),
+            *balances,
+        ]:
             try:
                 objet.fermer()
             except Exception as erreur:
@@ -376,6 +414,7 @@ class Materiel:
         self._clients.clear()
         self._bus.clear()
         self._puces.clear()
+        self._balances.clear()
         self._commandes.clear()
 
     def __enter__(self) -> "Materiel":

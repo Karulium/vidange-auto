@@ -1,7 +1,8 @@
 # Réglages de la machine : axes, positions nommées, zones réservées.
 # Unités : mètres. Repère : x vers le stockage, y vers l'allée, z vers le haut.
 #
-# ATTENTION : tout ce fichier est un EXEMPLE (valeurs inventées) pour montrer le format.
+# ATTENTION : tout ce fichier est un EXEMPLE (valeurs inventées) pour montrer le format,
+# SAUF la partie « poste_fut » (chiffres vrais du module figé ; seule sa pesée est à étalonner).
 # Les vrais axes, positions et zones arrivent avec les tâches des modules,
 # depuis docs/decisions.md. Quand le fichier sera vrai, passer « exemple » à false.
 #
@@ -12,6 +13,7 @@
 #   - la carte FluidNC d'un axe existe dans fluidnc.yaml, et deux axes n'ont pas la même lettre
 #     sur la même carte ;
 #   - chaque geste de « lieu_sur » cite une carte, une position et un délai qui existent ;
+#   - poste du fût : intervalles dans l'ordre, fond du fût sous son bord, pesée cohérente ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
 
 exemple: true
@@ -56,6 +58,62 @@ zones:
 durees:
   exemple_deplacement_max: 30
   exemple_prise_origine_max: 90
+
+# Poste du fût. Ces chiffres-là sont VRAIS (fiche du module « Poste du fût », validée le
+# 23/10/2026, et plan de commande v221), sauf la partie « pesee » (à étalonner, voir plus bas).
+# Repère du portique, en mètres. Rien ne bouge seul au poste : ces chiffres servent à l'état
+# du poste et aux verrous des modules qui passent par là (pont, chariot de remplissage, griffe,
+# préhension). Un verrou du logiciel ne protège que la machine : la sécurité est câblée.
+poste_fut:
+  # Le fût, toujours debout dans la machine.
+  centre_fut: [0.29, 0.57]
+  ouverture_diametre: 0.60
+  ouverture_z: 1.07
+  fut_diametre_interieur: 0.565
+  fut_profondeur_interieure: 0.86
+  # À peu près : le fond est trouvé au toucher par la griffe (tâche 18).
+  fut_fond_interieur_z: 0.1825
+  fut_bord_z: 1.0425
+  # Chariot du fût absent ou en mouvement : le pont reste hors de x 0 à 0,80
+  # (le chariot monte à 1,06, le chariot X du pont descend à 1,11).
+  pont_interdit_x: [0.0, 0.80]
+  # Pendant ce temps, le bout du chariot de remplissage reste à y ≤ 0,875 (poste ou files 1
+  # et 2, jamais devant la 3e file), pour laisser passer le chariot du fût en biais.
+  remplissage_y_bout_max: 0.875
+  # Griffe au-dessus de la poignée du volet : bas de sa tête à z ≥ 1,13.
+  poignee_volet:
+    x: [0.50, 0.63]
+    y: [1.005, 1.015]
+  griffe_bas_min_poignee_z: 1.13
+  # Préhension en lavage, pour passer la paroi côté stockage.
+  lavage_paroi_fond_seau_min_z: 0.84
+  lavage_paroi_axe_y_max: 0.86
+  # Signaux stables depuis 2 s avant de compter ; relus tous les 0,1 s.
+  stabilite_s: 2
+  periode_s: 0.1
+  # Voyant du bouton « Prêt » : clignote (0,5 s allumé, 0,5 s éteint) tant que ce n'est pas prêt.
+  clignotement_s: 0.5
+  pesee:
+    # EXEMPLE : zéro, pente et tare à mesurer sur la vraie pesée (pi/systeme/essai-poste-fut.md),
+    # puis passer « exemple » à false. Les bornes « plausible_kg » sont aussi à confirmer.
+    exemple: true
+    zero_brut: 0
+    brut_par_kg: 10000
+    # Berceau + fût vide.
+    tare_kg: 40
+    # Poids lu (berceau + fût + contenu) plausible quand un fût est en place.
+    # 2 capteurs de 150/200 kg : au plus 400 kg.
+    plausible_kg: [20, 400]
+    # Une pesée = médiane de 5 lectures ; une lecture à plus de 2 kg de la médiane est jetée ;
+    # il en faut au moins 3 bonnes.
+    lectures: 5
+    lectures_valides_min: 3
+    ecart_aberrant_kg: 2
+    # Pas de réponse en 0,5 s : « pesée débranchée » (jamais une erreur qui arrête le Pi).
+    delai_reponse_s: 0.5
+    periode_s: 1
+    # Somme des doses de la griffe contre baisse de la pesée : avertissement au-delà de 3 kg.
+    ecart_doses_max_kg: 3
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

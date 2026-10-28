@@ -37,6 +37,7 @@ from vidange.distance import ErreurDistance, PiloteDistance
 from vidange.fiabilite.constats import Constat, pire
 from vidange.journal import donner_journal
 from vidange.mises_a_jour import ErreurMiseAJour, MisesAJour
+from vidange.poste_fut import ErreurPoste, PosteFut
 from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import ReglagesApi
 
@@ -61,6 +62,8 @@ class Services:
     pilote: PiloteDistance | None = None
     # Mises à jour des cartes et du Pi (None : pas de mises à jour).
     mises_a_jour: MisesAJour | None = None
+    # Poste du fût (None : pas de poste du fût).
+    poste: PosteFut | None = None
 
 
 class Tenir(BaseModel):
@@ -140,6 +143,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
     @app.exception_handler(ErreurRegistre)
     @app.exception_handler(ErreurDistance)
     @app.exception_handler(ErreurMiseAJour)
+    @app.exception_handler(ErreurPoste)
     async def refus(_: Request, erreur: Exception) -> JSONResponse:
         # Un ordre impossible maintenant (pas de Go attendu, alarme déjà acquittée...).
         return JSONResponse({"detail": str(erreur)}, status_code=409)
@@ -167,6 +171,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             "rafraichir_s": reglages.rafraichir_s,
             "distance": pilote is not None and pilote.actif,
             "mise_a_jour": mises_a_jour is not None and mises_a_jour.en_cours,
+            "poste_fut": None if services.poste is None else services.poste.etat().en_dict(),
         }
 
     @app.get("/api/checklist", dependencies=protege)
@@ -208,6 +213,23 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         pas_pendant_le_pilotage("Go")
         chef.donner_go(module)
         return {"go": module}
+
+    # ------------------------------------------------------------ poste du fût
+
+    def le_poste() -> PosteFut:
+        if services.poste is None:
+            raise HTTPException(404, "pas de poste du fût (machine.yaml → poste_fut)")
+        return services.poste
+
+    @app.get("/api/poste-fut", dependencies=protege)
+    def poste_fut() -> dict[str, Any]:
+        return le_poste().etat().en_dict()
+
+    @app.post("/api/poste-fut/pret", dependencies=protege)
+    def poste_fut_pret(requete: Request) -> dict[str, Any]:
+        poste = le_poste()
+        poste.appuyer_pret(_qui(requete))
+        return poste.etat().en_dict()
 
     # ------------------------------------------------------------ alarmes
 

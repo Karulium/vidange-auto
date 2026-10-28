@@ -23,7 +23,7 @@ Pas encore de vrai module de la machine.
 | `vidange/fluidnc/faux.py` | Faux FluidNC pour les tests et le simulateur |
 | `vidange/fluidnc/outil.py` | Commande `vidange-fluidnc` (lister les ports, console) pour les essais |
 | `vidange/materiel/materiel.py` | Entrées/sorties du Pi par leur nom : lire, commander, mesurer |
-| `vidange/materiel/puces.py` | GPIO du Pi, bus I2C, PCF8574, MCP23017, ADS1115, SHT31 |
+| `vidange/materiel/puces.py` | GPIO du Pi, bus I2C, PCF8574, MCP23017, ADS1115, SHT31, carte de pesée HX711 |
 | `vidange/materiel/modbus.py` | Modbus RTU sur RS485 (transmetteurs d'ozone) |
 | `vidange/materiel/faux.py` | Faux capteurs et fausses cartes pour les tests et le simulateur |
 | `vidange/materiel/outil.py` | Commande `vidange-es` (lister, surveiller, commander) pour les essais |
@@ -56,7 +56,8 @@ Pas encore de vrai module de la machine.
 | `vidange/mises_a_jour/` | Mises à jour : cartes ESP32 (esptool, console FluidNC, copies de la mémoire), programme du Pi (git), fausse carte ; commande `vidange-maj` |
 | `vidange/accelerometre/` | Accéléromètre du chariot Z : copie de `accelerometre.yaml` dans le programme du RP2040 (`accelerometre/`) ; liaison par le fil série unique (chocs notés au registre, réglages envoyés), mise à jour de son programme par ce fil (chargeur, `fichier_programme.py`), faux RP2040 ; commande `vidange-accelerometre` |
 | `vidange/mode.py` | Mode de la machine (production, lavage, UV-ozone), gardé dans un fichier, changé machine au repos |
-| `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) |
+| `vidange/poste_fut/` | Poste du fût : état (absent, en place, prêt), bouton « Prêt » et voyant, pesée (HX711), mode permis par le panneau, verrous pour les autres modules, module « poste_fut » ; commande `vidange-pesee` (étalonnage) |
+| `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) ; poste du fût (chiffres **vrais**, pesée à étalonner) |
 | `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran, caméras, pilotage à distance, mises à jour) |
 | `reglages/fluidnc.yaml` | Cartes FluidNC (numéro de série USB) et réglages de leur liaison |
 | `reglages/simulateur.yaml` | Machine imaginaire du simulateur : vitesses des axes, délai du Go, capteurs qui changent (**exemple**) |
@@ -69,6 +70,7 @@ Pas encore de vrai module de la machine.
 | `systeme/essai-page-web.md` | Essai de la page web sur le vrai Pi (téléphone, Tailscale), pas à pas |
 | `systeme/essai-distance.md` | Essai des caméras et du pilotage à distance sur le vrai Pi, pas à pas |
 | `systeme/essai-ecran.md` | Essai de l'écran Nextion sur le vrai Pi (câblage, UART, chaque page), pas à pas |
+| `systeme/essai-poste-fut.md` | Essai du poste du fût sur le vrai matériel (chariot, panneau, bouton, pesée et étalonnage), pas à pas |
 | `tests/` | Tests (pytest) |
 
 ## Essayer sur un PC
@@ -206,6 +208,7 @@ en une fraction de seconde), et sort le planning : chaque étape, quand elle com
 .venv/bin/vidange-simulateur exemple                 # planning du module d'exemple
 .venv/bin/vidange-simulateur exemple --delai-go 0    # si Karulium donnait le Go tout de suite
 .venv/bin/vidange-simulateur exemple --json p.json   # planning aussi en JSON
+.venv/bin/vidange-simulateur poste_fut               # échange d'un fût (scénario « echange_fut »)
 ```
 
 - **Durées réglables** dans `reglages/simulateur.yaml` : vitesse et accélération de chaque axe (un déplacement
@@ -214,6 +217,9 @@ en une fraction de seconde), et sort le planning : chaque étape, quand elle com
 - Une alarme (délai dépassé, position inconnue...) ou un blocage (rien ne bouge jusqu'à `duree_max_s`) arrête
   la simulation ; le planning dit pourquoi (code de sortie 1).
 - Plusieurs modules peuvent être rejoués ensemble : ils se partagent zones et cartes comme sur la machine.
+- **Scénarios** nommés (`scenarios:` dans `simulateur.yaml`) : leurs capteurs et événements remplacent ceux
+  du haut du fichier (`--scenario nom`). Un événement peut aussi régler la fausse pesée (`pesee: pesee_fut`,
+  `kg: 165` ou `debranchee: true`). Le module `poste_fut` joue le scénario `echange_fut` par défaut.
 - Un module reçoit des axes imaginaires (`simulateur.axes()`) à la place des vrais `Axes`, avec les mêmes noms ;
   son code ne change pas. Pour qu'un nouveau module soit simulable, l'ajouter à `MODULES` dans
   `vidange/simulateur/outil.py`.
@@ -325,3 +331,32 @@ Tailscale (voir `systeme/installation.md`). Sur un PC : mettre une clé dans `pi
 | `GET /api/photos/{n}` | Le fichier de la photo n |
 
 Au plus `lignes_max` lignes par réponse ; `avant=<numéro>` donne la page suivante.
+
+## Poste du fût (tâche 17)
+
+Rien ne bouge seul au poste : `PosteFut` (`vidange/poste_fut/poste.py`) relit en fond le détecteur du chariot,
+le contact du panneau et le bouton « Prêt », pèse le chariot (carte HX711 lue par 2 broches du Pi), et règle
+le voyant du bouton (clignote tant que ce n'est pas prêt).
+
+```python
+poste = PosteFut(reglages.machine.poste_fut, materiel, registre)
+poste.etat()  # absent / en_place / pret, ce qui manque, poids, messages
+poste.appuyer_pret("page web")  # comme le bouton du poste (ErreurPoste : ce qui manque)
+poste.refus_lancement("production")  # panneau levé ? (None : permis)
+poste.surveillance  # Condition « chariot du fût en place » pour la griffe
+poste.noter_dose(kg)
+poste.finir_vidange(nombre_seaux)  # appelés par la griffe (tâche 18)
+poste.refus_pont(x)
+poste.refus_remplissage(y_bout)
+poste.refus_griffe(x, y, z, mode)
+```
+
+- **Prêt** = chariot au fond + chariot immobile depuis `stabilite_s` + pesée qui répond avec un poids
+  plausible + appui sur « Prêt ». Au « Prêt », le cycle `vidange` commence dans le registre avec le poids du
+  fût plein ; chariot retiré avant `finir_vidange` : cycle abandonné.
+- **Pesée** : médiane de plusieurs lectures, lectures aberrantes jetées, lecture interrompue par Linux refaite ;
+  pas de réponse = « pesée débranchée », jamais une erreur qui arrête le Pi. Étalonnage :
+  `vidange-pesee zero | etalonner 20 | tare` (voir `systeme/essai-poste-fut.md`).
+- **Verrous** (`vidange/poste_fut/regles.py`) : pour le pont, le chariot de remplissage, la griffe et la
+  préhension en lavage ; ils rendent la raison du refus. Ils ne protègent que la machine.
+- Page web (`/api/poste-fut`, bouton PRÊT) et écran (page `poste_fut`, qui vient seule à l'arrivée du chariot).
