@@ -41,7 +41,7 @@ def banc(tmp_path):
         Liaison("portique", reglages_essai(), ouvrir=faux.ouvrir) as portique,
     ):
         portique.attendre_connexion(DELAI)
-        module = module_exemple(Axes(reglages.machine, {"portique": portique}), materiel)
+        module = module_exemple(Axes(reglages.machine, {"chariot": portique}), materiel)
         chef.demarrer()
         try:
             yield chef, module, faux, fabrique

@@ -99,11 +99,15 @@ class PiloteDistance:
         self.registre = registre
         self._age_image = age_image
         self._horloge = horloge
-        # Les axes qu'on peut piloter : ceux qui ont une carte FluidNC reliée.
+        # Les axes qu'on peut piloter : les axes droits (en mètres) qui ont une carte FluidNC
+        # reliée. La rotation de la tête de la griffe (en degrés) n'est pas pilotée à distance.
         self.axes = {
             nom: axe
             for nom, axe in machine.axes.items()
-            if axe.carte is not None and axe.lettre is not None and axe.carte in self.liaisons
+            if axe.carte is not None
+            and axe.lettre is not None
+            and axe.carte in self.liaisons
+            and axe.unite == "m"
         }
         self._vitesse_mm_min = reglages.vitesse_max_m_s * MM_PAR_M * 60
         self._pas_mm = reglages.vitesse_max_m_s * MM_PAR_M * reglages.avance_s

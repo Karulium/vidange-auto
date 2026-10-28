@@ -355,6 +355,12 @@ def principal(
             "machine.yaml, poste_fut → pesee : zéro, pente et tare d'EXEMPLE : étalonner la "
             "pesée (pi/systeme/essai-poste-fut.md), puis passer « exemple » à false."
         )
+    griffe = reglages.machine.griffe
+    if griffe is not None and griffe.exemple:
+        journal.warning(
+            "machine.yaml, griffe : formats des seaux, vitesses, doses et seuils d'EXEMPLE : "
+            "les régler aux essais (pi/systeme/essai-griffe.md), puis passer « exemple » à false."
+        )
     exemples = entrees_sorties.exemples()
     if exemples:
         journal.warning(

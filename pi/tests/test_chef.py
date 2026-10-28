@@ -570,3 +570,25 @@ def test_dernier_tour_pour_le_chien_de_garde(horloge, banc):
     assert chef.dernier_tour is None
     tour(chef, horloge, 3)
     assert chef.dernier_tour == 3
+
+
+def test_ensuite_choisit_l_etape_suivante(horloge):
+    """Une étape qui dit la suivante : on boucle (prise, seau, prise...), puis on saute."""
+    faites: list[str] = []
+    tours = iter(["un", "trois"])
+
+    def etape(nom: str, ensuite=None) -> Etape:
+        return Etape(nom, QUOI, action=lambda: faites.append(nom), ensuite=ensuite)
+
+    chef = nouveau_chef(horloge)
+    chef.lancer(
+        Module(
+            nom="boucle",
+            etapes=(etape("un"), etape("deux", lambda: next(tours)), etape("trois")),
+        )
+    )
+    for _ in range(10):
+        chef.avancer()
+    # « trois » est la dernière, sans « ensuite » : le module est fini.
+    assert faites == ["un", "deux", "un", "deux", "trois"]
+    assert chef.etat().modules[0].statut == "fini"

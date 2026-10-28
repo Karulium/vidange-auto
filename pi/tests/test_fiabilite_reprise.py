@@ -42,7 +42,7 @@ class Machine:
         chef = Chef(
             REGLAGES.machine, ReglagesChef(periode_s=0.01, alarme_pause_tout=True), self.carnet
         )
-        liaisons = {"portique": liaison}
+        liaisons = {"chariot": liaison}
         exemple = module_exemple(Axes(REGLAGES.machine, liaisons), materiel)
         lieu_sur = module_lieu_sur(REGLAGES.machine, liaisons)
         return Pi(liaison, materiel, chef, exemple, lieu_sur)
@@ -137,7 +137,7 @@ def test_bilan_d_une_alarme_puis_acquittement(machine, tmp_path):
         ReglagesBilan(lignes_journal=3),
         registre,
         pi.chef,
-        {"portique": pi.liaison},
+        {"chariot": pi.liaison},
         pi.materiel,
         lambda: [],
         journal,
@@ -162,8 +162,8 @@ def test_bilan_d_une_alarme_puis_acquittement(machine, tmp_path):
         bilan = json.loads((tmp_path / alarme["bilan"]).read_text(encoding="utf-8"))
         assert bilan["alarme"]["module"] == "exemple"
         assert bilan["memoire_du_module"] == {"seau": "S12"}
-        assert bilan["cartes"]["portique"]["etat"] == "Alarm"
-        assert set(bilan["cartes"]["portique"]["positions"]) == {"X", "Y", "Z"}
+        assert bilan["cartes"]["chariot"]["etat"] == "Alarm"
+        assert set(bilan["cartes"]["chariot"]["positions"]) == {"X", "Y", "Z"}
         assert bilan["entrees"]["reed_panneau_poste_fut"] is True
         assert bilan["sorties"]["voyant_buzzer"] is False
         assert bilan["ambiance"]["sht31_armoire"]["temperature_c"] == pytest.approx(25, abs=0.1)

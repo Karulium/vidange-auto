@@ -134,6 +134,29 @@ si l'une pose problème, elle le dit dans sa PR.
   Les fils DT et SCK des câbles deviennent A et B du bus. Le Pi interroge les 3 cartes à tour de rôle, à
   115 200 bauds ; protocole libre (au choix du logiciel). La griffe doit tenir 80 mesures/s. La pesée du chariot
   du fût reste en direct sur 2 GPIO du Pi (tâche 17). Cahier CDC-PESEE-485 du projet mécanique.
+- **Réponses aux questions de la PR n° 23** (Griffe) :
+  1. Table des formats : les 4 formats mesurés par Karulium (5/10/2026) sont mis dans `machine.yaml` :
+     A Superlift 10,8 L (Ø haut 267, Ø bas 229, h 250 mm, la grande majorité), B 5 L (230 / 190 / 200),
+     C 10 L large et bas (295 / 255 / 235), D 10 L haut (275 / 240 / 265). Bord du seau au poste de
+     remplissage à 0,78 (0,775 pour le 5 L), comme au dosage du mycélium, pour que le plateau ne bouge pas
+     entre la griffe et le mycélium (à revoir au gel du Remplissage). Couches (4, et 2 pour le 5 L) et dose par
+     couche : exemples, à régler aux essais avec le poids visé par seau. Poste de vidage : mât en
+     (0,925 ; 0,14) (Transfert, 7/10).
+  2. « Trop léger » : rendre la prise au fût et reprendre juste à côté, 2 fois au plus, puis porter ce qu'il y a :
+     gardé.
+  3. Prises le long de la paroi (passe de fond) : elles partent au seau pour l'instant (le plus sûr, « la
+     fiabilité d'abord ») ; les lâcher au centre du fût sera un essai plus tard.
+  4. Raclage de la paroi : une fois, au début de la passe de fond, aller en descendant puis retour en remontant,
+     à partir de 1,075 d'axes : gardé pour les premiers essais.
+  5. Encombrement de la tête (fiche de la griffe) : bras le long du pont, la tête fait 0,111 de chaque côté du
+     mât godet fermé, 0,165 grand ouvert ; rayon balayé en tournant 0,137 ; raclette à 0,111 du mât ; pointes
+     des dents à ±0,105 et joues à ±0,136 à 20° d'ouverture. À ajouter comme marges (tâche 18 bis).
+  6. Bas du godet sous les axes (STEP de la tête) : 0,203 fermé, 0,211 à 10°, 0,213 à 20° (le plus bas),
+     0,204 grand ouvert (35°). Prendre 0,213 partout par prudence (tâche 18 bis).
+  7. Dans le fût : mât au plus à 0,197 de l'axe (prises le long de la paroi, fiche), 0,17 côté −x.
+  8. Seau commencé quand le fût est vide : gardé tel quel et signalé ; le Remplissage décidera à son gel.
+  9. Raclette côté fût (vers −x) quand la tête est bloquée en haut, essuyage du bord côté stockage (mât à +x du
+     seau) : confirmé par la fiche ; l'angle exact de A se mesure à l'essai (étape 1).
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr

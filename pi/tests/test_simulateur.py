@@ -91,7 +91,7 @@ def test_les_durees_se_reglent(reglages):
 
 
 def test_depart_a_une_position(reglages):
-    remplacer(reglages / "simulateur.yaml", "# depart: exemple_repos", "depart: exemple_repos")
+    remplacer(reglages / "simulateur.yaml", "depart: griffe_attente", "depart: exemple_repos")
     planning = simuler(reglages)
     # Déjà au repos : le premier geste ne dure rien.
     assert planning.lignes[0].geste == 0
@@ -153,7 +153,7 @@ def test_capteur_ou_etape_inconnus(reglages):
 
 def test_reglages_du_simulateur_verifies(reglages):
     remplacer(reglages / "simulateur.yaml", "  exemple_x:", "  exemple_w:")
-    remplacer(reglages / "simulateur.yaml", "# depart: exemple_repos", "depart: ailleurs")
+    remplacer(reglages / "simulateur.yaml", "depart: griffe_attente", "depart: ailleurs")
     message = erreur_de(reglages)
     assert "simulateur.yaml, axes → exemple_w : axe absent de machine.yaml" in message
     assert "simulateur.yaml, depart : position « ailleurs » absente de machine.yaml" in message

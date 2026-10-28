@@ -42,13 +42,16 @@ Lettre = Literal["X", "Y", "Z", "A", "B", "C"]
 
 
 class Axe(Modele):
-    """Un axe : longueur de son rail et course permise, en mètres."""
+    """Un axe : longueur de son rail et course permise, en mètres (en degrés pour un axe
+    tournant : « longueur_rail » est alors le tour permis, la course commence à -longueur_rail)."""
 
     longueur_rail: float = Field(gt=0)
     course: Intervalle
     # Carte FluidNC qui fait bouger l'axe (nom dans fluidnc.yaml) et lettre de l'axe sur la carte.
     carte: Nom | None = None
     lettre: Lettre | None = None
+    # « m » : axe droit (rail et course en mètres) ; « deg » : axe tournant (en degrés).
+    unite: Literal["m", "deg"] = "m"
 
     @model_validator(mode="after")
     def _verifier_course(self) -> "Axe":
@@ -59,9 +62,11 @@ class Axe(Modele):
             raise ValueError(
                 f"la course doit aller du plus petit au plus grand ({debut:g} puis {fin:g})"
             )
-        if debut < 0 or fin > self.longueur_rail:
+        bas = -self.longueur_rail if self.unite == "deg" else 0
+        if debut < bas or fin > self.longueur_rail:
             raise ValueError(
-                f"la course ({debut:g} à {fin:g} m) sort du rail (0 à {self.longueur_rail:g} m)"
+                f"la course ({debut:g} à {fin:g} {self.unite}) sort du rail "
+                f"({bas:g} à {self.longueur_rail:g} {self.unite})"
             )
         return self
 
@@ -194,6 +199,368 @@ class PosteFut(Modele):
         return self
 
 
+# Les 5 axes de la griffe, par leur nom dans machine.yaml (tous sur la carte du portique).
+AXES_GRIFFE = {
+    "pont_x": "m",  # le pont (Portique) ; le mât de la griffe est à pont + decalage_mat_x
+    "chariot_y": "m",  # le chariot du pont : y du mât
+    "griffe_z": "m",  # hauteur des axes de la tête
+    "griffe_a": "deg",  # rotation de la tête
+    "griffe_b": "m",  # vis du godet : début de la course = fermé, fin = grand ouvert
+}
+
+
+class RotationGriffe(Modele):
+    """Rotation de la tête (axe A), selon la hauteur des axes (plan de commande)."""
+
+    # Libre si les axes sont à z ≤ libre_z_max.
+    libre_z_max: float
+    # Au-dessus : orientation bloquée (bras le long du pont), à l'une de ces orientations.
+    bloquee_z_min: float
+    orientations_bloquees_deg: tuple[float, float]
+    # Entre les deux : libre godet fermé, à ± ouvert_ecart_max_deg d'une orientation bloquée
+    # godet ouvert.
+    ouvert_ecart_max_deg: float = Field(gt=0)
+    # Écart permis pour « à 0° ou 180° » (°).
+    tolerance_deg: float = Field(gt=0)
+    # Pas de rotation quand le pont est au-delà de ce x.
+    pont_x_max: float
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "RotationGriffe":
+        if self.libre_z_max > self.bloquee_z_min:
+            raise ValueError("libre_z_max doit être sous bloquee_z_min")
+        return self
+
+
+class TrajetGriffe(Modele):
+    """Trajet fût ↔ poste de remplissage : jamais en diagonale."""
+
+    # Hauteur des axes pendant les trajets.
+    z: float
+    # D'abord en x avec le mât à y ≥ mat_y_min, puis en y seulement une fois le mât à
+    # x ≥ mat_x_min_pour_y ; retour dans l'ordre inverse.
+    mat_y_min: float
+    mat_x_min_pour_y: float
+
+
+class BandeGriffe(Modele):
+    """Garage et glissière de l'agitateur : y minimum du mât pour une bande de x du mât,
+    godet fermé, à moitié ouvert, grand ouvert (volumes interdits à toute hauteur)."""
+
+    x: Intervalle
+    y_min: tuple[float, float, float]
+
+
+class ZoneMatGriffe(Modele):
+    """Une règle « mât à x ≤ ... ou y ≥ ... »."""
+
+    mat_x_max: float
+    mat_y_min: float
+
+
+class CameraBocalGriffe(Modele):
+    """Boîtier de la caméra du bocal : mât à x ≤ mat_x_max tant que le bas de la tête est sous
+    bas_z_max et que le mât est dans la bande y."""
+
+    mat_x_max: float
+    bas_z_max: float
+    y: Intervalle
+
+
+class BoutCoteFutGriffe(Modele):
+    """Bout côté fût : mât sous x = mat_x_max → bas de la tête ≥ bas_min_hors_fut hors du fût,
+    ≥ bas_min_paroi au-dessus de la paroi du fût."""
+
+    mat_x_max: float
+    bas_min_hors_fut: float
+    bas_min_paroi: float
+
+
+class PorteSprayGriffe(Modele):
+    """Porte du coffret du spray ouverte : griffe interdite en x < x_max et y < y_max."""
+
+    x_max: float
+    y_max: float
+
+
+class VitessesGriffe(Modele):
+    """Vitesses maximales (m/s ; °/s pour la rotation)."""
+
+    pont_x: float = Field(gt=0)
+    chariot_y: float = Field(gt=0)
+    griffe_z: float = Field(gt=0)
+    griffe_a: float = Field(gt=0)
+    griffe_b: float = Field(gt=0)
+    # Vitesses lentes de l'axe Z, par nom.
+    descente_lente: float = Field(gt=0)
+    plongee: float = Field(gt=0)
+    remontee_choc: float = Field(gt=0)
+
+
+class DescenteGriffe(Modele):
+    # Descente rapide jusqu'au dernier niveau connu + marge, puis lente.
+    marge_niveau_m: float = Field(gt=0)
+    # Contact : la charge pendue baisse de plus que ce seuil (N).
+    seuil_contact_n: float = Field(gt=0)
+    # Butée basse logicielle (secours) : bas du godet au plus à cette distance sous le fond.
+    butee_sous_fond_m: float = Field(ge=0)
+
+
+class MachouillerGriffe(Modele):
+    bouchees: int = Field(ge=0, le=10)
+    # Le godet se ferme jusqu'à cette ouverture (0 fermé, 1 grand ouvert) et se rouvre.
+    fermeture: float = Field(ge=0, le=1)
+    # Entre deux bouchées, le mât enfonce le godet de tant, force limitée.
+    enfoncement_m: float = Field(ge=0)
+    force_max_n: float = Field(gt=0)
+
+
+class PriseGriffe(Modele):
+    enfoncement_m: float = Field(ge=0)
+    # Le mât descend encore de tant pendant la fermeture (prise en plongée).
+    plongee_m: float = Field(ge=0)
+    # Pesée : le mât remonte de tant et s'arrête.
+    remontee_m: float = Field(gt=0)
+    pesee_attente_s: float = Field(ge=0)
+    # Prise bonne si son poids est à ± tolerance (fraction) du poids voulu.
+    tolerance: float = Field(gt=0, lt=1)
+    volume_max_l: float = Field(gt=0)
+    # Trop lourd : le godet s'entrouvre de tant, se referme, et on repèse.
+    entrouvrir: float = Field(gt=0, le=1)
+    entrouvrir_essais_max: int = Field(ge=0)
+    # Trop léger : on reprend à côté au plus tant de fois, puis on porte ce qu'on a.
+    reprises_max: int = Field(ge=0)
+    # Moins que ça (kg) au fond : pas de prise utile, le fût est vide.
+    utile_min_kg: float = Field(ge=0)
+    # Où prendre pendant les couches : des cercles autour de l'axe du fût (rayon du mât, m)
+    # et le nombre de prises sur chacun, pris à tour de rôle.
+    rayons_m: list[Annotated[float, Field(ge=0)]] = Field(min_length=1)
+    points: list[Annotated[int, Field(ge=1)]] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "PriseGriffe":
+        if len(self.rayons_m) != len(self.points):
+            raise ValueError("rayons_m et points : autant de valeurs l'un que l'autre")
+        return self
+
+
+class VidageGriffe(Modele):
+    # Hauteur des axes au vidage = haut du seau + ça.
+    au_dessus_haut_m: float
+    # Le godet s'ouvre en grand en tournant de tant (au plus).
+    rotation_deg: float = Field(ge=0)
+    # Haut du seau au-dessus de ça : vidage tête bloquée, sans tourner.
+    rotation_haut_max_z: float
+
+
+class TassementGriffe(Modele):
+    # Le fond du godet fermé appuie sur la couche jusqu'à ce que la charge baisse de tant (N).
+    force_n: float = Field(gt=0)
+    appuis: int = Field(ge=1)
+    # Entre deux appuis, le godet remonte de tant et attend (le seau tourne).
+    remontee_m: float = Field(gt=0)
+    attente_s: float = Field(ge=0)
+
+
+class EssuyageGriffe(Modele):
+    # Mât à rayon du haut du seau + decalage_m de l'axe du seau, axes à haut + au_dessus_haut_m.
+    decalage_m: float = Field(gt=0)
+    au_dessus_haut_m: float
+    # Direction (°, depuis +x) où va le mât par rapport à l'axe du seau.
+    direction_deg: float
+    # Temps d'un tour du seau sous la raclette (s).
+    duree_s: float = Field(gt=0)
+
+
+class RaclageGriffe(Modele):
+    # La tranche de la lame appuie de tant contre la paroi.
+    appui_m: float = Field(ge=0)
+    # Le tour commence avec le bas du godet à tant sous le bord du fût.
+    depart_sous_bord_m: float = Field(ge=0)
+    points_par_tour: int = Field(ge=4)
+
+
+class FondGriffe(Modele):
+    """Passe de fond : elle commence quand la pesée du fût annonce les derniers kilos."""
+
+    # Substrat restant (kg) qui lance la passe de fond...
+    passe_kg: float = Field(ge=0)
+    # ... ou niveau (bas du godet au contact) à moins de tant au-dessus du fond (sans pesée).
+    passe_hauteur_m: float = Field(ge=0)
+    # Godet en appui au fond : la charge baisse de tant (N) ; poussée limitée à force_max_n.
+    seuil_appui_n: float = Field(gt=0)
+    force_max_n: float = Field(gt=0)
+    # Prises en appui en spirale depuis le centre : un cercle tous les spirale_pas_m (mât),
+    # jusqu'à spirale_rayon_max_m.
+    spirale_pas_m: float = Field(gt=0)
+    spirale_rayon_max_m: float = Field(ge=0)
+    # Prises le long de la paroi : combien, rayon du mât, ouverture au plus.
+    paroi_prises: int = Field(ge=0)
+    paroi_rayon_m: float = Field(gt=0)
+    paroi_ouverture_max: float = Field(gt=0, le=1)
+    # Orientation (° dans la tête, à A = 0) de la joue du godet : à mettre parallèle à la paroi.
+    joue_angle_deg: float
+    # Chasse-neige : godet fermé, lame inclinée de tant par rapport au rayon, bas du godet à
+    # tant au-dessus du fond.
+    chasse_neige_angle_deg: float
+    chasse_neige_au_dessus_fond_m: float = Field(ge=0)
+    centre_prises: int = Field(ge=0)
+
+
+class ForceGriffe(Modele):
+    """Pesée de la griffe (capteur 50 kg + HX711, lue par une carte RP2040 sur le bus RS485
+    des pesées, tâche 22 bis)."""
+
+    # Lectures par seconde pendant les descentes et les trajets.
+    frequence_hz: float = Field(gt=0)
+    # Choc : force qui s'écarte de tant (N) de celle attendue pendant un trajet.
+    choc_n: float = Field(gt=0)
+    # Lectures prises pour une pesée (médiane).
+    lectures_pesee: int = Field(ge=1)
+    # Pesée muette pendant tant de secondes : la griffe s'arrête.
+    silence_max_s: float = Field(gt=0)
+
+
+class TableVolumes(Modele):
+    """Volume pris (L) selon l'ouverture du godet (0 à 1) et l'enfoncement (m)."""
+
+    ouvertures: list[Annotated[float, Field(ge=0, le=1)]] = Field(min_length=2)
+    enfoncements_m: list[Annotated[float, Field(ge=0)]] = Field(min_length=1)
+    # Une ligne par ouverture, une colonne par enfoncement.
+    litres: list[list[Annotated[float, Field(ge=0)]]]
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "TableVolumes":
+        erreurs = []
+        for nom, valeurs in (
+            ("ouvertures", self.ouvertures),
+            ("enfoncements_m", self.enfoncements_m),
+        ):
+            if any(a >= b for a, b in zip(valeurs, valeurs[1:], strict=False)):
+                erreurs.append(f"{nom} : du plus petit au plus grand, sans doublon")
+        if len(self.litres) != len(self.ouvertures) or any(
+            len(ligne) != len(self.enfoncements_m) for ligne in self.litres
+        ):
+            erreurs.append("litres : une ligne par ouverture, une colonne par enfoncement")
+        else:
+            for colonne in range(len(self.enfoncements_m)):
+                volumes = [ligne[colonne] for ligne in self.litres]
+                if any(a >= b for a, b in zip(volumes, volumes[1:], strict=False)):
+                    erreurs.append("litres : le volume doit grandir avec l'ouverture")
+                    break
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class DosesGriffe(Modele):
+    """Apprendre les doses : poids ≈ densité × volume (table des volumes)."""
+
+    # Densité (kg/L) des premières prises d'un fût, avant d'en avoir appris assez.
+    densite_defaut_kg_l: float = Field(gt=0)
+    prises_avant_apprentissage: int = Field(ge=1)
+    # Densité apprise sur les dernières prises du fût (combien).
+    prises_apprises: int = Field(ge=1)
+    # Corrections de départ des prises près de la paroi et au fond (densité × facteur),
+    # remplacées par celles apprises après prises_avant_correction prises de ce genre.
+    correction_paroi: float = Field(gt=0)
+    correction_fond: float = Field(gt=0)
+    prises_avant_correction: int = Field(ge=1)
+
+
+class FormatSeau(Modele):
+    """Un format de seau, posé au poste de remplissage (table des formats)."""
+
+    # Haut du seau, rayon du haut (m).
+    haut_z: float
+    rayon_haut: float = Field(gt=0)
+    couches: int = Field(ge=1)
+    # Substrat par couche (kg).
+    dose_kg: float = Field(gt=0)
+    # Tasser chaque couche (sinon : seulement la dernière, comme le seau de 5 L).
+    tasser_chaque_couche: bool
+    # Tassement : mât à tant de l'axe du seau (0 : tête centrée), bas du godet au plus à tant
+    # sous le bord.
+    tassement_rayon_m: float = Field(ge=0)
+    tassement_bas_max_sous_bord_m: float = Field(gt=0)
+
+
+class Griffe(Modele):
+    """Griffe sur mât (transfert fût → seau), module gelé le 25/10/2026.
+
+    Repère du portique, en mètres. « z » = hauteur des axes de la tête ; « mât » = position du
+    mât de la griffe (pont + decalage_mat_x en x). Un verrou du logiciel ne protège que la
+    machine : la sécurité des personnes reste câblée.
+    """
+
+    # Vrai tant que des chiffres sont inventés (formats, vitesses, doses...).
+    exemple: bool = False
+    decalage_mat_x: float
+    # Bas du godet = hauteur des axes − bas_godet_sous_axes.
+    bas_godet_sous_axes: float = Field(gt=0)
+    pont_x_min: float
+    rotation: RotationGriffe
+    # Mât en y godet grand ouvert (godet fermé : course de chariot_y).
+    mat_y_grand_ouvert: Intervalle
+    trajet: TrajetGriffe
+    garage_glissiere: list[BandeGriffe]
+    dosage: ZoneMatGriffe
+    camera_bocal: CameraBocalGriffe
+    bout_cote_fut: BoutCoteFutGriffe
+    porte_spray: PorteSprayGriffe
+    # Dans le fût (bas du godet sous le bord) : mât à au plus fut_rayon_mat_max_m de l'axe du
+    # fût, et côté −x au plus fut_moins_x_max_m.
+    fut_rayon_mat_max_m: float = Field(gt=0)
+    fut_moins_x_max_m: float = Field(gt=0)
+    # Distance entre deux points vérifiés le long d'un mouvement (m).
+    pas_verification_m: float = Field(gt=0)
+    # Orientation (°, depuis +x) de la raclette quand A = 0, et distance mât → tranche de la lame.
+    raclette_angle_deg: float
+    raclette_decalage_m: float = Field(gt=0)
+    vitesses: VitessesGriffe
+    descente: DescenteGriffe
+    machouiller: MachouillerGriffe
+    prise: PriseGriffe
+    vidage: VidageGriffe
+    tassement: TassementGriffe
+    essuyage: EssuyageGriffe
+    raclage: RaclageGriffe
+    fond: FondGriffe
+    force: ForceGriffe
+    volumes: TableVolumes
+    doses: DosesGriffe
+    formats: dict[Nom, FormatSeau] = Field(min_length=1)
+    format_par_defaut: Nom
+    # Axe du seau au poste de remplissage, en position du mât (Remplissage pas figé).
+    seau_remplissage: tuple[float, float]
+    # Où le mât attend, hors de la zone du chariot du fût, quand le fût est vide.
+    attente: tuple[float, float]
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Griffe":
+        erreurs = []
+        if self.format_par_defaut not in self.formats:
+            erreurs.append(f"format_par_defaut : « {self.format_par_defaut} » absent de formats")
+        if self.trajet.z <= self.rotation.bloquee_z_min:
+            erreurs.append(
+                "trajet → z : les trajets se font tête bloquée (au-dessus de bloquee_z_min)"
+            )
+        for nom, (x, _) in (("seau_remplissage", self.seau_remplissage), ("attente", self.attente)):
+            if x < self.trajet.mat_x_min_pour_y:
+                erreurs.append(
+                    f"{nom} : mât à x {x:g}, il faut x ≥ trajet → mat_x_min_pour_y "
+                    f"({self.trajet.mat_x_min_pour_y:g}) pour y aller en y"
+                )
+        for bande in self.garage_glissiere:
+            if bande.x[0] >= bande.x[1]:
+                erreurs.append("garage_glissiere : x du plus petit au plus grand")
+        if self.fond.force_max_n < self.fond.seuil_appui_n:
+            erreurs.append("fond → force_max_n doit être au moins seuil_appui_n")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -213,6 +580,8 @@ class Machine(Modele):
     lieu_sur: list[GesteLieuSur] = Field(default_factory=list)
     # Poste du fût (None : pas de poste du fût, pour des réglages d'essai).
     poste_fut: PosteFut | None = None
+    # Griffe (None : pas de griffe, pour des réglages d'essai). Demande le poste du fût.
+    griffe: Griffe | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -275,6 +644,7 @@ class Machine(Modele):
                     correcte = False
             if correcte:
                 zones_correctes.append(nom)
+        erreurs += self._verifier_griffe()
         for i, nom_a in enumerate(zones_correctes):
             for nom_b in zones_correctes[i + 1 :]:
                 if self._se_chevauchent(nom_a, nom_b):
@@ -282,6 +652,40 @@ class Machine(Modele):
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self
+
+    def _verifier_griffe(self) -> list[str]:
+        """Les axes de la griffe existent, et ses hauteurs ne sortent pas de leur course."""
+        griffe = self.griffe
+        if griffe is None:
+            return []
+        if self.poste_fut is None:
+            return ["griffe : il faut aussi la partie « poste_fut »"]
+        erreurs = []
+        for nom, unite in AXES_GRIFFE.items():
+            axe = self.axes.get(nom)
+            if axe is None:
+                erreurs.append(f"griffe : axe « {nom} » absent de axes")
+            elif axe.unite != unite or axe.carte is None:
+                erreurs.append(f"griffe : l'axe « {nom} » doit être en « {unite} », avec sa carte")
+        if erreurs:
+            return erreurs
+        bas, haut = self.axes["griffe_z"].course
+
+        def hauteur(quoi: str, z: float) -> None:
+            if not bas <= z <= haut:
+                erreurs.append(
+                    f"griffe → {quoi} : axes à z {z:g} m, hors de la course de griffe_z "
+                    f"({bas:g} à {haut:g} m)"
+                )
+
+        hauteur("trajet", griffe.trajet.z)
+        for nom, seau in griffe.formats.items():
+            hauteur(f"formats → {nom} (vidage)", seau.haut_z + griffe.vidage.au_dessus_haut_m)
+            hauteur(f"formats → {nom} (essuyage)", seau.haut_z + griffe.essuyage.au_dessus_haut_m)
+        pont = self.axes["pont_x"].course
+        if pont[0] < griffe.pont_x_min:
+            erreurs.append(f"pont_x : la course doit commencer à x ≥ {griffe.pont_x_min:g} m")
+        return erreurs
 
     def _se_chevauchent(self, nom_a: str, nom_b: str) -> bool:
         """Deux zones se chevauchent si elles se recouvrent sur tous les axes à la fois."""
@@ -766,6 +1170,23 @@ class EvenementSimule(Modele):
         return self
 
 
+class GriffeSimulee(Modele):
+    """Le substrat du fût imaginaire, pour la griffe du simulateur."""
+
+    # Densité vraie du substrat dans le fût (kg/L) : la griffe doit l'apprendre.
+    densite_kg_l: float = Field(gt=0)
+    # Prises près de la paroi (mât à au moins paroi_rayon_m de l'axe) et au fond (bas du godet à
+    # moins de fond_hauteur_m du fond) : poids × facteur.
+    paroi_rayon_m: float = Field(gt=0)
+    facteur_paroi: float = Field(gt=0, le=1)
+    fond_hauteur_m: float = Field(ge=0)
+    facteur_fond: float = Field(gt=0, le=1)
+    # Godet entrouvert puis refermé : part du contenu qui retombe.
+    entrouvrir_rendu: float = Field(ge=0, le=1)
+    # Charge pendue godet vide (N).
+    charge_vide_n: float = Field(gt=0)
+
+
 class ScenarioSimule(Modele):
     """Un scénario : capteurs actionnés au départ et événements, à la place de ceux du haut."""
 
@@ -792,6 +1213,8 @@ class ReglagesSimulateur(Modele):
     evenements: list[EvenementSimule] = Field(default_factory=list)
     # Scénarios nommés (« echange_fut »...), choisis au lancement du simulateur.
     scenarios: dict[Nom, ScenarioSimule] = Field(default_factory=dict)
+    # Le substrat du fût imaginaire (simulation de la griffe).
+    griffe: GriffeSimulee | None = None
 
 
 # ---------------------------------------------------------- accelerometre.yaml

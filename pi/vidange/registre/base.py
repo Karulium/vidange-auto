@@ -54,6 +54,7 @@ TOUTES_LES_TABLES = (
     "reglages_appliques",
     "envois",
     "actions_distance",
+    "prises_griffe",
 )
 
 
@@ -481,6 +482,41 @@ class Registre:
                 cnx,
                 "actions_distance",
                 {"quand": self._quand(), "qui": qui, "action": action, "detail": detail},
+            )
+
+    def noter_prise_griffe(
+        self,
+        lieu: str,
+        ouverture: float,
+        enfoncement_m: float,
+        bouchees: int,
+        niveau_z: float | None,
+        x: float,
+        y: float,
+        poids_kg: float,
+        volume_l: float,
+        cycle: int | None = None,
+        fut: str | None = None,
+    ) -> int:
+        """Une prise de la griffe : où, comment, et son poids pesé."""
+        with self._ecriture() as cnx:
+            return self._inserer(
+                cnx,
+                "prises_griffe",
+                {
+                    "quand": self._quand(),
+                    "cycle_id": cycle,
+                    "lieu": lieu,
+                    "ouverture": ouverture,
+                    "enfoncement_m": enfoncement_m,
+                    "bouchees": bouchees,
+                    "niveau_z": niveau_z,
+                    "x": x,
+                    "y": y,
+                    "poids_kg": poids_kg,
+                    "volume_l": volume_l,
+                    **self._objets(cnx, {"fut": fut}),
+                },
             )
 
     # ------------------------------------------------------------ file d'envoi
