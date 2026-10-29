@@ -95,7 +95,7 @@ def caplog(caplog, monkeypatch):
 
 def test_hx711_lit_les_mesures_bit_par_bit():
     faux = FauxHx711()
-    hx711 = Hx711(faux, horloge=faux.horloge, dormir=faux.dormir)
+    hx711 = Hx711(faux, horloge_ns=faux.horloge_ns, horloge=faux.horloge, dormir=faux.dormir)
     faux.brut = 1_234_567
     assert hx711.lire(0.5) == 1_234_567
     faux.brut = -5
@@ -106,7 +106,7 @@ def test_hx711_lit_les_mesures_bit_par_bit():
 def test_hx711_prise_debranchee():
     faux = FauxHx711()
     faux.debranche = True
-    hx711 = Hx711(faux, horloge=faux.horloge, dormir=faux.dormir)
+    hx711 = Hx711(faux, horloge_ns=faux.horloge_ns, horloge=faux.horloge, dormir=faux.dormir)
     with pytest.raises(PeseeMuette, match="prise débranchée"):
         hx711.lire(0.5)
     assert faux.temps == pytest.approx(0.5, abs=0.002)
@@ -127,11 +127,13 @@ def test_hx711_fil_dt_a_la_masse_et_hors_echelle():
 
     a_zero = DtAZero()
     with pytest.raises(ErreurMateriel, match="fil DT reste à 0"):
-        Hx711(a_zero, horloge=a_zero.horloge, dormir=a_zero.dormir).lire(0.5)
+        Hx711(
+            a_zero, horloge_ns=a_zero.horloge_ns, horloge=a_zero.horloge, dormir=a_zero.dormir
+        ).lire(0.5)
     faux = FauxHx711()
     faux.brut = (1 << 23) - 1
     with pytest.raises(ErreurMateriel, match="hors échelle"):
-        Hx711(faux, horloge=faux.horloge, dormir=faux.dormir).lire(0.5)
+        Hx711(faux, horloge_ns=faux.horloge_ns, horloge=faux.horloge, dormir=faux.dormir).lire(0.5)
 
 
 def test_pesee_par_son_nom_dans_le_materiel():
