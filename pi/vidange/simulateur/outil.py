@@ -6,6 +6,7 @@
   vidange-simulateur poste_fut                 échange d'un fût (scénario « echange_fut »)
   vidange-simulateur griffe                    vidange d'un fût par la griffe (« vidange_fut »)
   vidange-simulateur mycelium                  dosage du mycélium (« dosage_mycelium »)
+  vidange-simulateur prehension                gestes de la préhension (« prehension »)
 
 Les durées se règlent dans reglages/simulateur.yaml (vitesses des axes, délai du Go, capteurs).
 Tourne sur n'importe quel PC, sans la machine. Code de sortie 0 si le cycle va au bout, 1 sinon.
@@ -26,7 +27,9 @@ from vidange.griffe.simulation import griffe_du_simulateur
 from vidange.mycelium.module import module_mycelium
 from vidange.mycelium.simulation import mycelium_du_simulateur
 from vidange.poste_fut.module import module_echange_fut
-from vidange.reglages import ErreurReglages, charger_reglages
+from vidange.prehension.module import module_prehension
+from vidange.prehension.simulation import prehension_du_simulateur
+from vidange.reglages import ErreurReglages, PrehensionSimulee, charger_reglages
 from vidange.simulateur.simulateur import ErreurSimulation, Simulateur
 
 # Modules qu'on sait simuler : nom → fabrique (simulateur → module).
@@ -37,9 +40,24 @@ MODULES: dict[str, Callable[[Simulateur], Module]] = {
     "poste_fut": lambda simulateur: module_echange_fut(simulateur.poste_fut()),
     "griffe": lambda simulateur: module_griffe(griffe_du_simulateur(simulateur)),
     "mycelium": lambda simulateur: module_mycelium(mycelium_du_simulateur(simulateur)),
+    "prehension": lambda simulateur: module_prehension(
+        prehension_du_simulateur(simulateur), _places(simulateur)
+    ),
 }
 # Scénario de simulateur.yaml joué par défaut avec un module (sinon : le haut du fichier).
-SCENARIOS = {"poste_fut": "echange_fut", "griffe": "vidange_fut", "mycelium": "dosage_mycelium"}
+SCENARIOS = {
+    "poste_fut": "echange_fut",
+    "griffe": "vidange_fut",
+    "mycelium": "dosage_mycelium",
+    "prehension": "prehension",
+}
+
+
+def _places(simulateur: Simulateur) -> PrehensionSimulee:
+    places = simulateur.reglages.simulateur.prehension
+    if places is None:
+        raise ErreurSimulation("simulateur.yaml n'a pas de partie « prehension »")
+    return places
 
 
 def main(arguments: list[str] | None = None) -> int:

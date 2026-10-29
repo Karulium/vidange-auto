@@ -9,7 +9,7 @@ def test_lister(entrees_sorties, capsys):
     assert "reed_panneau_poste_fut (entree) : repos" in sortie
     assert "voyant_buzzer (sortie) : repos" in sortie
     assert "sht31_armoire (ambiance) : 25.0 °C, 50 %" in sortie
-    assert "vide_venturi (mesure) : 10 kPa" in sortie  # 0 V sur la voie → 10 kPa d'après la droite
+    assert "vide_venturi (mesure) : 12.49 kPa" in sortie  # 0 V sur la voie → 12,49 kPa (la droite)
     assert "ozone_1 (modbus) : 0 ppm" in sortie
     assert (
         "Pas lus par le Pi lui-même : ads1115_bus, ecran_nextion, accelerometre_fil, relais_1_bus"

@@ -471,6 +471,16 @@ class PosteFut:
         with self._verrou:
             return mode == "lavage" and self._panneau.valeur is False
 
+    def panneau_vu_rabattu(self) -> bool:
+        """Pour l'isolation du fût (préhension) : contact du panneau ouvert et stable. Un contact
+        illisible ou qui vient de bouger n'est pas « vu rabattu »."""
+        if self._lecture_directe:
+            self.observer()
+        with self._verrou:
+            return self._panneau.valeur is False and self._panneau.stable(
+                self._horloge(), self.reglages.stabilite_s
+            )
+
     def refus_pont(self, x: float) -> str | None:
         return regles.refus_pont(self.reglages, self.echange_en_cours, x)
 

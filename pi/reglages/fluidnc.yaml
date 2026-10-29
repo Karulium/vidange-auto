@@ -49,3 +49,12 @@ cartes:
   prehension:
     description: Axes de la préhension
     numero_serie_usb: "EXEMPLE-PREHENSION"
+    # Contact de la tête (plateau flottant vu par un inductif M8) : c'est aussi le palpeur de
+    # la carte (lettre P de « Pn: »), pour que la descente s'arrête tout de suite au contact.
+    # À VÉRIFIER à l'essai de la carte (pi/systeme/essai-prehension.md).
+    entrees:
+      contact_tete: P
+    # Sorties « user_outputs » digital0 et digital1 de fluidnc/prehension.yaml.
+    sorties:
+      vanne_vide: 0
+      electroaimants_capsule: 1

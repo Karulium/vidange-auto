@@ -315,7 +315,7 @@ def test_transmetteur_modbus_incomplet(entrees_sorties):
 
 
 def test_conversion_avec_deux_fois_la_meme_tension(entrees_sorties):
-    remplacer(entrees_sorties, "volts: [0.3, 3.0]", "volts: [0.3, 0.3]")
+    remplacer(entrees_sorties, "volts: [0.333, 3.0]", "volts: [0.333, 0.333]")
     assert "les deux tensions de « volts » doivent être différentes" in erreur_de(entrees_sorties)
 
 

@@ -396,6 +396,13 @@ def principal(
             "les régler aux essais (pi/systeme/essai-porte-bocal.md), puis passer « exemple » à "
             "false."
         )
+    prehension = reglages.machine.prehension
+    if prehension is not None and prehension.exemple:
+        journal.warning(
+            "machine.yaml, prehension : vitesses, poids estimés, encombrement des objets et "
+            "porte-bocal d'EXEMPLE : les régler aux essais (pi/systeme/essai-prehension.md), puis "
+            "passer « exemple » à false."
+        )
     exemples = entrees_sorties.exemples()
     if exemples:
         journal.warning(

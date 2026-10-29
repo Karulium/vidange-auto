@@ -292,6 +292,8 @@ class CameraBocalGriffe(Modele):
     y: Intervalle
     bas_z_max: float
     z_bas: float
+    # Haut du boîtier (m) : la préhension passe au-dessus (obligatoire s'il y a la préhension).
+    z_haut: float | None = None
 
 
 class BoutCoteFutGriffe(Modele):
@@ -516,6 +518,9 @@ class FormatSeau(Modele):
     hauteur: float | None = Field(default=None, gt=0)
     mycelium_kg: float | None = Field(default=None, gt=0)
     seaux_par_bocal: int = Field(default=1, ge=1, le=2)
+    # Poids du seau vide (kg), tare par type de seau (docs/decisions.md). La préhension s'en sert
+    # pour confirmer la prise d'un seau vide ; sans lui, elle prend son poids estimé.
+    tare_kg: float | None = Field(default=None, gt=0)
 
 
 class Griffe(Modele):
@@ -774,6 +779,18 @@ class DemiTourPorteBocal(Modele):
         return self
 
 
+class ApprochePorteBocal(Modele):
+    """Mors approchés à « Ø 98 » à faible courant, pendant que la préhension pose le bocal :
+    ils le guident sans le serrer, et cèdent s'il les touche."""
+
+    # Écart entre les mors (m).
+    ecart_m: float = Field(gt=0)
+    # Courant du pilote des mors (A) pendant l'approche, puis celui du serrage (le même que
+    # run_amps dans fluidnc/), remis avant tout autre geste des mors.
+    courant_faible_a: float = Field(gt=0)
+    courant_serrage_a: float = Field(gt=0)
+
+
 class PorteBocal(Modele):
     """Porte-bocal (mors et demi-tour du bocal), validé le 24/10/2026.
 
@@ -791,6 +808,227 @@ class PorteBocal(Modele):
     demi_tour: DemiTourPorteBocal
     # Ce que dit le capteur d'inclinaison quand il est actionné.
     inclinaison_actionne: Literal["tete_en_bas", "debout"]
+    # Mors approchés pour la pose du bocal par la préhension (None : pas d'approche).
+    approche: ApprochePorteBocal | None = None
+
+
+# Les 2 axes de la tête de préhension (carte n° 4) et leur unité. Le mât de la préhension est
+# sur le même pont et le même chariot que la griffe (pont_x, chariot_y, carte n° 1).
+AXES_PREHENSION = {
+    "pont_x": "m",
+    "chariot_y": "m",
+    "prehension_z": "m",
+    "prehension_a": "deg",
+}
+# Signaux de la tête lus ou commandés par sa carte FluidNC (docs/entrees-sorties.yaml).
+ENTREES_PREHENSION = ("contact_tete",)
+SORTIES_PREHENSION = ("vanne_vide", "electroaimants_capsule")
+# Objets que la tête sait prendre (les modules qui s'en servent en ajouteront).
+OBJETS_PREHENSION = ("seau", "couvercle", "bocal", "capsule")
+
+
+class SeauTenuPrehension(Modele):
+    """Seau tenu : son bord (le haut du seau) au plus à bord_max_operateur_z quand son axe est
+    côté opérateur (y > y_operateur), au plus à bord_max_piles_z au-dessus des piles."""
+
+    y_operateur: float
+    bord_max_operateur_z: float
+    bord_max_piles_z: float
+
+
+class CameraDosagePrehension(Modele):
+    """Boîte où la tête (et ce qu'elle tient) ne va pas pendant que la caméra du dosage pivote :
+    x < x_max, y < y_max, z dans z."""
+
+    x_max: float
+    y_max: float
+    z: Intervalle
+
+
+class AccelerationPrehension(Modele):
+    """Accélération des axes X et Y de la carte du portique (mm/s²) : normale (celle de
+    fluidnc/), et réduite quand la tête tient un seau (l'anse balance)."""
+
+    normale_mm_s2: float = Field(gt=0)
+    seau_mm_s2: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "AccelerationPrehension":
+        if self.seau_mm_s2 > self.normale_mm_s2:
+            raise ValueError("seau_mm_s2 doit être au plus normale_mm_s2")
+        return self
+
+
+class VitessesPrehension(Modele):
+    """Vitesses maximales (m/s ; °/s pour la rotation)."""
+
+    pont_x: float = Field(gt=0)
+    chariot_y: float = Field(gt=0)
+    z: float = Field(gt=0)
+    a: float = Field(gt=0)
+    # Vitesses lentes de Z, par nom : derniers cm d'une descente, début de la levée, levée quand
+    # le vide est faible, remontée après un choc ; rotation pendant le vissage (°/s).
+    approche: float = Field(gt=0)
+    levee_lente: float = Field(gt=0)
+    remontee_choc: float = Field(gt=0)
+    vissage_deg_s: float = Field(gt=0)
+
+
+class DescentePrehension(Modele):
+    # Lente sur les derniers cm (m) au-dessus de la cote attendue du contact.
+    approche_m: float = Field(gt=0)
+    # Contact à plus de tant de la cote attendue (m) : arrêt et alerte.
+    ecart_contact_max_m: float = Field(gt=0)
+
+
+class VidePrehension(Modele):
+    """Vide de la ventouse (kPa, négatif : −55 = 55 kPa sous la pression de l'air)."""
+
+    # Prise bonne quand le vide atteint prise_kpa ; perdue s'il remonte au-dessus de perte_kpa.
+    prise_kpa: float = Field(lt=0)
+    perte_kpa: float = Field(lt=0)
+    # Attente maximale du vide après l'ouverture de la vanne (s).
+    delai_prise_s: float = Field(gt=0)
+    # Attente après la fermeture de la vanne, pour que l'objet se détache (s).
+    relache_s: float = Field(ge=0)
+    # Lectures par seconde, et combien sont moyennées.
+    frequence_hz: float = Field(gt=0)
+    moyenne: int = Field(ge=1)
+    # Après tant d'échecs de levée (vide perdu), alerte.
+    essais_max: int = Field(ge=1)
+    # Zéro recalé à chaque démarrage, vanne fermée : moyenne de tant de lectures. Un zéro plus
+    # loin que zero_ecart_max_kpa de 0 : capteur déréglé ou vanne qui fuit, arrêt.
+    zero_lectures: int = Field(ge=1)
+    zero_ecart_max_kpa: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "VidePrehension":
+        if self.prise_kpa >= self.perte_kpa:
+            raise ValueError("prise_kpa doit être un vide plus fort (plus bas) que perte_kpa")
+        return self
+
+
+class ForcePrehension(Modele):
+    """Palier pesé du mât (carte de pesée RS485) : lecture = poids porté − poussée (N)."""
+
+    frequence_hz: float = Field(gt=0)
+    # Pesée muette pendant tant de secondes pendant un geste : arrêt.
+    silence_max_s: float = Field(gt=0)
+    # Une pesée = médiane de tant de lectures, après attente_pesee_s d'arrêt.
+    lectures_pesee: int = Field(ge=1)
+    attente_pesee_s: float = Field(ge=0)
+    # Choc en trajet : écart de plus de choc_n entre la force lue et le poids porté, pendant
+    # plus de choc_duree_s.
+    choc_n: float = Field(gt=0)
+    choc_duree_s: float = Field(ge=0)
+    # Remontée lente après un choc (m).
+    remontee_choc_m: float = Field(gt=0)
+
+
+class ObjetPrehension(Modele):
+    """Un objet que la tête prend : encombrement autour de l'axe de la tête et poids estimé."""
+
+    rayon_m: float = Field(gt=0)
+    # Ce qui dépasse au-dessus et au-dessous de la face de la tête quand elle le tient (m).
+    dessus_m: float = Field(ge=0)
+    dessous_m: float = Field(ge=0)
+    # Poids estimé (N) et écart permis ; None : trop léger pour être contrôlé (capsule).
+    poids_n: float | None = Field(default=None, gt=0)
+    tolerance_n: float = Field(default=0, ge=0)
+    # Tenu par les électroaimants (capsule), pas par la ventouse.
+    aimants: bool = False
+
+
+class VissagePrehension(Modele):
+    """Visser ou dévisser une capsule Twist-Off : rotation et Z ensemble sur la carte n° 4."""
+
+    # Appui (N) : consigne, plage acceptée, arrêt et alerte au-delà de arret_n.
+    appui_n: float = Field(gt=0)
+    appui_min_n: float = Field(gt=0)
+    appui_max_n: float = Field(gt=0)
+    arret_n: float = Field(gt=0)
+    # Course maximale de Z pour trouver l'appui (m), angle de vissage (°), et descente de Z
+    # pendant le vissage (m, le porte-ventouse à ressort absorbe le reste).
+    course_appui_m: float = Field(gt=0)
+    angle_deg: float = Field(gt=0)
+    descente_m: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "VissagePrehension":
+        if not self.appui_min_n <= self.appui_n <= self.appui_max_n < self.arret_n:
+            raise ValueError("il faut appui_min_n ≤ appui_n ≤ appui_max_n < arret_n")
+        return self
+
+
+class PorteBocalPrehension(Modele):
+    """Pose et reprise du bocal dans le porte-bocal, au garage de l'agitateur."""
+
+    # Axe du bocal (m) et face de la tête quand le bocal est à sa hauteur exacte entre les mors.
+    x: float
+    y: float
+    face_z: float
+    # Orientation de la tête (°, grâce aux méplats) et écart permis.
+    orientation_deg: float
+    tolerance_orientation_deg: float = Field(gt=0)
+    # Écart permis sur la hauteur du bocal (m), remontée avant le serrage (m).
+    tolerance_hauteur_m: float = Field(gt=0)
+    remontee_min_m: float = Field(gt=0)
+    # Autour de l'axe du bocal (m) : tête « entre les mors » (elle ne tourne pas) sous face_z +
+    # descente → approche_m.
+    rayon_zone_m: float = Field(gt=0)
+    # Attente maximale d'un geste des mors (s).
+    mors_max_s: float = Field(gt=0)
+
+
+class Prehension(Modele):
+    """Tête de préhension (ventouse, électroaimants, rotation), module validé le 27/10/2026.
+
+    Repère du portique, en mètres. « x, y » = axe de la tête (pont + decalage_mat_x en x, même y
+    que la griffe) ; « z » = hauteur de la face de la tête. Un verrou du logiciel ne protège que
+    la machine : la sécurité des personnes reste câblée.
+    """
+
+    exemple: bool = False
+    decalage_mat_x: float
+    # Face de la tête en butée haute : « en haut ».
+    haut_z: float
+    rayon_tete_m: float = Field(gt=0)
+    # Isolation du fût : axe de la tête sous x isolation_fut_x_max et panneau du poste du fût
+    # pas vu rabattu ⇒ face en haut.
+    isolation_fut_x_max: float
+    seau_tenu: SeauTenuPrehension
+    # Boîtier de la caméra du bocal (griffe → camera_bocal) : marge autour (m).
+    camera_bocal_marge_m: float = Field(ge=0)
+    camera_dosage: CameraDosagePrehension
+    acceleration: AccelerationPrehension
+    # Écart sous lequel la face est « en haut » ou à une cote voulue (m ; ° pour la rotation).
+    tolerance_m: float = Field(gt=0)
+    tolerance_deg: float = Field(gt=0)
+    # Distance entre deux points vérifiés le long d'un mouvement (m).
+    pas_verification_m: float = Field(gt=0)
+    vitesses: VitessesPrehension
+    descente: DescentePrehension
+    vide: VidePrehension
+    # Levée lente sur les premiers mm (m).
+    levee_lente_m: float = Field(gt=0)
+    force: ForcePrehension
+    objets: dict[Nom, ObjetPrehension]
+    vissage: VissagePrehension
+    porte_bocal: PorteBocalPrehension
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Prehension":
+        erreurs = [
+            f"objets : il manque « {nom} »" for nom in OBJETS_PREHENSION if nom not in self.objets
+        ]
+        if "capsule" in self.objets and not self.objets["capsule"].aimants:
+            erreurs.append("objets → capsule : elle est tenue par les électroaimants (aimants)")
+        bas, haut = self.camera_dosage.z
+        if bas >= haut:
+            erreurs.append("camera_dosage → z : du plus petit au plus grand")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
 
 
 class Machine(Modele):
@@ -818,6 +1056,9 @@ class Machine(Modele):
     mycelium: Mycelium | None = None
     # Porte-bocal (None : pas de porte-bocal). Son axe « mors » est sur une carte FluidNC.
     porte_bocal: PorteBocal | None = None
+    # Préhension (None : pas de préhension). Demande la griffe (boîtier de la caméra du bocal,
+    # formats des seaux) et le poste du fût.
+    prehension: Prehension | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -883,6 +1124,7 @@ class Machine(Modele):
         erreurs += self._verifier_griffe()
         erreurs += self._verifier_mycelium()
         erreurs += self._verifier_porte_bocal()
+        erreurs += self._verifier_prehension()
         for i, nom_a in enumerate(zones_correctes):
             for nom_b in zones_correctes[i + 1 :]:
                 if self._se_chevauchent(nom_a, nom_b):
@@ -1017,6 +1259,50 @@ class Machine(Modele):
                 "porte_bocal : diametre_bocal_m + tolerance_diametre_m doit être sous les mors "
                 f"ouverts ({ouvert:g} m)"
             )
+        return erreurs
+
+    def _verifier_prehension(self) -> list[str]:
+        """Les axes de la préhension existent ; ses cotes sont dans leur course."""
+        prehension = self.prehension
+        if prehension is None:
+            return []
+        if self.griffe is None or self.poste_fut is None:
+            return ["prehension : il faut aussi les parties « griffe » et « poste_fut »"]
+        erreurs = []
+        for nom, unite in AXES_PREHENSION.items():
+            axe = self.axes.get(nom)
+            if axe is None or axe.unite != unite or axe.carte is None:
+                erreurs.append(
+                    f"prehension : il faut l'axe « {nom} » en « {unite} », avec sa carte"
+                )
+        if erreurs:
+            return erreurs
+        z, a = self.axes["prehension_z"], self.axes["prehension_a"]
+        if z.carte != a.carte:
+            erreurs.append(
+                "prehension : prehension_z et prehension_a sur la même carte (vissage : rotation "
+                "et Z ensemble)"
+            )
+        if self.axes["pont_x"].carte == z.carte:
+            erreurs.append("prehension : le pont et la tête sont sur deux cartes différentes")
+        if "prehension_geste_max" not in self.durees:
+            erreurs.append("prehension : délai « prehension_geste_max » absent de durees")
+        debut, fin = z.course
+        if not debut <= prehension.haut_z <= fin:
+            erreurs.append(
+                f"prehension → haut_z : {prehension.haut_z:g} m hors de la course de "
+                f"prehension_z ({debut:g} à {fin:g} m)"
+            )
+        porte_bocal = prehension.porte_bocal
+        if not debut <= porte_bocal.face_z <= fin:
+            erreurs.append(
+                f"prehension → porte_bocal → face_z : {porte_bocal.face_z:g} m hors de la course "
+                f"de prehension_z ({debut:g} à {fin:g} m)"
+            )
+        if self.griffe.camera_bocal.z_haut is None:
+            erreurs.append("griffe → camera_bocal : il faut « z_haut » pour la préhension")
+        if self.porte_bocal is None or self.porte_bocal.approche is None:
+            erreurs.append("prehension : il faut la partie « porte_bocal » avec son « approche »")
         return erreurs
 
     def _se_chevauchent(self, nom_a: str, nom_b: str) -> bool:
@@ -1562,6 +1848,31 @@ class MyceliumSimule(Modele):
     seaux: list[SeauSimule] = Field(min_length=1)
 
 
+class PlaceSimulee(Modele):
+    """Où un objet attend, pour le simulateur : axe de la tête, et cote de sa face au contact."""
+
+    x: float
+    y: float
+    contact_z: float
+
+
+class PrehensionSimulee(Modele):
+    """Les objets imaginaires de la préhension (scénario « prehension »)."""
+
+    # Vide atteint quand la ventouse est sur un objet (kPa).
+    vide_kpa: float = Field(lt=0)
+    # Où prendre et où poser chaque objet du scénario ; où visser la capsule.
+    seau: PlaceSimulee
+    seau_pose: PlaceSimulee
+    couvercle: PlaceSimulee
+    couvercle_pose: PlaceSimulee
+    bocal: PlaceSimulee
+    capsule: PlaceSimulee
+    vissage: PlaceSimulee
+    # Durée d'un geste des mors du porte-bocal (s).
+    mors_s: float = Field(ge=0)
+
+
 class ScenarioSimule(Modele):
     """Un scénario : capteurs actionnés au départ et événements, à la place de ceux du haut."""
 
@@ -1592,6 +1903,8 @@ class ReglagesSimulateur(Modele):
     griffe: GriffeSimulee | None = None
     # Le bocal, le chariot et les seaux imaginaires (simulation du mycélium).
     mycelium: MyceliumSimule | None = None
+    # Les objets imaginaires de la préhension.
+    prehension: PrehensionSimulee | None = None
 
 
 # ---------------------------------------------------------- accelerometre.yaml
@@ -1966,6 +2279,19 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
                 f"machine.yaml, porte_bocal → demi_tour → attente_inclinaison_s ({attente:g} s) "
                 f"doit valoir au moins 2 fois periode_etat_s de fluidnc.yaml ({periode_etat:g} s)"
             )
+    if machine.prehension is not None:
+        carte_tete = machine.axes["prehension_z"].carte
+        carte = fluidnc.cartes.get(carte_tete or "")
+        if carte is not None:
+            erreurs += [
+                f"fluidnc.yaml, cartes → {carte_tete} → {quoi} : il manque « {nom} » (préhension)"
+                for quoi, noms, connus in (
+                    ("entrees", ENTREES_PREHENSION, carte.entrees),
+                    ("sorties", SORTIES_PREHENSION, carte.sorties),
+                )
+                for nom in noms
+                if nom not in connus
+            ]
     simulateur = valeurs["simulateur"]
     assert isinstance(simulateur, ReglagesSimulateur)
     erreurs += [

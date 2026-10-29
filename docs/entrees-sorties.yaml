@@ -161,6 +161,15 @@ cartes:
     sorties: 18
     tension_max: 24
     isolee: true
+  # Carte FluidNC n° 4 (tête de préhension) : comme la n° 3, le Pi ne la lit pas lui-même. Les
+  # vrais numéros de broches vont dans fluidnc/prehension.yaml (plan de câblage attendu).
+  fluidnc_prehension:
+    exemple: true
+    description: Carte FluidNC n° 4 (préhension), 6 axes, pilotes externes
+    entrees: 10
+    sorties: 18
+    tension_max: 24
+    isolee: true
 
 # Les signaux. Le nom est celui que le code utilise.
 #   carte : un nom de la liste « cartes » ci-dessus.
@@ -208,6 +217,12 @@ cartes:
 #   du demi-tour par elle : leurs lettres et numéros sont dans pi/reglages/fluidnc.yaml) :
 #   fdc_mors_ouverts, moteur_mors, verrou_plateau_engage, inclinaison_bocal,
 #   demi_tour_vers_tete_en_bas, demi_tour_vers_debout, electroaimant_verrou_plateau.
+# (tâche 37, préhension : sur la carte FluidNC n° 4 ; le Pi lit contact_tete dans l'état de la
+#   carte et commande vanne_vide et electroaimants_capsule par elle : lettres et numéros dans
+#   pi/reglages/fluidnc.yaml ; vide_venturi est lu par l'ADS1115 de l'armoire) :
+#   contact_tete, fdc_prehension_haut, origine_rotation_tete, alarme_prehension_z,
+#   alarme_rotation_tete, moteur_prehension_z, moteur_rotation_tete, vanne_vide,
+#   electroaimants_capsule, vide_venturi.
 # (tâche 15, accéléromètre) :
 #   accelerometre_fil : fil série unique vers le RP2040 de l'accéléromètre (half-duplex) ;
 #     TX du Pi par une résistance de 1 kΩ, RX directement, les deux sur le même fil.
@@ -297,16 +312,21 @@ signaux:
     module: armoire
     appareil: ads1115
     fichier: /dev/i2c-1
+  # Capteur de vide XGZP6847A de la ventouse (préhension figée le 27/10 : capteur en 3,3 V,
+  # sans pont diviseur). Conversion d'EXEMPLE : celle de la fiche pour le capteur 5 V derrière
+  # le pont 10 k / 20 k (0 kPa → 0,333 V lus, −40 → 1,40 V, −55 → 1,80 V, −100 → 3,00 V). Pour
+  # le capteur 3,3 V, mettre les 2 points de sa notice (tension → kPa) : jamais dans le code.
+  # Le zéro est de toute façon recalé à chaque démarrage, vanne fermée.
   vide_venturi:
     exemple: true
-    description: Capteur de vide du venturi (module à confirmer)
+    description: Capteur de vide XGZP6847A de la ventouse de la préhension (venturi)
     carte: ads1115
     broche: A0
     type: mesure
     unite: kPa
     conversion:
-      volts: [0.3, 3.0]
-      valeurs: [0, -90]
+      volts: [0.333, 3.0]
+      valeurs: [0, -100]
     tension: 3.3
     module: prehension
   ecran_nextion:
@@ -575,3 +595,86 @@ signaux:
     adresse: 3
     module: remplissage
     appareil: carte_pesee
+  # Préhension (fiche du module, validé définitivement le 27/10/2026 ; carte n° 4). Repères et
+  # types : EXEMPLES (plan de câblage).
+  # Plateau flottant de la tête (course 3 mm, ≈ 10 N) vu par un inductif M8 24 V du moyeu. C'est
+  # le palpeur de la carte (arrêt immédiat au contact) et aussi le contact « anse levée » du
+  # plan de commande (une seule entrée).
+  contact_tete:
+    exemple: true
+    description: Contact de la tête de préhension (plateau flottant, inductif M8), palpeur
+    carte: fluidnc_prehension
+    broche: E1
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: prehension
+  fdc_prehension_haut:
+    exemple: true
+    description: Fin de course de la tête en butée haute (origine de Z, face à 1,10)
+    carte: fluidnc_prehension
+    broche: E2
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: prehension
+  origine_rotation_tete:
+    exemple: true
+    description: Origine de la rotation de la tête (référence à confirmer au câblage)
+    carte: fluidnc_prehension
+    broche: E3
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: prehension
+  alarme_prehension_z:
+    exemple: true
+    description: Alarme du pilote boucle fermée de Z (pignon-crémaillère, NEMA 23 à frein)
+    carte: fluidnc_prehension
+    broche: E4
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: prehension
+  alarme_rotation_tete:
+    exemple: true
+    description: Alarme du pilote boucle fermée de la rotation de la tête
+    carte: fluidnc_prehension
+    broche: E5
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: prehension
+  moteur_prehension_z:
+    exemple: true
+    description: Pas et sens du pilote de Z de la préhension (axe Z de la carte n° 4)
+    carte: fluidnc_prehension
+    broche: [S1, S2]
+    type: logique
+    tension: 5
+    module: prehension
+  moteur_rotation_tete:
+    exemple: true
+    description: Pas et sens du pilote de la rotation de la tête (axe A de la carte n° 4)
+    carte: fluidnc_prehension
+    broche: [S3, S4]
+    type: logique
+    tension: 5
+    module: prehension
+  vanne_vide:
+    exemple: true
+    description: Vanne du venturi de la ventouse (commandée = vide), par un relais de l'armoire
+    carte: fluidnc_prehension
+    broche: S5
+    type: logique
+    tension: 5
+    module: prehension
+  electroaimants_capsule:
+    exemple: true
+    # La fiche dit « carte à confirmer au câblage » : sur la carte n° 4 en attendant.
+    description: Les 3 électroaimants des capsules (commandés = capsule tenue), par l'armoire
+    carte: fluidnc_prehension
+    broche: S6
+    type: logique
+    tension: 5
+    module: prehension
