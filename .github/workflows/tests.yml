@@ -72,3 +72,46 @@ jobs:
           path: |
             accelerometre/build/accelerometre-complet.uf2
             accelerometre/build/accelerometre.bin
+
+  # Programme des cartes de pesée (RP2040 + HX711, bus RS485) : essais sur PC, puis fabrication
+  # d'un programme par carte.
+  pesee:
+    runs-on: ubuntu-latest
+    env:
+      PICO_SDK_VERSION: "2.1.1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installation
+        run: |
+          # Lecture et vérification de pesees.yaml et entrees-sorties.yaml (par le code du Pi).
+          pip install "pydantic>=2.5,<3" "PyYAML>=6.0,<7"
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
+      - name: Essais sur PC
+        run: |
+          cmake -S pesee/tests -B pesee/build-essais
+          cmake --build pesee/build-essais
+          ctest --test-dir pesee/build-essais --output-on-failure
+      - name: Pico SDK (gardé d'une fois sur l'autre)
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: pico-sdk
+          key: pico-sdk-${{ env.PICO_SDK_VERSION }}
+      - name: Téléchargement du Pico SDK
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 -b "$PICO_SDK_VERSION" https://github.com/raspberrypi/pico-sdk.git
+          git -C pico-sdk submodule update --init --depth 1 lib/tinyusb
+      - name: Fabrication des programmes des cartes
+        run: |
+          cmake -S pesee -B pesee/build -DPICO_SDK_PATH="$PWD/pico-sdk"
+          cmake --build pesee/build -j 4
+      - name: Programmes à télécharger (un .uf2 par carte)
+        uses: actions/upload-artifact@v4
+        with:
+          name: pesee
+          path: pesee/build/*.uf2

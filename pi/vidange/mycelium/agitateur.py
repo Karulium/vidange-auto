@@ -22,8 +22,9 @@ de « Pn: », fluidnc.yaml) ; « en haut » = milieu de la zone sans métal + d�
 si la carte redémarre (alarme : retour en lieu sûr, puis la prise d'origine est refaite).
 
 La balance du plateau du chariot de remplissage est lue par une carte RP2040 sur le bus RS485
-des pesées (tâche 22 bis) : ici, la même interface que la pesée de la griffe (`CapteurForce`, en
-newtons), et une fausse pesée pour les tests (vidange.griffe.simulation.FausseForce).
+des pesées, avec la même interface que la pesée de la griffe (`CapteurForce`, en newtons) : sur
+la machine, `TourPesees(...).capteur("pesee_plateau_remplissage")` (vidange.pesees) ; une fausse
+pesée pour les tests (vidange.griffe.simulation.FausseForce).
 """
 
 import threading

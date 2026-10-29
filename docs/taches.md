@@ -521,7 +521,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   Tests, dont : couvercle qui glisse 2 fois, plateau flottant trop haut, mode refusé si le bac n'est pas trouvé,
   barrière coupée.
 - [ ] 22. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage
-- [ ] 22 bis. Cartes de pesée RS485 (RP2040 + HX711) : griffe, préhension, plateau du remplissage — Modèle : Opus.
+- [x] **22 bis. Cartes de pesée RS485 (RP2040 + HX711) : griffe, préhension, plateau du remplissage** — Modèle : Opus.
   Programme C (Pico SDK, comme l'accéléromètre) : lecture du HX711 en 3,3 V, jusqu'à 80 mesures/s, réponse sur le
   bus RS485 `rs485_pesee` quand le Pi l'interroge (une adresse par carte, contrôle CRC), mise à jour depuis le Pi
   si c'est simple. Côté Pi : lecture des 3 cartes à tour de rôle, 115 200 bauds, adaptateur USB-RS485 reconnu par

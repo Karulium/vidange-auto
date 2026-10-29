@@ -6,6 +6,7 @@
         materiel.mesurer("vide_venturi")         # valeur dans son unité (kPa...)
         materiel.ambiance("sht31_armoire")       # Ambiance(temperature_c, humidite_pct)
         materiel.peser("pesee_fut", 0.5)          # mesure brute d'une carte HX711
+        materiel.lire_carte_pesee("pesee_griffe") # carte de pesée du bus RS485 (MesureCarte)
 
 Pour les tests et le simulateur : `Materiel(liste, FausseFabrique(liste))`.
 
@@ -28,6 +29,7 @@ from dataclasses import dataclass
 from typing import Literal, NamedTuple, Protocol
 
 from vidange.entrees_sorties import (
+    CARTE_PESEE,
     ENTREES,
     PESEE,
     SORTIES,
@@ -37,6 +39,8 @@ from vidange.entrees_sorties import (
     Signal,
 )
 from vidange.journal import donner_journal
+from vidange.materiel import carte_pesee
+from vidange.materiel.carte_pesee import MesureCarte
 from vidange.materiel.modbus import ClientModbus, PortSerie
 from vidange.materiel.puces import (
     Ads1115,
@@ -49,6 +53,7 @@ from vidange.materiel.puces import (
     LignesGpio,
     Mcp23017,
     Pcf8574,
+    PeseeMuette,
     Sht31,
     Tirage,
 )
@@ -110,6 +115,8 @@ def tracer_branchements(liste: EntreesSorties) -> dict[str, Branchement]:
         if isinstance(liaison, LiaisonUsbSerie):
             if signal.appareil == "transmetteur_modbus":
                 branchements[nom] = Branchement(nom, "modbus", ("serie", signal.carte))
+            elif signal.appareil == CARTE_PESEE:
+                branchements[nom] = Branchement(nom, "pesee", ("serie", signal.carte))
             continue
         if signal.type == "i2c" and signal.appareil == "sht31":
             branchements[nom] = Branchement(nom, "ambiance", _bus_i2c(signal))
@@ -185,6 +192,12 @@ class VraieFabrique:
         port.write_timeout = liaison.delai_reponse_s
         port.exclusive = True
         port.open()
+        # Adaptateur FT232 : il rend les octets reçus au bout de 1 ms au lieu de 16 (le bus des
+        # pesées pose plus de 200 questions par seconde).
+        try:
+            port.set_low_latency_mode(True)
+        except (AttributeError, NotImplementedError, OSError, ValueError):
+            pass
         return port
 
     def hx711(self, fichier: str, dt: str, sck: str) -> Hx711:
@@ -359,11 +372,35 @@ class Materiel:
         """Mesure brute d'une carte de pesée HX711 (sans unité : voir vidange.poste_fut).
 
         Lève ErreurMateriel si la carte ne répond pas dans `delai_s` (prise débranchée) ou si
-        la lecture a été interrompue (LectureInterrompue : la refaire)."""
-        self._branchement(nom, "pesee")
+        la lecture a été interrompue (LectureInterrompue : la refaire). Pour une carte du bus
+        RS485, `delai_s` ne sert pas (c'est celui de l'adaptateur) ; HX711 muet : PeseeMuette."""
+        branchement = self._branchement(nom, "pesee")
+        if branchement.ressource[0] == "serie":
+            mesure = self.lire_carte_pesee(nom)
+            if mesure.hx711_muet:
+                raise PeseeMuette(f"signal « {nom} » : HX711 muet (débranché ?)")
+            return mesure.brut
         balance, verrou = self._balances[nom]
         with verrou:
             return self._au_nom_de(nom, lambda: balance.lire(delai_s))
+
+    def lire_carte_pesee(self, nom: str) -> MesureCarte:
+        """Tout ce que dit une carte de pesée du bus RS485 (pesee/README.md), en une question.
+
+        Lève ErreurMateriel si la carte ne répond pas ou si ce n'est pas une carte de pesée."""
+        branchement = self._branchement(nom, "pesee")
+        signal = self.liste.signaux[nom]
+        if branchement.ressource[0] != "serie" or signal.adresse is None:
+            raise ErreurMateriel(f"signal « {nom} » : pas une carte de pesée du bus RS485")
+        client = self._clients[signal.carte]
+        adresse = signal.adresse
+        registres = self._au_nom_de(
+            nom,
+            lambda: client.lire_registres(
+                adresse, carte_pesee.FONCTION, 0, carte_pesee.NB_REGISTRES
+            ),
+        )
+        return self._au_nom_de(nom, lambda: carte_pesee.decoder(registres))
 
     def unite(self, nom: str) -> str:
         signal = self.liste.signaux[nom]

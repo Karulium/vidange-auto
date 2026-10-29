@@ -58,8 +58,17 @@ BROCHES_DES_PUCES: dict[str, tuple[str, ...]] = {
 # Puces qui donnent des entrées/sorties tout-ou-rien (les autres donnent des mesures).
 PUCES_TOUT_OU_RIEN = ("pcf8574", "mcp23017")
 Appareil = Literal[
-    "sht31", "ads1115", "pcf8574", "mcp23017", "transmetteur_modbus", "nextion", "accelerometre"
+    "sht31",
+    "ads1115",
+    "pcf8574",
+    "mcp23017",
+    "transmetteur_modbus",
+    "nextion",
+    "accelerometre",
+    "carte_pesee",
 ]
+# Carte de pesée RP2040 + HX711 sur un bus RS485, lue en Modbus (pesee/README.md).
+CARTE_PESEE = "carte_pesee"
 Texte = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 
 
@@ -244,6 +253,11 @@ class Signal(Modele):
                 erreurs.append("un transmetteur Modbus doit avoir son adresse (exemple : 1)")
         elif self.modbus is not None:
             erreurs.append("« modbus » ne sert qu'à un appareil transmetteur_modbus")
+        if self.appareil == CARTE_PESEE:
+            if self.type != "serie":
+                erreurs.append("une carte de pesée est sur un bus série (« type: serie »)")
+            if self.adresse is None or not 1 <= self.adresse <= 247:
+                erreurs.append("une carte de pesée doit avoir son adresse sur le bus, de 1 à 247")
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self

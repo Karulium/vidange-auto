@@ -436,7 +436,7 @@ class FondGriffe(Modele):
 
 class ForceGriffe(Modele):
     """Pesée de la griffe (capteur 50 kg + HX711, lue par une carte RP2040 sur le bus RS485
-    des pesées, tâche 22 bis)."""
+    des pesées : vidange.pesees ; étalonnage dans pesees.yaml)."""
 
     # Lectures par seconde pendant les descentes et les trajets.
     frequence_hz: float = Field(gt=0)
@@ -1762,6 +1762,113 @@ class ReglagesAccelerometre(Modele):
         return self
 
 
+# --------------------------------------------------------------- pesees.yaml
+
+# Broches UART du RP2040 : (bloc, TX possibles, RX possibles).
+UARTS_RP2040 = ((0, (0, 12, 16, 28), (1, 13, 17, 29)), (1, (4, 8, 20, 24), (5, 9, 21, 25)))
+
+
+class BrochesPesee(Modele):
+    hx711_dt: BrocheRp2040
+    hx711_sck: BrocheRp2040
+    rs485_tx: BrocheRp2040
+    rs485_rx: BrocheRp2040
+    # Entrées DE et /RE de l'émetteur-récepteur RS485, reliées ensemble (1 = parler).
+    rs485_sens: BrocheRp2040
+    voyant: BrocheRp2040 | None = None
+
+    @property
+    def bloc_uart(self) -> int:
+        """Bloc UART du RP2040 (0 ou 1) qui sort sur ces broches."""
+        return next(bloc for bloc, tx, _ in UARTS_RP2040 if self.rs485_tx in tx)
+
+    @model_validator(mode="after")
+    def _verifier_broches(self) -> "BrochesPesee":
+        erreurs = []
+        bloc_tx = [bloc for bloc, tx, _ in UARTS_RP2040 if self.rs485_tx in tx]
+        bloc_rx = [bloc for bloc, _, rx in UARTS_RP2040 if self.rs485_rx in rx]
+        if not bloc_tx:
+            erreurs.append(
+                f"rs485_tx ({self.rs485_tx}) n'est pas une broche TX d'UART "
+                "(UART0 : 0, 12, 16, 28 ; UART1 : 4, 8, 20, 24)"
+            )
+        if not bloc_rx:
+            erreurs.append(
+                f"rs485_rx ({self.rs485_rx}) n'est pas une broche RX d'UART "
+                "(UART0 : 1, 13, 17, 29 ; UART1 : 5, 9, 21, 25)"
+            )
+        if bloc_tx and bloc_rx and bloc_tx != bloc_rx:
+            erreurs.append(
+                f"rs485_tx ({self.rs485_tx}) et rs485_rx ({self.rs485_rx}) ne sont pas du même UART"
+            )
+        deja_vues: dict[int, str] = {}
+        for nom, broche in self.model_dump().items():
+            if broche is None:
+                continue
+            autre = deja_vues.setdefault(broche, nom)
+            if autre != nom:
+                erreurs.append(f"la broche {broche} est prise deux fois ({autre} et {nom})")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class ProgrammePesee(Modele):
+    """Copié dans le programme des cartes (pesee/) quand on le fabrique."""
+
+    # Plus de mesure du HX711 depuis ce temps (ms) : « HX711 muet ».
+    sans_mesure_ms: int = Field(ge=20, le=10000)
+    # Attente avant de répondre (µs), le temps que l'adaptateur du Pi repasse en écoute.
+    delai_avant_reponse_us: int = Field(ge=0, le=1000)
+    # Le chien de garde du RP2040 ne compte pas plus loin que 8,3 s.
+    chien_de_garde_ms: int = Field(ge=10, le=8000)
+    periode_affichage_ms: int = Field(ge=100, le=600000)
+
+
+class EtalonnagePesee(Modele):
+    """Mesure brute à vide, et nombre de points de la mesure brute par kilogramme posé."""
+
+    zero_brut: int
+    brut_par_kg: float
+
+    @model_validator(mode="after")
+    def _pente(self) -> "EtalonnagePesee":
+        if self.brut_par_kg == 0:
+            raise ValueError("brut_par_kg ne peut pas valoir 0")
+        return self
+
+
+class ReglagesPesees(Modele):
+    """pesees.yaml : les cartes de pesée RP2040 + HX711 du bus RS485 des pesées."""
+
+    exemple: bool = False
+    # Nom de la carte RP2040 pour le Pico SDK (PICO_BOARD).
+    carte: Nom
+    broches: BrochesPesee
+    programme: ProgrammePesee
+    # Côté Pi : ordre des questions (une carte peut revenir plusieurs fois par tour).
+    tour: list[Nom] = Field(min_length=1)
+    pause_entre_tours_ms: int = Field(ge=0, le=10000)
+    # Mesure plus vieille que ça (ms) : la pesée est dite muette pour qui la lit.
+    age_max_ms: int = Field(gt=0, le=60000)
+    # Plus aucune carte ne répond : nouvel essai toutes les ... (s).
+    reconnexion_s: float = Field(gt=0, le=3600)
+    etalonnage: dict[Nom, EtalonnagePesee] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _verifier_cartes(self) -> "ReglagesPesees":
+        erreurs = []
+        for nom in dict.fromkeys(self.tour):
+            if nom not in self.etalonnage:
+                erreurs.append(f"tour : « {nom} » n'a pas d'étalonnage (section etalonnage)")
+        for nom in self.etalonnage:
+            if nom not in self.tour:
+                erreurs.append(f"etalonnage : « {nom} » n'est jamais lue (absente de « tour »)")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 # --------------------------------------------------------------- l'ensemble
 
 
@@ -1771,6 +1878,7 @@ class Reglages(Modele):
     fluidnc: Fluidnc
     simulateur: ReglagesSimulateur
     accelerometre: ReglagesAccelerometre
+    pesees: ReglagesPesees
 
 
 # Nom du fichier → (nom dans Reglages, modèle). Ajouter ici chaque nouveau fichier.
@@ -1780,6 +1888,7 @@ FICHIERS: dict[str, tuple[str, type[Modele]]] = {
     "fluidnc.yaml": ("fluidnc", Fluidnc),
     "simulateur.yaml": ("simulateur", ReglagesSimulateur),
     "accelerometre.yaml": ("accelerometre", ReglagesAccelerometre),
+    "pesees.yaml": ("pesees", ReglagesPesees),
 }
 
 

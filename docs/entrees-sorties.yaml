@@ -134,6 +134,22 @@ cartes:
       vitesse_bauds: 9600
       parite: aucune
       delai_reponse_s: 0.5
+  # 2ᵉ adaptateur USB-RS485, réservé aux 3 cartes de pesée embarquées (RP2040 + HX711 : griffe,
+  # préhension, plateau du remplissage), séparé du Modbus de l'ozone (docs/decisions.md, 28/10).
+  # Puce à numéro de série unique (FT232 ou CP2102N). Programme des cartes : pesee/.
+  # delai_reponse_s : une question et sa réponse durent ≈ 3 ms ; au-delà de ce délai, la carte
+  # est dite muette pour cette question (le Pi passe à la suivante).
+  rs485_pesee:
+    exemple: true
+    description: Adaptateur USB-RS485 du bus des pesées (3 cartes RP2040 + HX711)
+    tension_max: 5
+    isolee: false
+    liaison:
+      type: usb_serie
+      numero_serie_usb: "EXEMPLE-RS485-PESEE"
+      vitesse_bauds: 115200
+      parite: aucune
+      delai_reponse_s: 0.02
   # Carte FluidNC n° 3 (axes du mycélium et du lavage) : le Pi ne la lit pas lui-même (pas de
   # « liaison ») ; ses fins de course et alarmes de pilotes vont à FluidNC, qui les dit au Pi.
   # Entrées 24 V optocouplées (docs/decisions.md, PR n° 3). Repères : EXEMPLES, en attendant le
@@ -164,7 +180,8 @@ cartes:
 #     les mêmes broches seulement s'ils sont sur le même type de bus et ont chacun leur adresse.
 #   module : un nom de la liste « modules » ci-dessus.
 #   appareil : pour un bus, l'appareil au bout (obligatoire en i2c) :
-#     sht31, ads1115, pcf8574, mcp23017, transmetteur_modbus, nextion, accelerometre.
+#     sht31, ads1115, pcf8574, mcp23017, transmetteur_modbus, nextion, accelerometre,
+#     carte_pesee (carte RP2040 + HX711 du bus des pesées, lue en Modbus : pesee/README.md).
 #   fichier : pour un bus sur les broches du Pi, le fichier de Linux qui y donne accès
 #     (I2C des GPIO2/3 : /dev/i2c-1).
 #   unite, conversion : pour une mesure, son unité et deux points « tension lue → valeur »
@@ -196,6 +213,10 @@ cartes:
 #     TX du Pi par une résistance de 1 kΩ, RX directement, les deux sur le même fil.
 #     Son « fichier » est l'UART du Pi (GPIO 14/15 = /dev/ttyAMA0, avec « dtparam=uart0=on » :
 #     voir accelerometre/essai-etabli.md).
+# (tâche 22 bis, cartes de pesée du bus RS485 « rs485_pesee ») :
+#   pesee_griffe, pesee_prehension, pesee_plateau_remplissage : leur « adresse » est celle de la
+#   carte sur le bus ; elle est copiée dans le programme de chaque carte (pesee/README.md).
+#   Étalonnage et ordre de lecture : pi/reglages/pesees.yaml.
 signaux:
   reed_panneau_poste_fut:
     exemple: true
@@ -522,3 +543,35 @@ signaux:
     type: logique
     tension: 5
     module: porte_bocal
+  # Cartes de pesée du bus RS485 des pesées (tâche 22 bis). Les fils DT et SCK des câbles
+  # deviennent A et B du bus. Une adresse par carte (de 1 à 247), copiée dans son programme.
+  pesee_griffe:
+    exemple: true
+    description: Pesée de la griffe (capteur 50 kg + HX711, carte RP2040), 80 mesures/s
+    carte: rs485_pesee
+    broche: [A, B]
+    type: serie
+    tension: 3.3
+    adresse: 1
+    module: griffe
+    appareil: carte_pesee
+  pesee_prehension:
+    exemple: true
+    description: Palier pesé du mât de la préhension (Phidgets 3135 50 kg + HX711, carte RP2040)
+    carte: rs485_pesee
+    broche: [A, B]
+    type: serie
+    tension: 3.3
+    adresse: 2
+    module: prehension
+    appareil: carte_pesee
+  pesee_plateau_remplissage:
+    exemple: true
+    description: Balance du plateau du chariot de remplissage (HX711, carte RP2040), 80 mesures/s
+    carte: rs485_pesee
+    broche: [A, B]
+    type: serie
+    tension: 3.3
+    adresse: 3
+    module: remplissage
+    appareil: carte_pesee

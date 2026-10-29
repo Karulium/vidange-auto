@@ -13,6 +13,7 @@ soit testé lui aussi. Seules les broches GPIO du Pi sont imitées plus haut (`F
     faux.commande("voyant_buzzer")                    # ce qu'a fait le programme
     faux.debrancher("sht31_armoire")                  # la puce ne répond plus
     faux.debrancher("pesee_fut")                      # prise de la pesée débranchée
+    faux.carte_pesee("pesee_griffe").hx711_muet = True  # carte du bus RS485 : HX711 muet
 
 Le faux suit le même plan que le vrai (niveau actif, contact au repos, tirage), à l'envers.
 """
@@ -20,7 +21,13 @@ Le faux suit le même plan que le vrai (niveau actif, contact au repos, tirage),
 import errno
 from collections.abc import Mapping
 
-from vidange.entrees_sorties import BROCHES_DES_PUCES, EntreesSorties, LiaisonUsbSerie
+from vidange.entrees_sorties import (
+    BROCHES_DES_PUCES,
+    CARTE_PESEE,
+    EntreesSorties,
+    LiaisonUsbSerie,
+)
+from vidange.materiel import carte_pesee
 from vidange.materiel.materiel import Branchement, tracer_branchements
 from vidange.materiel.modbus import crc_modbus
 from vidange.materiel.puces import Ads1115, BusI2c, Hx711, Tirage, crc_sht31
@@ -303,11 +310,55 @@ class FauxTransmetteurModbus:
         return reponse + crc_modbus(reponse)
 
 
-class FauxRs485:
-    """Un fil RS485 (port série) avec des transmetteurs à leur adresse."""
+class FausseCartePesee:
+    """Une carte de pesée RP2040 + HX711 du bus des pesées (même table que pesee/src/mesures.h).
+
+    Chaque question trouve une mesure nouvelle (numéro + 1), sauf si `figee`."""
 
     def __init__(self) -> None:
-        self.appareils: dict[int, FauxTransmetteurModbus] = {}
+        self.brut = 0
+        self.numero = 0
+        self.hx711_muet = False
+        self.figee = False
+        self.exemple = False
+        self.par_seconde = 80
+        self.trames_abimees = 0
+        self.debranche = False
+        self.questions = 0
+
+    def repondre(self, demande: bytes) -> bytes:
+        adresse, fonction = demande[0], demande[1]
+        premier = int.from_bytes(demande[2:4], "big")
+        nombre = int.from_bytes(demande[4:6], "big")
+        self.questions += 1
+        if not self.figee and not self.hx711_muet:
+            self.numero = (self.numero + 1) & 0xFFFF
+        registres = carte_pesee.encoder(
+            carte_pesee.MesureCarte(
+                brut=self.brut,
+                numero=self.numero,
+                age_ms=0 if not self.hx711_muet else 0xFFFF,
+                hx711_muet=self.hx711_muet,
+                exemple=self.exemple,
+                par_seconde=0 if self.hx711_muet else self.par_seconde,
+                trames_abimees=self.trames_abimees,
+            )
+        )
+        if fonction not in (3, 4):
+            reponse = bytes([adresse, fonction | 0x80, 1])
+        elif nombre == 0 or premier + nombre > len(registres):
+            reponse = bytes([adresse, fonction | 0x80, 2])
+        else:
+            donnees = b"".join(r.to_bytes(2, "big") for r in registres[premier : premier + nombre])
+            reponse = bytes([adresse, fonction, len(donnees)]) + donnees
+        return reponse + crc_modbus(reponse)
+
+
+class FauxRs485:
+    """Un fil RS485 (port série) avec des appareils à leur adresse."""
+
+    def __init__(self) -> None:
+        self.appareils: dict[int, FauxTransmetteurModbus | FausseCartePesee] = {}
         self.cable_coupe = False
         self._reponse = b""
         self.ouvertures = 0
@@ -374,7 +425,11 @@ class FausseFabrique:
             else:
                 rs485 = self.rs485.setdefault(ressource[1], FauxRs485())
                 signal = liste.signaux[branchement.nom]
-                assert signal.adresse is not None and signal.modbus is not None
+                assert signal.adresse is not None
+                if signal.appareil == CARTE_PESEE:
+                    rs485.appareils.setdefault(signal.adresse, FausseCartePesee())
+                    continue
+                assert signal.modbus is not None
                 transmetteur = rs485.appareils.setdefault(signal.adresse, FauxTransmetteurModbus())
                 transmetteur.registres.setdefault(signal.modbus.registre, 0)
         # Au départ, aucun capteur n'est actionné.
@@ -455,8 +510,15 @@ class FausseFabrique:
         appareil.humidite_pct = humidite_pct
 
     def regler_pesee(self, nom: str, brut: int) -> None:
-        """Mesure brute de la carte de pesée (nombre signé de 24 bits)."""
+        """Mesure brute de la carte de pesée (nombre signé de 24 bits), HX711 ou carte RS485."""
         self._appareil(self._branchement(nom, "pesee")).brut = brut
+
+    def carte_pesee(self, nom: str) -> FausseCartePesee:
+        """La fausse carte de pesée du bus RS485 d'un signal (la figer, couper son HX711...)."""
+        appareil = self._appareil(self._branchement(nom, "pesee"))
+        if not isinstance(appareil, FausseCartePesee):
+            raise KeyError(f"faux : « {nom} » n'est pas une carte de pesée du bus RS485")
+        return appareil
 
     def debrancher(self, nom: str, debranche: bool = True) -> None:
         """La puce I2C, le transmetteur ou la carte de pesée du signal ne répond plus
