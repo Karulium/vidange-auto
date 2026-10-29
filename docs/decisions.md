@@ -245,15 +245,17 @@ si l'une pose problème, elle le dit dans sa PR.
      ou mesurée à l'étape 2 de l'essai ; c'est un réglage.
 - **Lavage des seaux** (réponses à la PR n° 36, tâche 21, 29/10/2026) :
   1. Centre du fût de lavage (x 0,35) hors de portée de 2 mm (tête à x ≥ 0,352 depuis les rails HGR15) : on garde
-     x 0,352 (2 mm de décalage), sans effet sur le brossage (tête décalée vers +x). Question posée au projet
-     mécanique (avec le point 7) : déplacer le fût de lavage vers +x ?
+     x 0,352 (2 mm de décalage), sans effet sur le brossage (tête décalée vers +x). La Préhension confirme
+     x ≥ 0,352 (rails HGR15, tête gelée) : c'est au Lavage de déplacer le fût ou la buse (question posée, point 7).
   2. Jet d'air et chauffage sur la carte 4 (la carte 3 n'a plus de sortie libre) : d'accord ; transmis au plan
      de câblage. Le code ne connaît que les noms.
   3. Chauffage entre deux seaux : après la pompe qui suit le rinçage, le Pi remet quelques secondes d'eau du
      réseau jusqu'au flotteur haut (délai maximal : réglage), pour que le bain reste chauffé. La règle « chauffer
      seulement flotteur haut et pompe arrêtée » ne change pas.
-  4. Rotation de la tête limitée (≈ ± 370°) : on essaie ainsi (≈ 1,75 tour par passe, aller puis retour) et on
-     juge la propreté aux essais. Le joint tournant n'est demandé au projet mécanique que si c'est sale.
+  4. Rotation de la tête (réponse de la Préhension, 29/10/2026) : la limite de conception est ± 1,5 tour (± 540°,
+     cordon spiralé CDC-CORDON, seul passage du vide et des fils). Le logiciel monte à **± 500°** (40° de marge,
+     ≈ 2,8 tours par aller-retour), retour à 0 sur le capteur d'origine à chaque fin de passe, jamais deux passes
+     de suite dans le même sens. À confirmer à la mise en service avec le cordon reçu ; s'il force, retour à ± 370°.
   5. Hauteur du seau pendant la passe 2 : réglage par format, 0 en attendant la cote du projet mécanique
      (demandée).
   6. Vanne à bille ouverte pendant la série : oui, **à condition** que la vanne 3 voies revienne sur « rampes »
