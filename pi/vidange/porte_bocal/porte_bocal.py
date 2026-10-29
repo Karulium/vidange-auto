@@ -146,6 +146,15 @@ class PorteBocalFluidnc:
             and abs(diametre - self.reglages.diametre_bocal_m) <= self.reglages.tolerance_diametre_m
         )
 
+    def ouverts(self) -> bool:
+        """Mors arrêtés grands ouverts (sur leur fin de course)."""
+        diametre = self.diametre()
+        return (
+            self.liaison.etat.au_repos
+            and diametre is not None
+            and diametre >= self._ouvert - self.reglages.tolerance_diametre_m
+        )
+
     def _entree(self, nom: str) -> bool:
         valeur = self.signaux.entree(nom)
         if valeur is None:

@@ -525,7 +525,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   Simulateur : scénario `lavage_couvercles` (2 couvercles, avec retournement) et `lavage_bocaux` (3 bocaux).
   Tests, dont : couvercle qui glisse 2 fois, plateau flottant trop haut, mode refusé si le bac n'est pas trouvé,
   barrière coupée.
-- [ ] **37 bis. Préhension au porte-bocal : zone du garage** — Modèle : Sonnet, effort moyen. Appliquer les
+- [x] **37 bis. Préhension au porte-bocal : zone du garage** — Modèle : Sonnet, effort moyen. Appliquer les
   réponses du 29/10 (`docs/decisions.md`, section « Préhension », points 1 et 3) : `porte_bocal.y` à 0,150 dans
   `machine.yaml` ; exception à l'isolation du fût dans la petite zone du garage (± 5 mm, réglage) avec ses 3
   conditions (manivelle en bas, course déclarée 7 cm ; mors ouverts pour poser, serrés pour prendre ; griffe en

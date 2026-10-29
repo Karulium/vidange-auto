@@ -103,6 +103,8 @@ class PorteBocal(Protocol):
 
     def serre(self) -> bool: ...
 
+    def ouverts(self) -> bool: ...
+
     def fini(self) -> bool: ...
 
 
@@ -123,11 +125,16 @@ class Prehension:
         camera_dosage_pivote: Callable[[], bool] = lambda: False,
         anse_levee: Callable[[], bool] = lambda: False,
         photo: Callable[[str], object] = lambda raison: None,
+        agitateur_au_garage: Callable[[], bool] = lambda: True,
+        manivelle_en_bas: Callable[[], bool] = lambda: False,
+        griffe_en_butee_haute: Callable[[], bool] = lambda: False,
     ) -> None:
         """`panneau_rabattu`, `echange_fut` : PosteFut.panneau_vu_rabattu, echange_en_cours.
         `camera_dosage_pivote` : la caméra du dosage pivote (Vision, tâche 22). `anse_levee` :
         la caméra voit une anse levée dans le seau à prendre (tâche 22). `photo(raison)` :
-        photo notée avec une alerte (choc)."""
+        photo notée avec une alerte (choc). `agitateur_au_garage`, `manivelle_en_bas` : ce que
+        dit le Mycélium (zone du garage) ; `griffe_en_butee_haute` : ce que dit la griffe. Sans
+        eux, la tête ne descend jamais au porte-bocal."""
         assert machine.prehension is not None and machine.griffe is not None
         self.reglages = machine.prehension
         self.formats = machine.griffe.formats
@@ -141,6 +148,9 @@ class Prehension:
         self._camera_dosage_pivote = camera_dosage_pivote
         self._anse_levee = anse_levee
         self._photo = photo
+        self._agitateur_au_garage = agitateur_au_garage
+        self._manivelle_en_bas = manivelle_en_bas
+        self._griffe_en_butee_haute = griffe_en_butee_haute
         # Verrou du noyau et de la couronne du lavage (vidange.lavage) : raison du refus, ou
         # None. Sans lavage, les brosses ne tournent jamais.
         self.verrou_brosses: Callable[[Pose], str | None] = lambda pose: "pas de lavage"
@@ -162,7 +172,19 @@ class Prehension:
             camera_dosage_pivote=self._camera_dosage_pivote(),
             echange_fut=self._echange_fut(),
             objet=self.objet,
+            agitateur_au_garage=self._agitateur_au_garage(),
+            manivelle_en_bas=self._manivelle_en_bas(),
+            mors=self._mors_etat(),
+            griffe_en_butee_haute=self._griffe_en_butee_haute(),
         )
+
+    def _mors_etat(self) -> str | None:
+        porte_bocal = self.porte_bocal
+        if porte_bocal is None:
+            return None
+        if porte_bocal.ouverts():
+            return "ouverts"
+        return "serres" if porte_bocal.serre() else None
 
     def tient_un_objet(self) -> bool:
         """Vide confirmé sur l'objet tenu par la ventouse (verrou du noyau du Lavage : sa

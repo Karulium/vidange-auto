@@ -116,6 +116,18 @@ def test_garage_et_glissiere():
     assert "il faut y ≥ 0,38 m" in refus(tournee.avec(y=0.36, b=0.3))
 
 
+def test_bande_du_garage_permise_en_butee_haute_seulement():
+    # Préhension au porte-bocal : mât de la griffe en x 0,249, y 0,150 (décision du 29/10).
+    pose = Pose(x=0.249, y=0.150, z=1.29, a=0, b=0)
+    assert refus(pose) is None
+    assert refus(pose.avec(z=1.2895)) is None
+    message = refus(pose.avec(z=1.28))
+    assert "garage ou glissière" in message and "(ou la tête en butée haute)" in message
+    # La bande de la glissière reste interdite, même en butée haute.
+    assert "garage ou glissière" in refus(Pose(x=0.6, y=0.30, z=1.29, a=0, b=0))
+    assert REGLES.en_butee_haute(1.29) and not REGLES.en_butee_haute(1.288)
+
+
 def test_encombrement_de_la_tete():
     # Bras le long du pont (A = 0), raclette côté fût (−x).
     corps, raclette = REGLES.encombrement(Pose(x=1.0, y=0.5, z=1.0, a=0, b=0))

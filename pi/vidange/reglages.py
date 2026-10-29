@@ -249,6 +249,9 @@ class BandeGriffe(Modele):
 
     x: Intervalle
     y_min: tuple[float, float, float]
+    # Bande permise à la griffe en butée haute (garage, quand la préhension est au porte-bocal :
+    # bas du godet au-dessus de tout le Mycélium, docs/decisions.md, 29/10/2026).
+    permise_en_butee_haute: bool = False
 
 
 class ZoneMatGriffe(Modele):
@@ -543,6 +546,8 @@ class Griffe(Modele):
     mat_y_grand_ouvert: Intervalle
     trajet: TrajetGriffe
     garage_glissiere: list[BandeGriffe]
+    # Écart sous lequel les axes sont « en butée haute » (fin de la course de griffe_z), en m.
+    tolerance_butee_haute_m: float = Field(gt=0)
     dosage: ZoneMatGriffe
     camera_bocal: CameraBocalGriffe
     bout_cote_fut: BoutCoteFutGriffe
@@ -978,6 +983,16 @@ class PorteBocalPrehension(Modele):
     rayon_zone_m: float = Field(gt=0)
     # Attente maximale d'un geste des mors (s).
     mors_max_s: float = Field(gt=0)
+    # Zone du garage : axe de la tête à zone_garage_m près de (x, y) en x et en y. Seule
+    # exception à l'isolation du fût : la tête y descend à la verticale, agitateur au garage
+    # manivelle en bas avec la course déclarée course_manivelle_m (celle de face_z), mors ouverts
+    # pour poser, serrés pour prendre, griffe en butée haute.
+    zone_garage_m: float = Field(gt=0)
+    course_manivelle_m: float = Field(gt=0)
+    # Haut de la capsule manivelle en haut (m) : la tête (et l'objet tenu) ne passe pas au-dessus
+    # du bocal au garage, à marge_bocal_m près, tant que la manivelle n'est pas en bas.
+    capsule_manivelle_haut_z: float
+    marge_bocal_m: float = Field(ge=0)
 
 
 class Prehension(Modele):
@@ -1424,6 +1439,23 @@ class Machine(Modele):
                 f"prehension → porte_bocal → face_z : {porte_bocal.face_z:g} m hors de la course "
                 f"de prehension_z ({debut:g} à {fin:g} m)"
             )
+        mycelium = self.mycelium
+        if mycelium is not None:
+            if abs(porte_bocal.x - mycelium.garage_x) > porte_bocal.zone_garage_m:
+                erreurs.append(
+                    f"prehension → porte_bocal → x : {porte_bocal.x:g} m, loin du garage de "
+                    f"l'agitateur (mycelium → garage_x : {mycelium.garage_x:g} m)"
+                )
+            manivelle = mycelium.manivelle
+            course = porte_bocal.course_manivelle_m
+            if (
+                course not in manivelle.courses_possibles_m
+                or course > manivelle.course_max_garage_m
+            ):
+                erreurs.append(
+                    f"prehension → porte_bocal → course_manivelle_m : {course:g} m n'est pas un "
+                    "trou de la manivelle permis au garage (mycelium → manivelle)"
+                )
         if self.griffe.camera_bocal.z_haut is None:
             erreurs.append("griffe → camera_bocal : il faut « z_haut » pour la préhension")
         if self.porte_bocal is None or self.porte_bocal.approche is None:
