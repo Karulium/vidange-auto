@@ -10,11 +10,11 @@ Essai de la liaison sur une vraie carte, pas à pas : [`essai-liaison.md`](essai
 
 Le Pi met à jour le programme et les réglages des cartes par leur câble USB (tâche 13, page web → « Mises à
 jour ») : le fichier `fluidnc/<carte>.yaml` devient `config.yaml` dans la carte. Avant chaque changement, toute
-la mémoire de la carte est copiée sur le Pi pour pouvoir revenir en arrière.
+la mémoire de la carte est copiée sur le Pi pour pouvoir revenir en arrière. Essai :
+[`pi/systeme/essai-mises-a-jour.md`](../pi/systeme/essai-mises-a-jour.md).
 
 **Un fichier marqué EXEMPLE n'est jamais envoyé à une carte** (tâche 19 bis) : tant que le mot `EXEMPLE`
 (en majuscules) reste quelque part dans le fichier, en commentaire ou dans une valeur, l'envoi est refusé
 et le message donne les lignes où il reste. Pour finir un fichier : mettre les vraies broches (plan de câblage),
 les vrais pas par mm et les vitesses, puis enlever chaque mot `EXEMPLE`. Le simulateur et les tests, eux, peuvent
-toujours se servir des fichiers d'exemple. (« exemple » en minuscules, comme « par exemple », ne bloque rien.) Essai :
-[`pi/systeme/essai-mises-a-jour.md`](../pi/systeme/essai-mises-a-jour.md).
+toujours se servir des fichiers d'exemple. (« exemple » en minuscules, comme « par exemple », ne bloque rien.)
