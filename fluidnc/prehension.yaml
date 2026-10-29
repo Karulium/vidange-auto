@@ -1,0 +1,98 @@
+# Réglages FluidNC de la carte n° 4 : tête de préhension (Z et rotation).
+#
+# ATTENTION : EXEMPLE. Ne PAS envoyer ce fichier à la vraie carte avant d'avoir mis les vraies
+# broches (plan de câblage), les vrais pas par mm et les vitesses. Chiffres de la fiche du module
+# « Préhension » (validé définitivement le 27/10/2026) marqués « (fiche) ».
+#
+# Repère : la position machine de chaque axe est celle de pi/reglages/machine.yaml
+# (mm = mètres × 1000 ; degrés pour la rotation).
+#   Z : pignon-crémaillère, NEMA 23 boucle fermée à frein (maintien réduit à l'arrêt). Position
+#       machine = hauteur de la FACE de la tête. Prise d'origine en haut, sur le fin de course
+#       fdc_prehension_haut : face à 1100 mm (fiche). Course ≈ 670 mm (EXEMPLE, à confirmer au
+#       montage).
+#   A : rotation de la tête, maintien plein (≈ 3 N·m pendant le brossage du lavage et le
+#       vissage, fiche). Visser = sens horaire vu d'en haut = A positif ; aucun axe inversé
+#       (fiche). Origine sur origine_rotation_tete (référence à confirmer au câblage).
+#   Contact de la tête (plateau flottant vu par un inductif M8 24 V) : c'est l'entrée « probe »
+#       de la carte, pour que la descente au contact (« G38.3 ») s'arrête tout de suite. Le Pi le
+#       lit dans « Pn: » (lettre P, pi/reglages/fluidnc.yaml).
+#   Vanne du venturi et électroaimants des capsules : 2 sorties « user_outputs », commandées par
+#       le Pi (M64 / M65). Numéros : pi/reglages/fluidnc.yaml.
+#   À VÉRIFIER à l'essai de la carte (pi/systeme/essai-prehension.md, étape 1) : sens de A, la
+#   lettre P de « Pn: » au contact, M64/M65, « G38.3 » qui s'arrête au contact.
+
+name: "Vidange carte 4 - prehension (EXEMPLE)"
+board: "ESP32 6 axes, pilotes externes (EXEMPLE)"
+
+stepping:
+  engine: RMT
+  idle_ms: 255
+  pulse_us: 4
+  dir_delay_us: 2
+  disable_delay_us: 0
+
+# Prise d'origine obligatoire à la mise sous tension (docs/decisions.md).
+start:
+  must_home: true
+
+axes:
+  shared_stepper_disable_pin: NO_PIN
+
+  z:
+    # EXEMPLE : 1600 pas par tour sur le pilote, pignon de 60 mm de tour (module 1, 19 dents).
+    steps_per_mm: 26.667
+    max_rate_mm_per_min: 9000
+    acceleration_mm_per_sec2: 500
+    max_travel_mm: 670
+    soft_limits: true
+    homing:
+      cycle: 1
+      positive_direction: true
+      mpos_mm: 1100
+      feed_mm_per_min: 300
+      seek_mm_per_min: 2000
+      settle_ms: 250
+    motor0:
+      # EXEMPLE de broche : fdc_prehension_haut.
+      limit_pos_pin: gpio.36:low
+      hard_limits: true
+      pulloff_mm: 2
+      standard_stepper:
+        step_pin: gpio.12
+        direction_pin: gpio.14
+        disable_pin: NO_PIN
+
+  a:
+    # EXEMPLE : 1600 pas par tour sur le pilote, réduction 1:5 → 22,222 pas par degré.
+    steps_per_mm: 22.222
+    max_rate_mm_per_min: 5400
+    acceleration_mm_per_sec2: 360
+    max_travel_mm: 740
+    soft_limits: true
+    homing:
+      cycle: 2
+      positive_direction: false
+      mpos_mm: 0
+      feed_mm_per_min: 300
+      seek_mm_per_min: 1800
+      settle_ms: 250
+    motor0:
+      # EXEMPLE de broche : origine_rotation_tete.
+      limit_neg_pin: gpio.39:low
+      hard_limits: false
+      pulloff_mm: 2
+      standard_stepper:
+        step_pin: gpio.26
+        direction_pin: gpio.27
+        disable_pin: NO_PIN
+
+# Palpeur : contact de la tête (inductif M8, plateau flottant). EXEMPLE de broche.
+probe:
+  pin: gpio.32:low
+  check_mode_start: true
+
+# Sorties (pi/reglages/fluidnc.yaml → sorties). EXEMPLES de broches.
+#   digital0 : vanne_vide ; digital1 : electroaimants_capsule.
+user_outputs:
+  digital0_pin: gpio.2
+  digital1_pin: gpio.5

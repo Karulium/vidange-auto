@@ -24,6 +24,10 @@
 #     mycelium_geste_max, assez lent pour l'état de la carte (fluidnc.yaml → periode_etat_s) ;
 #   - porte-bocal : axe « mors » en mètres, ouverts ils laissent passer la capsule, le diamètre du
 #     bocal (± tolérance) est dans leur course ; relache_s < delai_max_s ;
+#   - préhension : ses axes existent (Z et rotation sur la même carte, pas celle du pont), « en
+#     haut » et la face au porte-bocal dans la course de Z, vides de prise et de perte dans l'ordre,
+#     objets seau, couvercle, bocal et capsule décrits, appuis du vissage dans l'ordre, haut du
+#     boîtier de la caméra du bocal donné, approche des mors du porte-bocal donnée ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
 
 exemple: true
@@ -113,6 +117,24 @@ axes:
     course: [0.08, 0.103]
     carte: mycelium_lavage
     lettre: Y
+  # Les 2 axes de la tête de préhension, sur la carte n° 4 (prehension). Son mât est sur le même
+  # pont et le même chariot que la griffe (pont_x, chariot_y). Régler FluidNC pour que sa
+  # position machine Z soit la hauteur de la FACE de la tête, en mm.
+  # Z : pignon-crémaillère avec frein ; « en haut » = face en butée haute à 1,10 (fiche).
+  # Course ≈ 0,67 : EXEMPLE, à confirmer au montage.
+  prehension_z:
+    longueur_rail: 1.15
+    course: [0.43, 1.10]
+    carte: prehension
+    lettre: Z
+  # Rotation de la tête (°). Visser = sens horaire vu d'en haut ; aucun axe inversé dans FluidNC.
+  # EXEMPLE : un peu plus d'un tour de chaque côté (les câbles et le tuyau du vide la limitent).
+  prehension_a:
+    unite: deg
+    longueur_rail: 400
+    course: [-370, 370]
+    carte: prehension
+    lettre: A
 
 positions:
   exemple_repos:
@@ -131,6 +153,10 @@ positions:
     griffe_z: 1.29
     griffe_a: 0
     griffe_b: 0
+  # La tête de préhension en haut, sans rotation.
+  prehension_haut:
+    prehension_z: 1.10
+    prehension_a: 0
   # L'agitateur du mycélium au garage, manivelle en haut.
   agitateur_garage:
     agitateur_x: 0.565
@@ -154,6 +180,8 @@ durees:
   mycelium_geste_max: 300
   mycelium_chariot_max: 120
   mycelium_agitation_max: 300
+  # Un geste de la préhension (prise, pose, vissage, porte-bocal) : au plus 5 min. EXEMPLE.
+  prehension_geste_max: 300
 
 # Poste du fût. Ces chiffres-là sont VRAIS (fiche du module « Poste du fût », validée le
 # 23/10/2026, et plan de commande v221), sauf la partie « pesee » (à étalonner, voir plus bas).
@@ -279,7 +307,8 @@ griffe:
   # pont, raclette côté fût). Le boîtier est un obstacle : la tête ne passe pas non plus de
   # l'autre côté en le touchant. Si seule la partie haute de la tête (tete ci-dessus) arrive au-dessus
   # du bas du boîtier (z_bas), elle seule compte (cotes du projet mécanique, 28/10).
-  camera_bocal: {x: [1.045, 1.085], y: [0.22, 0.28], bas_z_max: 1.08, z_bas: 0.982}
+  # z_haut : haut du boîtier, pour la préhension (elle passe au-dessus avec 1 cm de marge).
+  camera_bocal: {x: [1.045, 1.085], y: [0.22, 0.28], bas_z_max: 1.08, z_bas: 0.982, z_haut: 1.062}
   # Bout côté fût : tête (son bord côté −x) sous x ≈ 0,12 → bas de la tête ≥ 0,85 hors du fût,
   # ≥ 1,05 au-dessus de la paroi du fût (fiche). Mât au-dessus de l'intérieur du fût : ce sont
   # les règles du fût qui comptent.
@@ -571,6 +600,121 @@ porte_bocal:
     attente_inclinaison_s: 0.5
   # Ce que dit le capteur d'inclinaison quand il est actionné (à vérifier au montage).
   inclinaison_actionne: tete_en_bas
+  # Pose du bocal par la préhension (fiche « Préhension », 27/10) : mors approchés à « Ø 98 » à
+  # faible courant (ils guident le bocal sans le serrer). Courant de serrage = run_amps de
+  # fluidnc/mycelium_lavage.yaml (remis avant tout autre geste des mors). Courants : EXEMPLES.
+  approche:
+    ecart_m: 0.098
+    courant_faible_a: 0.2
+    courant_serrage_a: 0.6
+
+# Préhension (tête à ventouse, électroaimants et rotation), validée définitivement le 27/10/2026
+# (fiche du module, plan de commande v221, rails HGR15 du Portique du 29/10). Repère du portique,
+# en mètres. « x, y » = axe de la tête ; « z » = hauteur de la FACE de la tête.
+# Chiffres VRAIS de la fiche, sauf ceux marqués EXEMPLE (vitesses, durées, tolérances, poids
+# estimés à mesurer à la mise en route, encombrement des objets, porte-bocal).
+# Un verrou du logiciel ne protège que la machine : la sécurité des personnes reste câblée.
+prehension:
+  exemple: true
+  # Axe de la préhension = pont + 0,129 en x (rails HGR15, 29/10), même y que la griffe.
+  decalage_mat_x: 0.129
+  # « En haut » = face de la tête en butée haute à 1,10.
+  haut_z: 1.10
+  rayon_tete_m: 0.045
+  # Règle 2, isolation du fût : axe de la tête sous x 0,71 et panneau du poste du fût pas vu
+  # « rabattu » (contact ouvert et stable) ⇒ face en haut. Le signal est le panneau, pas le fût.
+  isolation_fut_x_max: 0.71
+  # Règle 3 : seau tenu avec son axe à y > 0,86 (côté opérateur) : bord ≤ 1,10 ; au-dessus des
+  # piles (y ≤ 0,86) : bord ≤ 1,155.
+  seau_tenu: {y_operateur: 0.86, bord_max_operateur_z: 1.10, bord_max_piles_z: 1.155}
+  # Règle 4 : boîtier de la caméra du bocal (griffe → camera_bocal) + rayon de la tête (ou de
+  # l'objet tenu, s'il est plus large) + 1 cm : la tête et l'objet passent au-dessus de son haut
+  # + 1 cm. Contrôle de la fiche : x 0,99-1,16, y < 0,335, face sous 1,072 interdite.
+  camera_bocal_marge_m: 0.01
+  # Règle 5 : pendant que la caméra du dosage pivote, la tête n'est pas dans la boîte
+  # x < 1,10, y < 0,34, z 0,95-1,08 (docs/decisions.md, règle 2).
+  camera_dosage: {x_max: 1.10, y_max: 0.34, z: [0.95, 1.08]}
+  # Règle 6 : seau tenu, accélération réduite sur la carte n° 1 (l'anse balance). Accélération
+  # normale = celle des axes X et Y dans fluidnc/ (à recopier ici). EXEMPLES.
+  acceleration: {normale_mm_s2: 500, seau_mm_s2: 150}
+  # « En haut », « à la cote » : à 1 mm près ; orientation à 0,5° près. Un mouvement est vérifié
+  # point par point, tous les 5 mm. EXEMPLES.
+  tolerance_m: 0.001
+  tolerance_deg: 0.5
+  pas_verification_m: 0.005
+  # Vitesses maximales (m/s ; °/s). Levée lente ≈ 10 mm/s (fiche) ; le reste : EXEMPLES.
+  vitesses:
+    pont_x: 0.25
+    chariot_y: 0.25
+    z: 0.15
+    a: 90
+    approche: 0.01
+    levee_lente: 0.01
+    remontee_choc: 0.01
+    vissage_deg_s: 30
+  # Descente lente sur les 3 derniers cm (EXEMPLE) ; contact à plus de 5 mm de la cote attendue :
+  # arrêt et alerte (fiche).
+  descente: {approche_m: 0.03, ecart_contact_max_m: 0.005}
+  # Vide (fiche) : prise bonne à −55 kPa ; perdu au-dessus de −40 pendant la levée (« feed hold »,
+  # redescendre, reposer, reprendre ; après 2 échecs, alerte). ≈ 100 lectures/s, moyennées.
+  # Zéro recalé à chaque démarrage, vanne fermée. Délais, relâche, moyenne, zéro : EXEMPLES.
+  vide:
+    prise_kpa: -55
+    perte_kpa: -40
+    delai_prise_s: 3
+    relache_s: 0.5
+    frequence_hz: 100
+    moyenne: 5
+    essais_max: 2
+    zero_lectures: 50
+    zero_ecart_max_kpa: 5
+  # Levée lente sur les 30 premiers mm (fiche).
+  levee_lente_m: 0.03
+  # Palier pesé du mât (Phidgets 3135 50 kg + HX711, carte de pesée RS485) : lecture = poids
+  # porté − poussée. Choc (fiche) : plus de 15 N d'écart avec le poids porté pendant plus de
+  # 50 ms, en trajet. Pesée, silence, remontée : EXEMPLES.
+  force:
+    frequence_hz: 80
+    silence_max_s: 0.5
+    lectures_pesee: 20
+    attente_pesee_s: 0.5
+    choc_n: 15
+    choc_duree_s: 0.05
+    remontee_choc_m: 0.05
+  # Objets : encombrement autour de l'axe de la tête (rayon ; ce qui dépasse au-dessus et
+  # au-dessous de la face) et poids estimé (fiche : seau vide ≈ 5 N, deux seaux emboîtés ≈ 10 N,
+  # couvercle ≈ 1 à 1,5 N, bocal plein ≈ 10 N ; à mesurer à la mise en route). Le seau est pris
+  # par la ventouse sur son fond, de l'intérieur : il dépasse au-dessus de la face. Son rayon, sa
+  # hauteur et sa tare viennent de la table des formats (griffe → formats) quand elle les a.
+  # Capsule (30 g) : trop légère, pas de contrôle du poids. Encombrements : EXEMPLES.
+  objets:
+    seau: {rayon_m: 0.1335, dessus_m: 0.25, dessous_m: 0, poids_n: 5, tolerance_n: 2}
+    couvercle: {rayon_m: 0.14, dessus_m: 0, dessous_m: 0.015, poids_n: 1.25, tolerance_n: 0.5}
+    bocal: {rayon_m: 0.0515, dessus_m: 0, dessous_m: 0.17, poids_n: 10, tolerance_n: 3}
+    capsule: {rayon_m: 0.0515, dessus_m: 0, dessous_m: 0.01, aimants: true}
+  # Vissage d'une capsule Twist-Off (fiche) : appui 80 N, accepté 60 à 100 N, au-delà de 150 N
+  # arrêt et alerte (le pilote limite Z à 250 N). Angle, course et descente : EXEMPLES.
+  vissage:
+    appui_n: 80
+    appui_min_n: 60
+    appui_max_n: 100
+    arret_n: 150
+    course_appui_m: 0.01
+    angle_deg: 90
+    descente_m: 0.002
+  # Porte-bocal, au garage de l'agitateur (x 0,565, validé le 24/10) : tête orientée à ± 3°
+  # (méplats), bocal à sa hauteur exacte (± 0,5 mm), remontée d'au moins 5 mm avant le serrage
+  # (fiche). y, face_z, orientation, zone et délai des mors : EXEMPLES (à mesurer au montage).
+  porte_bocal:
+    x: 0.565
+    y: 0.155
+    face_z: 1.0
+    orientation_deg: 0
+    tolerance_orientation_deg: 3
+    tolerance_hauteur_m: 0.0005
+    remontee_min_m: 0.005
+    rayon_zone_m: 0.06
+    mors_max_s: 20
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

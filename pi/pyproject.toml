@@ -45,6 +45,7 @@ vidange-accelerometre = "vidange.accelerometre.outil:lancer"
 vidange-pesee = "vidange.poste_fut.outil:lancer"
 vidange-pesees = "vidange.pesees.outil:lancer"
 vidange-porte-bocal = "vidange.porte_bocal.outil:lancer"
+vidange-prehension = "vidange.prehension.outil:lancer"
 
 [tool.setuptools.packages.find]
 include = ["vidange*"]

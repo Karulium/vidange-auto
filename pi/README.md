@@ -60,6 +60,7 @@ Pas encore de vrai module de la machine.
 | `vidange/mode.py` | Mode de la machine (production, lavage, UV-ozone), gardé dans un fichier, changé machine au repos |
 | `vidange/griffe/` | Griffe sur mât : règles de position (`regles.py`), doses apprises (`doses.py`), bras sur la carte du portique et sa pesée (`bras.py`), gestes (`griffe.py`), module « griffe » (`module.py`), griffe du simulateur (`simulation.py`) |
 | `vidange/porte_bocal/` | Porte-bocal (carte n° 3) : mors (serrage par palpage, ouverture), demi-tour du bocal (pont en H, verrou, inclinaison, photo de contrôle), signaux de la carte par leur nom (`signaux.py`), faux plateau et faux bocal (`faux.py`) ; commande `vidange-porte-bocal` |
+| `vidange/prehension/` | Préhension (cartes n° 1 et n° 4) : règles de mouvement (`regles.py`), tête sur ses deux cartes avec le vide et la force (`tete.py`), gestes : prendre, poser, porte-bocal, visser (`prehension.py`), scénario du simulateur (`module.py`, `simulation.py`) ; commande `vidange-prehension` |
 | `vidange/poste_fut/` | Poste du fût : état (absent, en place, prêt), bouton « Prêt » et voyant, pesée (HX711), mode permis par le panneau, verrous pour les autres modules, module « poste_fut » ; commande `vidange-pesee` (étalonnage) |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) ; poste du fût (chiffres **vrais**, pesée à étalonner) |
 | `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran, caméras, pilotage à distance, mises à jour) |
@@ -74,6 +75,7 @@ Pas encore de vrai module de la machine.
 | `systeme/essai-page-web.md` | Essai de la page web sur le vrai Pi (téléphone, Tailscale), pas à pas |
 | `systeme/essai-distance.md` | Essai des caméras et du pilotage à distance sur le vrai Pi, pas à pas |
 | `systeme/essai-ecran.md` | Essai de l'écran Nextion sur le vrai Pi (câblage, UART, chaque page), pas à pas |
+| `systeme/essai-prehension.md` | Essai de la préhension sur le vrai matériel (carte n° 4, vide, force, prises, porte-bocal, vissage), pas à pas |
 | `systeme/essai-poste-fut.md` | Essai du poste du fût sur le vrai matériel (chariot, panneau, bouton, pesée et étalonnage), pas à pas |
 | `tests/` | Tests (pytest) |
 
@@ -215,6 +217,7 @@ en une fraction de seconde), et sort le planning : chaque étape, quand elle com
 .venv/bin/vidange-simulateur poste_fut               # échange d'un fût (scénario « echange_fut »)
 .venv/bin/vidange-simulateur griffe                  # vidange d'un fût par la griffe (« vidange_fut »)
 .venv/bin/vidange-simulateur mycelium                # dosage du mycélium (« dosage_mycelium »)
+.venv/bin/vidange-simulateur prehension              # gestes de la préhension (« prehension »)
 ```
 
 - **Durées réglables** dans `reglages/simulateur.yaml` : vitesse et accélération de chaque axe (un déplacement
@@ -447,6 +450,59 @@ mycelium.demander(Demande("S1293", "seau_a", couche=1, variete="pleurote_grise",
   `photo(raison)` et `controle()` du porte-bocal (Vision).
 - **Porte-bocal** (`vidange/porte_bocal/`, tâche 20) : `vidange-porte-bocal etat | origine | ouvrir | serrer |
   tete-en-bas | debout` pour l'essayer sur la carte (`systeme/essai-porte-bocal.md`).
+
+## Préhension (tâche 37)
+
+La tête pend sous le même pont que la griffe, sur son propre mât (axe = pont + 0,129 en x) : ventouse Ø 40
+(venturi) pour les seaux vides, couvercles, bocaux et l'entonnoir ; 3 électroaimants pour les capsules ;
+rotation (vissage). Module validé le 27/10/2026. Les chiffres sont dans `reglages/machine.yaml` (partie
+`prehension`, axes `prehension_z` et `prehension_a`) ; ceux marqués EXEMPLE sont à mesurer
+(`systeme/essai-prehension.md`).
+
+```python
+carte = reglages.fluidnc.cartes["prehension"]
+tete = TeteFluidnc(
+    reglages.machine,
+    liaison_portique,
+    liaison_prehension,
+    signaux_prehension(liaison_prehension, carte),
+    pesees.capteur("pesee_prehension"),
+    CapteurVide(reglages.machine.prehension.vide, lambda: materiel.mesurer("vide_venturi")),
+)
+tete.demarrer(
+    arret
+)  # zéro du vide recalé (vanne fermée), puis vide et force ≈ 100 fois par seconde
+prehension = Prehension(
+    reglages.machine,
+    tete,
+    porte_bocal,
+    panneau_rabattu=poste.panneau_vu_rabattu,
+    echange_fut=lambda: poste.echange_en_cours,
+)
+# Dans l'étape d'un module (Stockage, Lavage...) :
+Etape(
+    "prendre_un_seau",
+    QUOI_FAIRE,
+    action=lambda: prehension.lancer(lambda: prehension.geste_prendre("seau", x, y, z, "seau_a")),
+    fin=Condition("geste de la préhension fini", prehension.geste_fini),
+    delai_max="prehension_geste_max",
+)
+```
+
+- **Gestes** : `geste_prendre(objet, x, y, contact_z, format)`, `geste_poser(x, y, contact_z)`,
+  `geste_poser_bocal()`, `geste_reprendre_bocal()`, `geste_visser(x, y, contact_z, devisser=False)`,
+  `geste_aller(x, y)`. `contact_z` = cote de la face de la tête quand elle touche l'objet.
+- **Règles** (`regles.py`) : pont puis tête, jamais ensemble, tête en haut avant de bouger le pont ;
+  isolation du fût (sous x 0,71, panneau pas vu rabattu ⇒ face en haut) ; bord du seau tenu ; boîtier de la
+  caméra du bocal ; boîte de la caméra du dosage ; pas de rotation entre les mors.
+- **Prise** : descente au contact (palpage de FluidNC), cote à ± 5 mm, vide −55 kPa, levée lente puis
+  normale ; vide au-dessus de −40 kPa pendant la levée → arrêt, reposer, reprendre, alerte au 2ᵉ échec ;
+  poids contrôlé (deux seaux emboîtés : reposés).
+- **Choc** en trajet (> 15 N d'écart pendant > 50 ms) : arrêt du pont et de la tête, remontée lente, photo.
+- `tient_un_objet()` (verrou du noyau du Lavage), `hors_boite_camera_dosage()` (verrou de la caméra du
+  dosage), `refus_manuel(pose)` (mode manuel du téléphone).
+- **Porte-bocal** : `approcher_mors()` (« Ø 98 » à faible courant) ajouté pour la pose du bocal.
+- Essai sur la machine : `vidange-prehension etat | vide | prendre-poser | porte-bocal | visser`.
 
 ## Cartes de pesée du bus RS485 (tâche 22 bis)
 

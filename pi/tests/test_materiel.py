@@ -161,14 +161,14 @@ def test_mesure_analogique_convertie(faux_et_materiel):
     faux.regler("vide_venturi", -45)
     assert materiel.mesurer("vide_venturi") == pytest.approx(-45, abs=0.02)
     assert materiel.unite("vide_venturi") == "kPa"
-    # 0,3 V → 0 kPa et 3,0 V → -90 kPa : 1,65 V → -45 kPa.
-    assert faux.bus["/dev/i2c-1"].appareils[0x48].tensions["A0"] == pytest.approx(1.65)
+    # 0,333 V → 0 kPa et 3,0 V → -100 kPa : 1,533 V → -45 kPa.
+    assert faux.bus["/dev/i2c-1"].appareils[0x48].tensions["A0"] == pytest.approx(1.533, abs=0.001)
 
 
 def test_mesure_sans_conversion_en_volts(entrees_sorties):
     remplacer(
         entrees_sorties,
-        "    unite: kPa\n    conversion:\n      volts: [0.3, 3.0]\n      valeurs: [0, -90]\n",
+        "    unite: kPa\n    conversion:\n      volts: [0.333, 3.0]\n      valeurs: [0, -100]\n",
         "",
     )
     faux, materiel = ouvrir(entrees_sorties)

@@ -8,6 +8,7 @@ FluidNC n° 3.
     porte_bocal.retourner_tete_en_bas()
     porte_bocal.remettre_debout()
     porte_bocal.ouvrir_mors()
+    porte_bocal.approcher_mors()        # « Ø 98 » à faible courant (pose par la préhension)
 
 Les mors (NEMA 17 sur TMC2209, vis gauche-droite) sont l'axe « mors » de machine.yaml : sa
 position est l'écart entre les 2 mors.
@@ -17,6 +18,9 @@ position est l'écart entre les 2 mors.
   du pilote sur l'entrée « probe »). L'écart à l'arrêt est le diamètre du bocal ; hors de la
   plage attendue, le bocal est absent, cassé ou mal posé : alerte avec photo. Le courant de
   serrage se règle sur le pilote (fluidnc/), pas ici.
+- Approcher (pour la préhension, qui pose le bocal) : mors ouverts, puis à « Ø 98 » avec un
+  courant faible : ils guident le bocal sans le serrer, et cèdent s'il les touche. Le courant de
+  serrage est remis avant le geste des mors suivant.
 - Les mors ne bougent jamais bocal tête en bas (il tomberait).
 
 Le demi-tour (motoréducteur JGY370 par un pont en H : le sens du courant donne le sens) :
@@ -115,7 +119,9 @@ class PorteBocalFluidnc:
         mors = machine.axes["mors"]
         self._lettre = mors.lettre
         self._ferme, self._ouvert = mors.course
-        self._geste: Literal["ouvrir", "serrer", "demi_tour"] | None = None
+        self._geste: Literal["ouvrir", "serrer", "approcher", "demi_tour"] | None = None
+        # Courant faible des mors (approche) pas encore remis à celui du serrage.
+        self._courant_faible = False
         self._commandes: list[Commande] = []
         # Demi-tour en cours : sens voulu, départ, doigt sorti du trou, arrêt du moteur.
         self._voulu: Sens = "debout"
@@ -157,7 +163,35 @@ class PorteBocalFluidnc:
 
     def ouvrir_mors(self) -> None:
         """Mors ouverts sur leur fin de course (origine reprise)."""
-        self._mors("ouvrir", [f"$H{self._lettre}"])
+        self._mors("ouvrir", [*self._courant_serrage(), f"$H{self._lettre}"])
+
+    def approcher_mors(self) -> None:
+        """Mors ouverts, puis à « Ø 98 » à faible courant (pose du bocal par la préhension)."""
+        approche = self.reglages.approche
+        if approche is None:
+            raise ErreurEtape("porte-bocal : pas d'« approche » dans machine.yaml")
+        ecart = approche.ecart_m * MM_PAR_M
+        f = 2 * self.reglages.palpage_m_s * 60 * MM_PAR_M
+        self._mors(
+            "approcher",
+            [
+                f"$H{self._lettre}",
+                self._ligne_courant(approche.courant_faible_a),
+                f"G90 G1 {self._lettre}{ecart:.3f} F{f:.0f}",
+            ],
+        )
+        self._courant_faible = True
+
+    def _ligne_courant(self, amperes: float) -> str:
+        return f"$/axes/{(self._lettre or '').lower()}/motor0/tmc_2209/run_amps={amperes:g}"
+
+    def _courant_serrage(self) -> list[str]:
+        """Après une approche, le courant du serrage est remis (avant tout autre geste)."""
+        approche = self.reglages.approche
+        if not self._courant_faible or approche is None:
+            return []
+        self._courant_faible = False
+        return [self._ligne_courant(approche.courant_serrage_a)]
 
     def serrer_bocal(self) -> None:
         """Mors ouverts, puis palpage jusqu'au bocal (arrêt par StallGuard)."""
@@ -166,13 +200,19 @@ class PorteBocalFluidnc:
         f = 2 * self.reglages.palpage_m_s * 60 * MM_PAR_M
         self._mors(
             "serrer",
-            [f"$H{self._lettre}", f"G91 G38.3 {self._lettre}-{course:.3f} F{f:.0f}", "G90"],
+            [
+                *self._courant_serrage(),
+                f"$H{self._lettre}",
+                f"G91 G38.3 {self._lettre}-{course:.3f} F{f:.0f}",
+                "G90",
+            ],
         )
 
-    def _mors(self, geste: Literal["ouvrir", "serrer"], lignes: list[str]) -> None:
+    def _mors(self, geste: Literal["ouvrir", "serrer", "approcher"], lignes: list[str]) -> None:
         if self.tete_en_bas():
             raise ErreurEtape("mors refusés : le bocal est tête en bas (il tomberait)")
-        journal.info("Porte-bocal : %s", "ouverture des mors" if geste == "ouvrir" else "serrage")
+        textes = {"ouvrir": "ouverture des mors", "serrer": "serrage", "approcher": "approche"}
+        journal.info("Porte-bocal : %s", textes[geste])
         self._geste = geste
         self._commandes = [self.liaison.envoyer(ligne) for ligne in lignes]
 

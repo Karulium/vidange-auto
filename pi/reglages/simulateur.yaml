@@ -36,6 +36,10 @@ axes:
   # Agitateur du mycélium : ses vitesses (machine.yaml → mycelium → vitesses) passent avant
   # celles-ci. Manivelle en °/s (300 tr/min = 1800 °/s).
   agitateur_x: {vitesse: 0.1, acceleration: 0.5}
+  # Tête de préhension : ses vitesses plus lentes (machine.yaml → prehension → vitesses)
+  # passent avant celles-ci.
+  prehension_z: {vitesse: 0.15, acceleration: 0.5}
+  prehension_a: {vitesse: 90, acceleration: 180}
   manivelle: {vitesse: 1800, acceleration: 3600}
 
 # Position (machine.yaml) des axes au départ. Sans « depart », chaque axe est au début de sa course.
@@ -69,6 +73,20 @@ mycelium:
     - {seau: S0002, format: seau_b, variete: pleurote_grise}
     - {seau: S0003, format: seau_b, variete: pleurote_grise}
 
+# Les objets imaginaires de la préhension (scénario « prehension ») : où les prendre, où les
+# poser (axe de la tête, cote de la face au contact), vide atteint sur un objet, durée d'un
+# geste des mors du porte-bocal. La tête part en haut (position prehension_haut).
+prehension:
+  vide_kpa: -70
+  seau: {x: 1.6, y: 0.6, contact_z: 0.6}
+  seau_pose: {x: 1.9, y: 0.6, contact_z: 0.6}
+  couvercle: {x: 1.6, y: 0.75, contact_z: 0.8}
+  couvercle_pose: {x: 1.9, y: 0.75, contact_z: 0.8}
+  bocal: {x: 1.4, y: 0.75, contact_z: 0.95}
+  capsule: {x: 1.5, y: 0.5, contact_z: 0.85}
+  vissage: {x: 1.7, y: 0.5, contact_z: 0.9}
+  mors_s: 3
+
 # Capteurs (entrées tout-ou-rien de docs/entrees-sorties.yaml) actionnés au départ.
 capteurs_actionnes: []
 
@@ -86,7 +104,8 @@ evenements:
 # Scénarios nommés : ils remplacent « capteurs_actionnes » et « evenements » du haut.
 # Lancer : vidange-simulateur poste_fut   (scénario « echange_fut » par défaut),
 #         vidange-simulateur griffe      (scénario « vidange_fut » par défaut),
-#         vidange-simulateur mycelium    (scénario « dosage_mycelium » par défaut).
+#         vidange-simulateur mycelium    (scénario « dosage_mycelium » par défaut),
+#         vidange-simulateur prehension  (scénario « prehension » par défaut).
 scenarios:
   # Échange d'un fût au poste : le chariot du fût vide s'en va, le suivant arrive.
   echange_fut:
@@ -133,3 +152,9 @@ scenarios:
         actionne: false
   # Dosage du mycélium (seaux de la partie « mycelium » plus haut) : aucun capteur ne change.
   dosage_mycelium: {}
+  # Gestes de la préhension (objets de la partie « prehension » plus haut) : chariot du fût au
+  # fond, panneau du poste du fût rabattu (contact ouvert) : la tête peut descendre au
+  # porte-bocal, sous x 0,71. Prise et pose d'un seau, d'un couvercle, d'un bocal, pose et
+  # reprise au porte-bocal, vissage d'une capsule.
+  prehension:
+    capteurs_actionnes: [chariot_fut_en_place]

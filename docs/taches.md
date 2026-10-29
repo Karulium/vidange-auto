@@ -549,7 +549,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 - [ ] 34. Remplissage
 - [ ] 35. Stockage
 - [ ] 36. Portique
-- [ ] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
+- [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
   (le Lavage a besoin de la Préhension, qui tient le seau pendant tout le lavage).
   Sources (recopiées ici le 29/10/2026) : fiche du module « Préhension », **validé définitivement le 27/10/2026**,
   plan de commande v221, rails HGR15 du Portique (29/10, déjà dans `docs/decisions.md`).
