@@ -188,7 +188,10 @@ si l'une pose problème, elle le dit dans sa PR.
   en haut (le contrepoids passe devant lui) et ne voit rien sur environ ± 95° autour du haut. Prise d'origine :
   un tour lent, noter la position du moteur au bord d'entrée et au bord de sortie de la zone sans métal, dans le
   même sens de rotation ; « manivelle en haut » = le milieu de cette zone, plus un décalage fixe (hystérésis du
-  capteur) réglé une fois sur la machine (`machine.yaml`). Précision attendue ≈ 0,5°. Les règles de mouvement ne
+  capteur) réglé une fois sur la machine (`machine.yaml`). Précision attendue ≈ 0,5°. À chaque prise d'origine, vérifier la
+  largeur de la zone sans métal (≈ 190°, mesurée une fois sur la machine et enregistrée) : écart de plus de ± 10°,
+  ou plus de 2 bords sur un tour → arrêt et alerte « capteur manivelle » (capteur déréglé, pièce desserrée ou
+  métal étranger). La bielle reste à ≥ 14 mm du capteur (portée 1,5 à 2 mm) : pas de faux signal attendu. Les règles de mouvement ne
   changent pas (manivelle en haut au garage et pendant le roulage ; chariot de remplissage seulement agitateur
   au garage manivelle en haut, ou au dosage manivelle en bas).
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la

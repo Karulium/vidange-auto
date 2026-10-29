@@ -391,7 +391,8 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   *Origine de la manivelle (précision du 29/10, voir `docs/decisions.md`)* : le capteur `origine_manivelle` voit
   du métal quand la manivelle n'est **pas** en haut, et rien sur ≈ ± 95° autour du haut. Écrire la prise d'origine
   de la manivelle : un tour lent, position du moteur aux 2 bords de la zone sans métal (même sens de rotation),
-  « en haut » = le milieu, plus un décalage réglé dans `machine.yaml`. Corriger la ligne `origine_manivelle` de
+  « en haut » = le milieu, plus un décalage réglé dans `machine.yaml`. Contrôle à chaque prise d'origine : largeur de
+  la zone (≈ 190°, réglée) à ± 10° près et 2 bords au plus sur un tour, sinon arrêt et alerte « capteur manivelle ». Corriger la ligne `origine_manivelle` de
   `docs/entrees-sorties.yaml` et le code de la tâche 19 s'ils supposent l'inverse. Tests avec un faux capteur.
 
   *À corriger dans le Mycélium (tâche 19)* : le geste fait aujourd'hui le demi-tour manivelle en haut. Le corriger :
