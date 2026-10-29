@@ -406,7 +406,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   Simulateur : le scénario `mycelium` de la tâche 19 avec le vrai porte-bocal sur le faux FluidNC (serrage,
   demi-tours, photo de contrôle). Tests, dont : bocal absent (diamètre hors plage), verrou qui ne revient pas,
   capteur d'inclinaison faux, demi-tour refusé manivelle en haut.
-- [ ] 21. Lavage
+- [ ] 21. Lavage — **après la tâche 37 (Préhension)**, qui tient le seau pendant tout le lavage.
 - [ ] 22. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage
 - [ ] 22 bis. Cartes de pesée RS485 (RP2040 + HX711) : griffe, préhension, plateau du remplissage — Modèle : Opus.
   Programme C (Pico SDK, comme l'accéléromètre) : lecture du HX711 en 3,3 V, jusqu'à 80 mesures/s, réponse sur le
@@ -436,7 +436,94 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 - [ ] 34. Remplissage
 - [ ] 35. Stockage
 - [ ] 36. Portique
-- [ ] 37. Préhension
+- [ ] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
+  (le Lavage a besoin de la Préhension, qui tient le seau pendant tout le lavage).
+  Sources (recopiées ici le 29/10/2026) : fiche du module « Préhension », **validé définitivement le 27/10/2026**,
+  plan de commande v221, rails HGR15 du Portique (29/10, déjà dans `docs/decisions.md`).
+  Les chiffres vont dans `pi/reglages/machine.yaml`, `docs/entrees-sorties.yaml` et `fluidnc/`, jamais dans le code.
+
+  *Ce que fait le module.* La tête de préhension pend sous le même pont que la griffe, sur son propre mât. Elle
+  prend par une ventouse Ø 40 (vide fait par un venturi) les seaux vides, les couvercles, les bocaux et l'entonnoir,
+  et tient les capsules par 3 électroaimants. Elle peut tourner sur elle-même (rotation) et visser une capsule.
+  Cette tâche écrit les gestes de base de la tête ; les modules qui s'en servent (Stockage, Lavage, Remplissage,
+  Entonnoir) les appelleront plus tard.
+
+  *Position du mât* : axe de la préhension = **pont + 0,129** en x (rails HGR15, 29/10), même y que la griffe.
+  À mettre dans `machine.yaml` (comme `decalage_mat_x` de la griffe). La course en x se déduit de celle du pont.
+
+  *Moteurs et capteurs* (carte 4, sauf le vide ; à ajouter à `docs/entrees-sorties.yaml` et `fluidnc/`, marqués
+  `exemple: true` tant que le plan de câblage n'est pas arrivé) :
+  - Z préhension : pignon-crémaillère avec frein (maintien réduit à l'arrêt). « En haut » = face de la tête en
+    butée haute à **1,10** ; course ≈ 0,67 (exemple, à confirmer au montage).
+  - Rotation de la tête : maintien plein (≈ 3 N·m pendant le brossage du lavage et le vissage). Visser = sens
+    horaire vu d'en haut ; aucun axe inversé dans FluidNC.
+  - Vanne de vide (venturi) : 1 sortie. Électroaimants des capsules : 1 sortie (carte à confirmer au câblage).
+  - Capteur de vide XGZP6847A lu par l'ADS1115 de l'armoire (entrée `capteur_vide`, déjà dans le fichier). Avec le
+    capteur 5 V et le pont 10 k / 20 k : tension du capteur = 1,5 × tension lue ; vide (kPa) = −25 × (tension du
+    capteur − 0,5) ; repères 0 kPa → 0,333 V lus, −40 → 1,40 V, −55 → 1,80 V, −100 → 3,00 V. Le capteur 3,3 V
+    (préféré le 26/10) se branche sans pont : la conversion est un réglage du fichier, jamais dans le code.
+    ≈ 100 lectures/s avec moyenne. **Zéro recalé à chaque démarrage, vanne de vide fermée.**
+  - Capteur de force : palier pesé du mât (Phidgets 3135 50 kg + HX711), lu par sa carte RS485 (tâche 22 bis) ;
+    ici, derrière la même interface de pesée que la griffe, avec un faux. Lecture = poids porté − poussée.
+  - Contact de la tête : plateau flottant (course 3 mm, ≈ 10 N) vu par un inductif M8 du moyeu. Il sert aussi
+    de contact « anse levée » du plan de commande (une seule entrée).
+  - Alarmes des pilotes et fins de course de la préhension (origines comme dans `fluidnc/`).
+
+  *Règles de mouvement* (verrous du logiciel : ils protègent la machine, pas les personnes) :
+  1. XY sur la carte 1 puis Z sur la carte 4, **jamais les deux à la fois** : la tête est en haut (ou à l'arrêt
+     en appui) avant tout déplacement du pont.
+  2. Isolation du fût : axe de la tête sous **x 0,71** et panneau de la paroi pas vu « rabattu » ⇒ face à 1,10
+     (le signal est le panneau, pas la présence du fût).
+  3. Seau tenu avec son axe à **y > 0,86** (côté opérateur) : bord du seau ≤ 1,10. Au-dessus des piles (y ≤ 0,86) :
+     bord ≤ 1,155.
+  4. Boîtier de la caméra du bocal : la tête ne passe pas autour du boîtier tant que sa face est trop basse. À
+     calculer depuis la boîte `camera_bocal` déjà dans `machine.yaml` + rayon de la tête 0,045 + 1 cm + rayon de
+     l'objet tenu. Contrôle : la page donne x 0,99-1,16, y < 0,335, face sous 1,072 (bocal : x 0,98-1,17, y < 0,345).
+  5. Caméra du dosage : la préhension donne sa position au verrou déjà écrit (pas dans la boîte x < 1,10, y < 0,34,
+     z 0,95-1,08 pendant que la caméra pivote).
+  6. Seau tenu : accélération réduite sur la carte 1 (l'anse balance) ; valeur en réglage.
+  7. Choc : écart de plus de 15 N entre la force lue et le poids porté pendant plus de 50 ms, en trajet ⇒ arrêt de
+     Z et du pont, remontée lente, alerte avec photo. Le capteur voit surtout le vertical : il ne remplace pas les
+     zones interdites.
+
+  *Prendre un objet* (seau, couvercle, bocal, entonnoir) :
+  1. Tare tête en l'air. Descente ; lente sur les derniers cm (réglage).
+  2. Contact de la tête : le Pi note la cote Z au déclenchement ; plus de 5 mm d'écart avec la cote attendue ⇒
+     arrêt et alerte (cotes attendues : réglages, par objet).
+  3. Vanne de vide ouverte ; attendre vide ≥ −55 kPa (délai maximal : réglage). Valeur de chaque prise écrite au
+     journal (repère une ventouse usée).
+  4. Levée lente (≈ 10 mm/s sur les 30 premiers mm, réglages), puis normale si le vide est ≥ −55 kPa, lente
+     s'il est plus faible. Si le vide remonte au-dessus de **−40 kPa** pendant la levée : « feed hold » à la carte 4,
+     redescendre, reposer, reprendre ; après 2 échecs, alerte.
+  5. Confirmer la prise par le poids : seau vide ≈ 5 N, deux seaux emboîtés ≈ 10 N (reposer), couvercle ≈ 1 à
+     1,5 N, bocal plein ≈ 10 N (poids estimés : réglages, à mesurer à la mise en route ; poids d'un seau vide
+     pris dans la table des formats s'il y est). Une capsule seule (30 g) est trop légère : pas de contrôle.
+  6. Seau vide : avant de descendre dedans, la caméra vérifie qu'aucune anse n'est levée (point d'appel, l'analyse
+     est dans la tâche 22) ; le contact de la tête déclenché trop haut = anse levée : arrêt et alerte.
+  Lâcher : vanne de vide fermée (et électroaimants coupés pour une capsule), puis remontée.
+  La fonction `tient_un_objet()` (vide confirmé) sert au verrou du noyau du Lavage : sa rotation s'arrête à toute
+  perte de vide. Le mode manuel du téléphone applique les mêmes verrous.
+
+  *Visser ou dévisser une capsule Twist-Off* : rotation et Z ensemble sur la carte 4 (le porte-ventouse à ressort
+  absorbe le décalage). Appui lu par le capteur de force : consigne 80 N, accepté 60 à 100 N, **au-delà de 150 N
+  arrêt et alerte** (le pilote limite Z à 250 N). Angle de vissage : réglage.
+
+  *Poser et reprendre le bocal dans le porte-bocal* (au garage de l'agitateur, x 0,565 ; validé le 24/10) :
+  - Poser : mors grands ouverts, tête orientée à ±3°, bocal descendu à sa hauteur exacte (±0,5 mm), mors à
+    « Ø 98 » à faible courant, lâcher, remonter d'au moins 5 mm, **puis** `serrer_bocal()` (tâche 20).
+  - Reprendre : mors serrés, descente lente entre les mors, prise, `ouvrir_mors()`, remonter.
+  - Jeu 1 mm au-dessus de la capsule et sous le fond. La tête ne tourne jamais entre les mors.
+  Ajouter au porte-bocal la position « Ø 98 faible courant » si elle manque (sans changer le reste).
+
+  *Ce qui n'est pas dans cette tâche* : la sortie d'une pile de seaux (Stockage), les gestes du lavage (couloir du
+  seau retourné, couvercles sur le noyau, jet d'air, réservoir et rince-verre : tâche 21), la pose sur le chariot
+  de remplissage et ses verrous (Remplissage), l'entonnoir (Entonnoir), l'analyse des photos (tâche 22).
+  Ces modules appellent les gestes d'ici.
+
+  Simulateur : un scénario `prehension` sur le faux FluidNC et les faux capteurs : prise d'un seau, d'un couvercle
+  et d'un bocal, pose et reprise au porte-bocal, vissage. Tests, dont : vide qui lâche pendant la levée (feed hold,
+  2 échecs ⇒ alerte), deux seaux pris, contact trop bas, choc, isolation du fût, XY refusé tête basse, vissage
+  au-delà de 150 N, zéro du vide au démarrage.
 - [ ] 38. Nettoyage
 - [ ] 39. Spray (et le programme de sa carte ESP32)
 - [ ] 40. Micropore
