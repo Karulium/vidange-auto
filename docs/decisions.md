@@ -194,6 +194,9 @@ si l'une pose problème, elle le dit dans sa PR.
   métal étranger). La bielle reste à ≥ 14 mm du capteur (portée 1,5 à 2 mm) : pas de faux signal attendu. Les règles de mouvement ne
   changent pas (manivelle en haut au garage et pendant le roulage ; chariot de remplissage seulement agitateur
   au garage manivelle en haut, ou au dosage manivelle en bas).
+- **Rails du portique HGR15** (Portique, validé le 29/10/2026) : mât de la griffe à **pont − 0,187** en x (− 0,175
+  avant), mât de la préhension à **pont + 0,129** (+ 0,117 avant), butée du pont côté stockage à **2,495**. Les deux
+  premiers chiffres sont dans `pi/reglages/machine.yaml` ; celui de la préhension y ira avec sa tâche.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr

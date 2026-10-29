@@ -47,10 +47,11 @@ axes:
   # Les 5 axes de la griffe, sur la carte n° 1 (portique). Le Portique n'est pas figé : la fin
   # de course du pont et les rails sont des EXEMPLES ; les débuts et fins (fiche) viennent du plan
   # de commande v221.
-  # Pont : x ≥ 0,223 (fiche). Le mât de la griffe est à pont − 0,175 en x.
+  # Pont : x ≥ 0,223 (fiche), butée côté stockage à 2,495 (Portique, rails HGR15, 29/10). Le mât
+  # de la griffe est à pont − 0,187 en x.
   pont_x:
     longueur_rail: 2.6
-    course: [0.223, 2.5]
+    course: [0.223, 2.495]
     carte: portique
     lettre: X
   # Mât en y : 0,056 à 0,884 godet fermé (fiche).
@@ -205,8 +206,8 @@ poste_fut:
 # Un verrou du logiciel ne protège que la machine : la sécurité des personnes reste câblée.
 griffe:
   exemple: true
-  # Mât de la griffe = pont − 0,175 en x (fiche).
-  decalage_mat_x: -0.175
+  # Mât de la griffe = pont − 0,187 en x (Portique, rails HGR15, 29/10 ; − 0,175 avant).
+  decalage_mat_x: -0.187
   # Bas du godet sous les axes (STEP de la tête, PR n° 23) : 0,203 fermé, 0,211 à 10°, 0,213 à
   # 20° (le plus bas), 0,204 grand ouvert. On prend 0,213 partout, par prudence : en butée haute
   # (axes à 1,29), le bas est compté à 1,077. Le bas de la tête est pris égal au bas du godet.
