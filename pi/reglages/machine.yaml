@@ -28,6 +28,10 @@
 #     haut » et la face au porte-bocal dans la course de Z, vides de prise et de perte dans l'ordre,
 #     objets seau, couvercle, bocal et capsule décrits, appuis du vissage dans l'ordre, haut du
 #     boîtier de la caméra du bocal donné, approche des mors du porte-bocal donnée ;
+#   - lavage : axes du noyau et de la couronne en degrés sur la carte de la tête, délais, objet
+#     « seau_retourne », un réglage par format de la griffe, chaque position de la tête à sa portée
+#     (course du pont + 0,129), décalage du brossage dans le rayon du verrou, tours du seau des 2
+#     passes dans la course de la rotation de la tête, couloir conforme au passage de la paroi ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
 
 exemple: true
@@ -135,6 +139,23 @@ axes:
     course: [-370, 370]
     carte: prehension
     lettre: A
+  # Les 2 brosses du lavage (NEMA 23, carte n° 4 avec la préhension : la rotation de la tête est
+  # dans la même commande, elle suit le seau). Pas de capteur d'origine (le Hall a été supprimé le
+  # 22/10) : leur position ne compte pas. Elles ne tournent que dans un sens (« en avant ») ; le
+  # compteur de la carte grandit donc sans fin : course de ± 100 millions de degrés (≈ 4 000 seaux).
+  # Plein : redémarrer la carte n° 4 sur place (elle repart de 0).
+  lavage_noyau:
+    unite: deg
+    longueur_rail: 100000000
+    course: [-100000000, 100000000]
+    carte: prehension
+    lettre: B
+  lavage_couronne:
+    unite: deg
+    longueur_rail: 100000000
+    course: [-100000000, 100000000]
+    carte: prehension
+    lettre: C
 
 positions:
   exemple_repos:
@@ -182,6 +203,10 @@ durees:
   mycelium_agitation_max: 300
   # Un geste de la préhension (prise, pose, vissage, porte-bocal) : au plus 5 min. EXEMPLE.
   prehension_geste_max: 300
+  # Lavage : un geste de la tête (laver un seau ≈ 60 à 70 s, fiche) ; remplir ou vider le fût de
+  # lavage (le remplissage a son propre temps maximal, lavage → eau). EXEMPLES.
+  lavage_geste_max: 300
+  lavage_eau_max: 1200
 
 # Poste du fût. Ces chiffres-là sont VRAIS (fiche du module « Poste du fût », validée le
 # 23/10/2026, et plan de commande v221), sauf la partie « pesee » (à étalonner, voir plus bas).
@@ -692,6 +717,9 @@ prehension:
     couvercle: {rayon_m: 0.14, dessus_m: 0, dessous_m: 0.015, poids_n: 1.25, tolerance_n: 0.5}
     bocal: {rayon_m: 0.0515, dessus_m: 0, dessous_m: 0.17, poids_n: 10, tolerance_n: 3}
     capsule: {rayon_m: 0.0515, dessus_m: 0, dessous_m: 0.01, aimants: true}
+    # Seau retourné (bord en bas), tenu pour le lavage : la ventouse est sur son fond, il pend
+    # sous la face. Son rayon et sa hauteur viennent de la table des formats.
+    seau_retourne: {rayon_m: 0.1335, dessus_m: 0, dessous_m: 0.25, poids_n: 5, tolerance_n: 2}
   # Vissage d'une capsule Twist-Off (fiche) : appui 80 N, accepté 60 à 100 N, au-delà de 150 N
   # arrêt et alerte (le pilote limite Z à 250 N). Angle, course et descente : EXEMPLES.
   vissage:
@@ -715,6 +743,80 @@ prehension:
     remontee_min_m: 0.005
     rayon_zone_m: 0.06
     mors_max_s: 20
+
+# Lavage des seaux (fût de lavage, noyau, couronne, eau), module validé définitivement le
+# 25/10/2026 (fût de 44 cm) ; dossiers eau automatique, arrosage, chauffage, jet d'air du col ;
+# plan de commande v221. Repère du portique, en mètres ; « x, y » = axe de la tête de préhension,
+# « z » = sa face. La Préhension tient le seau retourné par la ventouse et ne le lâche jamais.
+# Chiffres VRAIS de la fiche, sauf ceux marqués EXEMPLE (à régler aux essais :
+# pi/systeme/essai-lavage.md).
+# Un verrou du logiciel ne protège que la machine : la sécurité des personnes reste câblée.
+lavage:
+  exemple: true
+  # Centre du fût de lavage, inox, Ø intérieur 0,45 (pas celui du fût de production).
+  # ATTENTION : la tête ne va pas sous x 0,352 (pont ≥ 0,223, mât à pont + 0,129 depuis les rails
+  # HGR15) : elle ne peut pas être exactement au centre (question de la PR de la tâche 21).
+  centre_fut: [0.35, 0.65]
+  fut_diametre_interieur: 0.45
+  # Couloir du seau retourné : de l'axe du fût en ligne droite jusqu'au coude (0,45 ; 0,74), puis
+  # vers +x à y 0,74 ; entrée par le même chemin à l'envers ; ventouse en butée haute (1,10)
+  # pendant tout le trajet.
+  coude_couloir: [0.45, 0.74]
+  # Verrou du noyau et de la couronne : ils ne tournent que si l'axe de la tête est à moins de
+  # rayon_m du centre du fût et sa face sous face_max_z, et que le vide confirme un objet tenu.
+  # EXEMPLES.
+  verrou: {rayon_m: 0.05, face_max_z: 0.70}
+  eau:
+    # Vanne à bille motorisée ≈ 15 s pour s'ouvrir (fiche) ; vanne 3 voies : EXEMPLE.
+    vanne_vidange_s: 15
+    vanne_rampes_s: 10
+    # Flotteur immobile depuis 1 s avant de compter (vagues du brossage). EXEMPLE.
+    flotteur_stable_s: 1
+    # Remplissage : premier temps maximal EXEMPLE, puis temps du premier remplissage mesuré
+    # + 20 % (fiche ; au-delà, l'eau monterait aux poulies).
+    premier_remplissage_max_s: 900
+    marge_remplissage: 0.2
+    # Vidange : jusqu'au flotteur bas (au plus 10 min, EXEMPLE), puis encore ≈ 60 s (fiche).
+    vidange_max_s: 600
+    apres_flotteur_s: 60
+    # Eau neuve au début de chaque série (un fût de production, ≈ 18 seaux), vidée à la fin.
+    # Un nombre ici : eau changée après tant de seaux.
+    seaux_max_par_eau: null
+  # Arrosage (bain recyclé) en marche depuis 2 s avant de brosser : jamais à sec. EXEMPLE.
+  arrosage_avant_s: 2
+  brossage:
+    # Face de la tête quand le fond du seau touche le noyau (à peu près, la même pour tous les
+    # formats : l'appui de 80 N est cherché au capteur de force), descente lente sur les 3
+    # derniers cm, sur 4 cm au plus pour trouver l'appui. Hauteurs : EXEMPLES.
+    face_contact_z: 0.62
+    approche_m: 0.03
+    appui_n: 80
+    course_appui_m: 0.04
+    # La tête ne fait qu'un peu plus d'un tour de chaque côté (câbles, tuyau du vide) : elle part
+    # de −350° et les tours du seau des 2 passes doivent tenir dans sa course (vérifié).
+    angle_depart_deg: -350
+    # Passe 1, paroi et fond (fiche) : noyau ≈ 5 s à 100 tr/min (centre du fond), puis
+    # ≈ 200 tr/min (≈ 15-20 s). Tours du seau : EXEMPLES.
+    passe_1:
+      - {duree_s: 5, noyau_tr_min: 100, couronne_tr_min: 0, seau_tours: 0.25}
+      - {duree_s: 15, noyau_tr_min: 200, couronne_tr_min: 0, seau_tours: 1.5}
+    # Passe 2, le bord (≈ 10-15 s) : brosses fermées, couronne en avant. Vitesses : EXEMPLES.
+    passe_2:
+      - {duree_s: 12, noyau_tr_min: 0, couronne_tr_min: 60, seau_tours: -1.75}
+  # Rinçage propre : électrovanne ≈ 5 s (≈ 0,5 L) dans les rampes, puis la pompe vide jusqu'au
+  # flotteur bas (au plus 60 s, EXEMPLE).
+  rincage: {duree_s: 5, vidange_max_s: 60}
+  # Jet d'air du col : 1 tour en ≈ 4 s ; égouttage au-dessus du fût (EXEMPLE).
+  jet_air: {tour_s: 4, egouttage_s: 5}
+  # Par format : décalage fixe de la tête vers +x pendant le brossage (EXEMPLE), remontée avant
+  # la passe 2 (EXEMPLE : 0, même hauteur), seau décalé vers la buse (+x) et bord à sa hauteur
+  # pour le jet d'air (fiche : A 11 mm, bord 0,711 ; B 17 mm, 0,698 ; C 0, 0,714 ; D 8 mm, 0,712 ;
+  # à ajuster à l'essai). C : 2 mm au lieu de 0, la tête n'allant pas sous x 0,352.
+  formats:
+    seau_a: {decalage_brossage_m: 0.01, remontee_passe_2_m: 0, jet_decalage_m: 0.011, jet_bord_z: 0.711}
+    seau_b: {decalage_brossage_m: 0.01, remontee_passe_2_m: 0, jet_decalage_m: 0.017, jet_bord_z: 0.698}
+    seau_c: {decalage_brossage_m: 0.01, remontee_passe_2_m: 0, jet_decalage_m: 0.002, jet_bord_z: 0.714}
+    seau_d: {decalage_brossage_m: 0.01, remontee_passe_2_m: 0, jet_decalage_m: 0.008, jet_bord_z: 0.712}
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

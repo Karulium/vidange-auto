@@ -406,7 +406,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   Simulateur : le scénario `mycelium` de la tâche 19 avec le vrai porte-bocal sur le faux FluidNC (serrage,
   demi-tours, photo de contrôle). Tests, dont : bocal absent (diamètre hors plage), verrou qui ne revient pas,
   capteur d'inclinaison faux, demi-tour refusé manivelle en haut.
-- [ ] **21. Lavage des seaux (eau, bain, brossage)** — Modèle : Opus, effort moyen. **Après la tâche 37
+- [x] **21. Lavage des seaux (eau, bain, brossage)** — Modèle : Opus, effort moyen. **Après la tâche 37
   (Préhension)**, dont il appelle les gestes.
   Sources (recopiées ici le 29/10/2026) : fiche du module « Lavage », **validé définitivement le 25/10/2026**
   (fût de 44 cm), dossiers eau automatique, arrosage (validé 22/10, colliers 27/10), chauffage (22/10), jet d'air du
@@ -479,6 +479,11 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 
 - [ ] **21 bis. Lavage des couvercles et des bocaux** — Modèle : Opus, effort moyen. Après la tâche 21.
   Mêmes sources. Le lave-bocal et le retourneur sont posés **à la main** avant leur série et enlevés après ;
+  **D'abord**, corriger le lavage des seaux (tâche 21) selon `docs/decisions.md`, « Lavage des seaux », points 3,
+  6 et 7 : eau du réseau jusqu'au flotteur haut après la pompe qui suit le rinçage ; vanne 3 voies remise sur
+  « rampes » dès que la pompe s'arrête, et alerte « fuite ou siphon » si le flotteur retombe sans vidange ; jet
+  d'air aux centres donnés par format (réglage `x, y` au lieu de `jet_decalage_m`, avec ses tests) ; rotation de
+  la tête jusqu'à ± 500° (point 4) ; passe 2 sans remontée (point 5, déjà 0).
   bocaux et seaux ne se lavent jamais en même temps.
 
   *Couvercles de seau, dans le fût* :

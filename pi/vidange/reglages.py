@@ -1031,6 +1031,128 @@ class Prehension(Modele):
         return self
 
 
+# Les 2 axes des brosses du lavage (NEMA 23 sur la carte de la préhension : la rotation de la
+# tête est dans la même commande, elle suit le seau). Pas de capteur d'origine.
+AXES_LAVAGE = {"lavage_noyau": "deg", "lavage_couronne": "deg"}
+# Signaux du lavage (docs/entrees-sorties.yaml), chacun sur la carte FluidNC où fluidnc.yaml le
+# met (cartes n° 3 et n° 4).
+ENTREES_LAVAGE = ("flotteur_lavage",)
+SORTIES_LAVAGE = (
+    "eau_reseau_lavage",
+    "vanne_vidange_lavage",
+    "pompe_lavage",
+    "vanne_rampes_lavage",
+    "rincage_lavage",
+    "air_col_lavage",
+    "chauffage_lavage",
+)
+
+
+class FormatLavage(Modele):
+    """Ce qui change d'un format de seau à l'autre, au lavage (décalages vers +x, en m)."""
+
+    # Brossage : tête décalée de façon fixe vers +x (c'est le seau qui tourne dessous).
+    decalage_brossage_m: float = Field(ge=0)
+    # Passe 2 (le bord) : remontée de la tête depuis l'appui de la passe 1 (0 : même hauteur).
+    remontee_passe_2_m: float = Field(ge=0)
+    # Jet d'air du col : seau décalé vers la buse, son bord arrêté à jet_bord_z.
+    jet_decalage_m: float = Field(ge=0)
+    jet_bord_z: float
+
+
+class PhaseBrossage(Modele):
+    """Un moment d'une passe : noyau, couronne et seau tournent ensemble pendant duree_s."""
+
+    duree_s: float = Field(gt=0)
+    # Noyau et couronne ne tournent que dans un sens (« en avant »).
+    noyau_tr_min: float = Field(ge=0)
+    couronne_tr_min: float = Field(ge=0)
+    # Tours du seau (rotation de la tête) pendant la phase ; négatif : dans l'autre sens.
+    seau_tours: float
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "PhaseBrossage":
+        if not (self.noyau_tr_min or self.couronne_tr_min or self.seau_tours):
+            raise ValueError("une phase fait tourner au moins le noyau, la couronne ou le seau")
+        return self
+
+
+class BrossageLavage(Modele):
+    # Face de la tête quand le fond du seau retourné touche le noyau (à peu près : l'appui est
+    # cherché au capteur de force). Descente rapide jusqu'à approche_m au-dessus, puis lente
+    # jusqu'à l'appui, sur course_appui_m au plus.
+    face_contact_z: float
+    approche_m: float = Field(gt=0)
+    appui_n: float = Field(gt=0)
+    course_appui_m: float = Field(gt=0)
+    # Rotation de la tête au début du lavage (°) : la course de la tête est limitée (câbles,
+    # tuyau du vide), les tours du seau des deux passes doivent y tenir.
+    angle_depart_deg: float
+    passe_1: list[PhaseBrossage] = Field(min_length=1)
+    passe_2: list[PhaseBrossage] = Field(min_length=1)
+
+
+class EauLavage(Modele):
+    # Temps pour ouvrir ou fermer la vanne à bille motorisée, pour tourner la vanne 3 voies (s).
+    vanne_vidange_s: float = Field(ge=0)
+    vanne_rampes_s: float = Field(ge=0)
+    # Le flotteur compte quand il n'a pas bougé depuis tant de secondes (vagues).
+    flotteur_stable_s: float = Field(ge=0)
+    # Remplissage : temps maximal tant que le premier n'est pas mesuré, puis temps du premier
+    # remplissage mesuré + marge (0,2 = 20 %). Au-delà : électrovanne fermée, alerte.
+    premier_remplissage_max_s: float = Field(gt=0)
+    marge_remplissage: float = Field(ge=0)
+    # Vidange : temps maximal jusqu'au flotteur bas, puis pompe encore apres_flotteur_s.
+    vidange_max_s: float = Field(gt=0)
+    apres_flotteur_s: float = Field(ge=0)
+    # Eau changée après tant de seaux (None : une eau par série, vidée à la fin).
+    seaux_max_par_eau: int | None = Field(default=None, ge=1)
+
+
+class VerrouLavage(Modele):
+    """Noyau et couronne ne tournent que si la tête est à sa hauteur de travail au-dessus du fût
+    (axe à moins de rayon_m du centre, face sous face_max_z) et qu'elle tient un objet (vide)."""
+
+    rayon_m: float = Field(gt=0)
+    face_max_z: float
+
+
+class RincageLavage(Modele):
+    # Électrovanne de rinçage ouverte tant de secondes (≈ 0,5 L dans les rampes), puis la
+    # pompe vide jusqu'au flotteur bas (au plus vidange_max_s).
+    duree_s: float = Field(gt=0)
+    vidange_max_s: float = Field(gt=0)
+
+
+class JetAirLavage(Modele):
+    # Un tour du seau devant la buse (s), puis égouttage au-dessus du fût (s).
+    tour_s: float = Field(gt=0)
+    egouttage_s: float = Field(ge=0)
+
+
+class Lavage(Modele):
+    """Lavage des seaux (fût de lavage, noyau, couronne, eau), module validé le 25/10/2026.
+
+    Repère du portique, en mètres ; « x, y » = axe de la tête de préhension, « z » = sa face.
+    Un verrou du logiciel ne protège que la machine : la sécurité des personnes reste câblée.
+    """
+
+    exemple: bool = False
+    # Centre du fût de lavage (pas celui du fût de production : poste_fut → centre_fut).
+    centre_fut: tuple[float, float]
+    fut_diametre_interieur: float = Field(gt=0)
+    # Couloir du seau retourné : du fût en ligne droite jusqu'au coude, puis vers +x à son y.
+    coude_couloir: tuple[float, float]
+    verrou: VerrouLavage
+    eau: EauLavage
+    # Pompe en marche (voie des rampes) depuis tant de secondes avant de brosser.
+    arrosage_avant_s: float = Field(ge=0)
+    brossage: BrossageLavage
+    rincage: RincageLavage
+    jet_air: JetAirLavage
+    formats: dict[Nom, FormatLavage] = Field(min_length=1)
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -1059,6 +1181,8 @@ class Machine(Modele):
     # Préhension (None : pas de préhension). Demande la griffe (boîtier de la caméra du bocal,
     # formats des seaux) et le poste du fût.
     prehension: Prehension | None = None
+    # Lavage des seaux (None : pas de lavage). Demande la préhension.
+    lavage: Lavage | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -1125,6 +1249,7 @@ class Machine(Modele):
         erreurs += self._verifier_mycelium()
         erreurs += self._verifier_porte_bocal()
         erreurs += self._verifier_prehension()
+        erreurs += self._verifier_lavage()
         for i, nom_a in enumerate(zones_correctes):
             for nom_b in zones_correctes[i + 1 :]:
                 if self._se_chevauchent(nom_a, nom_b):
@@ -1303,6 +1428,105 @@ class Machine(Modele):
             erreurs.append("griffe → camera_bocal : il faut « z_haut » pour la préhension")
         if self.porte_bocal is None or self.porte_bocal.approche is None:
             erreurs.append("prehension : il faut la partie « porte_bocal » avec son « approche »")
+        return erreurs
+
+    def _verifier_lavage(self) -> list[str]:
+        """Les axes des brosses existent sur la carte de la tête ; chaque position du lavage est
+        à la portée de la tête ; les tours du seau tiennent dans la course de sa rotation."""
+        lavage = self.lavage
+        if lavage is None:
+            return []
+        prehension, griffe, poste = self.prehension, self.griffe, self.poste_fut
+        if prehension is None or griffe is None or poste is None:
+            return ["lavage : il faut aussi la partie « prehension »"]
+        if any(nom not in self.axes for nom in AXES_PREHENSION):
+            return []
+        erreurs = []
+        carte_tete = self.axes["prehension_z"].carte
+        for nom, unite in AXES_LAVAGE.items():
+            axe = self.axes.get(nom)
+            if axe is None or axe.unite != unite or axe.carte != carte_tete:
+                erreurs.append(
+                    f"lavage : il faut l'axe « {nom} » en « {unite} », sur la carte de la tête "
+                    f"« {carte_tete} » (la rotation de la tête est dans la même commande)"
+                )
+        for duree in ("lavage_geste_max", "lavage_eau_max"):
+            if duree not in self.durees:
+                erreurs.append(f"lavage : délai « {duree} » absent de durees")
+        if "seau_retourne" not in prehension.objets:
+            erreurs.append("lavage : il faut l'objet « seau_retourne » dans prehension → objets")
+        for nom, seau in griffe.formats.items():
+            if nom not in lavage.formats:
+                erreurs.append(f"lavage → formats : il manque « {nom} » (griffe → formats)")
+            elif seau.hauteur is None:
+                erreurs.append(f"griffe → formats → {nom} : il faut « hauteur » pour le lavage")
+        erreurs += [
+            f"lavage → formats → {nom} : format absent de griffe → formats"
+            for nom in lavage.formats
+            if nom not in griffe.formats
+        ]
+        pont_debut, pont_fin = self.axes["pont_x"].course
+        x_min, x_max = pont_debut + prehension.decalage_mat_x, pont_fin + prehension.decalage_mat_x
+        z_debut, z_fin = self.axes["prehension_z"].course
+        centre_x = lavage.centre_fut[0]
+        brossage = lavage.brossage
+        if brossage.face_contact_z > lavage.verrou.face_max_z:
+            erreurs.append(
+                "lavage → brossage → face_contact_z : au-dessus de verrou → face_max_z (le noyau "
+                "ne pourrait pas tourner)"
+            )
+        if not z_debut <= brossage.face_contact_z - brossage.course_appui_m:
+            erreurs.append(
+                "lavage → brossage : face_contact_z − course_appui_m sous la course de prehension_z"
+            )
+        for nom, reglage in lavage.formats.items():
+            if nom not in griffe.formats:
+                continue
+            for quoi, decalage in (
+                ("decalage_brossage_m", reglage.decalage_brossage_m),
+                ("jet_decalage_m", reglage.jet_decalage_m),
+            ):
+                x = centre_x + decalage
+                if not x_min - 1e-9 <= x <= x_max:
+                    erreurs.append(
+                        f"lavage → formats → {nom} → {quoi} : axe de la tête à x {x:g} m, hors de "
+                        f"sa portée ({x_min:g} à {x_max:g} m = course du pont + "
+                        f"{prehension.decalage_mat_x:g})"
+                    )
+            if reglage.decalage_brossage_m > lavage.verrou.rayon_m:
+                erreurs.append(
+                    f"lavage → formats → {nom} → decalage_brossage_m : plus loin du centre que "
+                    "verrou → rayon_m (le noyau ne pourrait pas tourner)"
+                )
+            hauteur = griffe.formats[nom].hauteur
+            if hauteur is not None and not z_debut <= reglage.jet_bord_z + hauteur <= z_fin:
+                erreurs.append(
+                    f"lavage → formats → {nom} → jet_bord_z : face de la tête à "
+                    f"{reglage.jet_bord_z + hauteur:g} m, hors de la course de prehension_z"
+                )
+        a_debut, a_fin = self.axes["prehension_a"].course
+        angle = brossage.angle_depart_deg
+        for numero, phase in enumerate([*brossage.passe_1, *brossage.passe_2], start=1):
+            angle += phase.seau_tours * 360
+            if not a_debut <= angle <= a_fin:
+                erreurs.append(
+                    f"lavage → brossage : après la phase n° {numero} des passes, la tête serait à "
+                    f"{angle:g}°, hors de la course de prehension_a ({a_debut:g} à {a_fin:g}°)"
+                )
+                break
+        if not a_debut <= brossage.angle_depart_deg <= a_fin:
+            erreurs.append("lavage → brossage → angle_depart_deg : hors de la course de la tête")
+        if a_fin - a_debut < 360:
+            erreurs.append("lavage : la rotation de la tête doit pouvoir faire un tour (jet d'air)")
+        # Le couloir passe la paroi côté stockage selon les règles du poste du fût.
+        if lavage.coude_couloir[1] > poste.lavage_paroi_axe_y_max:
+            erreurs.append(
+                "lavage → coude_couloir : y au-delà de poste_fut → lavage_paroi_axe_y_max"
+            )
+        if prehension.haut_z < poste.lavage_paroi_fond_seau_min_z:
+            erreurs.append(
+                "lavage : prehension → haut_z sous poste_fut → lavage_paroi_fond_seau_min_z"
+            )
         return erreurs
 
     def _se_chevauchent(self, nom_a: str, nom_b: str) -> bool:
@@ -1873,6 +2097,27 @@ class PrehensionSimulee(Modele):
     mors_s: float = Field(ge=0)
 
 
+class SeauLavageSimule(Modele):
+    """Un seau retourné à laver : son format, où la tête le prend et le repose."""
+
+    format: Nom
+    x: float
+    y: float
+    contact_z: float
+
+
+class LavageSimule(Modele):
+    """L'eau imaginaire du fût de lavage, et les seaux à laver (scénario « lavage »)."""
+
+    # Eau au-dessus de laquelle le flotteur est « haut » (L) ; débits (L/s) de l'eau du réseau,
+    # de la pompe (vers la bonde), de l'électrovanne de rinçage.
+    niveau_flotteur_l: float = Field(gt=0)
+    debit_eau_l_s: float = Field(ge=0)
+    debit_pompe_l_s: float = Field(gt=0)
+    debit_rincage_l_s: float = Field(ge=0)
+    seaux: list[SeauLavageSimule] = Field(min_length=1)
+
+
 class ScenarioSimule(Modele):
     """Un scénario : capteurs actionnés au départ et événements, à la place de ceux du haut."""
 
@@ -1905,6 +2150,8 @@ class ReglagesSimulateur(Modele):
     mycelium: MyceliumSimule | None = None
     # Les objets imaginaires de la préhension.
     prehension: PrehensionSimulee | None = None
+    # L'eau et les seaux imaginaires du lavage.
+    lavage: LavageSimule | None = None
 
 
 # ---------------------------------------------------------- accelerometre.yaml
@@ -2292,6 +2539,22 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
                 for nom in noms
                 if nom not in connus
             ]
+    if machine.lavage is not None:
+        # Chaque signal du lavage est sur une seule carte (n° 3 ou n° 4 : le plan de câblage
+        # choisit) ; le code ne connaît que son nom.
+        for quoi, noms in (("entrees", ENTREES_LAVAGE), ("sorties", SORTIES_LAVAGE)):
+            for nom in noms:
+                cartes_du_signal = [
+                    carte
+                    for carte, reglage in fluidnc.cartes.items()
+                    if nom in getattr(reglage, quoi)
+                ]
+                if len(cartes_du_signal) != 1:
+                    ou = ", ".join(cartes_du_signal) or "aucune carte"
+                    erreurs.append(
+                        f"fluidnc.yaml : « {nom} » (lavage) doit être dans les {quoi} d'une seule "
+                        f"carte ({ou})"
+                    )
     simulateur = valeurs["simulateur"]
     assert isinstance(simulateur, ReglagesSimulateur)
     erreurs += [
@@ -2305,6 +2568,14 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
             f"simulateur.yaml, mycelium → seaux : format « {seau.format} » absent de "
             "machine.yaml (griffe → formats)"
             for seau in simulateur.mycelium.seaux
+            if seau.format not in formats
+        ]
+    if simulateur.lavage is not None:
+        formats = machine.lavage.formats if machine.lavage is not None else {}
+        erreurs += [
+            f"simulateur.yaml, lavage → seaux : format « {seau.format} » absent de machine.yaml "
+            "(lavage → formats)"
+            for seau in simulateur.lavage.seaux
             if seau.format not in formats
         ]
     if simulateur.depart is not None and simulateur.depart not in machine.positions:

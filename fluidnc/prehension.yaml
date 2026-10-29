@@ -1,4 +1,4 @@
-# Réglages FluidNC de la carte n° 4 : tête de préhension (Z et rotation).
+# Réglages FluidNC de la carte n° 4 : tête de préhension (Z et rotation), brosses du lavage.
 #
 # ATTENTION : EXEMPLE. Ne PAS envoyer ce fichier à la vraie carte avant d'avoir mis les vraies
 # broches (plan de câblage), les vrais pas par mm et les vitesses. Chiffres de la fiche du module
@@ -16,10 +16,17 @@
 #   Contact de la tête (plateau flottant vu par un inductif M8 24 V) : c'est l'entrée « probe »
 #       de la carte, pour que la descente au contact (« G38.3 ») s'arrête tout de suite. Le Pi le
 #       lit dans « Pn: » (lettre P, pi/reglages/fluidnc.yaml).
+#   B et C : noyau et couronne du lavage (tâche 21), NEMA 23 boucle fermée. La rotation de la
+#       tête (A) est dans la même commande : elle suit le seau. Pas de capteur d'origine (Hall
+#       supprimé le 22/10), pas de prise d'origine : leur position ne compte pas. Ils ne
+#       tournent que dans un sens (« en avant »), sans fin : pas de limites logicielles.
+#       Jusqu'à 200 tr/min pour le noyau (fiche) = 72 000 °/min.
 #   Vanne du venturi et électroaimants des capsules : 2 sorties « user_outputs », commandées par
-#       le Pi (M64 / M65). Numéros : pi/reglages/fluidnc.yaml.
+#       le Pi (M64 / M65). Jet d'air du col et chauffage du lavage : 2 de plus (la carte n° 3 n'a
+#       plus de sortie libre). Numéros : pi/reglages/fluidnc.yaml.
 #   À VÉRIFIER à l'essai de la carte (pi/systeme/essai-prehension.md, étape 1) : sens de A, la
-#   lettre P de « Pn: » au contact, M64/M65, « G38.3 » qui s'arrête au contact.
+#   lettre P de « Pn: » au contact, M64/M65, « G38.3 » qui s'arrête au contact ; sens de B et C
+#   (pi/systeme/essai-lavage.md).
 
 name: "Vidange carte 4 - prehension (EXEMPLE)"
 board: "ESP32 6 axes, pilotes externes (EXEMPLE)"
@@ -86,13 +93,47 @@ axes:
         direction_pin: gpio.27
         disable_pin: NO_PIN
 
+  b:
+    # Noyau du lavage. EXEMPLE : 1600 pas par tour sur le pilote, entraînement direct →
+    # 4,444 pas par degré. Aucune prise d'origine, aucune limite.
+    steps_per_mm: 4.444
+    max_rate_mm_per_min: 72000
+    acceleration_mm_per_sec2: 1200
+    max_travel_mm: 360
+    soft_limits: false
+    motor0:
+      hard_limits: false
+      pulloff_mm: 0
+      standard_stepper:
+        step_pin: gpio.13
+        direction_pin: gpio.15
+        disable_pin: NO_PIN
+
+  c:
+    # Couronne du lavage. EXEMPLE : comme le noyau, 100 tr/min au plus.
+    steps_per_mm: 4.444
+    max_rate_mm_per_min: 36000
+    acceleration_mm_per_sec2: 1200
+    max_travel_mm: 360
+    soft_limits: false
+    motor0:
+      hard_limits: false
+      pulloff_mm: 0
+      standard_stepper:
+        step_pin: gpio.25
+        direction_pin: gpio.33
+        disable_pin: NO_PIN
+
 # Palpeur : contact de la tête (inductif M8, plateau flottant). EXEMPLE de broche.
 probe:
   pin: gpio.32:low
   check_mode_start: true
 
 # Sorties (pi/reglages/fluidnc.yaml → sorties). EXEMPLES de broches.
-#   digital0 : vanne_vide ; digital1 : electroaimants_capsule.
+#   digital0 : vanne_vide ; digital1 : electroaimants_capsule ; digital2 : air_col_lavage ;
+#   digital3 : chauffage_lavage.
 user_outputs:
   digital0_pin: gpio.2
   digital1_pin: gpio.5
+  digital2_pin: gpio.17
+  digital3_pin: gpio.18

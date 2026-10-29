@@ -678,3 +678,111 @@ signaux:
     type: logique
     tension: 5
     module: prehension
+  # Lavage des seaux (fiche du module, validé définitivement le 25/10/2026). Repères, types et
+  # cartes : EXEMPLES (plan de câblage). Moteurs du noyau et de la couronne sur la carte n° 4
+  # (la rotation de la tête est dans la même commande). Eau sur la carte n° 3 ; jet d'air et
+  # chauffage sur la carte n° 4 (FluidNC n'a que 8 sorties « digital » et la carte n° 3 n'en a
+  # plus de libre). Aucun capteur « brosses fermées », aucun capteur d'origine des brosses.
+  alarme_noyau_lavage:
+    exemple: true
+    description: Alarme du pilote boucle fermée du noyau du lavage (NEMA 23)
+    carte: fluidnc_prehension
+    broche: E6
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: lavage
+  alarme_couronne_lavage:
+    exemple: true
+    description: Alarme du pilote boucle fermée de la couronne du lavage (NEMA 23)
+    carte: fluidnc_prehension
+    broche: E7
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: lavage
+  moteur_noyau_lavage:
+    exemple: true
+    description: Pas et sens du pilote du noyau à brosses (axe B de la carte n° 4)
+    carte: fluidnc_prehension
+    broche: [S7, S8]
+    type: logique
+    tension: 5
+    module: lavage
+  moteur_couronne_lavage:
+    exemple: true
+    description: Pas et sens du pilote de la couronne de brosses extérieures (axe C de la carte n° 4)
+    carte: fluidnc_prehension
+    broche: [S9, S10]
+    type: logique
+    tension: 5
+    module: lavage
+  air_col_lavage:
+    exemple: true
+    description: Électrovanne d'air du jet du col (commandée = air), par un relais de l'armoire
+    carte: fluidnc_prehension
+    broche: S11
+    type: logique
+    tension: 5
+    module: lavage
+  chauffage_lavage:
+    exemple: true
+    description: >-
+      Relais statique (SSR) de la prise du thermoplongeur 2 kW (commandé = prise alimentée ; le
+      thermostat de l'appareil, réglé à 50 °C, règle la température)
+    carte: fluidnc_prehension
+    broche: S12
+    type: logique
+    tension: 5
+    module: lavage
+  flotteur_lavage:
+    exemple: true
+    description: Flotteur du fût de lavage (contact sec ; actionné = flotteur haut, fût plein)
+    carte: fluidnc_mycelium_lavage
+    broche: E9
+    type: contact
+    tension: 24
+    repos: ouvert
+    module: lavage
+  eau_reseau_lavage:
+    exemple: true
+    description: Électrovanne d'eau du réseau (remplir le fût de lavage), par un relais de l'armoire
+    carte: fluidnc_mycelium_lavage
+    broche: S10
+    type: logique
+    tension: 5
+    module: lavage
+  vanne_vidange_lavage:
+    exemple: true
+    description: Vanne à bille motorisée de vidange (commandée = ouverte, ≈ 15 s pour s'ouvrir)
+    carte: fluidnc_mycelium_lavage
+    broche: S11
+    type: logique
+    tension: 5
+    module: lavage
+  pompe_lavage:
+    exemple: true
+    description: Pompe à membrane du lavage (commandée = en marche), par un relais de l'armoire
+    carte: fluidnc_mycelium_lavage
+    broche: S12
+    type: logique
+    tension: 5
+    module: lavage
+  vanne_rampes_lavage:
+    exemple: true
+    description: >-
+      Vanne 3 voies motorisée après la pompe (commandée = voie des rampes, arrosage ; au repos =
+      voie de la bonde, vidange)
+    carte: fluidnc_mycelium_lavage
+    broche: S13
+    type: logique
+    tension: 5
+    module: lavage
+  rincage_lavage:
+    exemple: true
+    description: Électrovanne de rinçage (eau du réseau dans les rampes), par un relais de l'armoire
+    carte: fluidnc_mycelium_lavage
+    broche: S14
+    type: logique
+    tension: 5
+    module: lavage

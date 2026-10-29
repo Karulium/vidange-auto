@@ -230,7 +230,7 @@ def test_fichier_d_exemple_jamais_envoye(tmp_path, carte, faux, contenu):
 def test_vrai_fichier_d_exemple_du_depot_refuse_avec_ses_lignes(tmp_path, carte, faux):
     # Le fichier du dépôt a aussi des accents : le refus EXEMPLE passe avant, son message est clair.
     fichier = Path(__file__).parents[2] / "fluidnc" / "mycelium_lavage.yaml"
-    with pytest.raises(ErreurMiseAJour, match=r"« mycelium_lavage.yaml ».*ligne 3, 35, 36"):
+    with pytest.raises(ErreurMiseAJour, match=r"« mycelium_lavage.yaml ».*ligne 3, 38, 39"):
         carte.envoyer_reglages(fichier)
     assert faux.commandes == []
 
