@@ -315,12 +315,17 @@ griffe:
     z: 1.29
     mat_y_min: 0.36
     mat_x_min_pour_y: 0.86
+  # « En butée haute » : axes à 1 mm près de la fin de la course de griffe_z. EXEMPLE.
+  tolerance_butee_haute_m: 0.001
   # Garage et glissière de l'agitateur du mycélium, volumes interdits à toute hauteur (fiche) :
   # y minimum du mât godet fermé / à moitié ouvert / grand ouvert, par bande de x du mât, tête
   # bras le long du pont. Tête tournée : godet fermé, y minimum « fermé » + (rayon balayé −
   # demi-longueur fermé) ; godet ouvert, y minimum « grand ouvert ».
+  # La bande du garage (x 0,15-0,43) est permise à la griffe en butée haute seulement (bas du
+  # godet à 1,087 : rien du Mycélium ne dépasse 1,0 dessous), quand la préhension est au
+  # porte-bocal (mât de la griffe en x 0,249, y 0,150 ; décision du 29/10/2026).
   garage_glissiere:
-    - {x: [0.15, 0.43], y_min: [0.23, 0.24, 0.28]}
+    - {x: [0.15, 0.43], y_min: [0.23, 0.24, 0.28], permise_en_butee_haute: true}
     - {x: [0.43, 0.77], y_min: [0.33, 0.345, 0.38]}
     - {x: [0.77, 0.82], y_min: [0.24, 0.24, 0.27]}
     - {x: [0.82, 0.85], y_min: [0.13, 0.13, 0.13]}
@@ -648,6 +653,7 @@ prehension:
   rayon_tete_m: 0.045
   # Règle 2, isolation du fût : axe de la tête sous x 0,71 et panneau du poste du fût pas vu
   # « rabattu » (contact ouvert et stable) ⇒ face en haut. Le signal est le panneau, pas le fût.
+  # Seule exception : la petite zone du garage (porte_bocal → zone_garage_m, plus bas).
   isolation_fut_x_max: 0.71
   # Règle 3 : seau tenu avec son axe à y > 0,86 (côté opérateur) : bord ≤ 1,10 ; au-dessus des
   # piles (y ≤ 0,86) : bord ≤ 1,155.
@@ -730,19 +736,32 @@ prehension:
     course_appui_m: 0.01
     angle_deg: 90
     descente_m: 0.002
-  # Porte-bocal, au garage de l'agitateur (x 0,565, validé le 24/10) : tête orientée à ± 3°
-  # (méplats), bocal à sa hauteur exacte (± 0,5 mm), remontée d'au moins 5 mm avant le serrage
-  # (fiche). y, face_z, orientation, zone et délai des mors : EXEMPLES (à mesurer au montage).
+  # Porte-bocal, au garage de l'agitateur (x 0,565, y 0,150 : réponse du 29/10) : tête orientée
+  # à ± 3° (méplats), bocal à sa hauteur exacte (± 0,5 mm), remontée d'au moins 5 mm avant le
+  # serrage (fiche). Capsule à ≈ 1,0625 manivelle en bas (course 7 cm) : face_z ≈ 1,0625, à
+  # mesurer. Orientation, zone des mors et délai des mors : EXEMPLES (à mesurer au montage).
   porte_bocal:
     x: 0.565
-    y: 0.155
-    face_z: 1.0
+    y: 0.150
+    face_z: 1.0625
     orientation_deg: 0
     tolerance_orientation_deg: 3
     tolerance_hauteur_m: 0.0005
     remontee_min_m: 0.005
     rayon_zone_m: 0.06
     mors_max_s: 20
+    # Isolation du fût (réponse du 29/10) : elle ne s'applique pas dans la petite zone du garage,
+    # axe de la tête à ± 5 mm de (x, y) (pas plus loin : entre y 0,16 et 0,215, la tête toucherait
+    # la paroi haute). La tête y arrive à 1,10 et descend à la verticale, seulement si :
+    # (a) agitateur au garage manivelle en bas, course déclarée 7 cm (mycelium →
+    # course_agitation_m) ; (b) mors ouverts pour poser, serrés pour prendre ; (c) griffe en butée
+    # haute.
+    zone_garage_m: 0.005
+    course_manivelle_m: 0.07
+    # Manivelle en haut, la capsule est à 1,1325, au-dessus de la butée haute de la tête (1,10) :
+    # la tête ne passe jamais au-dessus du bocal au garage (1 cm de marge, EXEMPLE).
+    capsule_manivelle_haut_z: 1.1325
+    marge_bocal_m: 0.01
 
 # Lavage des seaux (fût de lavage, noyau, couronne, eau), module validé définitivement le
 # 25/10/2026 (fût de 44 cm) ; dossiers eau automatique, arrosage, chauffage, jet d'air du col ;

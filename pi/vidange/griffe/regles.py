@@ -91,6 +91,10 @@ class ReglesGriffe:
         """Bas du godet sous le bord du fût, au-dessus de son ouverture."""
         return self.bas(pose) < self.poste.fut_bord_z and self.au_dessus_du_fut(pose.x, pose.y)
 
+    def en_butee_haute(self, z: float) -> bool:
+        """Les axes de la tête sont-ils en butée haute (fin de la course de griffe_z) ?"""
+        return z >= self.courses["z"][1] - self.griffe.tolerance_butee_haute_m
+
     def bloquee(self, a: float) -> bool:
         """La tête est-elle à une orientation bloquée (bras le long du pont) ?"""
         rotation = self.griffe.rotation
@@ -173,6 +177,8 @@ class ReglesGriffe:
                     f"à {_m(fin)} m seulement"
                 )
         for bande in g.garage_glissiere:
+            if bande.permise_en_butee_haute and self.en_butee_haute(pose.z):
+                continue
             minimum = bande.y_min[classe]
             if not self.bloquee(pose.a):
                 # Tête tournée : elle dépasse en y plus que bras le long du pont.
@@ -183,9 +189,10 @@ class ReglesGriffe:
                     else minimum + tete.rayon_balaye - tete.demi_longueur_ferme
                 )
             if bande.x[0] <= pose.x <= bande.x[1] and pose.y < minimum - _EGAL:
+                butee = " (ou la tête en butée haute)" if bande.permise_en_butee_haute else ""
                 return (
                     f"garage ou glissière de l'agitateur : mât à x {_m(pose.x)}, "
-                    f"y {_m(pose.y)} m ; il faut y ≥ {_m(minimum)} m ici"
+                    f"y {_m(pose.y)} m ; il faut y ≥ {_m(minimum)} m ici{butee}"
                 )
         if contexte.dosage_en_cours and pose.x > g.dosage.mat_x_max and pose.y < g.dosage.mat_y_min:
             return (
