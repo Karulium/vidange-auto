@@ -254,6 +254,13 @@ def test_reglages_et_retour_a_une_copie(b):
     assert reglages == ["réglages FluidNC", "retour à une copie"]
 
 
+def test_reglages_d_exemple_refuses_sans_arreter_la_liaison(b):
+    (b.fluidnc / "portique.yaml").write_bytes(b"# EXEMPLE\n" + REGLAGES_FLUIDNC)
+    reponse = b.client().post("/api/mises-a-jour/cartes/portique/reglages")
+    assert reponse.status_code == 409 and "fichier d'EXEMPLE" in reponse.json()["detail"]
+    assert b.faux.commandes == [] and "config.yaml" not in b.faux.fichiers
+
+
 def test_carte_inconnue(b):
     reponse = b.client().post("/api/mises-a-jour/cartes/inconnue/revenir", json={})
     assert reponse.status_code == 409 and "inconnue" in reponse.json()["detail"]

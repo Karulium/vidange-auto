@@ -1,6 +1,7 @@
 """Mises à jour des cartes ESP32 : console FluidNC (XMODEM...) et esptool, avec une fausse carte."""
 
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -210,6 +211,34 @@ def test_reglages_refuses_si_la_carte_ne_repond_pas(tmp_path, carte, faux):
 def test_fichier_de_reglages_illisible(tmp_path, carte, contenu, message):
     with pytest.raises(ErreurMiseAJour, match=message):
         carte.envoyer_reglages(ecrire(tmp_path, "portique.yaml", contenu))
+
+
+@pytest.mark.parametrize(
+    "contenu",
+    [
+        b"# ATTENTION : EXEMPLE.\nname: portique\n",
+        b'name: "Vidange carte 1 (EXEMPLE)"\n',
+        b"axes:\n  x:\n    # EXEMPLES de broches\n    steps_per_mm: 80\n",
+    ],
+)
+def test_fichier_d_exemple_jamais_envoye(tmp_path, carte, faux, contenu):
+    with pytest.raises(ErreurMiseAJour, match="fichier d'EXEMPLE.*enlever chaque mot EXEMPLE"):
+        carte.envoyer_reglages(ecrire(tmp_path, "portique.yaml", contenu))
+    assert faux.commandes == [] and carte.copies() == []  # rien touché sur la carte
+
+
+def test_vrai_fichier_d_exemple_du_depot_refuse_avec_ses_lignes(tmp_path, carte, faux):
+    # Le fichier du dépôt a aussi des accents : le refus EXEMPLE passe avant, son message est clair.
+    fichier = Path(__file__).parents[2] / "fluidnc" / "mycelium_lavage.yaml"
+    with pytest.raises(ErreurMiseAJour, match=r"« mycelium_lavage.yaml ».*ligne 3, 19, 20"):
+        carte.envoyer_reglages(fichier)
+    assert faux.commandes == []
+
+
+def test_le_mot_exemple_en_minuscules_ne_bloque_pas(tmp_path, carte, faux):
+    contenu = REGLAGES_FLUIDNC + b"# par exemple : 80 pas par mm, contre-exemple\n"
+    carte.envoyer_reglages(ecrire(tmp_path, "portique.yaml", contenu))
+    assert faux.fichiers["config.yaml"].startswith(contenu)
 
 
 def test_fichier_de_reglages_absent(tmp_path, carte):

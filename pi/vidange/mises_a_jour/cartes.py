@@ -23,6 +23,7 @@ réglages sont dans le dossier fluidnc/ du dépôt (un fichier par carte).
 
 import json
 import os
+import re
 import sys
 import time
 from collections.abc import Callable
@@ -42,6 +43,8 @@ from vidange.reglages import ReglagesMajCartes
 # Premier octet d'un programme pour ESP32 (« image » d'esptool).
 DEBUT_PROGRAMME = 0xE9
 MO = 1024 * 1024
+# Mot qui marque un fichier de réglages FluidNC d'exemple (en majuscules, n'importe où dedans).
+MOT_EXEMPLE = re.compile(rb"\bEXEMPLES?\b")
 # Attente entre deux essais d'ouverture du port USB (pendant que la carte redémarre).
 ATTENTE_PORT_S = 0.5
 
@@ -90,12 +93,31 @@ def verifier_programme(fichier: Path, reglages: ReglagesMajCartes) -> None:
     verifier_contenu_programme(fichier.name, contenu, reglages)
 
 
+def refuser_exemple(nom: str, contenu: bytes) -> None:
+    """Refuse un fichier de réglages FluidNC marqué EXEMPLE : il n'irait pas dans une vraie carte.
+
+    Le mot EXEMPLE (en majuscules) peut être dans un commentaire ou dans une valeur : tant qu'il
+    en reste un seul, le fichier n'est pas fini. Le simulateur et les tests, eux, s'en servent
+    quand même (ils ne passent pas par ici).
+    """
+    lignes = [n for n, ligne in enumerate(contenu.splitlines(), 1) if MOT_EXEMPLE.search(ligne)]
+    if not lignes:
+        return
+    ou = ", ".join(str(n) for n in lignes[:8]) + ("…" if len(lignes) > 8 else "")
+    raise ErreurMiseAJour(
+        f"« {nom} » est un fichier d'EXEMPLE (mot EXEMPLE ligne {ou}) : il n'est pas envoyé à "
+        "la carte. Mettre les vrais réglages (broches du plan de câblage, pas par mm, vitesses), "
+        "enlever chaque mot EXEMPLE du fichier, puis recommencer"
+    )
+
+
 def lire_reglages_fluidnc(fichier: Path) -> bytes:
-    """Le contenu d'un fichier de réglages FluidNC, s'il est en YAML lisible."""
+    """Le contenu d'un fichier de réglages FluidNC, s'il est fini (sans EXEMPLE) et lisible."""
     try:
         contenu = fichier.read_bytes()
     except OSError:
         raise ErreurMiseAJour(f"pas de fichier de réglages « {fichier} »") from None
+    refuser_exemple(fichier.name, contenu)
     try:
         texte = contenu.decode("ascii")
         donnees = yaml.safe_load(texte)

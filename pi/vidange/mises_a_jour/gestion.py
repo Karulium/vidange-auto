@@ -46,7 +46,12 @@ from vidange.chef import Chef
 from vidange.fluidnc import Liaison
 from vidange.fluidnc.ports import ouvrir_port_usb, trouver_port
 from vidange.journal import donner_journal
-from vidange.mises_a_jour.cartes import CarteEsp32, Resultat, verifier_contenu_programme
+from vidange.mises_a_jour.cartes import (
+    CarteEsp32,
+    Resultat,
+    lire_reglages_fluidnc,
+    verifier_contenu_programme,
+)
 from vidange.mises_a_jour.commun import ErreurMiseAJour
 from vidange.mises_a_jour.pi import ProgrammePi
 from vidange.registre import ErreurRegistre, Registre
@@ -375,6 +380,7 @@ class MisesAJour:
         chemin = self.fichier_reglages(carte)
         if not chemin.is_file():
             raise ErreurMiseAJour(f"pas encore de fichier de réglages « fluidnc/{carte}.yaml »")
+        lire_reglages_fluidnc(chemin)  # refus tout de suite (EXEMPLE, illisible), liaison intacte
         self._changer_carte(
             carte,
             qui,
