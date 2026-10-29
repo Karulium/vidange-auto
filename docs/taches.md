@@ -171,7 +171,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   sur lui-même (axe A). Les 3 axes sont sur la carte FluidNC n° 1 (portique). Une pesée (capteur 50 kg + HX711)
   dans la suspension du mât mesure le poids pendu : poids de la prise, et contact (la charge baisse quand le
   godet appuie). Une raclette en silicone est fixée sur le côté de la tête. « Hauteur des axes » = hauteur des
-  axes de la tête ; mât de la griffe = pont − 0,175 en x.
+  axes de la tête ; mât de la griffe = pont − 0,187 en x (Portique, 29/10).
 
   *Une couche (godet unique).*
   1. Tête au-dessus du fût, godet ouvert. Descente rapide jusqu'au dernier niveau connu + 3 cm (le capteur de

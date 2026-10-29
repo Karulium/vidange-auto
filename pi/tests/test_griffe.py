@@ -469,7 +469,8 @@ def attendre(condition, delai: float = DELAI) -> None:
 def test_bras_va_a_une_pose():
     with BancBras() as banc:
         pose = banc.bras.position()
-        assert pose.x == pytest.approx(0.86) and pose.z == pytest.approx(1.0) and pose.b == 0
+        # Pont à 1,035 : mât à 1,035 − 0,187.
+        assert pose.x == pytest.approx(0.848) and pose.z == pytest.approx(1.0) and pose.b == 0
         banc.bras.executer(Pas("monter", {"z": 1.01}), pose.avec(z=1.01, b=0.5))
         assert banc.faux.lignes_recues[-1].startswith("$J=G53 X1035.000 Y570.000 Z1010.000 A0.000")
         # Godet à moitié : 15 mm de vis.
