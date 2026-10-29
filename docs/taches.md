@@ -342,7 +342,63 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 - [ ] **19 bis. Ne jamais envoyer à une carte un fichier FluidNC d'exemple** — Modèle : Sonnet, effort bas.
   L'envoi de `fluidnc/<carte>.yaml` à une carte est refusé si le fichier est marqué EXEMPLE, avec un message clair
   qui dit quoi faire. Le simulateur et les tests peuvent toujours s'en servir. Tests.
-- [ ] 20. Porte-bocal
+- [ ] **20. Porte-bocal (mors et demi-tour du bocal)** — Modèle : Opus, effort moyen.
+  Sources (recopiées ici le 29/10/2026) : fiche du module « Porte-bocal », **validé définitivement le 24/10/2026**
+  (fiche des pièces v10c), plan de commande v221, page « Passage de l'agitateur » du Mycélium (24/10).
+  Les chiffres vont dans `pi/reglages/machine.yaml`, `docs/entrees-sorties.yaml` et `fluidnc/`, jamais dans le code.
+
+  *Ce que fait le module.* Le porte-bocal est la partie de l'agitateur du Mycélium qui tient le bocal de semence :
+  2 mors qui serrent le bocal, et un plateau tournant qui le retourne d'un demi-tour (debout ↔ tête en bas).
+  La tâche 19 l'appelle derrière l'interface `PorteBocal` (`retourner_tete_en_bas`, `remettre_debout`) avec
+  un faux : cette tâche écrit le vrai.
+
+  *Moteurs et capteurs* (tous sur la carte 3 ; à ajouter à `docs/entrees-sorties.yaml` et `fluidnc/`, marqués
+  `exemple: true` tant que le plan de câblage n'est pas arrivé) :
+  - Mors : NEMA 17 simple (17HS4401, sans codeur ni frein) sur un TMC2209 en UART, sa sortie DIAG (StallGuard)
+    sur l'entrée « probe » de la carte 3. Une vis gauche-droite rapproche les 2 mors ensemble : le bocal reste
+    centré. Le courant de serrage se règle sur le pilote à l'essai, pas dans le code.
+  - Fin de course « mors ouverts » : c'est l'origine des mors, reprise à **chaque** ouverture.
+  - Demi-tour : motoréducteur JGY370 24 V à courant continu (pas un pas à pas), par un pont en H de l'armoire
+    (2 sorties de la carte : le sens du courant donne le sens). Environ 2,3 s pour un demi-tour. Il est
+    irréversible : il tient seul sa position.
+  - Verrou : électroaimant 24 V (1 sortie). Son doigt entre dans un des 2 trous du plateau et bloque le demi-tour ;
+    il n'est retiré **que pendant** le demi-tour. Contact « verrou engagé » : le doigt est bien entré.
+  - Capteur d'inclinaison : dit si le bocal est debout ou tête en bas.
+  - Il n'y a **pas** de capteur de capsule (supprimé le 23/10) ni de capteur sur les mors : ne pas les inventer.
+
+  *Serrer un bocal* (bocal droit Ø 95, capsule Ø 103 ; diamètres et tolérance dans `machine.yaml`) :
+  1. Mors ouverts sur le fin de course (origine reprise).
+  2. Palpage (G38.2) jusqu'à l'arrêt par StallGuard (DIAG). Vitesse de palpage au-dessus du minimum de StallGuard
+     (4 mm de jeu par côté pour prendre de la vitesse avant le contact) : réglage.
+  3. La position d'arrêt donne le diamètre du bocal à ≈ 1 mm près. Diamètre hors de la plage attendue = bocal
+     absent, cassé ou mal posé : arrêt, alerte avec photo.
+  Ouvrir : retour au fin de course « mors ouverts ». Qui pose et reprend le bocal (la Préhension, au garage
+  x 0,565) n'est pas dans cette tâche : ici, seulement `serrer_bocal()` et `ouvrir_mors()`.
+
+  *Faire un demi-tour* (dans un sens ou dans l'autre) :
+  1. Conditions (verrous, ils protègent la machine) : agitateur arrêté à x 0,865 (demi-tour), **manivelle en bas**
+     (page du Mycélium du 24/10 : « manivelle en bas comme pour le demi-tour »), bocal serré, chariot de remplissage
+     à y ≥ 0,375.
+  2. Retirer le doigt du verrou (électroaimant), lancer le JGY370 dans le bon sens.
+  3. Relâcher l'électroaimant après un court temps (réglage), quand le plateau a quitté le trou : le doigt
+     frotte, puis entre dans le trou suivant. S'arrêter quand le contact « verrou engagé » revient ; délai maximal : réglage. Pas de retour du
+     contact dans le délai : arrêt du moteur, alerte.
+  4. Vérifier le capteur d'inclinaison (debout ou tête en bas, comme demandé), sinon alerte.
+  5. Après chaque retour debout, demander une photo de contrôle du bocal (contour, fissure, bocal qui a bougé dans
+     les mors) : l'analyse est dans la tâche 22 ; ici, un point d'appel qui accepte la réponse « bon / douteux »
+     (douteux = arrêt et alerte).
+
+  *À corriger dans le Mycélium (tâche 19)* : le geste fait aujourd'hui le demi-tour manivelle en haut. Le corriger :
+  au demi-tour, manivelle en bas, demi-tour, manivelle en haut, puis la glissière roule (elle ne roule que
+  manivelle en haut). Brancher le vrai porte-bocal à la place du faux, et garder le faux pour les tests.
+
+  *Ce qui n'est pas dans cette tâche* : la pose et la reprise du bocal par la Préhension, le retournement d'une
+  capsule seule (variante pas adoptée par Karulium), l'agitation des bocaux désignés en mode bocaux (avec le
+  Stockage), l'analyse des photos (tâche 22).
+
+  Simulateur : le scénario `mycelium` de la tâche 19 avec le vrai porte-bocal sur le faux FluidNC (serrage,
+  demi-tours, photo de contrôle). Tests, dont : bocal absent (diamètre hors plage), verrou qui ne revient pas,
+  capteur d'inclinaison faux, demi-tour refusé manivelle en haut.
 - [ ] 21. Lavage
 - [ ] 22. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage
 - [ ] 22 bis. Cartes de pesée RS485 (RP2040 + HX711) : griffe, préhension, plateau du remplissage — Modèle : Opus.
