@@ -209,6 +209,17 @@ si l'une pose problème, elle le dit dans sa PR.
 - **Rails du portique HGR15** (Portique, validé le 29/10/2026) : mât de la griffe à **pont − 0,187** en x (− 0,175
   avant), mât de la préhension à **pont + 0,129** (+ 0,117 avant), butée du pont côté stockage à **2,495**. Les deux
   premiers chiffres sont dans `pi/reglages/machine.yaml` ; celui de la préhension y ira avec sa tâche.
+- **Cartes de pesée RS485** (réponses à la PR n° 33, tâche 22 bis, 29/10/2026) :
+  1. Pas de mise à jour des cartes de pesée par le bus pour l'instant : elle se fait par le câble USB-C de la
+     carte. Le boîtier de chaque carte (griffe, préhension, plateau) doit laisser la prise USB-C accessible sans
+     démonter la tête. Si une carte se révèle difficile d'accès au montage, on ajoutera une tâche « 22 ter » qui
+     reprend le chargeur de l'accéléromètre (tâche 16).
+  2. Carte **Waveshare RP2040-Zero** (comme l'accéléromètre) et module RS485 **en 3,3 V** avec broche DE/RE
+     (MAX3485 ou SP3485) ; jamais un MAX485 en 5 V ni un module à sens automatique. Résistance de 120 Ω à chaque
+     bout du bus, 0 V commun dans le câble. Les broches de `pi/reglages/pesees.yaml` passent à la RP2040-Zero au
+     montage (exemples d'ici là).
+  3. Cartes HX711 à **80 mesures/s** : broche RATE accessible (pont « RATE » type SparkFun) ou piste à couper ;
+     contrôle à l'étape 4 de `pesee/essai-etabli.md`.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
