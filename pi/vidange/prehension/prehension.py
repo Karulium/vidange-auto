@@ -26,6 +26,9 @@ Prendre un objet (seau, couvercle, bocal, entonnoir) :
    contrôle.
 Lâcher : vanne fermée (électroaimants coupés pour une capsule), puis remontée.
 
+Les brosses du lavage (un pas avec `brosses`) ne tournent que si `verrou_brosses` (donné par
+le Lavage) l'accepte : tête à sa hauteur de travail au-dessus du fût, objet tenu (vide).
+
 Ces verrous ne protègent que la MACHINE : la sécurité des personnes reste câblée.
 """
 
@@ -138,6 +141,9 @@ class Prehension:
         self._camera_dosage_pivote = camera_dosage_pivote
         self._anse_levee = anse_levee
         self._photo = photo
+        # Verrou du noyau et de la couronne du lavage (vidange.lavage) : raison du refus, ou
+        # None. Sans lavage, les brosses ne tournent jamais.
+        self.verrou_brosses: Callable[[Pose], str | None] = lambda pose: "pas de lavage"
         # Ce que tient la tête, son poids pesé (N), et le vide de la dernière prise (kPa).
         self.objet: Objet | None = None
         self.poids_porte_n = 0.0
@@ -146,6 +152,7 @@ class Prehension:
         self._geste: Geste | None = None
         self._pas: Pas | Attente | None = None
         self._depuis = 0.0
+        self._pause_depuis: float | None = None
 
     # ------------------------------------------------------------ état
 
@@ -197,7 +204,8 @@ class Prehension:
 
     def objet_par_nom(self, nom: str, format: str | None = None) -> Objet:
         """L'objet `nom` de machine.yaml ; un seau prend le rayon, la hauteur et la tare de son
-        format (table des formats), quand elle les a."""
+        format (table des formats), quand elle les a. Un seau retourné (lavage) pend sous la
+        face : sa hauteur est en dessous."""
         if nom not in self.reglages.objets:
             raise ErreurEtape(f"préhension : objet inconnu « {nom} » (machine.yaml → objets)")
         valeurs: dict[str, float] = {}
@@ -207,7 +215,7 @@ class Prehension:
                 raise ErreurEtape(f"préhension : format de seau inconnu « {format} »")
             valeurs["rayon_m"] = seau.rayon_haut
             if seau.hauteur is not None:
-                valeurs["dessus_m"] = seau.hauteur
+                valeurs["dessous_m" if nom == "seau_retourne" else "dessus_m"] = seau.hauteur
             if seau.tare_kg is not None:
                 valeurs["poids_n"] = seau.tare_kg * 9.81
         return Objet.depuis(nom, self.reglages.objets[nom], **valeurs)
@@ -237,10 +245,12 @@ class Prehension:
         assert self.pose is not None
         self._pas = pas
         self._depuis = self._horloge()
-        if isinstance(pas, Attente) or not pas.cibles:
+        if isinstance(pas, Attente) or not (pas.cibles or pas.brosses):
             return
         cible = self.pose.avec(**pas.cibles)
         refus = self.regles.refus_mouvement(self.pose, cible, self.contexte())
+        if refus is None and pas.brosses:
+            refus = self.verrou_brosses(self.pose)
         if refus is not None:
             self._geste = self._pas = None
             raise ErreurEtape(f"préhension, « {pas.texte} » refusé : {refus}", QUOI_FAIRE)
@@ -260,7 +270,7 @@ class Prehension:
                     self._geste = self._pas = None
                     raise ErreurEtape(f"préhension : {pas.erreur}", pas.quoi_faire or QUOI_FAIRE)
                 resultat = Resultat(pose=self.pose)
-            elif not pas.cibles:
+            elif not (pas.cibles or pas.brosses):
                 if ecoule < pas.attente_s:
                     return False
                 force = self.tete.peser() if pas.pesee else None
@@ -274,9 +284,15 @@ class Prehension:
         return True
 
     def pauser(self) -> None:
+        if self._pause_depuis is None:
+            self._pause_depuis = self._horloge()
         self.tete.pauser()
 
     def reprendre(self) -> None:
+        # Le temps de la pause ne compte pas dans l'attente en cours (délais, durées).
+        if self._pause_depuis is not None:
+            self._depuis += self._horloge() - self._pause_depuis
+            self._pause_depuis = None
         self.tete.reprendre()
 
     def arreter(self) -> None:
@@ -332,7 +348,9 @@ class Prehension:
         if self.pose.z > haut + _EGAL:
             # Seau tenu : plus bas au-dessus des piles que côté opérateur (règle 3).
             yield Pas("descendre à la hauteur du trajet", {"z": haut})
-        self.tete.acceleration_seau(self.objet is not None and self.objet.sorte == "seau")
+        self.tete.acceleration_seau(
+            self.objet is not None and self.objet.sorte in ("seau", "seau_retourne")
+        )
         yield Pas("trajet", {"x": x, "y": y}, choc=True)
 
     def _orienter(self, angle: float) -> Geste:
@@ -507,6 +525,23 @@ class Prehension:
         self.objet, self.poids_porte_n = None, 0.0
         yield from self._relacher(objet.aimants)
         self.tete.acceleration_seau(False)
+
+    # ------------------------------------------------------------ pour les autres modules
+
+    # Morceaux de gestes que les modules qui se servent de la tête (Lavage...) enchaînent dans
+    # leurs propres gestes, joués par `lancer`.
+
+    def monter(self) -> Geste:
+        return self._monter()
+
+    def aller(self, x: float, y: float) -> Geste:
+        return self._aller(x, y)
+
+    def orienter(self, angle: float) -> Geste:
+        return self._orienter(angle)
+
+    def attendre_vide(self) -> Geste:
+        return self._attendre_vide()
 
     # ------------------------------------------------------------ les gestes
 

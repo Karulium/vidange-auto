@@ -7,6 +7,7 @@
   vidange-simulateur griffe                    vidange d'un fût par la griffe (« vidange_fut »)
   vidange-simulateur mycelium                  dosage du mycélium (« dosage_mycelium »)
   vidange-simulateur prehension                gestes de la préhension (« prehension »)
+  vidange-simulateur lavage                    3 seaux lavés, eau comprise (« lavage »)
 
 Les durées se règlent dans reglages/simulateur.yaml (vitesses des axes, délai du Go, capteurs).
 Tourne sur n'importe quel PC, sans la machine. Code de sortie 0 si le cycle va au bout, 1 sinon.
@@ -24,12 +25,19 @@ from vidange.demarrage import DOSSIER_PI, _chemin
 from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.griffe.module import module_griffe
 from vidange.griffe.simulation import griffe_du_simulateur
+from vidange.lavage.module import module_lavage
+from vidange.lavage.simulation import lavage_du_simulateur
 from vidange.mycelium.module import module_mycelium
 from vidange.mycelium.simulation import mycelium_du_simulateur
 from vidange.poste_fut.module import module_echange_fut
 from vidange.prehension.module import module_prehension
 from vidange.prehension.simulation import prehension_du_simulateur
-from vidange.reglages import ErreurReglages, PrehensionSimulee, charger_reglages
+from vidange.reglages import (
+    ErreurReglages,
+    LavageSimule,
+    PrehensionSimulee,
+    charger_reglages,
+)
 from vidange.simulateur.simulateur import ErreurSimulation, Simulateur
 
 # Modules qu'on sait simuler : nom → fabrique (simulateur → module).
@@ -43,6 +51,9 @@ MODULES: dict[str, Callable[[Simulateur], Module]] = {
     "prehension": lambda simulateur: module_prehension(
         prehension_du_simulateur(simulateur), _places(simulateur)
     ),
+    "lavage": lambda simulateur: module_lavage(
+        lavage_du_simulateur(simulateur), _lavage(simulateur).seaux
+    ),
 }
 # Scénario de simulateur.yaml joué par défaut avec un module (sinon : le haut du fichier).
 SCENARIOS = {
@@ -50,6 +61,7 @@ SCENARIOS = {
     "griffe": "vidange_fut",
     "mycelium": "dosage_mycelium",
     "prehension": "prehension",
+    "lavage": "lavage",
 }
 
 
@@ -58,6 +70,13 @@ def _places(simulateur: Simulateur) -> PrehensionSimulee:
     if places is None:
         raise ErreurSimulation("simulateur.yaml n'a pas de partie « prehension »")
     return places
+
+
+def _lavage(simulateur: Simulateur) -> LavageSimule:
+    lavage = simulateur.reglages.simulateur.lavage
+    if lavage is None:
+        raise ErreurSimulation("simulateur.yaml n'a pas de partie « lavage »")
+    return lavage
 
 
 def main(arguments: list[str] | None = None) -> int:

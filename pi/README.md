@@ -61,6 +61,7 @@ Pas encore de vrai module de la machine.
 | `vidange/griffe/` | Griffe sur mât : règles de position (`regles.py`), doses apprises (`doses.py`), bras sur la carte du portique et sa pesée (`bras.py`), gestes (`griffe.py`), module « griffe » (`module.py`), griffe du simulateur (`simulation.py`) |
 | `vidange/porte_bocal/` | Porte-bocal (carte n° 3) : mors (serrage par palpage, ouverture), demi-tour du bocal (pont en H, verrou, inclinaison, photo de contrôle), signaux de la carte par leur nom (`signaux.py`), faux plateau et faux bocal (`faux.py`) ; commande `vidange-porte-bocal` |
 | `vidange/prehension/` | Préhension (cartes n° 1 et n° 4) : règles de mouvement (`regles.py`), tête sur ses deux cartes avec le vide et la force (`tete.py`), gestes : prendre, poser, porte-bocal, visser (`prehension.py`), scénario du simulateur (`module.py`, `simulation.py`) ; commande `vidange-prehension` |
+| `vidange/lavage/` | Lavage des seaux (cartes n° 1, 3 et 4) : eau du fût de lavage, chauffage, jet d'air (`eau.py`), signaux répartis sur les cartes (`signaux.py`), verrou du noyau et gestes du lavage d'un seau (`lavage.py`), scénario du simulateur (`module.py`, `simulation.py`) ; commande `vidange-lavage` |
 | `vidange/poste_fut/` | Poste du fût : état (absent, en place, prêt), bouton « Prêt » et voyant, pesée (HX711), mode permis par le panneau, verrous pour les autres modules, module « poste_fut » ; commande `vidange-pesee` (étalonnage) |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) ; poste du fût (chiffres **vrais**, pesée à étalonner) |
 | `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran, caméras, pilotage à distance, mises à jour) |
@@ -76,6 +77,7 @@ Pas encore de vrai module de la machine.
 | `systeme/essai-distance.md` | Essai des caméras et du pilotage à distance sur le vrai Pi, pas à pas |
 | `systeme/essai-ecran.md` | Essai de l'écran Nextion sur le vrai Pi (câblage, UART, chaque page), pas à pas |
 | `systeme/essai-prehension.md` | Essai de la préhension sur le vrai matériel (carte n° 4, vide, force, prises, porte-bocal, vissage), pas à pas |
+| `systeme/essai-lavage.md` | Essai du lavage des seaux sur le vrai matériel (eau, flotteur, chauffage, brosses, verrou, un seau lavé), pas à pas |
 | `systeme/essai-poste-fut.md` | Essai du poste du fût sur le vrai matériel (chariot, panneau, bouton, pesée et étalonnage), pas à pas |
 | `tests/` | Tests (pytest) |
 
@@ -218,6 +220,7 @@ en une fraction de seconde), et sort le planning : chaque étape, quand elle com
 .venv/bin/vidange-simulateur griffe                  # vidange d'un fût par la griffe (« vidange_fut »)
 .venv/bin/vidange-simulateur mycelium                # dosage du mycélium (« dosage_mycelium »)
 .venv/bin/vidange-simulateur prehension              # gestes de la préhension (« prehension »)
+.venv/bin/vidange-simulateur lavage                  # 3 seaux lavés, eau comprise (« lavage »)
 ```
 
 - **Durées réglables** dans `reglages/simulateur.yaml` : vitesse et accélération de chaque axe (un déplacement
@@ -503,6 +506,45 @@ Etape(
   dosage), `refus_manuel(pose)` (mode manuel du téléphone).
 - **Porte-bocal** : `approcher_mors()` (« Ø 98 » à faible courant) ajouté pour la pose du bocal.
 - Essai sur la machine : `vidange-prehension etat | vide | prendre-poser | porte-bocal | visser`.
+
+## Lavage des seaux (tâche 21)
+
+Entre deux fûts de production, un fût de lavage (inox, Ø 0,45) vient au poste : noyau à brosses (dans le
+seau), couronne de brosses extérieures, eau chauffée. La Préhension tient le seau retourné et ne le lâche
+jamais. Module validé le 25/10/2026. Chiffres : `reglages/machine.yaml` (partie `lavage`, axes
+`lavage_noyau` et `lavage_couronne` sur la carte de la tête) ; ceux marqués EXEMPLE sont à mesurer
+(`systeme/essai-lavage.md`).
+
+```python
+eau = EauLavage(
+    reglages.machine.lavage,
+    signaux_lavage(liaisons, reglages.fluidnc),
+    fichier=donnees / "lavage.json",
+)
+lavage = Lavage(
+    reglages.machine,
+    prehension,
+    eau,
+    mode=lambda: mode.actuel,
+    refus_panneau=lambda: poste.refus_lancement("lavage"),
+    panneau_rabattu=poste.panneau_vu_rabattu,
+)
+prehension.lancer(lambda: lavage.geste_laver_seau("seau_a"))  # la tête tient le seau retourné
+```
+
+- **Gestes** : `geste_remplir()`, `geste_laver_seau(format)`, `geste_vider()` ; `finir_serie()` refuse tant
+  que le fût n'est pas vidé. `eau_a_changer()` après `seaux_max_par_eau` seaux.
+- **Laver un seau** : couloir du seau retourné (y 0,74, coude (0,45 ; 0,74)), descente, appui 80 N, arrosage,
+  passe 1 (noyau), passe 2 (couronne en avant), rinçage, remontée selon le vide (2 essais), jet d'air du col
+  (un tour), égouttage, retour au coude. Noyau, couronne et rotation de la tête dans le même déplacement.
+- **Verrou du noyau et de la couronne** (`refus_brosses`, branché sur la préhension) : jamais sans objet
+  tenu (vide), tête au-dessus du fût à sa hauteur de travail ; toute perte de vide les arrête. Le pilotage à
+  distance ne pilote pas les axes en degrés.
+- **Eau** : remplissage borné (premier temps mesuré + 20 %), vidange jusqu'au flotteur bas + 60 s, chauffage
+  seulement flotteur haut et pompe arrêtée ; pause : eau, pompe et air coupés, rallumés à la reprise.
+- **Mode** : lavage seulement mode « lavage » et panneau du poste rabattu ; panneau qui bouge pendant un
+  geste : alarme, la tête et le pont s'arrêtent.
+- Essai sur la machine : `vidange-lavage etat | sortie NOM S | remplir | vider | brosses | laver FORMAT x y z`.
 
 ## Cartes de pesée du bus RS485 (tâche 22 bis)
 

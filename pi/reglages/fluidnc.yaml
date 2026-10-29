@@ -35,17 +35,27 @@ cartes:
     numero_serie_usb: "EXEMPLE-MYCELIUM-LAVAGE"
     # Entrées que le Pi lit dans le rapport d'état de la carte (« Pn: ») : le capteur de la
     # manivelle est le fin de course de l'axe A (jamais une butée) ; verrou et inclinaison du
-    # porte-bocal sont sur les broches macro0 et macro1 (lettres 0 et 1), sans macro.
-    # À VÉRIFIER à l'essai de la carte (pi/systeme/essai-porte-bocal.md).
+    # porte-bocal sont sur les broches macro0 et macro1 (lettres 0 et 1), sans macro ; le
+    # flotteur du fût de lavage sur macro2 (lettre 2).
+    # À VÉRIFIER à l'essai de la carte (pi/systeme/essai-porte-bocal.md, essai-lavage.md).
     entrees:
       origine_manivelle: A
       verrou_plateau_engage: "0"
       inclinaison_bocal: "1"
-    # Sorties du porte-bocal (« user_outputs » digital0 à 2 de fluidnc/mycelium_lavage.yaml).
+      flotteur_lavage: "2"
+    # Sorties du porte-bocal (« user_outputs » digital0 à 2 de fluidnc/mycelium_lavage.yaml) et
+    # de l'eau du lavage (digital3 à 7). FluidNC n'a que 8 sorties « digital » par carte : le jet
+    # d'air et le chauffage du lavage sont sur la carte n° 4 (EXEMPLE, le plan de câblage
+    # choisit ; un signal du lavage peut changer de carte sans toucher au code).
     sorties:
       demi_tour_vers_tete_en_bas: 0
       demi_tour_vers_debout: 1
       electroaimant_verrou_plateau: 2
+      eau_reseau_lavage: 3
+      vanne_vidange_lavage: 4
+      pompe_lavage: 5
+      vanne_rampes_lavage: 6
+      rincage_lavage: 7
   prehension:
     description: Axes de la préhension
     numero_serie_usb: "EXEMPLE-PREHENSION"
@@ -54,7 +64,10 @@ cartes:
     # À VÉRIFIER à l'essai de la carte (pi/systeme/essai-prehension.md).
     entrees:
       contact_tete: P
-    # Sorties « user_outputs » digital0 et digital1 de fluidnc/prehension.yaml.
+    # Sorties « user_outputs » digital0 à 3 de fluidnc/prehension.yaml : ventouse, capsules,
+    # puis jet d'air du col et chauffage du lavage (place libre sur cette carte, EXEMPLE).
     sorties:
       vanne_vide: 0
       electroaimants_capsule: 1
+      air_col_lavage: 2
+      chauffage_lavage: 3

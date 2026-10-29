@@ -1,8 +1,8 @@
-# Réglages FluidNC de la carte n° 3 : axes du mycélium (et plus tard du lavage, tâche 21).
+# Réglages FluidNC de la carte n° 3 : axes du mycélium, eau du lavage (tâche 21).
 #
 # ATTENTION : EXEMPLE. Ne PAS envoyer ce fichier à la vraie carte avant d'avoir mis les vraies
-# broches (plan de câblage), les vrais pas par mm (poulies, réglage des pilotes) et les axes du
-# lavage. Les chiffres marqués « (fiche) » sont ceux du module Mycélium validé le 24/10/2026.
+# broches (plan de câblage) et les vrais pas par mm (poulies, réglage des pilotes). Les
+# moteurs du lavage (noyau, couronne) sont sur la carte n° 4. Les chiffres marqués « (fiche) » sont ceux du module Mycélium validé le 24/10/2026.
 #
 # Repère : la position machine de chaque axe est celle de pi/reglages/machine.yaml
 # (mm = mètres × 1000 ; degrés pour la manivelle).
@@ -29,8 +29,11 @@
 #       l'autre ; électroaimant du verrou), commandées par le Pi (M64 / M65). Contact « verrou
 #       engagé » et capteur d'inclinaison sur les broches macro0 et macro1 (lettres 0 et 1 de
 #       « Pn: »), sans macro. Numéros et lettres : pi/reglages/fluidnc.yaml.
-#   À VÉRIFIER à l'essai de la carte (pi/systeme/essai-porte-bocal.md, étape 1) : « $HY » avec
-#   « cycle: 0 », les lettres de « Pn: », M64/M65.
+#   Eau du lavage (tâche 21) : 5 sorties « user_outputs » (digital3 à 7 : eau du réseau, vanne
+#       à bille de vidange, pompe, vanne 3 voies vers les rampes, rinçage), commandées par le Pi
+#       par des relais de l'armoire ; flotteur du fût de lavage sur macro2 (lettre 2 de « Pn: »).
+#   À VÉRIFIER à l'essai de la carte (pi/systeme/essai-porte-bocal.md, étape 1 ;
+#   pi/systeme/essai-lavage.md) : « $HY » avec « cycle: 0 », les lettres de « Pn: », M64/M65.
 
 name: "Vidange carte 3 - mycelium et lavage (EXEMPLE)"
 board: "ESP32 6 axes, pilotes externes (EXEMPLE)"
@@ -146,21 +149,32 @@ probe:
   pin: gpio.32:high
   check_mode_start: true
 
-# Sorties du demi-tour du bocal (pi/reglages/fluidnc.yaml → sorties). EXEMPLES de broches.
+# Sorties du demi-tour du bocal et de l'eau du lavage (pi/reglages/fluidnc.yaml → sorties).
+# EXEMPLES de broches.
 #   digital0 : demi_tour_vers_tete_en_bas ; digital1 : demi_tour_vers_debout ;
-#   digital2 : electroaimant_verrou_plateau.
+#   digital2 : electroaimant_verrou_plateau ; digital3 : eau_reseau_lavage ;
+#   digital4 : vanne_vidange_lavage ; digital5 : pompe_lavage ; digital6 : vanne_rampes_lavage ;
+#   digital7 : rincage_lavage.
 user_outputs:
   digital0_pin: gpio.2
   digital1_pin: gpio.5
   digital2_pin: gpio.17
+  digital3_pin: gpio.18
+  digital4_pin: gpio.19
+  digital5_pin: gpio.21
+  digital6_pin: gpio.22
+  digital7_pin: gpio.23
 
 # Entrées lues par le Pi dans « Pn: » (pi/reglages/fluidnc.yaml → entrees). EXEMPLES de broches.
-#   macro0 (lettre 0) : verrou_plateau_engage ; macro1 (lettre 1) : inclinaison_bocal.
+#   macro0 (lettre 0) : verrou_plateau_engage ; macro1 (lettre 1) : inclinaison_bocal ;
+#   macro2 (lettre 2) : flotteur_lavage.
 control:
   macro0_pin: gpio.33:low
   macro1_pin: gpio.25:low
+  macro2_pin: gpio.0:low
 
 # Aucune macro : ces broches servent seulement à être lues.
 macros:
   macro0: ""
   macro1: ""
+  macro2: ""

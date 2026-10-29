@@ -403,6 +403,12 @@ def principal(
             "porte-bocal d'EXEMPLE : les régler aux essais (pi/systeme/essai-prehension.md), puis "
             "passer « exemple » à false."
         )
+    lavage = reglages.machine.lavage
+    if lavage is not None and lavage.exemple:
+        journal.warning(
+            "machine.yaml, lavage : hauteurs, décalages, vitesses des brosses, durées d'EXEMPLE : "
+            "les régler aux essais (pi/systeme/essai-lavage.md), puis passer « exemple » à false."
+        )
     exemples = entrees_sorties.exemples()
     if exemples:
         journal.warning(

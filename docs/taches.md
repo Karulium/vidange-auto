@@ -406,7 +406,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   Simulateur : le scénario `mycelium` de la tâche 19 avec le vrai porte-bocal sur le faux FluidNC (serrage,
   demi-tours, photo de contrôle). Tests, dont : bocal absent (diamètre hors plage), verrou qui ne revient pas,
   capteur d'inclinaison faux, demi-tour refusé manivelle en haut.
-- [ ] **21. Lavage des seaux (eau, bain, brossage)** — Modèle : Opus, effort moyen. **Après la tâche 37
+- [x] **21. Lavage des seaux (eau, bain, brossage)** — Modèle : Opus, effort moyen. **Après la tâche 37
   (Préhension)**, dont il appelle les gestes.
   Sources (recopiées ici le 29/10/2026) : fiche du module « Lavage », **validé définitivement le 25/10/2026**
   (fût de 44 cm), dossiers eau automatique, arrosage (validé 22/10, colliers 27/10), chauffage (22/10), jet d'air du

@@ -9,6 +9,8 @@ palier pesé du mât (carte de pesée RS485).
     tete.resultat()                 # où elle s'est arrêtée, contact, appui...
 
 Un pas bouge soit le pont (X, Y), soit la tête (Z, rotation), jamais les deux (règle 1).
+Les brosses du lavage (noyau, couronne : même carte que la tête) tournent dans le même
+déplacement manuel que la rotation de la tête (`brosses`), pendant `duree_s`.
 - Descente au contact (`palper`) : palpage de FluidNC (« G38.3 ») ; le contact de la tête
   (plateau flottant vu par un inductif M8) est le palpeur de la carte : elle s'arrête tout de
   suite au contact, et le Pi lit la cote Z où elle s'est arrêtée.
@@ -53,6 +55,8 @@ VANNE = "vanne_vide"
 AIMANTS = "electroaimants_capsule"
 
 Arret = Literal["vide", "choc", "appui", "appui_max"]
+# Les brosses du lavage, par leur nom court dans un Pas → axe de machine.yaml.
+BROSSES = {"noyau": "lavage_noyau", "couronne": "lavage_couronne"}
 
 QUOI_FAIRE_CHOC = (
     "La préhension a senti un choc pendant un trajet : le pont et la tête se sont arrêtés, la "
@@ -100,6 +104,10 @@ class Pas:
     # Attente après le mouvement (s), puis pesée (médiane de plusieurs lectures).
     attente_s: float = 0.0
     pesee: bool = False
+    # Lavage : brosses (noyau, couronne) qui tournent pendant le pas, de tant de degrés (« en
+    # avant »), et durée imposée du pas (s ; la vitesse en découle, pour tous les axes).
+    brosses: dict[str, float] = field(default_factory=dict)
+    duree_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -219,6 +227,10 @@ class TeteFluidnc:
         self._noms = {"x": "pont_x", "y": "chariot_y", "z": "prehension_z", "a": "prehension_a"}
         self._lettres = {cle: machine.axes[nom].lettre for cle, nom in self._noms.items()}
         self._unites = {cle: machine.axes[nom].unite for cle, nom in self._noms.items()}
+        # Axes des brosses du lavage (sur la carte de la tête), s'il y en a.
+        self._brosses = {
+            cle: machine.axes[nom] for cle, nom in BROSSES.items() if nom in machine.axes
+        }
         # Lectures récentes de la force : (heure, newtons bruts).
         self._lectures: deque[tuple[float, float]] = deque(maxlen=400)
         self._derniere_lecture: float | None = None
@@ -428,12 +440,14 @@ class TeteFluidnc:
         depart = self._axes(self.position())
         arrivee = self._axes(cible)
         mm = {cle: arrivee[cle] * self._facteur(cle) for cle in cles}
+        brosses = self._cibles_brosses(pas)
         with self._verrou:
             self._pas, self._liaison, self._arret, self._muette = pas, liaison, None, None
             self._poids_porte = poids_porte_n
             self._appui = self._appui_max = self._choc_depuis = None
             self._fin_mouvement = None
             self._cible = {self._lettres[cle] or "": valeur for cle, valeur in mm.items()}
+            self._cible.update(brosses)
             self._rapports_a_l_envoi = liaison.etat.rapports_recus
             self._commandes = []
             recente = self._force_recente(8)
@@ -453,12 +467,37 @@ class TeteFluidnc:
             self._commandes = [liaison.envoyer(ligne) for ligne in lignes]
             return
         duree = max((abs(arrivee[cle] - depart[cle]) / vitesses[cle] for cle in cles), default=0.0)
-        longueur = math.sqrt(sum((mm[cle] - depart[cle] * self._facteur(cle)) ** 2 for cle in cles))
+        carres = [(mm[cle] - depart[cle] * self._facteur(cle)) ** 2 for cle in cles]
+        carres += [degres**2 for degres in pas.brosses.values()]
+        longueur = math.sqrt(sum(carres))
+        if pas.duree_s is not None:
+            duree = pas.duree_s
         f = 60 * longueur / duree if duree > 0 else 60 * vitesses["z"] * MM_PAR_M
         self._f = max(f, 1.0)
         commande = liaison.deplacer_manuel(self._cible, self._f)
         if commande.erreur is not None:
             raise ErreurEtape(f"préhension, « {commande.ligne} » : {commande.erreur}")
+
+    def _cibles_brosses(self, pas: Pas) -> dict[str, float]:
+        """Lettre → position visée (°) des brosses qui tournent pendant le pas."""
+        cibles = {}
+        for cle, degres in pas.brosses.items():
+            axe = self._brosses.get(cle)
+            if axe is None or axe.carte != self.liaison_tete.nom or axe.lettre is None:
+                nom = BROSSES.get(cle, cle)
+                raise ErreurEtape(f"préhension : pas d'axe « {nom} » sur la carte de la tête")
+            position = self.liaison_tete.etat.positions.get(axe.lettre)
+            if position is None:
+                raise ErreurEtape(f"position de l'axe {BROSSES[cle]} inconnue")
+            cible = position + degres
+            debut, fin = axe.course
+            if not debut <= cible <= fin:
+                raise ErreurEtape(
+                    f"compteur de l'axe {BROSSES[cle]} plein ({position:.0f}°) : redémarrer la "
+                    f"carte « {self.liaison_tete.nom} » sur place (elle repart de 0)"
+                )
+            cibles[axe.lettre] = cible
+        return cibles
 
     def fini(self) -> bool:
         self._surveiller()

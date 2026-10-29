@@ -23,7 +23,7 @@ from typing import Any
 from vidange.chef import Condition, ErreurEtape
 from vidange.prehension.prehension import Prehension
 from vidange.prehension.regles import Objet, Pose
-from vidange.prehension.tete import QUOI_FAIRE_CHOC, Pas, Resultat
+from vidange.prehension.tete import BROSSES, QUOI_FAIRE_CHOC, Pas, Resultat
 from vidange.reglages import Machine
 from vidange.simulateur.axes import EtatAxes
 from vidange.simulateur.simulateur import ErreurSimulation, Simulateur
@@ -156,7 +156,19 @@ class TeteSimulee:
                 arret = "appui"
         bougent = {self._noms[cle] for cle in pas.cibles}
         axes = {nom: valeur for nom, valeur in self._axes(cible).items() if nom in bougent}
-        self._arrivees = self._etat.aller_vers(pas.texte, axes, self._vitesses(pas))
+        positions = self._etat.positions
+        # Brosses du lavage : elles tournent de tant de degrés pendant le pas.
+        axes.update(
+            {BROSSES[cle]: positions[BROSSES[cle]] + degres for cle, degres in pas.brosses.items()}
+        )
+        vitesses = self._vitesses(pas)
+        if pas.duree_s:
+            # Durée imposée : chaque axe va à la vitesse qui le fait arriver à temps.
+            vitesses = {
+                nom: max(abs(valeur - positions[nom]) / pas.duree_s, 1e-6)
+                for nom, valeur in axes.items()
+            }
+        self._arrivees = self._etat.aller_vers(pas.texte, axes, vitesses)
         if pas.attente_s:
             self._arrivees = self._etat.attendre(CARTE_TETE, pas.attente_s)
         self._pas = pas

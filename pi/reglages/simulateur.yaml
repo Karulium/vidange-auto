@@ -41,6 +41,9 @@ axes:
   prehension_z: {vitesse: 0.15, acceleration: 0.5}
   prehension_a: {vitesse: 90, acceleration: 180}
   manivelle: {vitesse: 1800, acceleration: 3600}
+  # Brosses du lavage (°/s) : noyau jusqu'à 200 tr/min, couronne 100 tr/min.
+  lavage_noyau: {vitesse: 1200, acceleration: 2400}
+  lavage_couronne: {vitesse: 600, acceleration: 1200}
 
 # Position (machine.yaml) des axes au départ. Sans « depart », chaque axe est au début de sa course.
 # Les axes que la position ne cite pas sont au début de leur course.
@@ -87,6 +90,20 @@ prehension:
   vissage: {x: 1.7, y: 0.5, contact_z: 0.9}
   mors_s: 3
 
+# L'eau imaginaire du fût de lavage (scénario « lavage ») : le flotteur est haut au-dessus de
+# 45 L ; débits de l'eau du réseau (≈ 4 min pour remplir), de la pompe vers la bonde, du rinçage
+# (≈ 0,5 L en 5 s). Les seaux retournés à laver : format, et où la tête les prend et les repose
+# (axe, face au contact de leur fond), le long du couloir du seau retourné (y 0,74).
+lavage:
+  niveau_flotteur_l: 45
+  debit_eau_l_s: 0.2
+  debit_pompe_l_s: 0.5
+  debit_rincage_l_s: 0.1
+  seaux:
+    - {format: seau_a, x: 1.3, y: 0.74, contact_z: 0.95}
+    - {format: seau_b, x: 1.3, y: 0.74, contact_z: 0.90}
+    - {format: seau_c, x: 1.3, y: 0.74, contact_z: 0.935}
+
 # Capteurs (entrées tout-ou-rien de docs/entrees-sorties.yaml) actionnés au départ.
 capteurs_actionnes: []
 
@@ -105,7 +122,8 @@ evenements:
 # Lancer : vidange-simulateur poste_fut   (scénario « echange_fut » par défaut),
 #         vidange-simulateur griffe      (scénario « vidange_fut » par défaut),
 #         vidange-simulateur mycelium    (scénario « dosage_mycelium » par défaut),
-#         vidange-simulateur prehension  (scénario « prehension » par défaut).
+#         vidange-simulateur prehension  (scénario « prehension » par défaut),
+#         vidange-simulateur lavage      (scénario « lavage » par défaut).
 scenarios:
   # Échange d'un fût au poste : le chariot du fût vide s'en va, le suivant arrive.
   echange_fut:
@@ -157,4 +175,8 @@ scenarios:
   # porte-bocal, sous x 0,71. Prise et pose d'un seau, d'un couvercle, d'un bocal, pose et
   # reprise au porte-bocal, vissage d'une capsule.
   prehension:
+    capteurs_actionnes: [chariot_fut_en_place]
+  # Lavage de 3 seaux (A, B, C) : chariot du fût au fond, panneau du poste du fût rabattu (contact
+  # ouvert) ; remplissage, 3 seaux lavés, vidange, série finie.
+  lavage:
     capteurs_actionnes: [chariot_fut_en_place]
