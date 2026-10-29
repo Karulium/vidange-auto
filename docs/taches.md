@@ -520,6 +520,12 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   Simulateur : scénario `lavage_couvercles` (2 couvercles, avec retournement) et `lavage_bocaux` (3 bocaux).
   Tests, dont : couvercle qui glisse 2 fois, plateau flottant trop haut, mode refusé si le bac n'est pas trouvé,
   barrière coupée.
+- [ ] **37 bis. Préhension au porte-bocal : zone du garage** — Modèle : Sonnet, effort moyen. Appliquer les
+  réponses du 29/10 (`docs/decisions.md`, section « Préhension », points 1 et 3) : `porte_bocal.y` à 0,150 dans
+  `machine.yaml` ; exception à l'isolation du fût dans la petite zone du garage (± 5 mm, réglage) avec ses 3
+  conditions (manivelle en bas, course déclarée 7 cm ; mors ouverts pour poser, serrés pour prendre ; griffe en
+  butée haute) ; refus de passer la tête au-dessus du bocal au garage manivelle en haut ; la griffe peut être dans
+  la bande `garage_glissiere` seulement en butée haute. Tests de chaque condition refusée.
 - [ ] 22. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage
 - [x] **22 bis. Cartes de pesée RS485 (RP2040 + HX711) : griffe, préhension, plateau du remplissage** — Modèle : Opus.
   Programme C (Pico SDK, comme l'accéléromètre) : lecture du HX711 en 3,3 V, jusqu'à 80 mesures/s, réponse sur le
