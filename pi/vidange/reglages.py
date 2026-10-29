@@ -5,6 +5,7 @@ erreur arrête le programme avec un message en français qui dit quel fichier,
 quel réglage, et ce qui ne va pas. Toutes les erreurs sont listées d'un coup.
 """
 
+import math
 from pathlib import Path
 from typing import Annotated, Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -1063,15 +1064,20 @@ SORTIES_LAVAGE = (
 )
 
 
+# Objets lavés au lave-bocal (prehension → objets) : le bocal vide retourné, la capsule.
+OBJETS_LAVE_BOCAL = ("bocal_vide", "capsule")
+
+
 class FormatLavage(Modele):
-    """Ce qui change d'un format de seau à l'autre, au lavage (décalages vers +x, en m)."""
+    """Ce qui change d'un format de seau à l'autre, au lavage (en m)."""
 
     # Brossage : tête décalée de façon fixe vers +x (c'est le seau qui tourne dessous).
     decalage_brossage_m: float = Field(ge=0)
     # Passe 2 (le bord) : remontée de la tête depuis l'appui de la passe 1 (0 : même hauteur).
     remontee_passe_2_m: float = Field(ge=0)
-    # Jet d'air du col : seau décalé vers la buse, son bord arrêté à jet_bord_z.
-    jet_decalage_m: float = Field(ge=0)
+    # Jet d'air du col : centre du seau (axe de la tête, x, y) face à la buse, son bord arrêté à
+    # jet_bord_z.
+    jet_centre: tuple[float, float]
     jet_bord_z: float
 
 
@@ -1100,9 +1106,10 @@ class BrossageLavage(Modele):
     approche_m: float = Field(gt=0)
     appui_n: float = Field(gt=0)
     course_appui_m: float = Field(gt=0)
-    # Rotation de la tête au début du lavage (°) : la course de la tête est limitée (câbles,
-    # tuyau du vide), les tours du seau des deux passes doivent y tenir.
-    angle_depart_deg: float
+    # Rotation de la tête (°) : chaque passe part de − depart_passe_deg si ses tours vont dans
+    # le sens +, de + depart_passe_deg sinon, et la tête revient à 0 à la fin de la passe. Deux
+    # passes de suite ne tournent jamais dans le même sens (cordon spiralé du vide et des fils).
+    depart_passe_deg: float = Field(gt=0)
     passe_1: list[PhaseBrossage] = Field(min_length=1)
     passe_2: list[PhaseBrossage] = Field(min_length=1)
 
@@ -1134,14 +1141,115 @@ class VerrouLavage(Modele):
 
 class RincageLavage(Modele):
     # Électrovanne de rinçage ouverte tant de secondes (≈ 0,5 L dans les rampes), puis la
-    # pompe vide jusqu'au flotteur bas (au plus vidange_max_s).
+    # pompe vide jusqu'au flotteur bas (au plus vidange_max_s), puis l'eau du réseau remet le
+    # fût au flotteur haut (au plus remise_max_s), pour que le bain reste chauffé.
     duree_s: float = Field(gt=0)
     vidange_max_s: float = Field(gt=0)
+    remise_max_s: float = Field(gt=0)
 
 
 class JetAirLavage(Modele):
     # Un tour du seau devant la buse (s), puis égouttage au-dessus du fût (s).
     tour_s: float = Field(gt=0)
+    egouttage_s: float = Field(ge=0)
+
+
+class FormatCouvercle(Modele):
+    """Couvercle d'un format de seau, au lavage dans le fût (en m)."""
+
+    # Bas du couvercle tenu (son point le plus bas) à l'appui sur le noyau : face « dessous »
+    # lavée (couvercle à l'endroit), ou face « dessus » lavée (couvercle retourné).
+    bas_dessous_z: float
+    bas_dessus_z: float
+    # Centre du couvercle décalé de tant depuis le centre du noyau, pendant le brossage.
+    decalage_m: float = Field(ge=0)
+
+
+class RetourneurCouvercles(Modele):
+    """Retourneur de couvercles : tige sur une barre du chariot de remplissage, bac inox sur le
+    plateau fixe. Les barres et le chariot appartiennent au Remplissage."""
+
+    # Axe de la tête pour lâcher le couvercle au-dessus de la tige, et hauteur de sa face.
+    lacher: tuple[float, float]
+    lacher_face_z: float
+    # Après la chute, axe de la tête à x ≤ recul_x_max pour la photo du bac.
+    recul_x_max: float
+    # Écart des barres depuis l'axe de la tête (m) : fermées, ouvertes. Ouvertes avant que la
+    # tête descende sous ouvertes_sous_z ; refermées seulement tête au-dessus de
+    # fermees_au_dessus_z ; au plus barres_max_s pour bouger.
+    barres_fermees_m: float = Field(gt=0)
+    barres_ouvertes_m: float = Field(gt=0)
+    ouvertes_sous_z: float
+    fermees_au_dessus_z: float
+    barres_max_s: float = Field(gt=0)
+    # Face de la tête au contact d'un couvercle à plat dans le bac.
+    bac_contact_z: float
+    # La caméra trouve le bac et la tige à tant de leur place, sinon le mode ne démarre pas.
+    tolerance_place_m: float = Field(gt=0)
+    # Couvercle pas retourné après la chute : nouvelle chute ; alerte après tant d'échecs.
+    chutes_max: int = Field(ge=1)
+
+
+class CouverclesLavage(Modele):
+    """Lavage des couvercles de seau dans le fût, contre le noyau."""
+
+    # Axe de la tête au-dessus du noyau (le pont est à sa limite : x ≥ 0,352).
+    centre: tuple[float, float]
+    # Repère collé sur le dessus : avant la pose, la tête le met à repere_angle_deg (compté depuis
+    # −X, côté +Y, comme les angles de la caméra). sens_repere : +1 si l'angle du repère grandit
+    # quand la rotation de la tête grandit, −1 sinon.
+    repere_angle_deg: float
+    sens_repere: Literal[1, -1] = 1
+    # Descente rapide jusqu'à approche_m au-dessus de l'appui ; plateau flottant déclenché avec
+    # la face au-dessus de contact_trop_haut_z : arrêt et alerte. Appui de appui_n, jamais plus.
+    contact_trop_haut_z: float
+    approche_m: float = Field(gt=0)
+    appui_n: float = Field(gt=0)
+    # Brossage : noyau à noyau_tr_min pendant duree_s, couvercle tourné à rotation_tr_min ;
+    # centre décalé dans la direction (x, y). Le repère est contrôlé tous les controle_s.
+    noyau_tr_min: float = Field(gt=0)
+    duree_s: float = Field(gt=0)
+    rotation_tr_min: float = Field(gt=0)
+    direction_decalage: tuple[float, float]
+    controle_s: float = Field(gt=0)
+    # Repère à plus de glissement_max_deg de l'angle commandé : le couvercle glisse (arrêt du
+    # noyau, remontée de remontee_glissement_m, reprise) ; alerte au glissements_max-ième.
+    glissement_max_deg: float = Field(gt=0)
+    remontee_glissement_m: float = Field(gt=0)
+    glissements_max: int = Field(ge=1)
+    egouttage_s: float = Field(ge=0)
+    formats: dict[Nom, FormatCouvercle] = Field(min_length=1)
+    retourneur: RetourneurCouvercles
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "CouverclesLavage":
+        if math.hypot(*self.direction_decalage) < 1e-6:
+            raise ValueError("couvercles → direction_decalage : une direction, pas (0, 0)")
+        r = self.retourneur
+        if r.barres_ouvertes_m <= r.barres_fermees_m:
+            raise ValueError("couvercles → retourneur : barres ouvertes plus loin que fermées")
+        if r.fermees_au_dessus_z < r.ouvertes_sous_z:
+            raise ValueError("couvercles → retourneur : fermees_au_dessus_z sous ouvertes_sous_z")
+        if r.lacher_face_z < r.ouvertes_sous_z:
+            raise ValueError(
+                "couvercles → retourneur → lacher_face_z : sous ouvertes_sous_z (les barres "
+                "fermées sont sous la tête)"
+            )
+        return self
+
+
+class LaveBocal(Modele):
+    """Lave-bocal (rince-verre de bar) posé à la main sur l'anneau de rive du fût de lavage."""
+
+    # Axe de la tête au-dessus du plateau du rince-verre, et hauteur du plateau.
+    centre: tuple[float, float]
+    plateau_z: float
+    # Descente rapide jusqu'à approche_m au-dessus du plateau, puis appui de appui_n (cherché
+    # sur course_appui_m au plus), tenu duree_s ; puis égouttage au-dessus du fût.
+    approche_m: float = Field(gt=0)
+    appui_n: float = Field(gt=0)
+    course_appui_m: float = Field(gt=0)
+    duree_s: float = Field(gt=0)
     egouttage_s: float = Field(ge=0)
 
 
@@ -1166,6 +1274,9 @@ class Lavage(Modele):
     rincage: RincageLavage
     jet_air: JetAirLavage
     formats: dict[Nom, FormatLavage] = Field(min_length=1)
+    # Couvercles et bocaux (tâche 21 bis) ; None : pas lavés par la machine.
+    couvercles: CouverclesLavage | None = None
+    lave_bocal: LaveBocal | None = None
 
 
 class Machine(Modele):
@@ -1511,20 +1622,24 @@ class Machine(Modele):
             erreurs.append(
                 "lavage → brossage : face_contact_z − course_appui_m sous la course de prehension_z"
             )
+        y_debut, y_fin = self.axes["chariot_y"].course
+
+        def hors_portee(ou: str, x: float, y: float | None = None) -> None:
+            if not x_min - 1e-9 <= x <= x_max + 1e-9:
+                erreurs.append(
+                    f"lavage → {ou} : axe de la tête à x {x:g} m, hors de sa portée ({x_min:g} à "
+                    f"{x_max:g} m = course du pont + {prehension.decalage_mat_x:g})"
+                )
+            if y is not None and not y_debut - 1e-9 <= y <= y_fin + 1e-9:
+                erreurs.append(f"lavage → {ou} : axe de la tête à y {y:g} m, hors de sa course")
+
         for nom, reglage in lavage.formats.items():
             if nom not in griffe.formats:
                 continue
-            for quoi, decalage in (
-                ("decalage_brossage_m", reglage.decalage_brossage_m),
-                ("jet_decalage_m", reglage.jet_decalage_m),
-            ):
-                x = centre_x + decalage
-                if not x_min - 1e-9 <= x <= x_max:
-                    erreurs.append(
-                        f"lavage → formats → {nom} → {quoi} : axe de la tête à x {x:g} m, hors de "
-                        f"sa portée ({x_min:g} à {x_max:g} m = course du pont + "
-                        f"{prehension.decalage_mat_x:g})"
-                    )
+            hors_portee(
+                f"formats → {nom} → decalage_brossage_m", centre_x + reglage.decalage_brossage_m
+            )
+            hors_portee(f"formats → {nom} → jet_centre", *reglage.jet_centre)
             if reglage.decalage_brossage_m > lavage.verrou.rayon_m:
                 erreurs.append(
                     f"lavage → formats → {nom} → decalage_brossage_m : plus loin du centre que "
@@ -1537,19 +1652,35 @@ class Machine(Modele):
                     f"{reglage.jet_bord_z + hauteur:g} m, hors de la course de prehension_z"
                 )
         a_debut, a_fin = self.axes["prehension_a"].course
-        angle = brossage.angle_depart_deg
-        for numero, phase in enumerate([*brossage.passe_1, *brossage.passe_2], start=1):
-            angle += phase.seau_tours * 360
-            if not a_debut <= angle <= a_fin:
-                erreurs.append(
-                    f"lavage → brossage : après la phase n° {numero} des passes, la tête serait à "
-                    f"{angle:g}°, hors de la course de prehension_a ({a_debut:g} à {a_fin:g}°)"
-                )
-                break
-        if not a_debut <= brossage.angle_depart_deg <= a_fin:
-            erreurs.append("lavage → brossage → angle_depart_deg : hors de la course de la tête")
-        if a_fin - a_debut < 360:
-            erreurs.append("lavage : la rotation de la tête doit pouvoir faire un tour (jet d'air)")
+        depart = brossage.depart_passe_deg
+        if not (a_debut <= -depart and depart <= a_fin):
+            erreurs.append("lavage → brossage → depart_passe_deg : hors de la course de la tête")
+        sens_passes = []
+        for nom_passe, phases in (("passe_1", brossage.passe_1), ("passe_2", brossage.passe_2)):
+            tours = sum(phase.seau_tours for phase in phases)
+            if abs(tours) < 1e-9:
+                erreurs.append(f"lavage → brossage → {nom_passe} : le seau doit tourner")
+                continue
+            sens_passes.append(tours > 0)
+            angle = -depart if tours > 0 else depart
+            for numero, phase in enumerate(phases, start=1):
+                angle += phase.seau_tours * 360
+                if not a_debut <= angle <= a_fin:
+                    erreurs.append(
+                        f"lavage → brossage → {nom_passe} : après la phase n° {numero}, la tête "
+                        f"serait à {angle:g}°, hors de la course de prehension_a ({a_debut:g} à "
+                        f"{a_fin:g}°)"
+                    )
+                    break
+        if len(sens_passes) == 2 and sens_passes[0] == sens_passes[1]:
+            erreurs.append(
+                "lavage → brossage : passe_1 et passe_2 tournent dans le même sens (jamais deux "
+                "passes de suite dans le même sens)"
+            )
+        if a_fin < 360 and a_debut > -360:
+            erreurs.append(
+                "lavage : depuis 0, la rotation de la tête doit pouvoir faire un tour (jet d'air)"
+            )
         # Le couloir passe la paroi côté stockage selon les règles du poste du fût.
         if lavage.coude_couloir[1] > poste.lavage_paroi_axe_y_max:
             erreurs.append(
@@ -1559,6 +1690,69 @@ class Machine(Modele):
             erreurs.append(
                 "lavage : prehension → haut_z sous poste_fut → lavage_paroi_fond_seau_min_z"
             )
+        couvercles = lavage.couvercles
+        if couvercles is not None:
+            hors_portee("couvercles → centre", *couvercles.centre)
+            for nom in griffe.formats:
+                if nom not in couvercles.formats:
+                    erreurs.append(f"lavage → couvercles → formats : il manque « {nom} »")
+            erreurs += [
+                f"lavage → couvercles → formats → {nom} : format absent de griffe → formats"
+                for nom in couvercles.formats
+                if nom not in griffe.formats
+            ]
+            couvercle = prehension.objets.get("couvercle")
+            dx, dy = couvercles.direction_decalage
+            longueur = math.hypot(dx, dy)
+            for nom, reglage in couvercles.formats.items():
+                x = couvercles.centre[0] + reglage.decalage_m * dx / longueur
+                y = couvercles.centre[1] + reglage.decalage_m * dy / longueur
+                hors_portee(f"couvercles → formats → {nom} → decalage_m", x, y)
+                ecart = math.hypot(x - lavage.centre_fut[0], y - lavage.centre_fut[1])
+                if ecart > lavage.verrou.rayon_m + 1e-9:
+                    erreurs.append(
+                        f"lavage → couvercles → formats → {nom} : axe de la tête à {ecart:.3f} m "
+                        "du centre du fût, plus loin que verrou → rayon_m (le noyau ne pourrait "
+                        "pas tourner)"
+                    )
+                if couvercle is None:
+                    continue
+                for face in ("dessous", "dessus"):
+                    face_z = getattr(reglage, f"bas_{face}_z") + couvercle.dessous_m
+                    if face_z > lavage.verrou.face_max_z + 1e-9:
+                        erreurs.append(
+                            f"lavage → couvercles → formats → {nom} → bas_{face}_z : face de la "
+                            "tête au-dessus de verrou → face_max_z (le noyau ne pourrait pas "
+                            "tourner)"
+                        )
+                    if face_z >= couvercles.contact_trop_haut_z:
+                        erreurs.append(
+                            f"lavage → couvercles → formats → {nom} → bas_{face}_z : appui "
+                            "au-dessus de contact_trop_haut_z"
+                        )
+            r = couvercles.retourneur
+            hors_portee("couvercles → retourneur → lacher", *r.lacher)
+            if r.recul_x_max >= r.lacher[0]:
+                erreurs.append("lavage → couvercles → retourneur : recul_x_max au-delà de lacher")
+            for quoi, z in (("lacher_face_z", r.lacher_face_z), ("bac_contact_z", r.bac_contact_z)):
+                if not z_debut <= z <= z_fin:
+                    erreurs.append(
+                        f"lavage → couvercles → retourneur → {quoi} : hors de la course de "
+                        "prehension_z"
+                    )
+        lave_bocal = lavage.lave_bocal
+        if lave_bocal is not None:
+            hors_portee("lave_bocal → centre", *lave_bocal.centre)
+            for nom in OBJETS_LAVE_BOCAL:
+                objet = prehension.objets.get(nom)
+                if objet is None:
+                    erreurs.append(f"lavage : il faut l'objet « {nom} » dans prehension → objets")
+                    continue
+                bas = lave_bocal.plateau_z + objet.dessous_m - lave_bocal.course_appui_m
+                if bas < z_debut:
+                    erreurs.append(
+                        f"lavage → lave_bocal : appui d'un(e) {nom} sous la course de prehension_z"
+                    )
         return erreurs
 
     def _se_chevauchent(self, nom_a: str, nom_b: str) -> bool:
@@ -2130,9 +2324,19 @@ class PrehensionSimulee(Modele):
 
 
 class SeauLavageSimule(Modele):
-    """Un seau retourné à laver : son format, où la tête le prend et le repose."""
+    """Un seau retourné (ou un couvercle) à laver : son format, où la tête le prend et le
+    repose."""
 
     format: Nom
+    x: float
+    y: float
+    contact_z: float
+
+
+class ObjetLaveBocalSimule(Modele):
+    """Un bocal vide (retourné) ou une capsule à laver : où la tête le prend et le repose."""
+
+    sorte: Literal["bocal_vide", "capsule"]
     x: float
     y: float
     contact_z: float
@@ -2148,6 +2352,12 @@ class LavageSimule(Modele):
     debit_pompe_l_s: float = Field(gt=0)
     debit_rincage_l_s: float = Field(ge=0)
     seaux: list[SeauLavageSimule] = Field(min_length=1)
+    # Scénario « lavage_couvercles » : les couvercles à laver (format, où la tête les prend et
+    # les repose), et le temps que mettent les barres du retourneur à bouger (s).
+    couvercles: list[SeauLavageSimule] = Field(default_factory=list)
+    barres_s: float = Field(default=2, ge=0)
+    # Scénario « lavage_bocaux » : les bocaux vides et les capsules à laver au lave-bocal.
+    bocaux: list[ObjetLaveBocalSimule] = Field(default_factory=list)
 
 
 class ScenarioSimule(Modele):

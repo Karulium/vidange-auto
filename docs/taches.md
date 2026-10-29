@@ -477,7 +477,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   vide. Tests, dont : noyau refusé sans objet tenu, perte de vide pendant la rotation, remplissage trop long,
   chauffage refusé flotteur bas, série refusée sans vidange, panneau qui change pendant un mouvement.
 
-- [ ] **21 bis. Lavage des couvercles et des bocaux** — Modèle : Opus, effort moyen. Après la tâche 21.
+- [x] **21 bis. Lavage des couvercles et des bocaux** — Modèle : Opus, effort moyen. Après la tâche 21.
   Mêmes sources. Le lave-bocal et le retourneur sont posés **à la main** avant leur série et enlevés après ;
   **D'abord**, corriger le lavage des seaux (tâche 21) selon `docs/decisions.md`, « Lavage des seaux », points 3,
   6 et 7 : eau du réseau jusqu'au flotteur haut après la pompe qui suit le rinçage ; vanne 3 voies remise sur

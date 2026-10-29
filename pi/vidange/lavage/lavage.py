@@ -17,6 +17,11 @@ Mode lavage seulement si le panneau du poste du fût est rabattu et le mode « l
 (conditions d'entrée des étapes) ; un changement d'état du panneau pendant un mouvement met le
 module en alarme : la tête et le pont s'arrêtent tout de suite (cartes n° 1 et n° 4).
 
+Couvercles et bocaux (tâche 21 bis) : vidange.lavage.couvercles, vidange.lavage.bocaux. Bocaux
+et seaux ne se lavent jamais en même temps : le lave-bocal, posé à la main sur l'anneau de rive
+du fût, est confirmé à l'écran (`confirmer_lave_bocal`) ; tant qu'il est là, seaux et couvercles
+sont refusés, et sans lui les bocaux.
+
 Laver un seau (la tête le tient retourné) :
 1. aller au fût par le couloir du seau retourné (en y jusqu'à y 0,74, vers −x jusqu'au coude
    (0,45 ; 0,74), puis en ligne droite vers le fût), ventouse en butée haute ;
@@ -24,11 +29,14 @@ Laver un seau (la tête le tient retourné) :
    extérieures ; appui de 80 N lu par le capteur de force (tête décalée de façon fixe vers +x selon
    le format : c'est le seau qui tourne dessous) ;
 3. arrosage (bain recyclé dans les rampes), jamais à sec ;
-4. passe 1 (paroi et fond, noyau), passe 2 (le bord, couronne en avant) : noyau, couronne et
-   rotation de la tête dans la même commande, vide surveillé ;
-5. rinçage propre, la pompe garde le même niveau ;
+4. passe 1 (paroi et fond, noyau), passe 2 (le bord, couronne en avant), seau posé sur son bord
+   (pas de remontée) : noyau, couronne et rotation de la tête dans la même commande, vide
+   surveillé ; chaque passe part de ∓ depart_passe_deg (± 500°, cordon spiralé), la tête revient
+   à 0 à sa fin, jamais deux passes de suite dans le même sens ;
+5. rinçage propre, la pompe garde le même niveau, puis l'eau du réseau remet le flotteur haut ;
 6. remontée selon le vide (−55 / −40 kPa, « feed hold », 2 essais) ;
-7. jet d'air du col : seau décalé vers la buse, bord à sa hauteur, un tour ; égouttage ;
+7. jet d'air du col : centre du seau à sa place devant la buse (réglage par format), bord à sa
+   hauteur, un tour ; égouttage ;
 8. retour au coude du couloir.
 
 Verrou du noyau et de la couronne : ils ne tournent JAMAIS sans objet tenu. Le Pi n'envoie leur
@@ -75,6 +83,10 @@ QUOI_FAIRE_APPUI = (
     "L'appui du seau sur le noyau n'est pas venu : regarder la vidéo (seau mal tenu, noyau "
     "absent, fût de lavage pas en place ?). Corriger, puis acquitter et donner le Go."
 )
+QUOI_FAIRE_LAVE_BOCAL = (
+    "Bocaux et seaux ne se lavent jamais en même temps. Poser ou enlever le lave-bocal sur le fût "
+    "de lavage comme demandé, le confirmer à l'écran, puis donner le Go."
+)
 QUOI_FAIRE_SERIE = (
     "Le fût de lavage doit être vidé avant d'être échangé : lancer la vidange (étape « vider »), "
     "puis finir la série."
@@ -116,6 +128,8 @@ class Lavage:
         # Seaux lavés depuis le dernier remplissage, et depuis le début de la série.
         self.seaux_eau = 0
         self.seaux_serie = 0
+        # Lave-bocal posé sur l'anneau de rive du fût (le Pi ne le voit pas : confirmé à l'écran).
+        self.lave_bocal_pose = False
         prehension.verrou_brosses = self.refus_brosses
 
     # ------------------------------------------------------------ verrous et conditions
@@ -129,6 +143,27 @@ class Lavage:
 
     def mode_permis(self) -> bool:
         return self.refus_mode() is None
+
+    def refus_fut(self, quoi: str) -> str | None:
+        """Bocaux et seaux jamais en même temps : `quoi` (« seaux », « couvercles », « bocaux »)
+        est-il refusé par la présence ou l'absence du lave-bocal ?"""
+        if quoi == "bocaux":
+            if not self.lave_bocal_pose:
+                return "lave-bocal pas confirmé posé sur le fût de lavage (écran)"
+        elif self.lave_bocal_pose:
+            return f"lave-bocal posé sur le fût de lavage : pas de {quoi} (l'enlever, le confirmer)"
+        return None
+
+    def confirmer_lave_bocal(self, pose: bool) -> None:
+        """L'écran : Karulium a posé (ou enlevé) le lave-bocal. Refusé pendant une série de
+        seaux (fût pas vidé)."""
+        if pose and self.eau.eau_dans_le_fut:
+            raise ErreurEtape(
+                "lavage : série de seaux pas finie (fût pas vidé) : pas de lave-bocal",
+                QUOI_FAIRE_LAVE_BOCAL,
+            )
+        self.lave_bocal_pose = pose
+        journal.info("Lavage : lave-bocal %s (confirmé à l'écran)", "posé" if pose else "enlevé")
 
     def panneau_tenu(self) -> bool:
         """Surveillance : le panneau reste rabattu pendant les gestes du lavage."""
@@ -249,6 +284,9 @@ class Lavage:
         refus = self.refus_mode()
         if refus is not None:
             raise ErreurEtape(f"lavage refusé : {refus}", QUOI_FAIRE_PANNEAU)
+        refus = self.refus_fut("seaux")
+        if refus is not None:
+            raise ErreurEtape(f"lavage refusé : {refus}", QUOI_FAIRE_LAVE_BOCAL)
         if not self.eau.eau_dans_le_fut:
             raise ErreurEtape("lavage : le fût de lavage n'est pas rempli", QUOI_FAIRE)
         brossage = self.reglages.brossage
@@ -256,11 +294,8 @@ class Lavage:
         journal.info("Lavage d'un seau %s", format)
         # 1. Au fût par le couloir, ventouse en haut.
         yield from self._entrer(centre_x + reglage.decalage_brossage_m, centre_y)
-        # 2. Orientée au départ des tours du seau (en haut), descente dans les brosses, appui.
-        assert p.pose is not None
-        if abs(p.pose.a - brossage.angle_depart_deg) > p.reglages.tolerance_deg:
-            # Angle exact (pas « à 360° près ») : les tours du seau tiennent dans la course.
-            yield Pas("tête au départ des tours du seau", {"a": brossage.angle_depart_deg})
+        # 2. Orientée au départ de la passe 1 (en haut), descente dans les brosses, appui.
+        yield from self._tourner(self._depart(brossage.passe_1), "tête au départ de la passe 1")
         yield Pas(
             "descendre dans les brosses", {"z": brossage.face_contact_z + brossage.approche_m}
         )
@@ -278,27 +313,48 @@ class Lavage:
                 QUOI_FAIRE_APPUI,
             )
         z_appui = p.pose.z
-        # 3. et 4. Arrosage, puis les deux passes.
+        # 3. et 4. Arrosage, puis les deux passes (la tête revient à 0 à la fin de chacune).
         yield from self.eau.geste_arroser()
-        for numero, phase in enumerate(brossage.passe_1, start=1):
-            yield from self._brosser(phase, f"passe 1 ({numero})")
+        yield from self._passe(brossage.passe_1, "passe 1")
         if reglage.remontee_passe_2_m > 0:
             yield Pas("remonter pour la passe 2", {"z": z_appui + reglage.remontee_passe_2_m})
-        for numero, phase in enumerate(brossage.passe_2, start=1):
-            yield from self._brosser(phase, f"passe 2 ({numero})")
+        yield from self._passe(brossage.passe_2, "passe 2")
         self.eau.arreter_arrosage()
-        # 5. Rinçage propre.
+        # 5. Rinçage propre, puis le fût remis au flotteur haut.
         yield from self.eau.geste_rincer()
         # 6. Remontée selon le vide.
         yield from self._remonter(z_appui)
         # 7. Jet d'air du col, égouttage au-dessus du fût.
-        yield from self._jet_air(centre_x + reglage.jet_decalage_m, centre_y, reglage.jet_bord_z)
+        yield from self._jet_air(*reglage.jet_centre, reglage.jet_bord_z)
         yield Pas("égoutter au-dessus du fût", attente_s=self.reglages.jet_air.egouttage_s)
         # 8. Retour au coude du couloir.
         yield from self._sortir()
         self.seaux_eau += 1
         self.seaux_serie += 1
         journal.info("Lavage : seau %s lavé", format)
+
+    def _depart(self, phases: list[PhaseBrossage]) -> float:
+        """Angle de départ d'une passe : à l'opposé du sens de ses tours."""
+        depart = self.reglages.brossage.depart_passe_deg
+        return -depart if sum(phase.seau_tours for phase in phases) > 0 else depart
+
+    def _tourner(self, angle: float, texte: str) -> Geste:
+        """Rotation de la tête seule (angle exact, pas « à 360° près »), vide surveillé."""
+        p = self.prehension
+        assert p.pose is not None
+        if abs(p.pose.a - angle) <= p.reglages.tolerance_deg:
+            return
+        resultat = yield Pas(texte, {"a": angle}, vide_perte_kpa=p.reglages.vide.perte_kpa)
+        assert resultat is not None
+        if resultat.arret == "vide":
+            raise ErreurEtape(f"lavage : vide perdu ({texte})", QUOI_FAIRE_VIDE)
+
+    def _passe(self, phases: list[PhaseBrossage], nom: str) -> Geste:
+        """Une passe : la tête à son départ, les phases, puis la tête revenue à 0."""
+        yield from self._tourner(self._depart(phases), f"tête au départ de la {nom}")
+        for numero, phase in enumerate(phases, start=1):
+            yield from self._brosser(phase, f"{nom} ({numero})")
+        yield from self._tourner(0.0, f"tête revenue à 0 (fin de la {nom})")
 
     def _brosser(self, phase: PhaseBrossage, texte: str) -> Geste:
         """Noyau, couronne et seau ensemble pendant la phase ; arrêt à toute perte de vide."""
@@ -360,7 +416,8 @@ class Lavage:
             yield from p.attendre_vide()
 
     def _jet_air(self, x: float, y: float, bord_z: float) -> Geste:
-        """Seau décalé vers la buse, son bord à sa hauteur, air ouvert pendant un tour."""
+        """Centre du seau à (x, y) devant la buse, son bord à sa hauteur, air ouvert pendant un
+        tour."""
         p = self.prehension
         objet = p.objet
         assert objet is not None

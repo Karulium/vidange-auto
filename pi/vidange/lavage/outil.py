@@ -7,6 +7,9 @@
   vidange-lavage brosses                      demande la rotation du noyau tête vide : refusée
   vidange-lavage laver seau_a 1.3 0.74 0.95   prendre le seau retourné là (x y contact_z), le
                                               laver, le reposer au même endroit
+  vidange-lavage bocal bocal_vide 1.4 0.75 0.95  prendre le bocal vide retourné (ou la capsule :
+                                              capsule) là, l'appuyer sur le lave-bocal, le
+                                              reposer (lave-bocal posé, fût vidé)
   ... --faux                                  avec de faux FluidNC (essai de l'outil : etat)
 
 Les gestes sont ceux du programme, avec tous leurs verrous (vidange.lavage, vidange.prehension) :
@@ -30,6 +33,7 @@ from vidange.fluidnc import FauxFluidnc, Liaison
 from vidange.fluidnc.ports import ErreurFluidnc
 from vidange.griffe.simulation import FausseForce
 from vidange.journal import configurer_journal
+from vidange.lavage.bocaux import LavageBocaux
 from vidange.lavage.eau import CHAUFFAGE, EauLavage
 from vidange.lavage.lavage import Lavage
 from vidange.lavage.signaux import signaux_lavage
@@ -38,7 +42,13 @@ from vidange.pesees.tour import TourPesees
 from vidange.poste_fut import PosteFut
 from vidange.prehension.prehension import Geste, Prehension
 from vidange.prehension.tete import CapteurVide, ErreurVide, Pas, TeteFluidnc, signaux_prehension
-from vidange.reglages import SORTIES_LAVAGE, ErreurReglages, Reglages, charger_reglages
+from vidange.reglages import (
+    OBJETS_LAVE_BOCAL,
+    SORTIES_LAVAGE,
+    ErreurReglages,
+    Reglages,
+    charger_reglages,
+)
 
 PONT = "portique"
 TETE = "prehension"
@@ -70,7 +80,7 @@ def main(arguments: list[str] | None = None) -> int:
     lecteur.add_argument("--donnees", help="dossier des données (défaut : pi/donnees)")
     lecteur.add_argument("--faux", action="store_true", help="avec de faux FluidNC")
     lecteur.add_argument(
-        "commande", choices=["etat", "sortie", "remplir", "vider", "brosses", "laver"]
+        "commande", choices=["etat", "sortie", "remplir", "vider", "brosses", "laver", "bocal"]
     )
     lecteur.add_argument("valeurs", nargs="*", help="sortie et durée, ou format et cotes")
     options = lecteur.parse_args(arguments)
@@ -92,7 +102,15 @@ def main(arguments: list[str] | None = None) -> int:
     if machine.lavage is None or machine.prehension is None or machine.poste_fut is None:
         print("machine.yaml n'a pas de partie « lavage »", file=sys.stderr)
         return 2
-    attendus = {"etat": 0, "sortie": 2, "remplir": 0, "vider": 0, "brosses": 0, "laver": 4}
+    attendus = {
+        "etat": 0,
+        "sortie": 2,
+        "remplir": 0,
+        "vider": 0,
+        "brosses": 0,
+        "laver": 4,
+        "bocal": 4,
+    }
     if len(options.valeurs) != attendus[options.commande]:
         lecteur.error(f"« {options.commande} » attend {attendus[options.commande]} valeurs")
     arret = threading.Event()
@@ -167,6 +185,8 @@ def _jouer(lavage: Lavage, geste: Callable[[], Geste], delai_s: float) -> None:
         while not prehension.geste_fini():
             prehension.tete.surveillance.test()
             lavage.eau.surveiller()
+            if not lavage.eau.niveau_tenu():
+                raise ErreurEtape("niveau du fût de lavage tombé sans vidange (fuite ou siphon)")
             if not lavage.panneau_tenu():
                 raise ErreurEtape("le panneau du poste du fût a bougé pendant le lavage")
             if time.monotonic() > fin:
@@ -236,6 +256,20 @@ def _faire(options: argparse.Namespace, reglages: Reglages, lavage: Lavage) -> i
         print("Les cotes s'écrivent en mètres, avec un point : 1.3 0.74 0.95", file=sys.stderr)
         return 2
     delai = durees["prehension_geste_max"]
+    if options.commande == "bocal":
+        if format not in OBJETS_LAVE_BOCAL or reglages.machine.lavage.lave_bocal is None:  # type: ignore[union-attr]
+            print(f"Objet : {' ou '.join(OBJETS_LAVE_BOCAL)}", file=sys.stderr)
+            return 2
+        # Lancer la commande vaut confirmation : le lave-bocal est posé.
+        lavage.confirmer_lave_bocal(True)
+        bocaux = LavageBocaux(lavage)
+        _jouer(lavage, lambda: prehension.geste_prendre(format, x, y, z), delai)
+        debut = time.monotonic()
+        _jouer(lavage, bocaux.geste_laver, durees["lavage_geste_max"])
+        print(f"{format} lavé(e) en {time.monotonic() - debut:.0f} s.")
+        _jouer(lavage, lambda: prehension.geste_poser(x, y, z), delai)
+        print("Reposé(e).")
+        return 0
     _jouer(lavage, lambda: prehension.geste_prendre("seau_retourne", x, y, z, format), delai)
     print(f"Seau pris : vide {prehension.vide_prise_kpa:.1f} kPa")
     debut = time.monotonic()

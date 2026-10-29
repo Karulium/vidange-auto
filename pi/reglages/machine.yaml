@@ -132,11 +132,13 @@ axes:
     carte: prehension
     lettre: Z
   # Rotation de la tête (°). Visser = sens horaire vu d'en haut ; aucun axe inversé dans FluidNC.
-  # EXEMPLE : un peu plus d'un tour de chaque côté (les câbles et le tuyau du vide la limitent).
+  # Limite de conception ± 1,5 tour (± 540°, cordon spiralé CDC-CORDON, seul passage du vide et
+  # des fils) ; le logiciel monte à ± 500° (40° de marge, réponse de la Préhension du 29/10). À
+  # confirmer à la mise en service avec le cordon reçu ; s'il force, revenir à ± 370°.
   prehension_a:
     unite: deg
-    longueur_rail: 400
-    course: [-370, 370]
+    longueur_rail: 540
+    course: [-500, 500]
     carte: prehension
     lettre: A
   # Les 2 brosses du lavage (NEMA 23, carte n° 4 avec la préhension : la rotation de la tête est
@@ -723,6 +725,8 @@ prehension:
     couvercle: {rayon_m: 0.14, dessus_m: 0, dessous_m: 0.015, poids_n: 1.25, tolerance_n: 0.5}
     bocal: {rayon_m: 0.0515, dessus_m: 0, dessous_m: 0.17, poids_n: 10, tolerance_n: 3}
     capsule: {rayon_m: 0.0515, dessus_m: 0, dessous_m: 0.01, aimants: true}
+    # Bocal vide retourné, tenu par son fond pour le lave-bocal (poids : EXEMPLE, à peser).
+    bocal_vide: {rayon_m: 0.0515, dessus_m: 0, dessous_m: 0.17, poids_n: 4, tolerance_n: 2}
     # Seau retourné (bord en bas), tenu pour le lavage : la ventouse est sur son fond, il pend
     # sous la face. Son rayon et sa hauteur viennent de la table des formats.
     seau_retourne: {rayon_m: 0.1335, dessus_m: 0, dessous_m: 0.25, poids_n: 5, tolerance_n: 2}
@@ -811,9 +815,11 @@ lavage:
     approche_m: 0.03
     appui_n: 80
     course_appui_m: 0.04
-    # La tête ne fait qu'un peu plus d'un tour de chaque côté (câbles, tuyau du vide) : elle part
-    # de −350° et les tours du seau des 2 passes doivent tenir dans sa course (vérifié).
-    angle_depart_deg: -350
+    # Rotation de la tête jusqu'à ± 500° (cordon spiralé, réponse du 29/10) : chaque passe part
+    # de −500° (tours dans le sens +) ou de +500° (sens −), la tête revient à 0 à la fin de la
+    # passe ; jamais deux passes de suite dans le même sens. Les tours de chaque passe doivent
+    # tenir dans la course (vérifié).
+    depart_passe_deg: 500
     # Passe 1, paroi et fond (fiche) : noyau ≈ 5 s à 100 tr/min (centre du fond), puis
     # ≈ 200 tr/min (≈ 15-20 s). Tours du seau : EXEMPLES.
     passe_1:
@@ -823,19 +829,82 @@ lavage:
     passe_2:
       - {duree_s: 12, noyau_tr_min: 0, couronne_tr_min: 60, seau_tours: -1.75}
   # Rinçage propre : électrovanne ≈ 5 s (≈ 0,5 L) dans les rampes, puis la pompe vide jusqu'au
-  # flotteur bas (au plus 60 s, EXEMPLE).
-  rincage: {duree_s: 5, vidange_max_s: 60}
+  # flotteur bas (au plus 60 s, EXEMPLE), puis l'eau du réseau remet le fût au flotteur haut pour
+  # que le bain reste chauffé (réponse du 29/10 ; au plus 60 s, EXEMPLE).
+  rincage: {duree_s: 5, vidange_max_s: 60, remise_max_s: 60}
   # Jet d'air du col : 1 tour en ≈ 4 s ; égouttage au-dessus du fût (EXEMPLE).
   jet_air: {tour_s: 4, egouttage_s: 5}
-  # Par format : décalage fixe de la tête vers +x pendant le brossage (EXEMPLE), remontée avant
-  # la passe 2 (EXEMPLE : 0, même hauteur), seau décalé vers la buse (+x) et bord à sa hauteur
-  # pour le jet d'air (fiche : A 11 mm, bord 0,711 ; B 17 mm, 0,698 ; C 0, 0,714 ; D 8 mm, 0,712 ;
-  # à ajuster à l'essai). C : 2 mm au lieu de 0, la tête n'allant pas sous x 0,352.
+  # Par format : décalage fixe de la tête vers +x pendant le brossage (EXEMPLE) ; passe 2 sans
+  # remontée (réponse du Lavage du 29/10 : 0 pour tous) ; jet d'air du col : centre du seau
+  # (x reste à 0,352, seau décalé en −y vers la buse) et bord à sa hauteur (réponse du Lavage du
+  # 29/10 : A (0,352 ; 0,6348), B (0,352 ; 0,6270), C (0,352 ; 0,650), D (0,352 ; 0,6385) ; bords
+  # 0,711 / 0,698 / 0,714 / 0,712 ; à ajuster à l'essai).
   formats:
-    seau_a: {decalage_brossage_m: 0.01, remontee_passe_2_m: 0, jet_decalage_m: 0.011, jet_bord_z: 0.711}
-    seau_b: {decalage_brossage_m: 0.01, remontee_passe_2_m: 0, jet_decalage_m: 0.017, jet_bord_z: 0.698}
-    seau_c: {decalage_brossage_m: 0.01, remontee_passe_2_m: 0, jet_decalage_m: 0.002, jet_bord_z: 0.714}
-    seau_d: {decalage_brossage_m: 0.01, remontee_passe_2_m: 0, jet_decalage_m: 0.008, jet_bord_z: 0.712}
+    seau_a: {decalage_brossage_m: 0.01, remontee_passe_2_m: 0, jet_centre: [0.352, 0.6348], jet_bord_z: 0.711}
+    seau_b: {decalage_brossage_m: 0.01, remontee_passe_2_m: 0, jet_centre: [0.352, 0.6270], jet_bord_z: 0.698}
+    seau_c: {decalage_brossage_m: 0.01, remontee_passe_2_m: 0, jet_centre: [0.352, 0.650], jet_bord_z: 0.714}
+    seau_d: {decalage_brossage_m: 0.01, remontee_passe_2_m: 0, jet_centre: [0.352, 0.6385], jet_bord_z: 0.712}
+  # Couvercles de seau, dans le fût (tâche 21 bis) : la tête tient le couvercle face lavée vers
+  # le bas au-dessus du noyau, centre (0,352 ; 0,65) (pont à sa limite 0,223). Avant la pose, le
+  # repère (collé sur le dessus, près du bord) est mis à ≈ 60° de −X côté +Y ; photo. Plateau
+  # flottant déclenché face au-dessus de 0,735 : arrêt, alerte. Appui ≈ 15 N, jamais plus (dépôts
+  # secs : allonger le temps). Noyau 100 tr/min ≈ 5 s, couvercle tourné à 10-20 tr/min, centre
+  # décalé dans la direction (+0,26 ; −0,97). Repère à plus de 10° de l'angle commandé : il
+  # glisse (remontée de 2 mm, reprise) ; alerte au 2e glissement. Sens du repère, approche,
+  # contrôle, égouttage : EXEMPLES.
+  couvercles:
+    centre: [0.352, 0.65]
+    repere_angle_deg: 60
+    sens_repere: 1
+    contact_trop_haut_z: 0.735
+    approche_m: 0.02
+    appui_n: 15
+    noyau_tr_min: 100
+    duree_s: 5
+    rotation_tr_min: 15
+    direction_decalage: [0.26, -0.97]
+    controle_s: 0.5
+    glissement_max_deg: 10
+    remontee_glissement_m: 0.002
+    glissements_max: 2
+    egouttage_s: 5
+    # Bas du couvercle à l'appui (fiche : A 0,638 ; B 0,637 ; C et D 0,640) ; face « dessus »
+    # (couvercle retourné) : EXEMPLE, mêmes chiffres en attendant. Décalage du centre (fiche :
+    # A 21 mm, B 0, C 21 mm, D 23 mm).
+    formats:
+      seau_a: {bas_dessous_z: 0.638, bas_dessus_z: 0.638, decalage_m: 0.021}
+      seau_b: {bas_dessous_z: 0.637, bas_dessus_z: 0.637, decalage_m: 0}
+      seau_c: {bas_dessous_z: 0.640, bas_dessus_z: 0.640, decalage_m: 0.021}
+      seau_d: {bas_dessous_z: 0.640, bas_dessus_z: 0.640, decalage_m: 0.023}
+    # Retourneur (tige Ø 12 sur une barre du chariot de remplissage, x 0,9425 ; chariot en
+    # y 0,50 ; plateau fixe à 0,459 avec un bac inox ; barrière lumineuse à 0,7315). Lâcher : tête
+    # en (0,9675 ; 0,53), barres à 0,19 de l'axe ; photo tête reculée à x ≤ 0,87 ; barres ouvertes
+    # à 0,30 avant que la tête descende sous 0,75, refermées tête au-dessus de 0,80. Hauteur du
+    # lâcher, contact dans le bac, délai des barres : EXEMPLES.
+    retourneur:
+      lacher: [0.9675, 0.53]
+      lacher_face_z: 0.78
+      recul_x_max: 0.87
+      barres_fermees_m: 0.19
+      barres_ouvertes_m: 0.30
+      ouvertes_sous_z: 0.75
+      fermees_au_dessus_z: 0.80
+      barres_max_s: 10
+      bac_contact_z: 0.49
+      tolerance_place_m: 0.005
+      chutes_max: 2
+  # Lave-bocal (rince-verre de bar, posé à la main sur l'anneau de rive du fût de lavage) : la
+  # tête appuie le bocal retourné (ou la capsule) sur son plateau, qui projette de l'eau tant
+  # qu'on appuie. Plateau ≈ 5 mm au-dessus de l'anneau de rive, à mesurer sur le produit acheté.
+  # Tout : EXEMPLES (appui et temps à l'essai).
+  lave_bocal:
+    centre: [0.352, 0.65]
+    plateau_z: 0.74
+    approche_m: 0.02
+    appui_n: 20
+    course_appui_m: 0.02
+    duree_s: 5
+    egouttage_s: 5
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

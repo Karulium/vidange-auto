@@ -17,9 +17,15 @@ apres_flotteur_s, puis pompe arrêtée et vanne fermée.
 Arroser (pendant le brossage) : la pompe envoie le bain dans les rampes. Jamais à sec : fût
 rempli pour la série (pas encore vidé) avant de commencer.
 Rincer : électrovanne de rinçage (eau propre dans les rampes) duree_s, puis la pompe vide vers
-la bonde jusqu'au flotteur bas, pour garder le même niveau.
+la bonde jusqu'au flotteur bas, pour garder le même niveau ; puis quelques secondes d'eau du
+réseau remettent le fût au flotteur haut (au plus remise_max_s), pour que le bain reste chauffé.
 Chauffer : le Pi n'alimente la prise du thermoplongeur (thermostat à 50 °C sur l'appareil) que
 fût rempli pour la série, flotteur haut et pompe arrêtée. Il ne mesure pas la température.
+
+La vanne à bille reste ouverte pendant la série, à condition que la vanne 3 voies revienne sur
+« rampes » dès que la pompe s'arrête (pas de siphon vers la bonde). Fût rempli, pompe arrêtée,
+si le flotteur retombe sans vidange demandée : alerte « fuite ou siphon », vanne à bille fermée
+(`niveau_tenu`, surveillance du chef).
 
 Le premier temps de remplissage et « il y a de l'eau dans le fût » sont gardés dans un fichier
 (ils survivent à un redémarrage) : le Pi refuse de finir une série sans vidange.
@@ -64,6 +70,16 @@ QUOI_FAIRE_VIDANGE = (
     "vanne à bille, la vanne 3 voies et la bonde (bouchée ?), et le flotteur. Corriger, puis "
     "acquitter et donner le Go."
 )
+QUOI_FAIRE_REMISE = (
+    "Après le rinçage, l'eau du réseau n'a pas remis le fût de lavage au flotteur haut à temps : "
+    "l'eau est coupée. Regarder le fût (fuite, vanne à bille, flotteur coincé, robinet du réseau "
+    "fermé ?). Corriger, puis acquitter et donner le Go."
+)
+QUOI_FAIRE_FUITE = (
+    "Le niveau du fût de lavage a baissé sans vidange demandée, pompe arrêtée : fuite ou siphon "
+    "vers la bonde. La vanne à bille est fermée. Regarder le fût, la bonde, la vanne 3 voies "
+    "(revenue sur « rampes » ?) et les tuyaux. Corriger, puis acquitter et donner le Go."
+)
 QUOI_FAIRE_A_SEC = (
     "Le fût de lavage n'est pas rempli : on ne brosse jamais à sec. Le remplir (étape "
     "« remplir »), regarder s'il fuit, puis acquitter et donner le Go."
@@ -88,10 +104,14 @@ class EauLavage:
         # Premier remplissage mesuré (s), et de l'eau dans le fût (rempli, pas encore vidé).
         self.premier_remplissage_s: float | None = memoire.get("premier_remplissage_s")
         self.eau_dans_le_fut: bool = memoire.get("eau_dans_le_fut", False)
-        # Vannes motorisées : None tant qu'on ne sait pas (après un démarrage).
+        # Vannes motorisées : None tant qu'on ne sait pas (après un démarrage). La vanne 3 voies
+        # est commandée depuis _voie_depuis (elle met vanne_rampes_s à tourner).
         self.vidange_ouverte: bool | None = None
         self.voie_rampes: bool | None = None
+        self._voie_depuis = 0.0
         self.pompe = False
+        # Le fût doit être au flotteur haut (rempli, pas de vidange en cours) : surveillé.
+        self._niveau_haut = False
         self._chauffage: bool | None = None
         # Flotteur : dernière valeur lue et depuis quand.
         self._flotteur: bool | None = None
@@ -163,7 +183,16 @@ class EauLavage:
         self._sortie(POMPE, marche)
         self.pompe = marche
         if not marche:
+            # Pompe arrêtée : vanne 3 voies sur « rampes » tout de suite (pas de siphon).
+            self._commander_voie(rampes=True)
             self.surveiller()
+
+    def _commander_voie(self, rampes: bool) -> None:
+        if self.voie_rampes is rampes:
+            return
+        self._sortie(RAMPES, rampes)
+        self.voie_rampes = rampes
+        self._voie_depuis = self._horloge()
 
     def _regler_chauffage(self, voulu: bool) -> None:
         if voulu != self._chauffage:
@@ -187,6 +216,22 @@ class EauLavage:
         self._regler_chauffage(permis)
         return True
 
+    def niveau_tenu(self) -> bool:
+        """Surveillance : fût rempli, pompe arrêtée, pas de vidange demandée : le flotteur reste
+        haut. Sinon fuite ou siphon : vanne à bille fermée, et faux (alarme du chef)."""
+        if not self._niveau_haut or self.pompe or self._pause_depuis is not None:
+            return True
+        if not self.flotteur_bas():
+            return True
+        self._niveau_haut = False
+        journal.error("Lavage : niveau du fût tombé sans vidange (fuite ou siphon)")
+        try:
+            self._sortie(VIDANGE, False)
+            self.vidange_ouverte = False
+        except ErreurEtape as erreur:
+            journal.error("Lavage : vanne à bille pas fermée : %s", erreur)
+        return False
+
     def air_col(self, ouvert: bool) -> None:
         self._sortie(AIR, ouvert)
 
@@ -205,6 +250,11 @@ class EauLavage:
             except ErreurEtape as erreur:
                 journal.error("Lavage : %s pas coupé(e) : %s", nom, erreur)
         self._chauffage = False
+        # Pompe arrêtée : vanne 3 voies sur « rampes » (pas de siphon vers la bonde).
+        try:
+            self._commander_voie(rampes=True)
+        except ErreurEtape as erreur:
+            journal.error("Lavage : vanne 3 voies pas remise sur « rampes » : %s", erreur)
 
     def pauser(self) -> None:
         """Pause de Karulium : eau, pompe, rinçage et air coupés (rallumés à la reprise)."""
@@ -240,14 +290,13 @@ class EauLavage:
         self.vidange_ouverte = ouverte
 
     def _voie(self, rampes: bool) -> Geste:
-        if self.voie_rampes is rampes:
-            return
-        self._sortie(RAMPES, rampes)
-        yield Pas(
-            f"vanne 3 voies vers {'les rampes' if rampes else 'la bonde'}",
-            attente_s=self.reglages.eau.vanne_rampes_s,
-        )
-        self.voie_rampes = rampes
+        """La vanne 3 voies commandée, puis le temps qu'il lui reste pour tourner."""
+        self._commander_voie(rampes)
+        reste = self.reglages.eau.vanne_rampes_s - (self._horloge() - self._voie_depuis)
+        if reste > 0:
+            yield Pas(
+                f"vanne 3 voies vers {'les rampes' if rampes else 'la bonde'}", attente_s=reste
+            )
 
     def remplissage_max_s(self) -> float:
         eau = self.reglages.eau
@@ -267,6 +316,7 @@ class EauLavage:
             self.eau_dans_le_fut = True
             self._garder()
             yield from self._attendre_flotteur_haut()
+            self._niveau_haut = True
             return
         yield from self._vanne_vidange(False)
         self._sortie(EAU, True)
@@ -283,6 +333,7 @@ class EauLavage:
                 self.remplissage_max_s(),
             )
         self.eau_dans_le_fut = True
+        self._niveau_haut = True
         self._garder()
         self.surveiller()
 
@@ -300,6 +351,7 @@ class EauLavage:
     def geste_vider(self) -> Geste:
         """Vidange par la bonde : jusqu'au flotteur bas, puis encore apres_flotteur_s."""
         eau = self.reglages.eau
+        self._niveau_haut = False
         self._regler_chauffage(False)
         yield from self._voie(rampes=False)
         yield from self._vanne_vidange(True)
@@ -334,11 +386,13 @@ class EauLavage:
         self._pompe(False)
 
     def geste_rincer(self) -> Geste:
-        """Eau propre dans les rampes, puis la pompe garde le même niveau (flotteur bas)."""
+        """Eau propre dans les rampes, puis la pompe garde le même niveau (flotteur bas), puis
+        l'eau du réseau remet le fût au flotteur haut (le bain reste chauffé)."""
         rincage = self.reglages.rincage
         self._sortie(RINCAGE, True)
         yield Pas("rinçage propre", attente_s=rincage.duree_s)
         self._sortie(RINCAGE, False)
+        self._niveau_haut = False
         yield from self._voie(rampes=False)
         yield from self._vanne_vidange(True)
         self._pompe(True)
@@ -351,3 +405,22 @@ class EauLavage:
             QUOI_FAIRE_VIDANGE,
         )
         self._pompe(False)
+        yield from self.geste_remettre_eau()
+
+    def geste_remettre_eau(self) -> Geste:
+        """Quelques secondes d'eau du réseau jusqu'au flotteur haut (au plus remise_max_s),
+        vanne 3 voies sur « rampes » (la vanne à bille reste ouverte pendant la série)."""
+        maximum = self.reglages.rincage.remise_max_s
+        yield from self._voie(rampes=True)
+        self._sortie(EAU, True)
+        yield Attente(
+            "eau du réseau jusqu'au flotteur haut (après le rinçage)",
+            self.flotteur_haut,
+            maximum,
+            f"après le rinçage, flotteur haut pas revenu en {maximum:g} s d'eau du réseau, "
+            "eau coupée",
+            QUOI_FAIRE_REMISE,
+        )
+        self._sortie(EAU, False)
+        self._niveau_haut = True
+        self.surveiller()

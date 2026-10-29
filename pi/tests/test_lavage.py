@@ -10,7 +10,7 @@ from vidange.distance import PiloteDistance
 from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.fluidnc import FauxFluidnc, Liaison
 from vidange.lavage import EauLavage, signaux_lavage
-from vidange.lavage.eau import CHAUFFAGE, EAU, POMPE
+from vidange.lavage.eau import CHAUFFAGE, EAU, POMPE, RAMPES, VIDANGE
 from vidange.lavage.module import module_lavage
 from vidange.lavage.outil import main as outil
 from vidange.lavage.simulation import FausseEauLavage, lavage_du_simulateur
@@ -40,10 +40,14 @@ def test_reglages_du_lavage_du_depot():
     assert LAVAGE.exemple
     assert LAVAGE.centre_fut == (0.35, 0.65) and LAVAGE.coude_couloir == (0.45, 0.74)
     assert LAVAGE.brossage.appui_n == 80
-    assert (LAVAGE.formats["seau_a"].jet_decalage_m, LAVAGE.formats["seau_a"].jet_bord_z) == (
-        0.011,
-        0.711,
-    )
+    # Jet d'air du col (réponse du Lavage du 29/10) : centres du seau par format.
+    assert LAVAGE.formats["seau_a"].jet_centre == (0.352, 0.6348)
+    assert LAVAGE.formats["seau_b"].jet_centre == (0.352, 0.6270)
+    assert LAVAGE.formats["seau_a"].jet_bord_z == 0.711
+    # Passe 2 sans remontée ; rotation de la tête jusqu'à ± 500°.
+    assert all(reglage.remontee_passe_2_m == 0 for reglage in LAVAGE.formats.values())
+    assert MACHINE.axes["prehension_a"].course == (-500, 500)
+    assert LAVAGE.brossage.depart_passe_deg == 500
     for nom in ("lavage_noyau", "lavage_couronne"):
         assert MACHINE.axes[nom].carte == "prehension" and MACHINE.axes[nom].unite == "deg"
     # Chaque signal du lavage cité dans fluidnc.yaml est dans la liste, module « lavage ».
@@ -56,18 +60,27 @@ def test_reglages_du_lavage_du_depot():
 def test_positions_du_lavage_a_la_portee_de_la_tete(reglages):
     # La tête ne va pas sous x 0,352 (pont ≥ 0,223, mât à pont + 0,129) : pas au centre exact.
     machine = reglages / "machine.yaml"
-    remplacer(machine, "jet_decalage_m: 0.002", "jet_decalage_m: 0")
+    remplacer(machine, "jet_centre: [0.352, 0.650]", "jet_centre: [0.35, 0.650]")
+    remplacer(machine, "jet_centre: [0.352, 0.6385]", "jet_centre: [0.352, 3.5]")
     remplacer(machine, "  verrou: {rayon_m: 0.05", "  verrou: {rayon_m: 0.005")
     message = erreur_de(reglages)
-    assert "lavage → formats → seau_c → jet_decalage_m : axe de la tête à x 0.35 m" in message
+    assert "lavage → formats → seau_c → jet_centre : axe de la tête à x 0.35 m" in message
     assert "hors de sa portée (0.352 à" in message
+    assert "seau_d → jet_centre : axe de la tête à y 3.5 m, hors de sa course" in message
     assert "seau_a → decalage_brossage_m : plus loin du centre que verrou → rayon_m" in message
 
 
 def test_tours_du_seau_dans_la_course_de_la_tete(reglages):
-    remplacer(reglages / "machine.yaml", "angle_depart_deg: -350", "angle_depart_deg: 0")
+    remplacer(reglages / "machine.yaml", "depart_passe_deg: 500", "depart_passe_deg: 100")
     message = erreur_de(reglages)
-    assert "après la phase n° 2 des passes, la tête serait à 630°" in message
+    assert "passe_1 : après la phase n° 2, la tête serait à 530°" in message
+    assert "passe_2 : après la phase n° 1, la tête serait à -530°" in message
+
+
+def test_jamais_deux_passes_de_suite_dans_le_meme_sens(reglages):
+    remplacer(reglages / "machine.yaml", "seau_tours: -1.75}", "seau_tours: 0.5}")
+    message = erreur_de(reglages)
+    assert "passe_1 et passe_2 tournent dans le même sens" in message
 
 
 def test_signaux_du_lavage_sur_une_seule_carte(reglages):
@@ -150,6 +163,42 @@ def test_premier_remplissage_garde_dans_un_fichier(tmp_path):
     assert relue.eau_dans_le_fut and relue.remplissage_max_s() == pytest.approx(240)
 
 
+def test_vanne_3_voies_sur_rampes_des_que_la_pompe_s_arrete():
+    eau, faux, horloge = eau_seule(litres=50)
+    eau._commander_voie(rampes=False)
+    eau._pompe(True)
+    assert faux.sorties[POMPE] and not faux.sorties[RAMPES]
+    eau._pompe(False)
+    assert faux.sorties[RAMPES] and faux.historique[-1] == "vanne_rampes_lavage oui"
+    # La vanne met vanne_rampes_s à tourner : l'arrosage n'attend que le temps qui reste.
+    horloge.temps += 4
+    pas = next(eau._voie(rampes=True))
+    assert pas.attente_s == pytest.approx(LAVAGE.eau.vanne_rampes_s - 4)
+    # Alarme : la pompe coupée remet aussi la vanne sur « rampes ».
+    eau._commander_voie(rampes=False)
+    eau.couper()
+    assert faux.sorties[RAMPES]
+
+
+def test_fuite_ou_siphon_flotteur_retombe_sans_vidange():
+    eau, faux, horloge = eau_seule(litres=50)
+    eau.eau_dans_le_fut, eau._niveau_haut = True, True
+    eau._sortie(VIDANGE, True)
+    eau.vidange_ouverte = True
+    assert eau.niveau_tenu()
+    # Le niveau baisse, pompe arrêtée : alerte une fois le flotteur stable, vanne à bille fermée.
+    faux.litres = 40
+    horloge.temps = 5
+    assert eau.niveau_tenu()
+    horloge.temps = 7
+    assert not eau.niveau_tenu()
+    assert not faux.sorties[VIDANGE] and eau.vidange_ouverte is False
+    # Pompe en marche (vidange, rinçage) : pas d'alerte.
+    eau._niveau_haut = True
+    eau._pompe(True)
+    assert eau.niveau_tenu()
+
+
 def test_pas_d_arrosage_fut_pas_rempli():
     eau, _, _ = eau_seule()
     with pytest.raises(ErreurEtape, match="on ne brosse jamais à sec"):
@@ -220,6 +269,8 @@ def test_trois_seaux_laves_au_simulateur():
     assert lavage.prehension.objet is None and not lavage.eau.eau_dans_le_fut
     # Premier remplissage mesuré (45 L à 0,2 L/s ≈ 225 s, + 1 s de flotteur stable).
     assert lavage.eau.premier_remplissage_s == pytest.approx(226, abs=1)
+    # Après la pompe qui suit chaque rinçage, l'eau du réseau remet le flotteur haut.
+    assert eau.historique.count("eau_reseau_lavage oui") == 1 + 3
     # Arrosage, rinçage et jet d'air à chaque seau ; pompe et chauffage coupés à la fin.
     assert eau.historique.count("rincage_lavage oui") == 3
     assert eau.historique.count("air_col_lavage oui") == 3
@@ -243,10 +294,22 @@ def test_brosses_et_rotation_de_la_tete_dans_la_meme_commande():
     assert len(passes) == 9
     premier = passes[0]
     assert set(premier.axes) == {"prehension_a", "lavage_noyau"}
-    # Passe 1 (1) : noyau 5 s à 100 tr/min = 3000° ; seau 1/4 de tour depuis −350°.
+    # Passe 1 (1) : noyau 5 s à 100 tr/min = 3000° ; seau 1/4 de tour depuis −500°.
     debut, fin = premier.axes["lavage_noyau"]
     assert fin - debut == pytest.approx(3000)
-    assert premier.axes["prehension_a"] == pytest.approx((-350, -260))
+    assert premier.axes["prehension_a"] == pytest.approx((-500, -410))
+    # La tête revient à 0 à la fin de chaque passe ; la passe 2 part de +500° (autre sens).
+    rotations = [m for m in mouvements if set(m.axes) == {"prehension_a"}]
+    textes = [m.position for m in rotations]
+    assert textes[:4] == [
+        "tête au départ de la passe 1",
+        "tête revenue à 0 (fin de la passe 1)",
+        "tête au départ de la passe 2",
+        "tête revenue à 0 (fin de la passe 2)",
+    ]
+    assert rotations[1].axes["prehension_a"] == pytest.approx((130, 0))
+    assert rotations[2].axes["prehension_a"] == pytest.approx((0, 500))
+    assert passes[2].axes["prehension_a"] == pytest.approx((500, -130))
     # Passe 2 : la couronne en avant, le seau revient.
     deuxieme = passes[2]
     assert set(deuxieme.axes) == {"prehension_a", "lavage_couronne"}
@@ -267,8 +330,8 @@ def test_couloir_du_seau_retourne():
     axes = [(m["pont_x"][1] + decalage, m["chariot_y"][1]) for m in trajets]
     assert axes[1] == pytest.approx((0.45, 0.74))
     assert axes[2] == pytest.approx((0.36, 0.65))
-    # Jet d'air du seau A : décalé de 11 mm vers la buse ; retour au coude.
-    assert axes[3] == pytest.approx((0.361, 0.65))
+    # Jet d'air du seau A : centre (0,352 ; 0,6348), décalé en −y vers la buse ; retour au coude.
+    assert axes[3] == pytest.approx((0.352, 0.6348))
     assert axes[4] == pytest.approx((0.45, 0.74))
 
 
@@ -287,6 +350,16 @@ def test_remplissage_trop_long():
     assert "remplissage trop long : flotteur haut pas atteint en 900 s" in planning.probleme
     # L'eau est coupée par l'arrêt du module.
     assert eau.historique[-1] != "eau_reseau_lavage oui" and not eau.sorties[EAU]
+
+
+def test_remise_au_flotteur_haut_trop_longue():
+    rincage = LAVAGE.rincage.model_copy(update={"remise_max_s": 0.5})
+    planning, _, eau = jouer(reglages=reglages_machine(rincage=rincage))
+    assert not planning.fini
+    assert (
+        "après le rinçage, flotteur haut pas revenu en 0.5 s d'eau du réseau" in planning.probleme
+    )
+    assert not eau.sorties[EAU]
 
 
 def test_noyau_refuse_sans_objet_tenu():
