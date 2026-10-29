@@ -406,7 +406,120 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   Simulateur : le scénario `mycelium` de la tâche 19 avec le vrai porte-bocal sur le faux FluidNC (serrage,
   demi-tours, photo de contrôle). Tests, dont : bocal absent (diamètre hors plage), verrou qui ne revient pas,
   capteur d'inclinaison faux, demi-tour refusé manivelle en haut.
-- [ ] 21. Lavage — **après la tâche 37 (Préhension)**, qui tient le seau pendant tout le lavage.
+- [ ] **21. Lavage des seaux (eau, bain, brossage)** — Modèle : Opus, effort moyen. **Après la tâche 37
+  (Préhension)**, dont il appelle les gestes.
+  Sources (recopiées ici le 29/10/2026) : fiche du module « Lavage », **validé définitivement le 25/10/2026**
+  (fût de 44 cm), dossiers eau automatique, arrosage (validé 22/10, colliers 27/10), chauffage (22/10), jet d'air du
+  col (14/10), plan de commande v221. Chiffres dans `pi/reglages/machine.yaml`, `docs/entrees-sorties.yaml` et
+  `fluidnc/`, jamais dans le code. Les couvercles et les bocaux sont dans la tâche 21 bis.
+
+  *Ce que fait le module.* Entre deux fûts de production, un fût de lavage (inox, Ø intérieur 0,45) vient au poste.
+  Dedans : un noyau à brosses (intérieur du seau) et une couronne de brosses extérieures. La Préhension tient le
+  seau retourné (bord en bas) par la ventouse et **ne le lâche jamais** ; elle le descend dans les brosses, il est
+  brossé mouillé, rincé, soufflé, puis repart.
+  Centre du fût de lavage (0,35 ; 0,65) : réglage à part (`centre_fut` de `machine.yaml` est celui du fût de
+  production, (0,29 ; 0,57)).
+
+  *Mode lavage* : seulement si le panneau du poste est « rabattu » (contact du panneau déjà lu, `docs/decisions.md`)
+  et le mode « lavage » choisi ; un changement d'état du panneau pendant un mouvement ⇒ « feed hold » des cartes 1
+  et 4 et alerte. Le fût de lavage lui-même n'est pas détecté.
+
+  *Moteurs, entrées, sorties* (à ajouter, marqués `exemple: true` tant que le plan de câblage n'est pas arrivé) :
+  - Carte 4 (avec la Préhension) : NEMA 23 du **noyau** et NEMA 23 de la **couronne**, avec les alarmes de leurs
+    pilotes. La rotation de la tête de préhension est dans la même commande : elle suit le seau. **Pas de capteur
+    d'origine** (le capteur Hall a été supprimé le 22/10) : la position de la couronne ne compte pas. La couronne
+    ne tourne que dans un sens (« toujours en avant »).
+  - Carte 3 (avec le Mycélium) : électrovanne d'eau du réseau (remplir), vanne à bille motorisée (vider, ≈ 15 s
+    pour s'ouvrir), pompe à membrane, vanne 3 voies motorisée après la pompe (voie bonde / voie rampes),
+    électrovanne de rinçage (eau du réseau dans les rampes), électrovanne d'air du jet du col, relais (SSR) de la
+    prise du thermoplongeur ; entrée : flotteur (contact sec).
+  - Aucun capteur « brosses fermées » : rien à attendre à ce sujet.
+
+  *Eau du fût* :
+  - Remplir : vanne à bille fermée, électrovanne d'eau ouverte jusqu'au flotteur haut. Temps maximal = temps du
+    premier remplissage mesuré + 20 % (réglage) ; au-delà : fermer, alerte (l'eau monterait aux poulies).
+  - Vider : vanne 3 voies vers la bonde, vanne à bille ouverte (attendre ≈ 15 s), pompe ; quand le flotteur
+    retombe, continuer ≈ 60 s (réglage), arrêter la pompe, fermer la vanne.
+  - Quand : par défaut, eau neuve au début de chaque série (un fût de production, ≈ 18 seaux) et vidange à la fin ;
+    réglage. **Le fût est toujours vidé avant d'être échangé** : le Pi refuse de déclarer la série finie sans vidange.
+  - Chauffage : le Pi n'alimente la prise du thermoplongeur (2 kW, thermostat réglé à 50 °C sur l'appareil) que
+    flotteur haut et pompe arrêtée. Le thermostat de l'appareil règle la température ; le Pi ne la mesure pas.
+  - Produit : percarbonate, mis à la main (pas de dosage par la machine).
+
+  *Laver un seau* (la Préhension tient le seau retourné) :
+  1. Aller au fût par le couloir du seau retourné : axe de la tête de (0,35 ; 0,65) en ligne droite jusqu'à
+     (0,45 ; 0,74), puis vers +x à y 0,74 ; entrée par le même chemin à l'envers ; ventouse à 1,10 (butée haute)
+     pendant tout le trajet. Passage de la paroi côté stockage : règles déjà dans `machine.yaml`
+     (`lavage_paroi_*`).
+  2. Descendre : le seau écarte lui-même les brosses extérieures.
+  3. **Verrou du noyau et de la couronne** : ils ne tournent **jamais** sans seau (ou couvercle) posé dessus. Le Pi
+     n'envoie leur rotation que si la préhension est à sa hauteur de travail au-dessus du fût et que le vide confirme
+     un objet tenu (`tient_un_objet()` de la tâche 37) ; toute perte de vide arrête noyau et couronne. Le mode
+     manuel du téléphone applique le même verrou.
+  4. Arrosage pendant le brossage : pompe sur la voie des rampes (bain recyclé). On ne brosse jamais à sec.
+  5. Passe 1, paroi et fond : noyau ≈ 5 s à 100 tr/min (centre du fond), puis ≈ 200 tr/min. Appui 80 N lu par le
+     capteur de force de la préhension, tête décalée de façon fixe vers +x selon le format (tête x ≥ 0,35, jamais
+     de cercle autour de l'axe) ; c'est le seau qui tourne dessous.
+  6. Passe 2, le bord : brosses fermées, couronne en avant.
+  7. Rinçage propre : électrovanne de rinçage ≈ 5 s (≈ 0,5 L) dans les rampes ; puis la pompe vide jusqu'au
+     flotteur bas pour garder le même niveau.
+  8. Remonter selon le vide (tâche 37 : −55 / −40 kPa, feed hold, 2 essais) ; retrait ≈ 35 N.
+  9. Jet d'air du col : décaler le seau vers la buse et l'arrêter le bord à sa hauteur (A 11 mm, bord 0,711 ;
+     B 17 mm, 0,698 ; C 0, 0,714 ; D 8 mm, 0,712 ; réglages par format, à ajuster à l'essai), ouvrir l'air, faire
+     1 tour en ≈ 4 s, fermer, remonter. Égoutter au-dessus du fût.
+  Durées des passes, vitesses de la couronne et du seau : réglages (estimation du plan : passe 1 ≈ 15-20 s,
+  passe 2 ≈ 10-15 s, ≈ 60-70 s par seau).
+
+  *Ce qui n'est pas dans cette tâche* : couvercles et bocaux (21 bis), la prise et la pose du seau sur les piles
+  (Stockage), la photo de contrôle après lavage (« vue A », tâche 22), le bain et l'UV des têtes (Nettoyage).
+
+  Simulateur : un scénario `lavage` : remplissage, 3 seaux lavés (A, B, C), vidange, avec faux flotteur et faux
+  vide. Tests, dont : noyau refusé sans objet tenu, perte de vide pendant la rotation, remplissage trop long,
+  chauffage refusé flotteur bas, série refusée sans vidange, panneau qui change pendant un mouvement.
+
+- [ ] **21 bis. Lavage des couvercles et des bocaux** — Modèle : Opus, effort moyen. Après la tâche 21.
+  Mêmes sources. Le lave-bocal et le retourneur sont posés **à la main** avant leur série et enlevés après ;
+  bocaux et seaux ne se lavent jamais en même temps.
+
+  *Couvercles de seau, dans le fût* :
+  1. La tête amène le couvercle face vers le bas au-dessus du noyau, centre (0,35 ; 0,65) (pont à sa limite 0,223).
+  2. Avant la pose, la tête tourne le couvercle pour mettre son repère (collé sur le dessus, près du bord) à ≈ 60°
+     de −X côté +Y ; photo par la caméra du plafond.
+  3. Descente : dessous du couvercle à z 0,638 (A), 0,637 (B), 0,640 (C et D), appui ≈ 15 N (jamais plus : si les
+     dépôts sont secs, on allonge le temps). Plateau flottant déclenché au-dessus de 0,735 ⇒ arrêt et alerte.
+  4. Noyau 100 tr/min ≈ 5 s. Pendant ce temps la tête décale le centre du couvercle dans la direction
+     (+0,26 ; −0,97) de 21 mm (A), 0 (B), 21 mm (C), 23 mm (D), et le fait tourner lentement (10 à 20 tr/min).
+  5. Pendant la rotation, la caméra du plafond compare l'angle du repère (quand il est visible) à l'angle commandé :
+     écart > 10° = le couvercle glisse : arrêt du noyau, remontée de 2 mm, reprise ; alerte après 2 glissements.
+     Vide surveillé (arrêt à −40 kPa). L'analyse d'image est dans la tâche 22 : ici, un point d'appel avec un faux.
+  6. Fin : repère ramené à son angle de photo, arrêt du noyau, remontée, égouttage, 2e photo (repère à ± 10°,
+     sinon alerte et couvercle « à vérifier »).
+
+  *Retourneur de couvercles* (tige Ø 12 sur une barre du chariot de remplissage, x 0,9425 ; chariot en y 0,50,
+  plateau fixe à 0,459 avec un bac inox) — pour laver les 2 faces :
+  - Avant le mode couvercles, la caméra trouve le bac et la tige à ± 5 mm de leur place, sinon le mode ne démarre pas.
+  - Séquence par couvercle : dessous lavé ; lâcher au-dessus de la tige (tête en (0,9675 ; 0,53), barres à 0,19 de
+    l'axe) ; la tête remonte à ventouse 0,85 puis recule jusqu'à son axe à x ≤ 0,87 ; photo (couvercle dans le bac,
+    à plat, face attendue, centre mesuré) ; ouverture des barres 0,19 → 0,30 avant que la tête descende sous 0,75 ;
+    reprise au centre mesuré ; dessus lavé ; barres refermées à 0,19 quand la tête est au-dessus de 0,80 ;
+    2e chute, photo, reprise par le dessus, rangement.
+  - Photo pas bonne : pas retourné ⇒ nouvelle chute, alerte après 2 échecs ; hors du bac ou penché ⇒ arrêt, alerte.
+  - Barrière lumineuse à 0,7315 : surveillée en continu dans ce mode ; coupée ⇒ pause avec message.
+  Les barres et le chariot appartiennent au Remplissage (tâche 34) : ici, derrière une interface avec un faux.
+
+  *Bocaux et capsules : lave-bocal* (posé à la main sur l'anneau de rive du fût de lavage) : la tête appuie le
+  bocal retourné (ou la capsule, tenue par les aimants) sur le plateau d'un rince-verre de bar, qui projette de
+  l'eau tant qu'on appuie. Pas d'électrovanne (vanne quart de tour manuelle au robinet). Le Pi ne fait que la
+  position, l'appui et la durée (réglages : hauteur du plateau ≈ 5 mm au-dessus de l'anneau de rive, à mesurer sur
+  le produit acheté ; appui et temps à l'essai), puis égouttage au-dessus du fût. La vidange automatique évacue
+  l'eau. Le Pi ne sait pas si le lave-bocal est posé : l'écran demande de le confirmer avant une série de bocaux.
+
+  *Ce qui n'est pas dans cette tâche* : la vue A après lavage et l'analyse des photos (tâche 22), le rangement des
+  bocaux et des couvercles (Stockage).
+
+  Simulateur : scénario `lavage_couvercles` (2 couvercles, avec retournement) et `lavage_bocaux` (3 bocaux).
+  Tests, dont : couvercle qui glisse 2 fois, plateau flottant trop haut, mode refusé si le bac n'est pas trouvé,
+  barrière coupée.
 - [ ] 22. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage
 - [ ] 22 bis. Cartes de pesée RS485 (RP2040 + HX711) : griffe, préhension, plateau du remplissage — Modèle : Opus.
   Programme C (Pico SDK, comme l'accéléromètre) : lecture du HX711 en 3,3 V, jusqu'à 80 mesures/s, réponse sur le
