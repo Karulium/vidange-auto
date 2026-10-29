@@ -244,9 +244,9 @@ si l'une pose problème, elle le dit dans sa PR.
   5. Capteur de vide 3,3 V : sa conversion (2 points tension → kPa) est relevée sur la notice du capteur acheté
      ou mesurée à l'étape 2 de l'essai ; c'est un réglage.
 - **Lavage des seaux** (réponses à la PR n° 36, tâche 21, 29/10/2026) :
-  1. Centre du fût de lavage (x 0,35) hors de portée de 2 mm (tête à x ≥ 0,352 depuis les rails HGR15) : on garde
-     x 0,352 (2 mm de décalage), sans effet sur le brossage (tête décalée vers +x). La Préhension confirme
-     x ≥ 0,352 (rails HGR15, tête gelée) : c'est au Lavage de déplacer le fût ou la buse (question posée, point 7).
+  1. Centre du fût de lavage (x 0,35) hors de portée de 2 mm (tête à x ≥ 0,352, rails HGR15, tête gelée) : on
+     garde x 0,352. Le Lavage confirme (29/10) : 2 mm sans effet ; le fût et la buse ne bougent pas. Couvercle B
+     et seau C : (0,352 ; 0,65).
   2. Jet d'air et chauffage sur la carte 4 (la carte 3 n'a plus de sortie libre) : d'accord ; transmis au plan
      de câblage. Le code ne connaît que les noms.
   3. Chauffage entre deux seaux : après la pompe qui suit le rinçage, le Pi remet quelques secondes d'eau du
@@ -256,15 +256,19 @@ si l'une pose problème, elle le dit dans sa PR.
      cordon spiralé CDC-CORDON, seul passage du vide et des fils). Le logiciel monte à **± 500°** (40° de marge,
      ≈ 2,8 tours par aller-retour), retour à 0 sur le capteur d'origine à chaque fin de passe, jamais deux passes
      de suite dans le même sens. À confirmer à la mise en service avec le cordon reçu ; s'il force, retour à ± 370°.
-  5. Hauteur du seau pendant la passe 2 : réglage par format, 0 en attendant la cote du projet mécanique
-     (demandée).
+  5. Passe 2 (réponse du Lavage, 29/10/2026) : **pas de remontée** (0 pour tous les formats). Le seau reste posé
+     sur son bord (appuis à 0,370) pendant tout le lavage ; les brosses extérieures frottent paroi et bord en même
+     temps. Les phases des passes peuvent rester séparées ou être fusionnées en une seule rotation, seau posé. Le
+     seau ne remonte qu'à la fin, pour le jet d'air. (Le texte « brosse de fond tenue par la tête » du plan de
+     commande est antérieur à la version gelée.)
   6. Vanne à bille ouverte pendant la série : oui, **à condition** que la vanne 3 voies revienne sur « rampes »
      dès que la pompe s'arrête (pas de siphon vers la bonde). Pompe arrêtée, si le flotteur retombe sans
      vidange demandée : alerte « fuite ou siphon », vanne à bille fermée.
-  7. Jet d'air du col : la fiche décale le seau **vers la buse**, donc vers −x et −y (A 11 mm, B 17, D 8). Avec
-     x ≥ 0,352, la partie −x n'est plus possible : le décalage vers +x de la PR éloigne le seau de la buse et est
-     probablement faux. En attendant la réponse du projet mécanique (fût de lavage vers +x, ou buse réorientée),
-     le décalage se fait **seulement en −y** (vers la buse), x à 0,352 ; réglage par format, à ajuster à l'essai.
+  7. Jet d'air du col (réponse du Lavage, 29/10/2026) : x reste à 0,352 et le seau est décalé en −y pour retrouver
+     la distance du dessin entre le centre du seau et le bout de la buse (0,2509 ; 0,5084). **Centres du seau** :
+     A (0,352 ; 0,6348), B (0,352 ; 0,6270), C (0,352 ; 0,650), D (0,352 ; 0,6385) ; bords inchangés (0,711 /
+     0,698 / 0,714 / 0,712). Jeu ≥ 26 mm avec l'anneau de rive. Réglages par format (centre x, y), ajustés à
+     l'essai. La règle « x ≥ 0,340 » de la fiche du jet d'air est périmée.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr

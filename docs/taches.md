@@ -482,7 +482,8 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   **D'abord**, corriger le lavage des seaux (tâche 21) selon `docs/decisions.md`, « Lavage des seaux », points 3,
   6 et 7 : eau du réseau jusqu'au flotteur haut après la pompe qui suit le rinçage ; vanne 3 voies remise sur
   « rampes » dès que la pompe s'arrête, et alerte « fuite ou siphon » si le flotteur retombe sans vidange ; jet
-  d'air décalé vers la buse comme le dit ce point (avec ses tests) ; rotation de la tête jusqu'à ± 500° (point 4).
+  d'air aux centres donnés par format (réglage `x, y` au lieu de `jet_decalage_m`, avec ses tests) ; rotation de
+  la tête jusqu'à ± 500° (point 4) ; passe 2 sans remontée (point 5, déjà 0).
   bocaux et seaux ne se lavent jamais en même temps.
 
   *Couvercles de seau, dans le fût* :
