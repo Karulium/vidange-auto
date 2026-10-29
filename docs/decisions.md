@@ -238,6 +238,10 @@ si l'une pose problème, elle le dit dans sa PR.
      haute** (bas du godet à 1,087 ; rien du Mycélium ne dépasse 1,0 sous son encombrement, la paroi haute et le
      volet sont dessous). La bande x 0,15-0,43 sous y 0,23 (`garage_glissiere`) reste interdite à la griffe,
      **sauf en butée haute**.
+  Réponse à la PR n° 37 (tâche 37 bis, 29/10/2026) : manivelle en haut, la capsule du bocal est à 1,1325 partout le
+  long de la glissière, plus haut que la butée haute de la tête (1,10). L'interdiction « pas de tête au-dessus du
+  bocal manivelle pas en bas » **suit la position de l'agitateur** (bocal en x = position de l'agitateur, y 0,150),
+  pas seulement au garage (tâche 37 ter). Sans information sur l'agitateur, toute la glissière est interdite.
   4. Mode manuel : la décision de la PR n° 14 reste (le pilotage à distance « en cas de problème » ne vérifie pas
      les règles), **sauf** le verrou du noyau et de la couronne du lavage (jamais de rotation sans objet tenu),
      qui sera appliqué aussi en pilotage à distance (tâche 21). `refus_manuel()` servira au mode guidé (tâche 32).
