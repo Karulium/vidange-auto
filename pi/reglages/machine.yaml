@@ -20,6 +20,10 @@
 #   - mycélium : ses 2 axes existent, garage < demi-tour < dosage dans la course de la glissière,
 #     course de l'agitation dans les trous de la manivelle, formats complets (hauteur, mycélium,
 #     bord du seau au dosage = haut_z), une agitation entière tient dans la course de la manivelle ;
+#     origine de la manivelle : largeur de zone et écart cohérents, tour lent plus court que
+#     mycelium_geste_max, assez lent pour l'état de la carte (fluidnc.yaml → periode_etat_s) ;
+#   - porte-bocal : axe « mors » en mètres, ouverts ils laissent passer la capsule, le diamètre du
+#     bocal (± tolérance) est dans leur course ; relache_s < delai_max_s ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
 
 exemple: true
@@ -100,6 +104,15 @@ axes:
     course: [-72000, 72000]
     carte: mycelium_lavage
     lettre: A
+  # Les 2 mors du porte-bocal (NEMA 17 sur TMC2209, carte n° 3), rapprochés ensemble par une vis
+  # gauche-droite. Régler FluidNC pour que la position de l'axe soit l'ÉCART entre les 2 mors, en
+  # mm : prise d'origine sur le fin de course « mors ouverts » (fin de la course), le serrage va
+  # vers le début. Ouverts : 95 + 2 × 4 mm de jeu = 103 mm (la capsule passe). Début : EXEMPLE.
+  mors:
+    longueur_rail: 0.12
+    course: [0.08, 0.103]
+    carte: mycelium_lavage
+    lettre: Y
 
 positions:
   exemple_repos:
@@ -500,6 +513,18 @@ mycelium:
     courses_possibles_m: [0.04, 0.07, 0.10]
     course_max_garage_m: 0.07
     max_tr_min: 300
+    # Prise d'origine par le Pi (décision du 29/10) : le capteur voit du métal quand la manivelle
+    # n'est PAS en haut, rien sur ≈ ± 95° autour du haut. Un tour lent ; « en haut » = milieu de
+    # la zone sans métal + décalage. Largeur de la zone (≈ 190°) et décalage : à mesurer une fois
+    # sur la machine (EXEMPLES). Écart de plus de 10° sur la largeur, ou plus de 2 bords sur un
+    # tour : arrêt, alerte « capteur manivelle ». Vitesse : EXEMPLE (précision ≈ vitesse ×
+    # periode_etat_s / 2 = 0,5° à 5 °/s).
+    origine:
+      vitesse_deg_s: 5
+      largeur_zone_deg: 190
+      ecart_largeur_max_deg: 10
+      decalage_deg: 0
+      marge_deg: 20
   # Vitesses : EXEMPLES, à trouver aux essais.
   vitesses:
     glissiere_m_s: 0.1
@@ -523,6 +548,29 @@ mycelium:
     lectures_saut: 4
     saut_kg: 0.3
     silence_max_s: 0.5
+
+# Porte-bocal (mors et demi-tour du bocal), validé définitivement le 24/10/2026 (fiche des
+# pièces v10c). Bocal droit Ø 95, capsule Ø 103 (fiche). Les mors sont l'axe « mors » plus haut.
+# Tolérance, vitesse de palpage et durées : EXEMPLES, à régler aux essais.
+porte_bocal:
+  exemple: true
+  diametre_bocal_m: 0.095
+  diametre_capsule_m: 0.103
+  # Le diamètre lu au serrage est juste à ≈ 1 mm près : au-delà de cet écart, bocal absent,
+  # cassé ou mal posé (arrêt, alerte avec photo).
+  tolerance_diametre_m: 0.003
+  # Vitesse de chaque mors pendant le palpage : au-dessus du minimum de StallGuard (les 4 mm de
+  # jeu par côté servent à prendre de la vitesse avant le contact).
+  palpage_m_s: 0.01
+  # Demi-tour (JGY370, ≈ 2,3 s) : doigt du verrou retiré pendant relache_s au départ ; le
+  # contact « verrou engagé » doit revenir avant delai_max_s ; lecture de l'inclinaison
+  # attente_inclinaison_s après l'arrêt du moteur.
+  demi_tour:
+    relache_s: 0.5
+    delai_max_s: 4
+    attente_inclinaison_s: 0.5
+  # Ce que dit le capteur d'inclinaison quand il est actionné (à vérifier au montage).
+  inclinaison_actionne: tete_en_bas
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

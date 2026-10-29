@@ -618,6 +618,38 @@ class ChariotMycelium(Modele):
     tolerance_plateau_m: float = Field(gt=0)
 
 
+class OrigineManivelle(Modele):
+    """Prise d'origine de la manivelle par le Pi (docs/decisions.md, 29/10/2026).
+
+    Le capteur origine_manivelle voit du métal quand la manivelle n'est PAS en haut, et rien sur
+    une zone d'environ 190° autour du haut. Un tour lent, toujours dans le même sens : « en haut »
+    = le milieu de la zone sans métal, plus un décalage (hystérésis du capteur).
+    """
+
+    # Vitesse du tour lent (°/s). Précision ≈ vitesse × periode_etat_s (fluidnc.yaml) / 2.
+    vitesse_deg_s: float = Field(gt=0)
+    # Largeur de la zone sans métal, mesurée une fois sur la machine (°), et l'écart permis à
+    # chaque prise d'origine : au-delà, arrêt et alerte « capteur manivelle ».
+    largeur_zone_deg: float = Field(gt=0, lt=360)
+    ecart_largeur_max_deg: float = Field(gt=0)
+    # Décalage fixe ajouté au milieu de la zone (°), réglé une fois sur la machine.
+    decalage_deg: float = Field(ge=-180, le=180)
+    # Le tour lent fait 360° + largeur + écart + cette marge (°) : la zone est vue en entier,
+    # même en partant de dedans.
+    marge_deg: float = Field(ge=0)
+
+    def balayage_deg(self) -> float:
+        return 360 + self.largeur_zone_deg + self.ecart_largeur_max_deg + self.marge_deg
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "OrigineManivelle":
+        if self.largeur_zone_deg + self.ecart_largeur_max_deg >= 360:
+            raise ValueError("largeur_zone_deg + ecart_largeur_max_deg doit rester < 360")
+        if self.ecart_largeur_max_deg >= self.largeur_zone_deg:
+            raise ValueError("ecart_largeur_max_deg doit rester < largeur_zone_deg")
+        return self
+
+
 class ManivelleMycelium(Modele):
     # Angle (°) de « manivelle en haut » ; « en bas » = 180° plus loin. Écart permis (°).
     angle_haut_deg: float
@@ -628,6 +660,7 @@ class ManivelleMycelium(Modele):
     course_max_garage_m: float = Field(gt=0)
     # Vitesse la plus forte permise (tr/min, fiche).
     max_tr_min: float = Field(gt=0)
+    origine: OrigineManivelle
 
 
 class VitessesMycelium(Modele):
@@ -722,6 +755,44 @@ class Mycelium(Modele):
         return casse - int(-v.agitation_tr_min * dose.temps_max_s // 60)
 
 
+class DemiTourPorteBocal(Modele):
+    """Le demi-tour du bocal : motoréducteur JGY370 (pont en H) et verrou à électroaimant."""
+
+    # Le doigt du verrou est retiré pendant tant de secondes au départ (le plateau quitte son
+    # trou), puis relâché : il frotte, puis entre dans le trou suivant.
+    relache_s: float = Field(gt=0)
+    # Le contact « verrou engagé » doit revenir dans ce délai (s), sinon arrêt du moteur, alerte.
+    delai_max_s: float = Field(gt=0)
+    # Attente après l'arrêt du moteur avant de lire le capteur d'inclinaison (s) ; au moins
+    # 2 fois periode_etat_s de fluidnc.yaml (les entrées de la carte arrivent avec son état).
+    attente_inclinaison_s: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "DemiTourPorteBocal":
+        if self.relache_s >= self.delai_max_s:
+            raise ValueError("relache_s doit être plus court que delai_max_s")
+        return self
+
+
+class PorteBocal(Modele):
+    """Porte-bocal (mors et demi-tour du bocal), validé le 24/10/2026.
+
+    Les mors sont l'axe « mors » de machine.yaml : sa position est l'écart entre les 2 mors (m).
+    """
+
+    exemple: bool = False
+    # Bocal droit (diamètre serré par les mors) et sa capsule (m).
+    diametre_bocal_m: float = Field(gt=0)
+    diametre_capsule_m: float = Field(gt=0)
+    # Écart permis sur le diamètre mesuré au serrage : au-delà, bocal absent, cassé ou mal posé.
+    tolerance_diametre_m: float = Field(gt=0)
+    # Vitesse de palpage des mors (m/s, chaque mors), au-dessus du minimum de StallGuard.
+    palpage_m_s: float = Field(gt=0)
+    demi_tour: DemiTourPorteBocal
+    # Ce que dit le capteur d'inclinaison quand il est actionné.
+    inclinaison_actionne: Literal["tete_en_bas", "debout"]
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -745,6 +816,8 @@ class Machine(Modele):
     griffe: Griffe | None = None
     # Mycélium (None : pas de mycélium). Demande la griffe (table des formats).
     mycelium: Mycelium | None = None
+    # Porte-bocal (None : pas de porte-bocal). Son axe « mors » est sur une carte FluidNC.
+    porte_bocal: PorteBocal | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -809,6 +882,7 @@ class Machine(Modele):
                 zones_correctes.append(nom)
         erreurs += self._verifier_griffe()
         erreurs += self._verifier_mycelium()
+        erreurs += self._verifier_porte_bocal()
         for i, nom_a in enumerate(zones_correctes):
             for nom_b in zones_correctes[i + 1 :]:
                 if self._se_chevauchent(nom_a, nom_b):
@@ -887,6 +961,13 @@ class Machine(Modele):
                 f"manivelle : une agitation peut faire {tours} tours ({tours * 360:g}°) ; "
                 f"la course ({debut:g} à {fin:g}°) doit les permettre dans les deux sens"
             )
+        origine = mycelium.manivelle.origine
+        tour_lent = origine.balayage_deg() / origine.vitesse_deg_s
+        if self.durees.get("mycelium_geste_max", 0) <= tour_lent:
+            erreurs.append(
+                f"durees → mycelium_geste_max doit dépasser le tour lent de la prise d'origine de "
+                f"la manivelle ({tour_lent:.0f} s)"
+            )
         agitation = mycelium.dose.temps_max_s + mycelium.dose.casse_du_bloc_s
         if self.durees.get("mycelium_agitation_max", 0) <= agitation:
             erreurs.append(
@@ -907,6 +988,35 @@ class Machine(Modele):
                     f"griffe → formats → {nom} : au dosage, plateau à {plateau:g} m et bord du "
                     f"seau à {plateau + seau.hauteur:g} m, mais haut_z vaut {seau.haut_z:g}"
                 )
+        return erreurs
+
+    def _verifier_porte_bocal(self) -> list[str]:
+        """L'axe des mors existe ; ouverts, ils laissent passer la capsule ; le diamètre attendu
+        est dans leur course."""
+        porte_bocal = self.porte_bocal
+        if porte_bocal is None:
+            return []
+        axe = self.axes.get("mors")
+        if axe is None or axe.unite != "m" or axe.carte is None:
+            return ["porte_bocal : il faut l'axe « mors » en « m », avec sa carte"]
+        erreurs = []
+        ferme, ouvert = axe.course
+        if ouvert < porte_bocal.diametre_capsule_m:
+            erreurs.append(
+                f"porte_bocal : mors ouverts à {ouvert:g} m (fin de la course de « mors »), la "
+                f"capsule ({porte_bocal.diametre_capsule_m:g} m) ne passerait pas"
+            )
+        tolerance = porte_bocal.tolerance_diametre_m
+        if not ferme < porte_bocal.diametre_bocal_m - tolerance:
+            erreurs.append(
+                f"porte_bocal : le début de la course de « mors » ({ferme:g} m) doit être sous "
+                "diametre_bocal_m − tolerance_diametre_m (pour voir un bocal absent)"
+            )
+        if not porte_bocal.diametre_bocal_m + tolerance < ouvert:
+            erreurs.append(
+                "porte_bocal : diametre_bocal_m + tolerance_diametre_m doit être sous les mors "
+                f"ouverts ({ouvert:g} m)"
+            )
         return erreurs
 
     def _se_chevauchent(self, nom_a: str, nom_b: str) -> bool:
@@ -1325,6 +1435,27 @@ class CarteFluidnc(Modele):
     description: str = ""
     # Numéro de série de l'USB de la carte : c'est lui qui la reconnaît, jamais l'ordre des ports.
     numero_serie_usb: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
+    # Entrées lues dans le rapport d'état de la carte (« Pn: ») : nom du signal
+    # (docs/entrees-sorties.yaml) → sa lettre dans FluidNC (fin de course d'un axe, macro0 = 0...).
+    entrees: dict[Nom, Annotated[str, StringConstraints(pattern=r"^[A-Z0-9]$")]] = Field(
+        default_factory=dict
+    )
+    # Sorties tout-ou-rien de la carte (« user_outputs ») : nom du signal → numéro de la sortie
+    # (M64 P<n> l'allume, M65 P<n> l'éteint).
+    sorties: dict[Nom, Annotated[int, Field(ge=0, le=7)]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _verifier_signaux(self) -> "CarteFluidnc":
+        erreurs = []
+        for quoi, valeurs in (("entrees", self.entrees), ("sorties", self.sorties)):
+            vus: dict[object, str] = {}
+            for nom, valeur in valeurs.items():
+                autre = vus.setdefault(valeur, nom)
+                if autre != nom:
+                    erreurs.append(f"{quoi} : « {autre} » et « {nom} » ont la même ({valeur})")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
 
 
 class Fluidnc(Modele):
@@ -1707,6 +1838,25 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
             f"programme.yaml, distance → avance_s ({avance:g} s) doit valoir au moins 2 fois "
             f"periode_etat_s de fluidnc.yaml ({periode_etat:g} s)"
         )
+    if machine.mycelium is not None:
+        # Le Pi lit le capteur de la manivelle à chaque état de la carte : le pas entre deux
+        # lectures doit rester sous la moitié de l'écart permis sur la largeur de la zone.
+        origine = machine.mycelium.manivelle.origine
+        pas_deg = origine.vitesse_deg_s * periode_etat
+        if pas_deg > origine.ecart_largeur_max_deg / 2:
+            erreurs.append(
+                f"machine.yaml, mycelium → manivelle → origine → vitesse_deg_s : "
+                f"{origine.vitesse_deg_s:g} °/s × periode_etat_s de fluidnc.yaml "
+                f"({periode_etat:g} s) = {pas_deg:g}° entre deux lectures du capteur, plus que "
+                f"ecart_largeur_max_deg / 2 ({origine.ecart_largeur_max_deg / 2:g}°)"
+            )
+    if machine.porte_bocal is not None:
+        attente = machine.porte_bocal.demi_tour.attente_inclinaison_s
+        if attente < 2 * periode_etat:
+            erreurs.append(
+                f"machine.yaml, porte_bocal → demi_tour → attente_inclinaison_s ({attente:g} s) "
+                f"doit valoir au moins 2 fois periode_etat_s de fluidnc.yaml ({periode_etat:g} s)"
+            )
     simulateur = valeurs["simulateur"]
     assert isinstance(simulateur, ReglagesSimulateur)
     erreurs += [

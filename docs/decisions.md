@@ -183,6 +183,18 @@ si l'une pose problème, elle le dit dans sa PR.
      deux sens, la manivelle tient par clavette et bague d'arrêt (pas de filetage qui se dévisse) ; le bocal est
      tenu par les mors.
   5. Fichier FluidNC marqué EXEMPLE envoyé à une carte : **tâche 19 bis** ajoutée (refuser l'envoi).
+- **Réponses aux questions de la PR n° 30** (tâche 20, Porte-bocal ; tranchées par le fil logiciel, niveau 1) :
+  1. Photo de contrôle après le retour debout : le point d'appel reste où il est ; la tâche 22 (Vision) choisit la
+     caméra. Le plan de commande demande un contrôle « quand le bocal revient debout, puis au garage » : si aucune
+     caméra ne voit le bocal au demi-tour, le contrôle se fait au garage (la caméra du dosage peut alors pivoter).
+  2. Sens du capteur d'inclinaison : `inclinaison_actionne: tete_en_bas` gardé, à vérifier au montage (étape 1 de
+     l'essai) ; on change le réglage, pas le code.
+  3. Redémarrage avec un bocal tête en bas : **les mors restent serrés hors tension** (projet mécanique, 29/10) :
+     vis T8 gauche-droite au pas de 2 mm, inox avec écrous laiton, irréversible (hélice ≈ 4,5° sous l'angle de
+     frottement ≈ 8 à 11°) ; le demi-tour (JGY370 à vis sans fin) est irréversible aussi. Ne pas confondre avec la
+     T8 au pas de 8 mm du Remplissage. Au redémarrage, le Pi ne touche pas aux mors : il signale le bocal tête en
+     bas et attend le Go de Karulium avant de le remettre debout. Le pas de 2 mm est un réglage
+     (`fluidnc/`, pas par mm) : à vérifier au montage.
 - **Origine de la manivelle** (projet mécanique, validé par Karulium le 29/10/2026, fiche des pièces v9) : le signal
   `origine_manivelle` est un capteur inductif M8 PNP sur la carte 3. Il voit du métal quand la manivelle **n'est pas**
   en haut (le contrepoids passe devant lui) et ne voit rien sur environ ± 95° autour du haut. Prise d'origine :
