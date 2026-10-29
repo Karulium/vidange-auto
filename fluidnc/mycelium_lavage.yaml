@@ -11,10 +11,26 @@
 #       jusqu'au dosage à 925 mm (fiche). Le fin de course du dosage est une butée de la machine
 #       (alarme s'il est touché) : le régler juste après 925 mm.
 #   A : manivelle. NEMA 34 à codeur, pilote HBS86H en 48 V. Elle tourne sans fin, dans les deux
-#       sens : pas de limites logicielles. Prise d'origine sur le capteur « manivelle en haut »
-#       (question n° 1 de la PR de la tâche 19) : 0° = en haut, 180° = en bas. Ce capteur voit
-#       passer la manivelle à chaque tour : il ne doit JAMAIS être une butée (hard_limits: false).
-#       Jusqu'à 300 tr/min (fiche) = 108 000 °/min.
+#       sens : pas de limites logicielles. Jusqu'à 300 tr/min (fiche) = 108 000 °/min.
+#       Le capteur origine_manivelle voit du MÉTAL quand la manivelle n'est PAS en haut, rien sur
+#       ≈ ± 95° autour du haut (décision du 29/10/2026). FluidNC ne sait pas prendre le milieu
+#       d'une zone : PAS de prise d'origine de A par FluidNC (pas de « homing »). Le capteur est
+#       branché comme fin de course de A, seulement pour que le Pi le lise dans « Pn: » (lettre A,
+#       pi/reglages/fluidnc.yaml) ; il n'est JAMAIS une butée (hard_limits: false). Le Pi fait un
+#       tour lent et prend le milieu de la zone (vidange.mycelium.agitateur) : A reste l'angle du
+#       moteur, le Pi retient l'angle « en haut ».
+#   Y : mors du porte-bocal (tâche 20). NEMA 17 (17HS4401) sur un TMC2209 en UART ; vis
+#       gauche-droite : la position de Y est l'ÉCART entre les 2 mors (mm). Prise d'origine sur
+#       le fin de course « mors ouverts » : 103 mm (95 + 2 × 4 mm de jeu). Elle n'est faite que par
+#       le Pi (« $HY », bocal debout), jamais par « $H » : à la mise sous tension, un bocal tête
+#       en bas tomberait. Serrage : palpage « G38.3 » ; la sortie DIAG (StallGuard) du TMC2209 est
+#       l'entrée « probe ». Le courant de serrage se règle ici (run_amps, hold_amps), à l'essai.
+#   Demi-tour du bocal : 3 sorties « user_outputs » (pont en H du JGY370 dans un sens, dans
+#       l'autre ; électroaimant du verrou), commandées par le Pi (M64 / M65). Contact « verrou
+#       engagé » et capteur d'inclinaison sur les broches macro0 et macro1 (lettres 0 et 1 de
+#       « Pn: »), sans macro. Numéros et lettres : pi/reglages/fluidnc.yaml.
+#   À VÉRIFIER à l'essai de la carte (pi/systeme/essai-porte-bocal.md, étape 1) : « $HY » avec
+#   « cycle: 0 », les lettres de « Pn: », M64/M65.
 
 name: "Vidange carte 3 - mycelium et lavage (EXEMPLE)"
 board: "ESP32 6 axes, pilotes externes (EXEMPLE)"
@@ -58,6 +74,48 @@ axes:
         direction_pin: gpio.14
         disable_pin: NO_PIN
 
+  y:
+    # EXEMPLE : 200 pas × 16 micro-pas par tour, vis gauche-droite au pas de 2 mm (l'écart se
+    # ferme de 4 mm par tour) → 800 pas par mm d'écart.
+    steps_per_mm: 800
+    max_rate_mm_per_min: 1500
+    acceleration_mm_per_sec2: 100
+    max_travel_mm: 23
+    soft_limits: true
+    homing:
+      # 0 : jamais avec « $H » ; seulement « $HY », demandé par le Pi.
+      cycle: 0
+      positive_direction: true
+      mpos_mm: 103
+      feed_mm_per_min: 100
+      seek_mm_per_min: 600
+      settle_ms: 250
+    motor0:
+      # EXEMPLE de broche : fdc_mors_ouverts.
+      limit_pos_pin: gpio.35:low
+      hard_limits: false
+      pulloff_mm: 1
+      tmc_2209:
+        uart_num: 1
+        addr: 0
+        r_sense_ohms: 0.11
+        # Courant de serrage : EXEMPLE, à régler à l'essai (le bocal ne glisse pas, ne casse pas).
+        run_amps: 0.6
+        hold_amps: 0.5
+        microsteps: 16
+        # Sensibilité de StallGuard : EXEMPLE, à régler à l'essai.
+        stallguard: 20
+        stallguard_debug: false
+        toff_disable: 0
+        toff_stealthchop: 5
+        toff_coolstep: 3
+        run_mode: StallGuard
+        homing_mode: CoolStep
+        use_enable: false
+        step_pin: gpio.13
+        direction_pin: gpio.15
+        disable_pin: NO_PIN
+
   a:
     # EXEMPLE : 4000 pas par tour sur le HBS86H → 11,111 pas par degré.
     steps_per_mm: 11.111
@@ -65,15 +123,8 @@ axes:
     acceleration_mm_per_sec2: 3600
     max_travel_mm: 360
     soft_limits: false
-    homing:
-      cycle: 2
-      positive_direction: true
-      mpos_mm: 0
-      feed_mm_per_min: 1800
-      seek_mm_per_min: 7200
-      settle_ms: 250
     motor0:
-      # EXEMPLE de broche : origine_manivelle (jamais une butée).
+      # EXEMPLE de broche : origine_manivelle, lu par le Pi (jamais une butée, pas de homing).
       limit_neg_pin: gpio.34:low
       hard_limits: false
       pulloff_mm: 0
@@ -81,3 +132,35 @@ axes:
         step_pin: gpio.26
         direction_pin: gpio.27
         disable_pin: NO_PIN
+
+# Liaison UART avec le TMC2209 des mors. EXEMPLES de broches.
+uart1:
+  txd_pin: gpio.4
+  rxd_pin: gpio.16
+  rts_pin: NO_PIN
+  baud: 115200
+  mode: 8N1
+
+# Palpeur : sortie DIAG (StallGuard) du TMC2209 des mors. EXEMPLE de broche.
+probe:
+  pin: gpio.32:high
+  check_mode_start: true
+
+# Sorties du demi-tour du bocal (pi/reglages/fluidnc.yaml → sorties). EXEMPLES de broches.
+#   digital0 : demi_tour_vers_tete_en_bas ; digital1 : demi_tour_vers_debout ;
+#   digital2 : electroaimant_verrou_plateau.
+user_outputs:
+  digital0_pin: gpio.2
+  digital1_pin: gpio.5
+  digital2_pin: gpio.17
+
+# Entrées lues par le Pi dans « Pn: » (pi/reglages/fluidnc.yaml → entrees). EXEMPLES de broches.
+#   macro0 (lettre 0) : verrou_plateau_engage ; macro1 (lettre 1) : inclinaison_bocal.
+control:
+  macro0_pin: gpio.33:low
+  macro1_pin: gpio.25:low
+
+# Aucune macro : ces broches servent seulement à être lues.
+macros:
+  macro0: ""
+  macro1: ""

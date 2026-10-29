@@ -1,6 +1,6 @@
 """L'agitateur du mycélium : glissière et manivelle (carte n° 3), et la balance du chariot.
 
-    agitateur = AgitateurFluidnc(reglages.machine, liaison_mycelium_lavage, balance)
+    agitateur = AgitateurFluidnc(reglages.machine, liaison_mycelium_lavage, balance, carte)
     agitateur.demarrer(arret)        # lit la balance 80 fois par seconde, en fond
     agitateur.executer(pas, cible)   # envoie un pas (sans attendre)
     agitateur.fini()                 # vrai quand le pas est fini ; ErreurEtape s'il a échoué
@@ -13,6 +13,14 @@ fil de la balance pendant une agitation (`jusqu_a_kg`) :
 - saut brutal du poids (bocal ou couvercle cassé, bocal tombé) → arrêt, alarme ;
 - balance muette → arrêt, alarme (jamais d'agitation « à l'aveugle » : le seau déborderait).
 
+Origine de la manivelle (décision du 29/10/2026) : le capteur `origine_manivelle` voit du métal
+quand la manivelle n'est PAS en haut, et rien sur ≈ 190° autour du haut. FluidNC ne sait pas
+trouver le milieu d'une zone : c'est le Pi qui le fait (pas `origine`). La manivelle fait un tour
+lent dans le sens +, le Pi note à chaque état de la carte l'angle du moteur et le capteur (lettre
+de « Pn: », fluidnc.yaml) ; « en haut » = milieu de la zone sans métal + décalage
+(`trouver_origine`). L'angle donné au Mycélium est celui du moteur moins cet angle. Il est perdu
+si la carte redémarre (alarme : retour en lieu sûr, puis la prise d'origine est refaite).
+
 La balance du plateau du chariot de remplissage est lue par une carte RP2040 sur le bus RS485
 des pesées (tâche 22 bis) : ici, la même interface que la pesée de la griffe (`CapteurForce`, en
 newtons), et une fausse pesée pour les tests (vidange.griffe.simulation.FausseForce).
@@ -23,6 +31,7 @@ import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
+from itertools import pairwise
 from statistics import median
 from typing import Literal, Protocol
 
@@ -33,7 +42,7 @@ from vidange.griffe.bras import MM_PAR_M, TOLERANCE_ARRIVEE, CapteurForce, G
 from vidange.journal import donner_journal
 from vidange.mycelium.regles import PoseAgitateur
 from vidange.quoi_faire import pour_carte
-from vidange.reglages import Machine
+from vidange.reglages import CarteFluidnc, Machine, OrigineManivelle
 
 journal = donner_journal("mycelium.agitateur")
 
@@ -48,6 +57,54 @@ QUOI_FAIRE_BALANCE = (
     "fait jamais sans la balance). Vérifier le câble du bus des pesées et la carte du plateau, "
     "puis acquitter et donner le Go."
 )
+QUOI_FAIRE_CAPTEUR = (
+    "Capteur manivelle : la prise d'origine a vu une zone sans métal de la mauvaise largeur, ou "
+    "trop de bords sur un tour (capteur déréglé ou débranché, pièce desserrée, métal étranger ?). "
+    "Regarder le capteur et la manivelle, corriger, puis acquitter et donner le Go : la prise "
+    "d'origine est refaite."
+)
+QUOI_FAIRE_ORIGINE = (
+    "La carte n° 3 a redémarré : la position de la manivelle est perdue. Faire le retour en lieu "
+    "sûr, puis relancer le dosage du mycélium (la prise d'origine de la manivelle est refaite)."
+)
+
+
+def trouver_origine(echantillons: list[tuple[float, bool]], reglages: OrigineManivelle) -> float:
+    """L'angle du moteur « manivelle en haut », d'après un tour lent dans le sens + :
+    `echantillons` = (angle du moteur, métal vu), dans l'ordre du tour. ValueError si le capteur
+    dit n'importe quoi (le message dit quoi)."""
+    # Bords : (angle, vrai si on entre dans la zone sans métal), au milieu de deux lectures.
+    bords = [
+        ((a + b) / 2, metal_a)
+        for (a, metal_a), (b, metal_b) in pairwise(echantillons)
+        if metal_a != metal_b
+    ]
+    # Sur un tour (moins l'écart permis : le même bord, un tour plus loin, ne compte pas).
+    tour = 360 - reglages.ecart_largeur_max_deg
+    for i, (angle, _) in enumerate(bords):
+        sur_un_tour = [bord for bord in bords[i:] if bord[0] < angle + tour]
+        if len(sur_un_tour) > 2:
+            raise ValueError(f"{len(sur_un_tour)} bords sur un tour (2 attendus)")
+    entree = next((i for i, (_, entre) in enumerate(bords) if entre), None)
+    if entree is None or entree + 1 >= len(bords):
+        raise ValueError(
+            "zone sans métal pas vue en entier pendant le tour (capteur débranché, ou qui voit "
+            "toujours du métal ?)"
+        )
+    debut, fin = bords[entree][0], bords[entree + 1][0]
+    largeur = fin - debut
+    if abs(largeur - reglages.largeur_zone_deg) > reglages.ecart_largeur_max_deg:
+        raise ValueError(
+            f"zone sans métal de {largeur:.0f}° (attendu {reglages.largeur_zone_deg:g} ± "
+            f"{reglages.ecart_largeur_max_deg:g}°)"
+        )
+    journal.info(
+        "Mycélium : zone sans métal de la manivelle de %.1f° à %.1f° du moteur (largeur %.1f°)",
+        debut,
+        fin,
+        largeur,
+    )
+    return (debut + fin) / 2 + reglages.decalage_deg
 
 
 @dataclass(frozen=True)
@@ -64,12 +121,14 @@ class Pas:
     # Attente après le mouvement (s), puis pesée (médiane de plusieurs lectures).
     attente_s: float = 0.0
     pesee: bool = False
-    # Geste du porte-bocal (tâche 20), fait au demi-tour.
-    porte_bocal: Literal["tete_en_bas", "debout"] | None = None
+    # Geste du porte-bocal (tâche 20) : demi-tour (au demi-tour), mors (au garage).
+    porte_bocal: Literal["tete_en_bas", "debout", "ouvrir", "serrer"] | None = None
+    # Prise d'origine de la manivelle (tour lent).
+    origine: bool = False
 
     @property
     def bouge(self) -> bool:
-        return self.x is not None or self.angle is not None
+        return self.x is not None or self.angle is not None or self.origine
 
 
 @dataclass(frozen=True)
@@ -87,7 +146,20 @@ class Agitateur(Protocol):
 
     def position(self) -> PoseAgitateur: ...
 
-    def executer(self, pas: Pas, cible: PoseAgitateur) -> None: ...
+    def glissiere_x(self) -> float:
+        """Où est la glissière (m), même avant la prise d'origine de la manivelle."""
+        ...
+
+    @property
+    def angle_haut_moteur(self) -> float | None:
+        """L'angle du moteur (FluidNC) quand la manivelle est en haut, s'il est connu."""
+        return self._zero if self.origine_connue() else None
+
+    def origine_connue(self) -> bool: ...
+
+    def executer(self, pas: Pas, cible: PoseAgitateur | None) -> None:
+        """`cible` : None pour la prise d'origine de la manivelle."""
+        ...
 
     def fini(self) -> bool: ...
 
@@ -111,9 +183,17 @@ class AgitateurFluidnc:
         machine: Machine,
         liaison: Liaison,
         balance: CapteurForce,
+        carte: CarteFluidnc,
         horloge: Callable[[], float] = time.monotonic,
     ) -> None:
+        """`carte` : les réglages de la carte dans fluidnc.yaml (lettre du capteur de la
+        manivelle dans « Pn: »)."""
         assert machine.mycelium is not None
+        if "origine_manivelle" not in carte.entrees:
+            raise ValueError(
+                f"fluidnc.yaml, carte « {liaison.nom} » : il manque entrees → origine_manivelle"
+            )
+        self._lettre_origine = carte.entrees["origine_manivelle"]
         self.reglages = machine.mycelium
         self.liaison = liaison
         self.balance = balance
@@ -132,6 +212,13 @@ class AgitateurFluidnc:
         self._saut = False
         self._muette = False
         self._en_pause = False
+        # Angle du moteur « manivelle en haut », et la carte quand il a été trouvé
+        # (redémarrages, coupures) : s'ils changent, il est perdu.
+        self._zero: float | None = None
+        self._carte_au_zero: tuple[int, int] | None = None
+        # Pendant la prise d'origine : (angle du moteur, métal vu) à chaque état de la carte.
+        self._echantillons: list[tuple[float, bool]] = []
+        self._rapport_echantillon = -1
         nom = f"carte « {liaison.nom} » connectée et sans alarme"
         self.pretes = Condition(nom, self._carte_prete)
         self.surveillance = Condition(nom, self._surveiller)
@@ -140,8 +227,25 @@ class AgitateurFluidnc:
 
     def demarrer(self, arret: threading.Event) -> threading.Thread:
         return lancer_boucle(
-            "balance_mycelium", 1 / self.reglages.pesee.frequence_hz, self.lire_balance, arret
+            "balance_mycelium", 1 / self.reglages.pesee.frequence_hz, self._en_fond, arret
         )
+
+    def _en_fond(self) -> None:
+        self._echantillonner()
+        self.lire_balance()
+
+    def _echantillonner(self) -> None:
+        """Pendant la prise d'origine : note l'angle et le capteur de chaque nouvel état."""
+        pas = self._pas
+        if pas is None or not pas.origine or self._fin_mouvement is not None:
+            return
+        etat = self.liaison.etat
+        angle = etat.positions.get(self._lettres["manivelle"])
+        if etat.rapports_recus == self._rapport_echantillon or angle is None:
+            return
+        self._rapport_echantillon = etat.rapports_recus
+        with self._verrou:
+            self._echantillons.append((angle, self._lettre_origine in etat.entrees_actives))
 
     def lire_balance(self) -> None:
         """Une lecture de la balance ; arrête l'agitation s'il le faut."""
@@ -194,28 +298,66 @@ class AgitateurFluidnc:
     def _facteur(self, nom: str) -> float:
         return MM_PAR_M if nom == "agitateur_x" else 1
 
-    def position(self) -> PoseAgitateur:
-        positions = self.liaison.etat.positions
+    def _lire(self, nom: str) -> float:
         try:
-            x, angle = (positions[self._lettres[nom]] for nom in ("agitateur_x", "manivelle"))
+            return self.liaison.etat.positions[self._lettres[nom]]
         except KeyError as manque:
             raise ErreurEtape(
                 f"position de l'axe {manque} inconnue (carte pas encore lue)"
             ) from None
-        return PoseAgitateur(x=x / MM_PAR_M, angle=angle)
 
-    def executer(self, pas: Pas, cible: PoseAgitateur) -> None:
+    def glissiere_x(self) -> float:
+        return self._lire("agitateur_x") / MM_PAR_M
+
+    @property
+    def angle_haut_moteur(self) -> float | None:
+        """L'angle du moteur (FluidNC) quand la manivelle est en haut, s'il est connu."""
+        return self._zero if self.origine_connue() else None
+
+    def origine_connue(self) -> bool:
+        etat = self.liaison.etat
+        if self._carte_au_zero != (etat.redemarrages, etat.coupures):
+            self._zero = None
+        return self._zero is not None
+
+    def position(self) -> PoseAgitateur:
+        """Où est l'agitateur ; l'angle compte depuis « manivelle en haut »."""
+        x = self.glissiere_x()
+        if not self.origine_connue():
+            raise ErreurEtape(
+                "origine de la manivelle pas faite, ou perdue (la carte a redémarré)",
+                QUOI_FAIRE_ORIGINE,
+            )
+        assert self._zero is not None
+        return PoseAgitateur(x=x, angle=self._lire("manivelle") - self._zero)
+
+    def executer(self, pas: Pas, cible: PoseAgitateur | None) -> None:
+        if pas.origine:
+            # Tour lent dans le sens +, assez long pour voir toute la zone sans métal.
+            origine = self.reglages.manivelle.origine
+            positions = {
+                self._lettres["manivelle"]: self._lire("manivelle") + origine.balayage_deg()
+            }
+            with self._verrou:
+                self._echantillons = []
+            self._partir(pas, positions, origine.vitesse_deg_s * 60)
+            return
+        assert cible is not None
         depart = self.position()
+        assert self._zero is not None
         positions = {}
         if pas.x is not None:
             positions[self._lettres["agitateur_x"]] = cible.x * MM_PAR_M
         if pas.angle is not None:
-            positions[self._lettres["manivelle"]] = cible.angle
+            positions[self._lettres["manivelle"]] = cible.angle + self._zero
         # Un seul axe bouge à la fois : F est sa vitesse (mm/min, ou °/min pour la manivelle).
         if pas.angle is not None and abs(cible.angle - depart.angle) > TOLERANCE_ARRIVEE:
             f = (pas.tr_min or self.reglages.vitesses.placement_tr_min) * 360
         else:
             f = self.reglages.vitesses.glissiere_m_s * 60 * MM_PAR_M
+        self._partir(pas, positions, f)
+
+    def _partir(self, pas: Pas, positions: dict[str, float], f: float) -> None:
         with self._verrou:
             self._pas, self._arrete, self._saut, self._muette = pas, False, False, False
             self._cible, self._f = positions, f
@@ -250,8 +392,19 @@ class AgitateurFluidnc:
             if self._fin_mouvement is None:
                 if not self._arrete and not self._arrive(etat.positions):
                     raise ErreurEtape(f"agitateur arrêté avant la fin de « {pas.texte} »")
+                if pas.origine:
+                    self._prendre_origine(etat.redemarrages, etat.coupures)
                 self._fin_mouvement = self._horloge()
             return self._horloge() - self._fin_mouvement >= pas.attente_s
+
+    def _prendre_origine(self, redemarrages: int, coupures: int) -> None:
+        """Fin du tour lent : « en haut » d'après le capteur (appelé sous le verrou)."""
+        try:
+            zero = trouver_origine(self._echantillons, self.reglages.manivelle.origine)
+        except ValueError as erreur:
+            raise ErreurEtape(f"capteur manivelle : {erreur}", QUOI_FAIRE_CAPTEUR) from None
+        journal.info("Mycélium : manivelle en haut à %.1f° du moteur", zero)
+        self._zero, self._carte_au_zero = zero, (redemarrages, coupures)
 
     def _arrive(self, positions: dict[str, float]) -> bool:
         return all(

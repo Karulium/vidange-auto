@@ -8,12 +8,17 @@
 Un « agitateur » porte le bocal sur une glissière au-dessus du poste de remplissage. Pour chaque
 couche versée et tassée par la griffe :
 1. le bocal attend au garage, manivelle en haut ; le chariot de remplissage s'écarte ;
-2. l'agitateur roule jusqu'au demi-tour ; le bocal est retourné tête en bas (Porte-bocal) ;
+2. l'agitateur roule jusqu'au demi-tour ; manivelle en bas, le bocal est retourné tête en bas
+   (Porte-bocal), manivelle en haut (la glissière ne roule que manivelle en haut) ;
 3. il roule jusqu'au dosage ; manivelle en bas ;
 4. le chariot revient avec le seau, plateau à la hauteur du dosage ;
 5. la manivelle secoue le bocal en lisant la balance du chariot ; elle s'arrête quand la dose de
    la couche est atteinte, toujours pile en bas (jamais entre le haut et le bas) ;
-6. le chariot repart ; manivelle en haut, retour au demi-tour, bocal remis debout, garage.
+6. le chariot repart ; manivelle en haut, retour au demi-tour, manivelle en bas, bocal remis
+   debout, manivelle en haut, garage.
+
+Avant tout, la manivelle prend son origine (tour lent, AgitateurFluidnc) : au premier geste, et
+à chaque geste tant qu'elle n'est pas connue.
 
 Un bocal sert un seau (toutes ses couches), ou 2 petits seaux de la même variété au plus. La
 casse du bloc (agitation plus forte au début) ne se fait qu'à la 1re agitation d'un bocal.
@@ -22,10 +27,12 @@ alarme, il ne bouge pas. Un geste est rejouable : refait depuis le début (aprè
 Go), il repart de là où est l'agitateur ; la dose d'une couche est comptée depuis le poids du
 plateau avant sa 1re agitation.
 
+Le porte-bocal (vidange.porte_bocal, tâche 20) est derrière l'interface `PorteBocal` ; au
+changement de bocal, ses mors s'ouvrent, le bocal neuf est posé, puis serré.
+
 Les modules pas encore écrits sont des cases vides, derrière des interfaces simples :
-- Porte-bocal (tâche 20) : `PorteBocal` (retourner_tete_en_bas, remettre_debout) ;
 - chariot de remplissage (Remplissage, pas figé) : `ChariotRemplissage` ;
-- changement de bocal (Porte-bocal, Préhension) et QR (tâche 22) : `nouveau_bocal(variete)` ;
+- pose du bocal neuf (Préhension) et QR (tâche 22) : `nouveau_bocal(variete)` ;
 - caméra du dosage (tâche 22) : `photo(raison)`.
 """
 
@@ -34,7 +41,7 @@ import time
 from collections import deque
 from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Literal, Protocol
 
 from vidange.chef import ErreurEtape
 from vidange.journal import donner_journal
@@ -59,15 +66,21 @@ QUOI_FAIRE_VIDE = (
 
 
 class PorteBocal(Protocol):
-    """Le demi-tour du bocal (moteur JGY370 et son verrou) et ses mors : tâche 20."""
+    """Le demi-tour du bocal (moteur JGY370 et son verrou) et ses mors : vidange.porte_bocal."""
 
     def retourner_tete_en_bas(self) -> None: ...
 
     def remettre_debout(self) -> None: ...
 
+    def ouvrir_mors(self) -> None: ...
+
+    def serrer_bocal(self) -> None: ...
+
     def fini(self) -> bool:
         """Vrai quand le geste est fini ; ErreurEtape s'il a échoué."""
         ...
+
+    def arreter(self) -> None: ...
 
 
 class ChariotRemplissage(Protocol):
@@ -158,6 +171,8 @@ class Mycelium:
         self._photo = photo
         self.plan = Plan()
         self.doses: list[Dose] = []
+        # Simulateur seulement : le faux matériel du porte-bocal (vidange.porte_bocal.faux).
+        self.materiel_porte_bocal: object | None = None
         self._demandes: deque[Demande] = deque()
         self._termine = False
         self._seaux_du_cycle: dict[tuple[int, str], int] = {}
@@ -204,6 +219,13 @@ class Mycelium:
         Il ne roule que si l'agitateur est au garage manivelle en haut, ou au dosage manivelle en
         bas."""
         return self.regles.refus_chariot(self._position(), self._bouge())
+
+    def refus_demi_tour(self) -> str | None:
+        """Pour le porte-bocal : pourquoi le demi-tour du bocal est interdit, ou None."""
+        pose = self._position()
+        if pose is None:
+            return "position de l'agitateur du mycélium inconnue"
+        return self.regles.refus_demi_tour(pose, self.chariot.etat())
 
     def camera_peut_pivoter(self) -> bool:
         """Pour la caméra du dosage : elle ne pivote vers le seau qu'agitateur garé."""
@@ -281,12 +303,22 @@ class Mycelium:
         return self.formats[self.demande.format]
 
     def lancer(self, geste: Callable[[], Geste]) -> None:
-        """Action d'une étape : le geste part depuis là où est l'agitateur."""
+        """Action d'une étape : le geste part depuis là où est l'agitateur (après la prise
+        d'origine de la manivelle, si elle n'est pas connue)."""
         self.agitateur.oublier_saut()
-        self.pose = self.agitateur.position()
-        self._geste = geste()
         self._pas = None
+        if self.agitateur.origine_connue():
+            self.pose = self.agitateur.position()
+            self._geste = geste()
+        else:
+            self.pose = None
+            self._geste = self._apres_origine(geste)
         self._suivant(None)
+
+    def _apres_origine(self, geste: Callable[[], Geste]) -> Geste:
+        resultat = yield Pas("origine de la manivelle (tour lent)", origine=True)
+        self.pose = resultat.pose
+        yield from geste()
 
     def _suivant(self, resultat: Resultat | None) -> None:
         assert self._geste is not None
@@ -298,16 +330,35 @@ class Mycelium:
         self._envoyer(pas)
 
     def _envoyer(self, pas: Pas) -> None:
-        assert self.pose is not None
         self._pas = pas
         self._depuis = self._horloge()
-        if pas.porte_bocal is not None:
-            if not self.regles.au_demi_tour(self.pose):
-                raise ErreurEtape(f"« {pas.texte} » refusé : l'agitateur n'est pas au demi-tour")
+        chariot = self.chariot.etat()
+        if pas.origine:
+            # Seule la glissière est connue : la manivelle tourne-t-elle à cet endroit ?
+            pose = PoseAgitateur(x=self.agitateur.glissiere_x(), angle=math.nan)
+            refus = self.regles.refus_manivelle(pose, chariot)
+            if refus is not None:
+                raise ErreurEtape(f"mycélium, « {pas.texte} » refusé : {refus}", QUOI_FAIRE)
+            journal.info("Mycélium : %s", pas.texte)
+            self.agitateur.executer(pas, None)
+            return
+        assert self.pose is not None
+        if pas.porte_bocal in ("tete_en_bas", "debout"):
+            refus = self.regles.refus_demi_tour(self.pose, chariot)
+            if refus is not None:
+                raise ErreurEtape(f"« {pas.texte} » refusé : {refus}", QUOI_FAIRE)
             if pas.porte_bocal == "tete_en_bas":
                 self.porte_bocal.retourner_tete_en_bas()
             else:
                 self.porte_bocal.remettre_debout()
+            return
+        if pas.porte_bocal is not None:
+            if not self.regles.au_garage(self.pose):
+                raise ErreurEtape(f"« {pas.texte} » refusé : l'agitateur n'est pas au garage")
+            if pas.porte_bocal == "ouvrir":
+                self.porte_bocal.ouvrir_mors()
+            else:
+                self.porte_bocal.serrer_bocal()
             return
         cible = self.pose.avec(
             **{
@@ -316,7 +367,6 @@ class Mycelium:
                 if valeur is not None
             }
         )
-        chariot = self.chariot.etat()
         if pas.x is not None and abs(cible.x - self.pose.x) > 1e-6:
             refus = self.regles.refus_glissiere(self.pose, cible.x, chariot)
         else:
@@ -339,13 +389,16 @@ class Mycelium:
     def _avancer(self) -> bool:
         while self._geste is not None:
             pas = self._pas
-            assert pas is not None and self.pose is not None
+            assert pas is not None
             if pas.porte_bocal is not None:
+                assert self.pose is not None
                 if not self.porte_bocal.fini():
                     return False
-                self.plan.tete_en_bas = pas.porte_bocal == "tete_en_bas"
+                if pas.porte_bocal in ("tete_en_bas", "debout"):
+                    self.plan.tete_en_bas = pas.porte_bocal == "tete_en_bas"
                 resultat = Resultat(pose=self.pose)
             elif not pas.bouge:
+                assert self.pose is not None
                 if self._horloge() - self._depuis < pas.attente_s:
                     return False
                 resultat = Resultat(pose=self.pose)
@@ -366,6 +419,7 @@ class Mycelium:
     def arreter(self) -> None:
         self._geste = self._pas = None
         self.agitateur.arreter()
+        self.porte_bocal.arreter()
 
     # ------------------------------------------------------------ morceaux de gestes
 
@@ -420,11 +474,28 @@ class Mycelium:
 
     # ------------------------------------------------------------ les gestes
 
+    def geste_origine(self) -> Geste:
+        """Prise d'origine de la manivelle (faite par `lancer` si elle n'est pas connue), puis
+        manivelle en haut."""
+        yield from self._manivelle(bas=False)
+
+    def geste_changer_de_bocal(self) -> Geste:
+        """Mors ouverts (l'ancien bocal est repris), bocal neuf posé, serré."""
+        yield Pas("mors ouverts", porte_bocal="ouvrir")
+        self.changer_de_bocal()
+        yield Pas("bocal serré", porte_bocal="serrer")
+
+    def _demi_tour(self, porte_bocal: Literal["tete_en_bas", "debout"], texte: str) -> Geste:
+        """Au demi-tour, toujours manivelle en bas ; la manivelle remonte ensuite."""
+        yield from self._glissiere(self.reglages.demi_tour_x, "rouler jusqu'au demi-tour")
+        yield from self._manivelle(bas=True)
+        yield Pas(texte, porte_bocal=porte_bocal)
+        yield from self._manivelle(bas=False)
+
     def geste_aller_doser(self) -> Geste:
         """Du garage au dosage : demi-tour du bocal tête en bas, puis manivelle en bas."""
         if not self.plan.tete_en_bas:
-            yield from self._glissiere(self.reglages.demi_tour_x, "rouler jusqu'au demi-tour")
-            yield Pas("bocal tête en bas", porte_bocal="tete_en_bas")
+            yield from self._demi_tour("tete_en_bas", "bocal tête en bas")
         yield from self._glissiere(self.reglages.dosage_x, "rouler jusqu'au dosage")
         yield from self._manivelle(bas=True)
 
@@ -469,8 +540,7 @@ class Mycelium:
     def geste_rentrer(self) -> Geste:
         """Manivelle en haut, retour au demi-tour, bocal remis debout, retour au garage."""
         if self.plan.tete_en_bas:
-            yield from self._glissiere(self.reglages.demi_tour_x, "rouler jusqu'au demi-tour")
-            yield Pas("bocal remis debout", porte_bocal="debout")
+            yield from self._demi_tour("debout", "bocal remis debout")
         yield from self._glissiere(self.reglages.garage_x, "rouler jusqu'au garage")
         yield from self._manivelle(bas=False)
 

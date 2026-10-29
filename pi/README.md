@@ -57,6 +57,7 @@ Pas encore de vrai module de la machine.
 | `vidange/accelerometre/` | Accéléromètre du chariot Z : copie de `accelerometre.yaml` dans le programme du RP2040 (`accelerometre/`) ; liaison par le fil série unique (chocs notés au registre, réglages envoyés), mise à jour de son programme par ce fil (chargeur, `fichier_programme.py`), faux RP2040 ; commande `vidange-accelerometre` |
 | `vidange/mode.py` | Mode de la machine (production, lavage, UV-ozone), gardé dans un fichier, changé machine au repos |
 | `vidange/griffe/` | Griffe sur mât : règles de position (`regles.py`), doses apprises (`doses.py`), bras sur la carte du portique et sa pesée (`bras.py`), gestes (`griffe.py`), module « griffe » (`module.py`), griffe du simulateur (`simulation.py`) |
+| `vidange/porte_bocal/` | Porte-bocal (carte n° 3) : mors (serrage par palpage, ouverture), demi-tour du bocal (pont en H, verrou, inclinaison, photo de contrôle), signaux de la carte par leur nom (`signaux.py`), faux plateau et faux bocal (`faux.py`) ; commande `vidange-porte-bocal` |
 | `vidange/poste_fut/` | Poste du fût : état (absent, en place, prêt), bouton « Prêt » et voyant, pesée (HX711), mode permis par le panneau, verrous pour les autres modules, module « poste_fut » ; commande `vidange-pesee` (étalonnage) |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) ; poste du fût (chiffres **vrais**, pesée à étalonner) |
 | `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran, caméras, pilotage à distance, mises à jour) |
@@ -403,18 +404,33 @@ chiffres sont dans `reglages/machine.yaml` (partie `mycelium`, axes `agitateur_x
 (`systeme/essai-mycelium.md`).
 
 ```python
+carte = reglages.fluidnc.cartes["mycelium_lavage"]
 agitateur = AgitateurFluidnc(
-    reglages.machine, liaison_mycelium_lavage, balance_plateau
-)  # tâche 22 bis
-agitateur.demarrer(arret)  # lit la balance 80 fois par seconde
+    reglages.machine, liaison_mycelium_lavage, balance_plateau, carte
+)  # balance : tâche 22 bis
+agitateur.demarrer(arret)  # lit la balance 80 fois par seconde (et le capteur de la manivelle)
+porte_bocal = PorteBocalFluidnc(
+    reglages.machine,
+    liaison_mycelium_lavage,
+    signaux_porte_bocal(liaison_mycelium_lavage, carte),
+    photo=photo,
+    controle=controle_du_bocal,  # tâche 22
+)
 mycelium = Mycelium(reglages.machine, agitateur, porte_bocal, chariot, nouveau_bocal, registre)
+porte_bocal.verrou = mycelium.refus_demi_tour
 chef.lancer(module_mycelium(mycelium))
 mycelium.demander(Demande("S1293", "seau_a", couche=1, variete="pleurote_grise", cycle=cycle))
 ```
 
-- **Une couche** : chariot écarté, demi-tour du bocal tête en bas, dosage, manivelle en bas, seau sous le
-  bocal (plateau à la hauteur du dosage), casse du bloc (1re agitation d'un bocal), agitation jusqu'à la dose,
-  arrêt **pile en bas**, chariot qui repart, manivelle en haut, bocal debout, garage.
+- **Origine de la manivelle** (tâche 20) : le capteur voit du métal quand la manivelle n'est **pas** en haut ;
+  le Pi fait un tour lent et prend le milieu de la zone sans métal (+ décalage), contrôle sa largeur (± 10°)
+  et le nombre de bords, sinon alarme « capteur manivelle ». Faite au début, et refaite si la carte redémarre.
+- **Une couche** : chariot écarté, au demi-tour manivelle en bas, bocal tête en bas, manivelle en haut,
+  dosage, manivelle en bas, seau sous le bocal (plateau à la hauteur du dosage), casse du bloc (1re agitation
+  d'un bocal), agitation jusqu'à la dose, arrêt **pile en bas**, chariot qui repart, manivelle en haut,
+  demi-tour (manivelle en bas, bocal debout, photo de contrôle, manivelle en haut), garage.
+- **Changement de bocal** : mors ouverts, bocal neuf posé (Préhension, case vide), serré (palpage : diamètre
+  hors plage = bocal absent, cassé ou mal posé → alarme avec photo).
 - **Verrous** (`ReglesMycelium`) : l'agitateur ne roule que chariot écarté (y ≥ 0,375) et manivelle en haut ;
   `mycelium.refus_chariot()` dit au chariot de remplissage s'il peut rouler (agitateur au garage manivelle en
   haut, ou au dosage manivelle en bas) ; au garage, pas de rotation avec la course de 10 cm ;
@@ -425,5 +441,7 @@ mycelium.demander(Demande("S1293", "seau_a", couche=1, variete="pleurote_grise",
   (`bocaux.variete`).
 - **Un bocal pour 2 petits seaux** de la même variété (`seaux_par_bocal: 2`), casse du bloc au 1er seau.
 - La manivelle tourne dans le sens qui la ramène vers 0 : le nombre de degrés ne grandit pas sans fin.
-- Cases vides : `PorteBocal` (tâche 20), `ChariotRemplissage` (Remplissage), `nouveau_bocal(variete)`
-  (Porte-bocal, Préhension, QR), `photo(raison)` (Vision).
+- Cases vides : `ChariotRemplissage` (Remplissage), `nouveau_bocal(variete)` (Préhension, QR),
+  `photo(raison)` et `controle()` du porte-bocal (Vision).
+- **Porte-bocal** (`vidange/porte_bocal/`, tâche 20) : `vidange-porte-bocal etat | origine | ouvrir | serrer |
+  tete-en-bas | debout` pour l'essayer sur la carte (`systeme/essai-porte-bocal.md`).

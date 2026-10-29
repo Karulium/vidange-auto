@@ -55,13 +55,14 @@ griffe:
   charge_vide_n: 120
 
 # Le mycélium imaginaire : grains qui tombent quand la manivelle tourne (bocal tête en bas, seau
-# dessous), en kg/s à la vitesse d'agitation (moins vite quand elle tourne plus lentement), mycélium d'un bocal neuf, durées du demi-tour du bocal et d'un trajet du chariot de
+# dessous), en kg/s à la vitesse d'agitation (moins vite quand elle tourne plus lentement), mycélium d'un bocal neuf, durées du demi-tour du bocal (≈ 2,3 s, fiche du
+# Porte-bocal ; le vrai porte-bocal tourne sur un faux FluidNC) et d'un trajet du chariot de
 # remplissage, et les seaux à doser (un seau A en 4 couches, puis 2 petits seaux B avec un seul
 # bocal). Le bocal attend au garage (position agitateur_garage de machine.yaml).
 mycelium:
   debit_kg_s: 0.02
   bocal_kg: 0.9
-  demi_tour_s: 4
+  demi_tour_s: 2.3
   chariot_s: 6
   seaux:
     - {seau: S0001, format: seau_a, variete: pleurote_grise}
