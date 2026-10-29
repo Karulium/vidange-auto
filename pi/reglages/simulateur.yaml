@@ -33,6 +33,10 @@ axes:
   griffe_z: {vitesse: 0.15, acceleration: 0.5}
   griffe_a: {vitesse: 90, acceleration: 180}
   griffe_b: {vitesse: 0.05, acceleration: 0.5}
+  # Agitateur du mycélium : ses vitesses (machine.yaml → mycelium → vitesses) passent avant
+  # celles-ci. Manivelle en °/s (300 tr/min = 1800 °/s).
+  agitateur_x: {vitesse: 0.1, acceleration: 0.5}
+  manivelle: {vitesse: 1800, acceleration: 3600}
 
 # Position (machine.yaml) des axes au départ. Sans « depart », chaque axe est au début de sa course.
 # Les axes que la position ne cite pas sont au début de leur course.
@@ -50,6 +54,20 @@ griffe:
   entrouvrir_rendu: 0.15
   charge_vide_n: 120
 
+# Le mycélium imaginaire : grains qui tombent quand la manivelle tourne (bocal tête en bas, seau
+# dessous), en kg/s à la vitesse d'agitation (moins vite quand elle tourne plus lentement), mycélium d'un bocal neuf, durées du demi-tour du bocal et d'un trajet du chariot de
+# remplissage, et les seaux à doser (un seau A en 4 couches, puis 2 petits seaux B avec un seul
+# bocal). Le bocal attend au garage (position agitateur_garage de machine.yaml).
+mycelium:
+  debit_kg_s: 0.02
+  bocal_kg: 0.9
+  demi_tour_s: 4
+  chariot_s: 6
+  seaux:
+    - {seau: S0001, format: seau_a, variete: pleurote_grise}
+    - {seau: S0002, format: seau_b, variete: pleurote_grise}
+    - {seau: S0003, format: seau_b, variete: pleurote_grise}
+
 # Capteurs (entrées tout-ou-rien de docs/entrees-sorties.yaml) actionnés au départ.
 capteurs_actionnes: []
 
@@ -66,7 +84,8 @@ evenements:
 
 # Scénarios nommés : ils remplacent « capteurs_actionnes » et « evenements » du haut.
 # Lancer : vidange-simulateur poste_fut   (scénario « echange_fut » par défaut),
-#         vidange-simulateur griffe      (scénario « vidange_fut » par défaut).
+#         vidange-simulateur griffe      (scénario « vidange_fut » par défaut),
+#         vidange-simulateur mycelium    (scénario « dosage_mycelium » par défaut).
 scenarios:
   # Échange d'un fût au poste : le chariot du fût vide s'en va, le suivant arrive.
   echange_fut:
@@ -111,3 +130,5 @@ scenarios:
       - attente_s: 6
         capteur: bouton_pret_fut
         actionne: false
+  # Dosage du mycélium (seaux de la partie « mycelium » plus haut) : aucun capteur ne change.
+  dosage_mycelium: {}

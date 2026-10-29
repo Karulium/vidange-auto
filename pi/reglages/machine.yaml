@@ -17,6 +17,9 @@
 #   - poste du fût : intervalles dans l'ordre, fond du fût sous son bord, pesée cohérente ;
 #   - griffe : ses 5 axes existent, ses hauteurs (trajet, vidage, essuyage) sont dans la course,
 #     table des volumes rangée, formats connus ;
+#   - mycélium : ses 2 axes existent, garage < demi-tour < dosage dans la course de la glissière,
+#     course de l'agitation dans les trous de la manivelle, formats complets (hauteur, mycélium,
+#     bord du seau au dosage = haut_z), une agitation entière tient dans la course de la manivelle ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
 
 exemple: true
@@ -78,6 +81,24 @@ axes:
     course: [0.0, 0.03]
     carte: portique
     lettre: B
+  # Les 2 axes de l'agitateur du Mycélium, sur la carte n° 3 (mycelium_lavage). Régler FluidNC
+  # pour que sa position machine soit celle du repère du portique, en mm (prise d'origine sur le
+  # fin de course du garage). Glissière : du garage (0,565) au dosage (0,925), 0,36 de course
+  # (fiche). La longueur du rail est un EXEMPLE.
+  agitateur_x:
+    longueur_rail: 0.95
+    course: [0.565, 0.925]
+    carte: mycelium_lavage
+    lettre: X
+  # Manivelle (°) : elle tourne sans fin, dans un sens ou dans l'autre (le Pi choisit le sens qui
+  # la ramène vers 0, pour que le nombre ne grandisse pas). La course doit tenir une agitation
+  # entière dans chaque sens (vérifié au démarrage). EXEMPLE : 200 tours de chaque côté.
+  manivelle:
+    unite: deg
+    longueur_rail: 72000
+    course: [-72000, 72000]
+    carte: mycelium_lavage
+    lettre: A
 
 positions:
   exemple_repos:
@@ -96,6 +117,10 @@ positions:
     griffe_z: 1.29
     griffe_a: 0
     griffe_b: 0
+  # L'agitateur du mycélium au garage, manivelle en haut.
+  agitateur_garage:
+    agitateur_x: 0.565
+    manivelle: 0
 
 zones:
   exemple_zone_a:
@@ -110,6 +135,11 @@ durees:
   exemple_prise_origine_max: 90
   # Un geste de la griffe (une prise, un trajet, un vidage...) : au plus 10 min.
   griffe_geste_max: 600
+  # Mycélium : un geste de l'agitateur, un trajet du chariot de remplissage demandé par le
+  # mycélium, une agitation (casse du bloc et dosage). EXEMPLES.
+  mycelium_geste_max: 300
+  mycelium_chariot_max: 120
+  mycelium_agitation_max: 300
 
 # Poste du fût. Ces chiffres-là sont VRAIS (fiche du module « Poste du fût », validée le
 # 23/10/2026, et plan de commande v221), sauf la partie « pesee » (à étalonner, voir plus bas).
@@ -375,6 +405,9 @@ griffe:
   # 28/10, à revoir au gel du Remplissage). rayon_haut = Ø haut / 2.
   # couches et dose_kg : EXEMPLES (godet de 3 L au plus par prise ; le poids visé par seau vient de
   # la recette de Karulium, à régler aux essais).
+  # Pour le Mycélium : hauteur du seau (mesurée, h dans « plateau à min(0,78 − h ; 0,575) »),
+  # mycelium_kg = mycélium par couche (EXEMPLE, à régler aux essais), seaux_par_bocal = 2 pour
+  # les petits seaux (un bocal pour 2 seaux de la même variété au plus, Karulium 26/10).
   formats:
     seau_a:
       haut_z: 0.78
@@ -384,6 +417,8 @@ griffe:
       tasser_chaque_couche: true
       tassement_rayon_m: 0.06
       tassement_bas_max_sous_bord_m: 0.30
+      hauteur: 0.25
+      mycelium_kg: 0.15
     # Seau de 5 L : tassement de la dernière couche seulement, tête centrée, bas du godet au plus
     # 8 cm sous le bord (fiche).
     seau_b:
@@ -394,6 +429,9 @@ griffe:
       tasser_chaque_couche: false
       tassement_rayon_m: 0.0
       tassement_bas_max_sous_bord_m: 0.08
+      hauteur: 0.20
+      mycelium_kg: 0.10
+      seaux_par_bocal: 2
     seau_c:
       haut_z: 0.78
       rayon_haut: 0.1475
@@ -402,6 +440,8 @@ griffe:
       tasser_chaque_couche: true
       tassement_rayon_m: 0.06
       tassement_bas_max_sous_bord_m: 0.30
+      hauteur: 0.235
+      mycelium_kg: 0.15
     seau_d:
       haut_z: 0.78
       rayon_haut: 0.1375
@@ -410,12 +450,78 @@ griffe:
       tasser_chaque_couche: true
       tassement_rayon_m: 0.06
       tassement_bas_max_sous_bord_m: 0.30
+      hauteur: 0.265
+      mycelium_kg: 0.15
   format_par_defaut: seau_a
   # Poste de vidage de la griffe (Transfert, 7/10, plan de commande) : mât en (0,925 ; 0,14),
   # godet à 1 cm du centre du seau (seau au poste y 0,135). À revoir au gel du Remplissage.
   seau_remplissage: [0.925, 0.14]
   # Fût vide : le mât attend ici, pont hors de la zone du chariot du fût (choix du logiciel).
   attente: [0.86, 0.57]
+
+# Mycélium (dosage), module validé le 24/10/2026 (option B : tout le module relevé de 12 mm).
+# Chiffres VRAIS de la fiche du module et du plan de commande v221, sauf ceux marqués EXEMPLE
+# (vitesses, tolérances, dose, pesée : à régler aux essais).
+# Repère du portique, en mètres ; x = position de l'agitateur sur sa glissière.
+mycelium:
+  exemple: true
+  # Garage (bocal en attente, manivelle en haut), demi-tour du bocal (Porte-bocal), dosage (axe
+  # du seau). EXEMPLE : écart permis autour de ces positions.
+  garage_x: 0.565
+  demi_tour_x: 0.865
+  dosage_x: 0.925
+  tolerance_x_m: 0.002
+  # La caméra du dosage ne pivote vers le seau que si l'agitateur est garé (x ≤ 0,62,
+  # docs/decisions.md, règle 2).
+  camera_x_max: 0.62
+  # Axe de la manivelle (module relevé de 12 mm le 24/10) : pour mémoire.
+  manivelle_z: 0.762
+  # Course de l'agitation, choisie À LA MAIN (bielle dans un des 3 trous de la manivelle).
+  # Le Pi ne la change pas : la tenir à jour quand on change de trou. EXEMPLE : 7 cm.
+  course_agitation_m: 0.07
+  # Le chariot de remplissage (verrous du 24/10) : l'agitateur ne roule que si le chariot est à
+  # y ≥ 0,375 ; au dosage, le seau est à y 0,155, plateau à min(0,78 − h ; 0,575) (h : hauteur
+  # du seau dans la table des formats ; bord du seau à 0,78, 0,775 pour le 5 L).
+  # Tolérances : EXEMPLES.
+  chariot:
+    y_ecarte_min: 0.375
+    y_dosage: 0.155
+    tolerance_y_m: 0.003
+    bord_seau_z: 0.78
+    plateau_max_z: 0.575
+    tolerance_plateau_m: 0.003
+  # Manivelle en haut à 0° (prise d'origine), en bas à 180°. Courses possibles (fiche) :
+  # 4, 7 ou 10 cm ; au garage, 7 cm au plus (à 10 cm, le fond du bocal toucherait la marche du
+  # poste du fût à z 0,88). Jusqu'à 300 tr/min (fiche). Tolérance : EXEMPLE.
+  manivelle:
+    angle_haut_deg: 0
+    tolerance_deg: 1
+    courses_possibles_m: [0.04, 0.07, 0.10]
+    course_max_garage_m: 0.07
+    max_tr_min: 300
+  # Vitesses : EXEMPLES, à trouver aux essais.
+  vitesses:
+    glissiere_m_s: 0.1
+    placement_tr_min: 20
+    agitation_tr_min: 120
+    casse_tr_min: 200
+  # Dosage : arrêt quand la dose de la couche (formats → mycelium_kg) est atteinte, moins
+  # arret_avant_kg ; temps maximal ; casse du bloc au 1er seau d'un bocal. EXEMPLES.
+  dose:
+    arret_avant_kg: 0.005
+    tolerance: 0.15
+    temps_max_s: 90
+    casse_du_bloc_s: 5
+    attente_pesee_s: 1
+  # Balance du plateau du chariot de remplissage (carte de pesée RS485, tâche 22 bis), lue
+  # 80 fois par seconde pendant l'agitation. Saut brutal (bocal ou couvercle cassé, bocal tombé) :
+  # arrêt de la manivelle et alerte. EXEMPLES.
+  pesee:
+    frequence_hz: 80
+    lectures_pesee: 20
+    lectures_saut: 4
+    saut_kg: 0.3
+    silence_max_s: 0.5
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

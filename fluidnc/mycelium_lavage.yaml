@@ -1,0 +1,83 @@
+# Réglages FluidNC de la carte n° 3 : axes du mycélium (et plus tard du lavage, tâche 21).
+#
+# ATTENTION : EXEMPLE. Ne PAS envoyer ce fichier à la vraie carte avant d'avoir mis les vraies
+# broches (plan de câblage), les vrais pas par mm (poulies, réglage des pilotes) et les axes du
+# lavage. Les chiffres marqués « (fiche) » sont ceux du module Mycélium validé le 24/10/2026.
+#
+# Repère : la position machine de chaque axe est celle de pi/reglages/machine.yaml
+# (mm = mètres × 1000 ; degrés pour la manivelle).
+#   X : glissière de l'agitateur. NEMA 17 boucle fermée (codeur 1000 lignes), courroie GT2.
+#       Prise d'origine sur le fin de course du garage : x = 565 mm (fiche). Course 360 mm
+#       jusqu'au dosage à 925 mm (fiche). Le fin de course du dosage est une butée de la machine
+#       (alarme s'il est touché) : le régler juste après 925 mm.
+#   A : manivelle. NEMA 34 à codeur, pilote HBS86H en 48 V. Elle tourne sans fin, dans les deux
+#       sens : pas de limites logicielles. Prise d'origine sur le capteur « manivelle en haut »
+#       (question n° 1 de la PR de la tâche 19) : 0° = en haut, 180° = en bas. Ce capteur voit
+#       passer la manivelle à chaque tour : il ne doit JAMAIS être une butée (hard_limits: false).
+#       Jusqu'à 300 tr/min (fiche) = 108 000 °/min.
+
+name: "Vidange carte 3 - mycelium et lavage (EXEMPLE)"
+board: "ESP32 6 axes, pilotes externes (EXEMPLE)"
+
+stepping:
+  engine: RMT
+  idle_ms: 255
+  pulse_us: 4
+  dir_delay_us: 2
+  disable_delay_us: 0
+
+# Prise d'origine obligatoire à la mise sous tension (docs/decisions.md).
+start:
+  must_home: true
+
+axes:
+  shared_stepper_disable_pin: NO_PIN
+
+  x:
+    # EXEMPLE : 1600 pas par tour sur le pilote, poulie GT2 de 20 dents (40 mm par tour).
+    steps_per_mm: 40
+    max_rate_mm_per_min: 12000
+    acceleration_mm_per_sec2: 500
+    max_travel_mm: 360
+    soft_limits: true
+    homing:
+      cycle: 1
+      positive_direction: false
+      mpos_mm: 565
+      feed_mm_per_min: 300
+      seek_mm_per_min: 2000
+      settle_ms: 250
+    motor0:
+      # EXEMPLES de broches : fdc_agitateur_garage, fdc_agitateur_dosage.
+      limit_neg_pin: gpio.36:low
+      limit_pos_pin: gpio.39:low
+      hard_limits: true
+      pulloff_mm: 2
+      standard_stepper:
+        step_pin: gpio.12
+        direction_pin: gpio.14
+        disable_pin: NO_PIN
+
+  a:
+    # EXEMPLE : 4000 pas par tour sur le HBS86H → 11,111 pas par degré.
+    steps_per_mm: 11.111
+    max_rate_mm_per_min: 108000
+    acceleration_mm_per_sec2: 3600
+    max_travel_mm: 360
+    soft_limits: false
+    homing:
+      cycle: 2
+      positive_direction: true
+      mpos_mm: 0
+      feed_mm_per_min: 1800
+      seek_mm_per_min: 7200
+      settle_ms: 250
+    motor0:
+      # EXEMPLE de broche : origine_manivelle (jamais une butée).
+      limit_neg_pin: gpio.34:low
+      hard_limits: false
+      pulloff_mm: 0
+      standard_stepper:
+        step_pin: gpio.26
+        direction_pin: gpio.27
+        disable_pin: NO_PIN

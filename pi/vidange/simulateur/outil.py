@@ -5,6 +5,7 @@
   vidange-simulateur exemple --json p.json     planning aussi en JSON (page web, comparaisons...)
   vidange-simulateur poste_fut                 échange d'un fût (scénario « echange_fut »)
   vidange-simulateur griffe                    vidange d'un fût par la griffe (« vidange_fut »)
+  vidange-simulateur mycelium                  dosage du mycélium (« dosage_mycelium »)
 
 Les durées se règlent dans reglages/simulateur.yaml (vitesses des axes, délai du Go, capteurs).
 Tourne sur n'importe quel PC, sans la machine. Code de sortie 0 si le cycle va au bout, 1 sinon.
@@ -22,6 +23,8 @@ from vidange.demarrage import DOSSIER_PI, _chemin
 from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.griffe.module import module_griffe
 from vidange.griffe.simulation import griffe_du_simulateur
+from vidange.mycelium.module import module_mycelium
+from vidange.mycelium.simulation import mycelium_du_simulateur
 from vidange.poste_fut.module import module_echange_fut
 from vidange.reglages import ErreurReglages, charger_reglages
 from vidange.simulateur.simulateur import ErreurSimulation, Simulateur
@@ -33,9 +36,10 @@ MODULES: dict[str, Callable[[Simulateur], Module]] = {
     "exemple": lambda simulateur: module_exemple(simulateur.axes(), simulateur.materiel),
     "poste_fut": lambda simulateur: module_echange_fut(simulateur.poste_fut()),
     "griffe": lambda simulateur: module_griffe(griffe_du_simulateur(simulateur)),
+    "mycelium": lambda simulateur: module_mycelium(mycelium_du_simulateur(simulateur)),
 }
 # Scénario de simulateur.yaml joué par défaut avec un module (sinon : le haut du fichier).
-SCENARIOS = {"poste_fut": "echange_fut", "griffe": "vidange_fut"}
+SCENARIOS = {"poste_fut": "echange_fut", "griffe": "vidange_fut", "mycelium": "dosage_mycelium"}
 
 
 def main(arguments: list[str] | None = None) -> int:

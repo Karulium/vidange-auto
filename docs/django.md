@@ -123,9 +123,10 @@ doit changer dans la même PR).
       "seau": "S1293",
       "type_seau": "opaque_10l",
       "quand": "2026-10-27T08:05:00",
+      "defaut": null,
       "doses": [
-        {"bocal": "B327", "quantite_g": 120.0, "quand": "2026-10-27T08:05:00"},
-        {"bocal": "B328", "quantite_g": null, "quand": "2026-10-27T08:05:30"}
+        {"bocal": "B327", "quantite_g": 120.0, "couche": 1, "quand": "2026-10-27T08:05:00"},
+        {"bocal": "B328", "quantite_g": null, "couche": null, "quand": "2026-10-27T08:05:30"}
       ]
     }
   ],
@@ -173,7 +174,8 @@ Les champs :
 | `cycle.issue` | `termine` (fini normalement) ou `abandonne` (arrêté en route : les seaux déjà remplis sont quand même listés) |
 | `cycle.fut` | code du fût vidé (ou `null`) : son substrat et son traitement thermique |
 | `seaux[]` | chaque seau rempli, dans l'ordre : `seau` (code du QR), `type_seau` (nom du format dans `machine.yaml`, ou `null` s'il n'est pas connu), `quand` (fin du remplissage) |
-| `seaux[].doses[]` | le mycélium versé dans ce seau : `bocal` (code du QR), `quantite_g` (grammes si pesés, sinon `null`), `quand`. Plusieurs doses et plusieurs bocaux possibles ; un bocal peut servir à deux petits seaux |
+| `seaux[].defaut` | `null` si le seau est bon ; sinon, pourquoi il ne l'est pas (exemple : « poids qui ne monte plus : 40 g sur 150 g », bocal vide ou couvercle bouché ; « saut de poids pendant l'agitation », bocal cassé). L'app ne doit pas le compter comme un bloc normal (tâche 19, mycélium) |
+| `seaux[].doses[]` | le mycélium versé dans ce seau : `bocal` (code du QR), `quantite_g` (grammes si pesés, sinon `null`), `couche` (numéro de la couche de substrat sur laquelle il est versé, 1 = celle du fond, ou `null`), `quand`. Plusieurs doses et plusieurs bocaux possibles ; un bocal peut servir à deux petits seaux |
 | `bocaux` | les codes de tous les bocaux versés pendant le cycle, sans doublon, dans l'ordre d'usage : les `semences` du lot d'inoculation |
 | `etapes[]` | chaque geste fait : `etape` (son nom), `debut`, `fin`, `duree_s` (secondes, sans les pauses), `issue` (`faite`, `alarme`, `abandonnee`) |
 | `mesures[]` | chaque mesure du cycle : `nom` (exemple `poids_seau`), `valeur`, `unite` (`kg`, `g`, `°C`...), `capteur` (nom dans la liste des entrées/sorties), `quand`, et l'objet mesuré (`fut`, `seau`, `bocal` ou `petri`, les autres à `null`) |
