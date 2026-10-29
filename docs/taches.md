@@ -479,6 +479,10 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 
 - [ ] **21 bis. Lavage des couvercles et des bocaux** — Modèle : Opus, effort moyen. Après la tâche 21.
   Mêmes sources. Le lave-bocal et le retourneur sont posés **à la main** avant leur série et enlevés après ;
+  **D'abord**, corriger le lavage des seaux (tâche 21) selon `docs/decisions.md`, « Lavage des seaux », points 3,
+  6 et 7 : eau du réseau jusqu'au flotteur haut après la pompe qui suit le rinçage ; vanne 3 voies remise sur
+  « rampes » dès que la pompe s'arrête, et alerte « fuite ou siphon » si le flotteur retombe sans vidange ; jet
+  d'air décalé vers la buse comme le dit ce point (avec ses tests).
   bocaux et seaux ne se lavent jamais en même temps.
 
   *Couvercles de seau, dans le fût* :

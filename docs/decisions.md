@@ -243,6 +243,26 @@ si l'une pose problème, elle le dit dans sa PR.
      qui sera appliqué aussi en pilotage à distance (tâche 21). `refus_manuel()` servira au mode guidé (tâche 32).
   5. Capteur de vide 3,3 V : sa conversion (2 points tension → kPa) est relevée sur la notice du capteur acheté
      ou mesurée à l'étape 2 de l'essai ; c'est un réglage.
+- **Lavage des seaux** (réponses à la PR n° 36, tâche 21, 29/10/2026) :
+  1. Centre du fût de lavage (x 0,35) hors de portée de 2 mm (tête à x ≥ 0,352 depuis les rails HGR15) : on garde
+     x 0,352 (2 mm de décalage), sans effet sur le brossage (tête décalée vers +x). Question posée au projet
+     mécanique (avec le point 7) : déplacer le fût de lavage vers +x ?
+  2. Jet d'air et chauffage sur la carte 4 (la carte 3 n'a plus de sortie libre) : d'accord ; transmis au plan
+     de câblage. Le code ne connaît que les noms.
+  3. Chauffage entre deux seaux : après la pompe qui suit le rinçage, le Pi remet quelques secondes d'eau du
+     réseau jusqu'au flotteur haut (délai maximal : réglage), pour que le bain reste chauffé. La règle « chauffer
+     seulement flotteur haut et pompe arrêtée » ne change pas.
+  4. Rotation de la tête limitée (≈ ± 370°) : on essaie ainsi (≈ 1,75 tour par passe, aller puis retour) et on
+     juge la propreté aux essais. Le joint tournant n'est demandé au projet mécanique que si c'est sale.
+  5. Hauteur du seau pendant la passe 2 : réglage par format, 0 en attendant la cote du projet mécanique
+     (demandée).
+  6. Vanne à bille ouverte pendant la série : oui, **à condition** que la vanne 3 voies revienne sur « rampes »
+     dès que la pompe s'arrête (pas de siphon vers la bonde). Pompe arrêtée, si le flotteur retombe sans
+     vidange demandée : alerte « fuite ou siphon », vanne à bille fermée.
+  7. Jet d'air du col : la fiche décale le seau **vers la buse**, donc vers −x et −y (A 11 mm, B 17, D 8). Avec
+     x ≥ 0,352, la partie −x n'est plus possible : le décalage vers +x de la PR éloigne le seau de la buse et est
+     probablement faux. En attendant la réponse du projet mécanique (fût de lavage vers +x, ou buse réorientée),
+     le décalage se fait **seulement en −y** (vers la buse), x à 0,352 ; réglage par format, à ajuster à l'essai.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
