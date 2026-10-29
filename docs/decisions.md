@@ -221,17 +221,23 @@ si l'une pose problème, elle le dit dans sa PR.
   3. Cartes HX711 à **80 mesures/s** : broche RATE accessible (pont « RATE » type SparkFun) ou piste à couper ;
      contrôle à l'étape 4 de `pesee/essai-etabli.md`.
 - **Préhension** (réponses à la PR n° 34, tâche 37, 29/10/2026) :
-  1. Isolation du fût et porte-bocal : la règle reste **stricte** dans le code (sous x 0,71, panneau pas vu
-     rabattu ⇒ face à 1,10). Elle empêcherait de poser un bocal en production : la limite exacte (par exemple
-     seulement côté fût, y ≥ 0,215, la paroi haute) est **demandée au projet mécanique** ; sa réponse sera
-     recopiée ici et appliquée avant que la Préhension et le Mycélium travaillent ensemble.
+  1. Isolation du fût et porte-bocal (réponse du projet mécanique, Préhension, 29/10/2026) : le bocal au garage
+     est en **x 0,565, y 0,150** (et non 0,155), au-dessus de la marche, hors de l'enceinte du fût ; capsule à
+     1,1325 manivelle en haut, ≈ 1,0625 manivelle en bas (course 7 cm). La règle « face à 1,10 sous x 0,71 » ne
+     s'applique pas dans une **petite zone** autour du garage : axe de la tête à x 0,565 ± 5 mm et y 0,150 ± 5 mm
+     (pas tout y < 0,215 : entre y 0,16 et 0,215 la tête toucherait la paroi haute). Dans cette zone, la tête
+     arrive à 1,10 et descend à la verticale, seulement si : (a) agitateur au garage **manivelle en bas** (course
+     déclarée 7 cm) ; (b) mors ouverts pour poser, serrés pour prendre ; (c) griffe en butée haute. Manivelle en
+     haut, la capsule (1,1325) dépasse la butée haute de la tête (1,10) : la tête ne passe jamais au-dessus du
+     bocal au garage dans ce cas.
   2. Boîtier de la caméra du bocal : on garde le calcul depuis la boîte de `machine.yaml` (x 1,045-1,085,
      bord limité à 1,085 par la raclette de la griffe dans le plan de commande), soit x 0,99-1,14. Le « 1,16 » de
      la fiche venait d'un boîtier plus large.
-  3. Griffe et préhension sur le même pont : quand la préhension est au porte-bocal (axe x 0,565), le mât de la
-     griffe est à x 0,249, dans une bande où `garage_glissiere` lui demande y ≥ 0,23. **Demandé au projet
-     mécanique** (Maquette) avec la vraie position en y du bocal au garage (0,155 en exemple). Le verrou commun
-     du pont sera branché par le chef d'orchestre quand les deux modules travailleront ensemble.
+  3. Griffe et préhension sur le même pont (réponse du projet mécanique, 29/10/2026) : quand la préhension est
+     au porte-bocal, le mât de la griffe est en x 0,249, y 0,150. Pas de collision si la griffe est **en butée
+     haute** (bas du godet à 1,087 ; rien du Mycélium ne dépasse 1,0 sous son encombrement, la paroi haute et le
+     volet sont dessous). La bande x 0,15-0,43 sous y 0,23 (`garage_glissiere`) reste interdite à la griffe,
+     **sauf en butée haute**.
   4. Mode manuel : la décision de la PR n° 14 reste (le pilotage à distance « en cas de problème » ne vérifie pas
      les règles), **sauf** le verrou du noyau et de la couronne du lavage (jamais de rotation sans objet tenu),
      qui sera appliqué aussi en pilotage à distance (tâche 21). `refus_manuel()` servira au mode guidé (tâche 32).
