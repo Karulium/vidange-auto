@@ -238,6 +238,15 @@ _VERSION_5 = (
     "CREATE INDEX prises_griffe_cycle ON prises_griffe (cycle_id)",
 )
 
+# Version 6 (tâche 19) : le mycélium. Chaque dose dit sa couche ; un bocal garde sa variété (un
+# bocal ne sert 2 petits seaux que de la même variété) ; un seau mal dosé (bocal vide, cassé...)
+# garde la raison de son défaut (vide : seau bon).
+_VERSION_6 = (
+    "ALTER TABLE doses_mycelium ADD COLUMN couche INTEGER",
+    "ALTER TABLE bocaux ADD COLUMN variete TEXT",
+    "ALTER TABLE seaux ADD COLUMN defaut TEXT",
+)
+
 # Montée n° i (en partant de 1) : ce qui fait passer la base de la version i - 1 à la version i.
 MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_1,
@@ -245,6 +254,7 @@ MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_3,
     _VERSION_4,
     _VERSION_5,
+    _VERSION_6,
 )
 
 VERSION = len(MONTEES)

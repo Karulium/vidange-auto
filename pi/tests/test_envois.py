@@ -202,16 +202,35 @@ def test_donnees_d_un_cycle(registre, donnees, horloge, envois):
             "seau": "S1293",
             "type_seau": "opaque_10l",
             "quand": "2026-10-27T08:05:00",
+            "defaut": None,
             "doses": [
-                {"bocal": "B327", "quantite_g": 120.0, "quand": "2026-10-27T08:05:00"},
-                {"bocal": "B328", "quantite_g": None, "quand": "2026-10-27T08:05:00"},
+                {
+                    "bocal": "B327",
+                    "quantite_g": 120.0,
+                    "couche": None,
+                    "quand": "2026-10-27T08:05:00",
+                },
+                {
+                    "bocal": "B328",
+                    "quantite_g": None,
+                    "couche": None,
+                    "quand": "2026-10-27T08:05:00",
+                },
             ],
         },
         {
             "seau": "S1294",
             "type_seau": None,
             "quand": "2026-10-27T08:05:00",
-            "doses": [{"bocal": "B328", "quantite_g": None, "quand": "2026-10-27T08:05:00"}],
+            "defaut": None,
+            "doses": [
+                {
+                    "bocal": "B328",
+                    "quantite_g": None,
+                    "couche": None,
+                    "quand": "2026-10-27T08:05:00",
+                }
+            ],
         },
     ]
     assert d["bocaux"] == ["B327", "B328"]

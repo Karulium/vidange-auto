@@ -266,7 +266,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   l'agitateur. Vérifier l'essuyage du bord du seau (mât à +x du seau, axes à haut + 0,196) contre le boîtier de
   la caméra du bocal (x 1,045-1,085, y 0,22-0,28, z 0,982-1,062) ; s'il y a contact, le dire dans les questions
   de la PR avec une proposition. Tests.
-- [ ] **19. Mycélium (dosage)** — Modèle : Opus, effort moyen.
+- [x] **19. Mycélium (dosage)** — Modèle : Opus, effort moyen.
   Sources (recopiées ici le 28/10/2026) : fiche du module « Mycélium », **validé définitivement le 24/10/2026**
   (option B : tout le module relevé de 12 mm, garage à x 0,565), fiche des pièces v8 et plan de commande v221.
   Les chiffres vont dans `pi/reglages/machine.yaml` et `docs/entrees-sorties.yaml`, jamais dans le code.
@@ -339,6 +339,9 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 
   Simulateur : un seau de format A dosé en 4 couches, puis 2 petits seaux B avec un seul bocal. Tests, dont les
   verrous avec le chariot et la casse du bocal.
+- [ ] **19 bis. Ne jamais envoyer à une carte un fichier FluidNC d'exemple** — Modèle : Sonnet, effort bas.
+  L'envoi de `fluidnc/<carte>.yaml` à une carte est refusé si le fichier est marqué EXEMPLE, avec un message clair
+  qui dit quoi faire. Le simulateur et les tests peuvent toujours s'en servir. Tests.
 - [ ] 20. Porte-bocal
 - [ ] 21. Lavage
 - [ ] 22. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage

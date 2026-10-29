@@ -510,6 +510,12 @@ class FormatSeau(Modele):
     # sous le bord.
     tassement_rayon_m: float = Field(ge=0)
     tassement_bas_max_sous_bord_m: float = Field(gt=0)
+    # Pour le Mycélium (obligatoires s'il y a la partie « mycelium ») : hauteur du seau (m),
+    # mycélium par couche (kg), et combien de seaux de ce format un bocal peut servir (2 pour
+    # les petits seaux, de la même variété).
+    hauteur: float | None = Field(default=None, gt=0)
+    mycelium_kg: float | None = Field(default=None, gt=0)
+    seaux_par_bocal: int = Field(default=1, ge=1, le=2)
 
 
 class Griffe(Modele):
@@ -589,6 +595,133 @@ class Griffe(Modele):
         return self
 
 
+# Délais (machine.yaml → durees) des étapes du Mycélium.
+DUREES_MYCELIUM = ("mycelium_geste_max", "mycelium_chariot_max", "mycelium_agitation_max")
+# Les 2 axes de l'agitateur du Mycélium (carte n° 3) et leur unité.
+AXES_MYCELIUM = {
+    "agitateur_x": "m",  # glissière de l'agitateur (repère du portique)
+    "manivelle": "deg",  # manivelle qui secoue le bocal (360° = un tour)
+}
+
+
+class ChariotMycelium(Modele):
+    """Le chariot de remplissage vu du Mycélium (verrous, hauteur du plateau)."""
+
+    # L'agitateur ne roule que si le chariot est à y ≥ y_ecarte_min.
+    y_ecarte_min: float
+    # Le seau sous le bocal : chariot à y_dosage.
+    y_dosage: float
+    tolerance_y_m: float = Field(gt=0)
+    # Plateau pendant le dosage : min(bord_seau_z − hauteur du seau ; plateau_max_z).
+    bord_seau_z: float
+    plateau_max_z: float
+    tolerance_plateau_m: float = Field(gt=0)
+
+
+class ManivelleMycelium(Modele):
+    # Angle (°) de « manivelle en haut » ; « en bas » = 180° plus loin. Écart permis (°).
+    angle_haut_deg: float
+    tolerance_deg: float = Field(gt=0)
+    # Les 3 trous de la manivelle (course du bocal, m), et la plus grande permise au garage
+    # (au-delà, le fond du bocal toucherait la marche du poste du fût).
+    courses_possibles_m: list[float] = Field(min_length=1)
+    course_max_garage_m: float = Field(gt=0)
+    # Vitesse la plus forte permise (tr/min, fiche).
+    max_tr_min: float = Field(gt=0)
+
+
+class VitessesMycelium(Modele):
+    glissiere_m_s: float = Field(gt=0)
+    # Manivelle (tr/min) : pour aller en haut ou en bas, pour doser, pour la casse du bloc.
+    placement_tr_min: float = Field(gt=0)
+    agitation_tr_min: float = Field(gt=0)
+    casse_tr_min: float = Field(gt=0)
+
+
+class DoseMycelium(Modele):
+    # Arrêter de secouer quand il manque encore tant (kg) : grains qui tombent pendant l'arrêt.
+    arret_avant_kg: float = Field(ge=0)
+    # Écart permis (part de la dose) : au-delà, la dose est signalée dans le journal.
+    tolerance: float = Field(ge=0, lt=1)
+    # Au plus tant de secondes d'agitation pour une couche (casse du bloc non comprise).
+    temps_max_s: float = Field(gt=0)
+    # Casse du bloc, au 1er seau d'un bocal seulement (s ; 0 : pas de casse).
+    casse_du_bloc_s: float = Field(ge=0)
+    # Attente avant de peser (le plateau ne bouge plus), s.
+    attente_pesee_s: float = Field(ge=0)
+
+
+class PeseeMycelium(Modele):
+    """La balance du chariot de remplissage, lue pendant l'agitation."""
+
+    frequence_hz: float = Field(gt=0)
+    # Médiane de tant de lectures pour une pesée.
+    lectures_pesee: int = Field(ge=1)
+    # Saut brutal : la médiane des « lectures_saut » dernières lectures s'écarte de plus de
+    # saut_kg de celle des « lectures_saut » d'avant.
+    lectures_saut: int = Field(ge=1)
+    saut_kg: float = Field(gt=0)
+    # Balance muette pendant tant de secondes pendant l'agitation : arrêt.
+    silence_max_s: float = Field(gt=0)
+
+
+class Mycelium(Modele):
+    """Module Mycélium (dosage), validé le 24/10/2026 (option B : module relevé de 12 mm).
+
+    Repère du portique, en mètres ; x = position de l'agitateur sur sa glissière. Un verrou du
+    logiciel ne protège que la machine : la sécurité des personnes reste câblée.
+    """
+
+    exemple: bool = False
+    garage_x: float
+    demi_tour_x: float
+    dosage_x: float
+    tolerance_x_m: float = Field(gt=0)
+    # La caméra du dosage ne pivote vers le seau que si l'agitateur est à x ≤ camera_x_max.
+    camera_x_max: float
+    # Axe de la manivelle (m) : pour mémoire (aucun geste n'en dépend).
+    manivelle_z: float
+    # Course choisie à la main (trou de la bielle), tenue à jour par Karulium (m).
+    course_agitation_m: float
+    chariot: ChariotMycelium
+    manivelle: ManivelleMycelium
+    vitesses: VitessesMycelium
+    dose: DoseMycelium
+    pesee: PeseeMycelium
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Mycelium":
+        erreurs = []
+        if not self.garage_x < self.demi_tour_x < self.dosage_x:
+            erreurs.append("garage_x < demi_tour_x < dosage_x : dans cet ordre")
+        if self.camera_x_max < self.garage_x:
+            erreurs.append("camera_x_max : la caméra doit pouvoir pivoter agitateur au garage")
+        manivelle = self.manivelle
+        if self.course_agitation_m not in manivelle.courses_possibles_m:
+            possibles = ", ".join(f"{c:g}" for c in manivelle.courses_possibles_m)
+            erreurs.append(
+                f"course_agitation_m : {self.course_agitation_m:g} n'est pas un trou de la "
+                f"manivelle ({possibles})"
+            )
+        v = self.vitesses
+        for nom in ("placement_tr_min", "agitation_tr_min", "casse_tr_min"):
+            if getattr(v, nom) > manivelle.max_tr_min:
+                erreurs.append(
+                    f"vitesses → {nom} : au plus manivelle → max_tr_min ({manivelle.max_tr_min:g})"
+                )
+        if self.chariot.y_dosage >= self.chariot.y_ecarte_min:
+            erreurs.append("chariot → y_dosage doit être sous y_ecarte_min")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+    def tours_max(self) -> int:
+        """Le plus de tours d'une agitation (casse du bloc + dosage), arrondi au-dessus."""
+        dose, v = self.dose, self.vitesses
+        casse = -int(-v.casse_tr_min * dose.casse_du_bloc_s // 60)
+        return casse - int(-v.agitation_tr_min * dose.temps_max_s // 60)
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -610,6 +743,8 @@ class Machine(Modele):
     poste_fut: PosteFut | None = None
     # Griffe (None : pas de griffe, pour des réglages d'essai). Demande le poste du fût.
     griffe: Griffe | None = None
+    # Mycélium (None : pas de mycélium). Demande la griffe (table des formats).
+    mycelium: Mycelium | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -673,6 +808,7 @@ class Machine(Modele):
             if correcte:
                 zones_correctes.append(nom)
         erreurs += self._verifier_griffe()
+        erreurs += self._verifier_mycelium()
         for i, nom_a in enumerate(zones_correctes):
             for nom_b in zones_correctes[i + 1 :]:
                 if self._se_chevauchent(nom_a, nom_b):
@@ -713,6 +849,64 @@ class Machine(Modele):
         pont = self.axes["pont_x"].course
         if pont[0] < griffe.pont_x_min:
             erreurs.append(f"pont_x : la course doit commencer à x ≥ {griffe.pont_x_min:g} m")
+        return erreurs
+
+    def _verifier_mycelium(self) -> list[str]:
+        """Axes de l'agitateur, positions dans leur course, formats complets, délais."""
+        mycelium = self.mycelium
+        if mycelium is None:
+            return []
+        if self.griffe is None:
+            return ["mycelium : il faut aussi la partie « griffe » (table des formats)"]
+        erreurs = []
+        for nom, unite in AXES_MYCELIUM.items():
+            axe = self.axes.get(nom)
+            if axe is None:
+                erreurs.append(f"mycelium : axe « {nom} » absent de axes")
+            elif axe.unite != unite or axe.carte is None:
+                erreurs.append(
+                    f"mycelium : l'axe « {nom} » doit être en « {unite} », avec sa carte"
+                )
+        for nom in DUREES_MYCELIUM:
+            if nom not in self.durees:
+                erreurs.append(f"mycelium : délai « {nom} » absent de durees")
+        if erreurs:
+            return erreurs
+        debut, fin = self.axes["agitateur_x"].course
+        for nom in ("garage_x", "demi_tour_x", "dosage_x"):
+            x = getattr(mycelium, nom)
+            if not debut - 1e-9 <= x <= fin + 1e-9:
+                erreurs.append(
+                    f"mycelium → {nom} : x {x:g} hors de la course de agitateur_x "
+                    f"({debut:g} à {fin:g} m)"
+                )
+        debut, fin = self.axes["manivelle"].course
+        tours = mycelium.tours_max() + 1
+        if tours * 360 > min(-debut, fin):
+            erreurs.append(
+                f"manivelle : une agitation peut faire {tours} tours ({tours * 360:g}°) ; "
+                f"la course ({debut:g} à {fin:g}°) doit les permettre dans les deux sens"
+            )
+        agitation = mycelium.dose.temps_max_s + mycelium.dose.casse_du_bloc_s
+        if self.durees.get("mycelium_agitation_max", 0) <= agitation:
+            erreurs.append(
+                f"durees → mycelium_agitation_max doit dépasser dose → temps_max_s + "
+                f"casse_du_bloc_s ({agitation:g} s)"
+            )
+        chariot = mycelium.chariot
+        for nom, seau in self.griffe.formats.items():
+            if seau.hauteur is None or seau.mycelium_kg is None:
+                erreurs.append(
+                    f"griffe → formats → {nom} : « hauteur » et « mycelium_kg » sont demandés "
+                    "par le mycélium"
+                )
+                continue
+            plateau = min(chariot.bord_seau_z - seau.hauteur, chariot.plateau_max_z)
+            if abs(plateau + seau.hauteur - seau.haut_z) > 0.001:
+                erreurs.append(
+                    f"griffe → formats → {nom} : au dosage, plateau à {plateau:g} m et bord du "
+                    f"seau à {plateau + seau.hauteur:g} m, mais haut_z vaut {seau.haut_z:g}"
+                )
         return erreurs
 
     def _se_chevauchent(self, nom_a: str, nom_b: str) -> bool:
@@ -1215,6 +1409,28 @@ class GriffeSimulee(Modele):
     charge_vide_n: float = Field(gt=0)
 
 
+class SeauSimule(Modele):
+    """Un seau à doser dans le simulateur (le QR vient de la vision, tâche 22)."""
+
+    seau: str
+    format: Nom
+    variete: str
+
+
+class MyceliumSimule(Modele):
+    """Le bocal et le chariot imaginaires du Mycélium."""
+
+    # Grains qui tombent pendant que la manivelle tourne, bocal tête en bas (kg/s).
+    debit_kg_s: float = Field(gt=0)
+    # Mycélium dans un bocal neuf (kg).
+    bocal_kg: float = Field(gt=0)
+    # Durée d'un demi-tour du porte-bocal, d'un trajet du chariot de remplissage (s).
+    demi_tour_s: float = Field(ge=0)
+    chariot_s: float = Field(ge=0)
+    # Les seaux à doser, dans l'ordre (chaque couche de leur format).
+    seaux: list[SeauSimule] = Field(min_length=1)
+
+
 class ScenarioSimule(Modele):
     """Un scénario : capteurs actionnés au départ et événements, à la place de ceux du haut."""
 
@@ -1243,6 +1459,8 @@ class ReglagesSimulateur(Modele):
     scenarios: dict[Nom, ScenarioSimule] = Field(default_factory=dict)
     # Le substrat du fût imaginaire (simulation de la griffe).
     griffe: GriffeSimulee | None = None
+    # Le bocal, le chariot et les seaux imaginaires (simulation du mycélium).
+    mycelium: MyceliumSimule | None = None
 
 
 # ---------------------------------------------------------- accelerometre.yaml
@@ -1496,6 +1714,14 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
         for nom in simulateur.axes
         if nom not in machine.axes
     ]
+    if simulateur.mycelium is not None:
+        formats = machine.griffe.formats if machine.griffe is not None else {}
+        erreurs += [
+            f"simulateur.yaml, mycelium → seaux : format « {seau.format} » absent de "
+            "machine.yaml (griffe → formats)"
+            for seau in simulateur.mycelium.seaux
+            if seau.format not in formats
+        ]
     if simulateur.depart is not None and simulateur.depart not in machine.positions:
         erreurs.append(
             f"simulateur.yaml, depart : position « {simulateur.depart} » absente de machine.yaml"

@@ -134,6 +134,17 @@ cartes:
       vitesse_bauds: 9600
       parite: aucune
       delai_reponse_s: 0.5
+  # Carte FluidNC n° 3 (axes du mycélium et du lavage) : le Pi ne la lit pas lui-même (pas de
+  # « liaison ») ; ses fins de course et alarmes de pilotes vont à FluidNC, qui les dit au Pi.
+  # Entrées 24 V optocouplées (docs/decisions.md, PR n° 3). Repères : EXEMPLES, en attendant le
+  # plan de câblage (les vrais numéros de broches vont dans fluidnc/mycelium_lavage.yaml).
+  fluidnc_mycelium_lavage:
+    exemple: true
+    description: Carte FluidNC n° 3 (mycélium et lavage), 6 axes, pilotes externes
+    entrees: 10
+    sorties: 18
+    tension_max: 24
+    isolee: true
 
 # Les signaux. Le nom est celui que le code utilise.
 #   carte : un nom de la liste « cartes » ci-dessus.
@@ -172,6 +183,9 @@ cartes:
 #     (GPIO 4/5 = /dev/ttyAMA2, avec « dtoverlay=uart2-pi5 » : voir pi/systeme/essai-ecran.md).
 # (tâche 17, poste du fût) :
 #   chariot_fut_en_place, reed_panneau_poste_fut, pesee_fut, bouton_pret_fut, voyant_pret_fut.
+# (tâche 19, mycélium : tous sur la carte FluidNC n° 3, lus par FluidNC) :
+#   fdc_agitateur_garage, fdc_agitateur_dosage, origine_manivelle, alarme_glissiere_agitateur,
+#   alarme_manivelle, moteur_glissiere_agitateur, moteur_manivelle.
 # (tâche 15, accéléromètre) :
 #   accelerometre_fil : fil série unique vers le RP2040 de l'accéléromètre (half-duplex) ;
 #     TX du Pi par une résistance de 1 kΩ, RX directement, les deux sur le même fil.
@@ -372,3 +386,68 @@ signaux:
     type: pesee
     tension: 3.3
     module: poste_fut
+  # Mycélium (fiche du module, validé le 24/10/2026 ; carte n° 3). Les arrêts entre le garage et
+  # le dosage (demi-tour) se font au codeur. Repères et types : EXEMPLES (plan de câblage).
+  fdc_agitateur_garage:
+    exemple: true
+    description: Fin de course de la glissière de l'agitateur, au garage (prise d'origine)
+    carte: fluidnc_mycelium_lavage
+    broche: E1
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: mycelium
+  fdc_agitateur_dosage:
+    exemple: true
+    description: Fin de course de la glissière de l'agitateur, au dosage (butée de la machine)
+    carte: fluidnc_mycelium_lavage
+    broche: E2
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: mycelium
+  # Pas dans la fiche : demandé dans la PR de la tâche 19 (question n° 1). Sans lui, la carte ne
+  # sait pas où est « manivelle en haut » après une mise sous tension.
+  origine_manivelle:
+    exemple: true
+    description: Capteur « manivelle en haut » (prise d'origine de la manivelle)
+    carte: fluidnc_mycelium_lavage
+    broche: E3
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: mycelium
+  alarme_glissiere_agitateur:
+    exemple: true
+    description: Alarme du pilote boucle fermée de la glissière (NEMA 17, codeur 1000 lignes)
+    carte: fluidnc_mycelium_lavage
+    broche: E4
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: mycelium
+  alarme_manivelle:
+    exemple: true
+    description: Alarme du pilote HBS86H de la manivelle (NEMA 34 à codeur, 48 V)
+    carte: fluidnc_mycelium_lavage
+    broche: E5
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: mycelium
+  moteur_glissiere_agitateur:
+    exemple: true
+    description: Pas et sens du pilote de la glissière de l'agitateur (axe X de la carte n° 3)
+    carte: fluidnc_mycelium_lavage
+    broche: [S1, S2]
+    type: logique
+    tension: 5
+    module: mycelium
+  moteur_manivelle:
+    exemple: true
+    description: Pas et sens du pilote HBS86H de la manivelle (axe A de la carte n° 3)
+    carte: fluidnc_mycelium_lavage
+    broche: [S3, S4]
+    type: logique
+    tension: 5
+    module: mycelium

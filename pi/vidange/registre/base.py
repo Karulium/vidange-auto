@@ -288,13 +288,25 @@ class Registre:
                 self._inserer_dose(cnx, seau_du_cycle, bocal, None)
             return seau_du_cycle
 
-    def ajouter_dose(self, seau_du_cycle: int, bocal: str, quantite_g: float | None = None) -> int:
-        """Une dose de mycélium versée dans un seau (plusieurs doses et bocaux possibles)."""
+    def ajouter_dose(
+        self,
+        seau_du_cycle: int,
+        bocal: str,
+        quantite_g: float | None = None,
+        couche: int | None = None,
+    ) -> int:
+        """Une dose de mycélium versée dans un seau (plusieurs doses et bocaux possibles),
+        sur sa couche n° `couche` si on la connaît."""
         with self._ecriture() as cnx:
-            return self._inserer_dose(cnx, seau_du_cycle, bocal, quantite_g)
+            return self._inserer_dose(cnx, seau_du_cycle, bocal, quantite_g, couche)
 
     def _inserer_dose(
-        self, cnx: sqlite3.Connection, seau_du_cycle: int, bocal: str, quantite_g: float | None
+        self,
+        cnx: sqlite3.Connection,
+        seau_du_cycle: int,
+        bocal: str,
+        quantite_g: float | None,
+        couche: int | None = None,
     ) -> int:
         return self._inserer(
             cnx,
@@ -302,6 +314,7 @@ class Registre:
             {
                 "seau_du_cycle_id": seau_du_cycle,
                 "quantite_g": quantite_g,
+                "couche": couche,
                 "quand": self._quand(),
                 **self._objets(cnx, {"bocal": bocal}),
             },

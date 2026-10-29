@@ -170,6 +170,19 @@ si l'une pose problème, elle le dit dans sa PR.
      jusqu'à 3 cm sous eux) : 0,117 au plus le long du bras ; quand seule elle arrive à la hauteur du boîtier de
      la caméra du bocal (bas à z 0,982), c'est elle seule qui compte. Avec la cote de 0,086, le mât reste à
      x ≤ 0,959 devant le boîtier (la fiche disait 0,96). L'essuyage côté allée passe pour les 4 formats.
+- **Réponses aux questions de la PR n° 26** (tâche 19, Mycélium ; tranchées par le fil logiciel, niveau 1) :
+  1. Origine de la manivelle : **capteur inductif M8 « manivelle en haut »** (`origine_manivelle`, carte 3), même
+     famille que les fins de course de la glissière (quelques euros). Sans lui, après une coupure, la carte ne sait
+     pas où est le haut. Demandé au projet mécanique de l'ajouter à la fiche et à la liste d'achats.
+  2. « L'agitateur remonte son bocal de 7 cm, quitte son garage » (plan de commande) : on suit la **fiche du
+     24/10** (manivelle en haut au garage et pendant les trajets). Le plan de commande sera corrigé.
+  3. Au dosage, la manivelle descend avant l'arrivée du seau et remonte après son départ (le verrou du chariot
+     l'impose : il ne roule qu'agitateur au dosage manivelle en bas) : **gardé, à vitesse lente**
+     (`placement_tr_min`) ; regarder à l'essai si des grains tombent à côté.
+  4. La manivelle tourne **dans les deux sens** (retour vers 0°) : accepté. La bielle fait le même mouvement dans les
+     deux sens, la manivelle tient par clavette et bague d'arrêt (pas de filetage qui se dévisse) ; le bocal est
+     tenu par les mors.
+  5. Fichier FluidNC marqué EXEMPLE envoyé à une carte : **tâche 19 bis** ajoutée (refuser l'envoi).
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr

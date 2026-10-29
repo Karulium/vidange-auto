@@ -53,14 +53,19 @@ def donnees_cycle(
     doses: dict[int, list[dict[str, Any]]] = {}
     bocaux: list[str] = []
     for dose in registre.lire(
-        "SELECT d.seau_du_cycle_id, d.quantite_g, d.quand, b.code FROM doses_mycelium d "
+        "SELECT d.seau_du_cycle_id, d.quantite_g, d.couche, d.quand, b.code FROM doses_mycelium d "
         "JOIN bocaux b ON b.id = d.bocal_id "
         "JOIN seaux_du_cycle sc ON sc.id = d.seau_du_cycle_id "
         "WHERE sc.cycle_id = ? ORDER BY d.id",
         (cycle,),
     ):
         doses.setdefault(dose["seau_du_cycle_id"], []).append(
-            {"bocal": dose["code"], "quantite_g": dose["quantite_g"], "quand": h(dose["quand"])}
+            {
+                "bocal": dose["code"],
+                "quantite_g": dose["quantite_g"],
+                "couche": dose["couche"],
+                "quand": h(dose["quand"]),
+            }
         )
         if dose["code"] not in bocaux:
             bocaux.append(dose["code"])
@@ -70,10 +75,11 @@ def donnees_cycle(
             "seau": seau["code"],
             "type_seau": seau["type_seau"],
             "quand": h(seau["quand"]),
+            "defaut": seau["defaut"],
             "doses": doses.get(seau["id"], []),
         }
         for seau in registre.lire(
-            "SELECT sc.id, sc.quand, s.code, s.type_seau FROM seaux_du_cycle sc "
+            "SELECT sc.id, sc.quand, s.code, s.type_seau, s.defaut FROM seaux_du_cycle sc "
             "JOIN seaux s ON s.id = sc.seau_id WHERE sc.cycle_id = ? ORDER BY sc.id",
             (cycle,),
         )

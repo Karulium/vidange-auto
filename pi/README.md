@@ -211,6 +211,7 @@ en une fraction de seconde), et sort le planning : chaque étape, quand elle com
 .venv/bin/vidange-simulateur exemple --json p.json   # planning aussi en JSON
 .venv/bin/vidange-simulateur poste_fut               # échange d'un fût (scénario « echange_fut »)
 .venv/bin/vidange-simulateur griffe                  # vidange d'un fût par la griffe (« vidange_fut »)
+.venv/bin/vidange-simulateur mycelium                # dosage du mycélium (« dosage_mycelium »)
 ```
 
 - **Durées réglables** dans `reglages/simulateur.yaml` : vitesse et accélération de chaque axe (un déplacement
@@ -392,3 +393,37 @@ chef.lancer(module_griffe(griffe, seau_pret=..., pont_libre=...))
 - Cases vides des modules pas écrits : `seau_pret`, `pont_libre`, `tourner_seau`, `couche_finie`,
   `seau_fini`, `prochain_format`, `machouiller` (faux pour le maïs), `dosage_en_cours`, `porte_spray_ouverte`.
 
+
+## Mycélium (tâche 19)
+
+L'agitateur porte le bocal de semence sur sa glissière ; tête en bas au-dessus du seau, la manivelle le
+secoue et la balance du chariot de remplissage pèse ce qui tombe (module validé le 24/10/2026). Tous les
+chiffres sont dans `reglages/machine.yaml` (partie `mycelium`, axes `agitateur_x` et `manivelle`, et
+`hauteur`, `mycelium_kg`, `seaux_par_bocal` des formats) ; ceux marqués EXEMPLE sont à mesurer
+(`systeme/essai-mycelium.md`).
+
+```python
+agitateur = AgitateurFluidnc(
+    reglages.machine, liaison_mycelium_lavage, balance_plateau
+)  # tâche 22 bis
+agitateur.demarrer(arret)  # lit la balance 80 fois par seconde
+mycelium = Mycelium(reglages.machine, agitateur, porte_bocal, chariot, nouveau_bocal, registre)
+chef.lancer(module_mycelium(mycelium))
+mycelium.demander(Demande("S1293", "seau_a", couche=1, variete="pleurote_grise", cycle=cycle))
+```
+
+- **Une couche** : chariot écarté, demi-tour du bocal tête en bas, dosage, manivelle en bas, seau sous le
+  bocal (plateau à la hauteur du dosage), casse du bloc (1re agitation d'un bocal), agitation jusqu'à la dose,
+  arrêt **pile en bas**, chariot qui repart, manivelle en haut, bocal debout, garage.
+- **Verrous** (`ReglesMycelium`) : l'agitateur ne roule que chariot écarté (y ≥ 0,375) et manivelle en haut ;
+  `mycelium.refus_chariot()` dit au chariot de remplissage s'il peut rouler (agitateur au garage manivelle en
+  haut, ou au dosage manivelle en bas) ; au garage, pas de rotation avec la course de 10 cm ;
+  `mycelium.camera_peut_pivoter()` pour la caméra du dosage ; `mycelium.dosage_en_cours()` pour la griffe.
+- **Surveillance** : saut de poids (bocal cassé ou tombé) → arrêt, alarme, photo ; poids qui ne monte plus au
+  bout du temps maximal → alarme ; dans les deux cas le seau est marqué « pas bon » (`seaux.defaut`).
+- **Registre** : chaque dose avec sa couche (`doses_mycelium.couche`) et son bocal, la variété du bocal
+  (`bocaux.variete`).
+- **Un bocal pour 2 petits seaux** de la même variété (`seaux_par_bocal: 2`), casse du bloc au 1er seau.
+- La manivelle tourne dans le sens qui la ramène vers 0 : le nombre de degrés ne grandit pas sans fin.
+- Cases vides : `PorteBocal` (tâche 20), `ChariotRemplissage` (Remplissage), `nouveau_bocal(variete)`
+  (Porte-bocal, Préhension, QR), `photo(raison)` (Vision).

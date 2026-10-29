@@ -361,6 +361,12 @@ def principal(
             "machine.yaml, griffe : formats des seaux, vitesses, doses et seuils d'EXEMPLE : "
             "les régler aux essais (pi/systeme/essai-griffe.md), puis passer « exemple » à false."
         )
+    mycelium = reglages.machine.mycelium
+    if mycelium is not None and mycelium.exemple:
+        journal.warning(
+            "machine.yaml, mycelium : vitesses, dose, pesée et course de l'agitation d'EXEMPLE : "
+            "les régler aux essais (pi/systeme/essai-mycelium.md), puis passer « exemple » à false."
+        )
     exemples = entrees_sorties.exemples()
     if exemples:
         journal.warning(
