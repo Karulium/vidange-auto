@@ -20,7 +20,10 @@ main sur l'arrêt d'urgence.
   et les **vrais pas par mm** (réglage des pilotes, poulie de la courroie GT2), puis envoyé à la carte
   (page web → « Mises à jour »). Tant qu'il dit « EXEMPLE », ne pas l'envoyer.
 - La position machine de la carte est **dans le repère du portique** : X = position de l'agitateur
-  (mm, 565 au garage, 925 au dosage), A = manivelle (°, 0 = en haut, 180 = en bas).
+  (mm, 565 au garage, 925 au dosage). A = angle du moteur de la manivelle (°) : FluidNC ne sait pas
+  où est le haut, c'est le Pi qui le trouve (prise d'origine de la manivelle, tâche 20 :
+  `essai-porte-bocal.md`, étape 1). Ci-dessous, « H » = l'angle du moteur manivelle en haut que
+  cette étape a donné.
 - La bielle est dans le trou de **4 cm** pour commencer, et `course_agitation_m: 0.04` dans
   `machine.yaml` (le Pi ne voit pas le trou : c'est ce réglage qu'il croit).
 - Pas de bocal dans le porte-bocal pour les étapes 1 et 2.
@@ -31,12 +34,11 @@ Dans les commandes ci-dessous, `vidange-fluidnc` veut dire
 ## Étape 1 : prise d'origine et repère
 
 1. Lancer la console de la carte : `vidange-fluidnc console mycelium_lavage`.
-2. Envoyer `$H`. La glissière doit rouler vers le garage et s'arrêter sur son fin de course, la
-   manivelle tourner lentement jusqu'au capteur « manivelle en haut ». Envoyer `?` : `MPos` doit dire
-   X = 565 et A = 0.
-3. Regarder la manivelle : elle doit être **pile en haut** (bocal au plus haut). Sinon, noter l'écart
-   en degrés : il va dans `manivelle → angle_haut_deg`.
-4. Manivelle en bas : `$J=G53 A180 F3600`. Elle doit être pile en bas. Revenir : `$J=G53 A0 F3600`.
+2. Envoyer `$H`. La glissière doit rouler vers le garage et s'arrêter sur son fin de course (la
+   manivelle ne bouge pas : son origine est prise par le Pi). Envoyer `?` : `MPos` doit dire X = 565.
+3. Faire la prise d'origine de la manivelle (`essai-porte-bocal.md`, étape 1) et noter H.
+4. Manivelle en haut : `$J=G53 A<H> F3600` : elle doit être **pile en haut** (bocal au plus haut) ;
+   sinon, corriger `manivelle → origine → decalage_deg`. Manivelle en bas : `$J=G53 A<H + 180> F3600`.
 5. Glissière : `$J=G53 X865 F3000`. Mesurer au mètre : l'agitateur doit être **au demi-tour**
    (x 0,865 dans le repère du portique). Puis `$J=G53 X925 F3000` : le bocal doit être **au-dessus de
    l'axe du seau** (x 0,925), sans toucher le fin de course du dosage. Sinon, corriger les pas par mm.
@@ -60,21 +62,22 @@ par les tests automatiques. Sur la machine, vérifier seulement à l'œil, en d�
 1. Seau vide sur le plateau, chariot au dosage : lire la balance (outil de la tâche 22 bis). Noter la
    valeur.
 2. Poser 100 g dans le seau : la balance doit monter de 100 g (± 2 g).
-3. Faire tourner la manivelle sans bocal, à 120 tr/min (`$J=G53 A43380 F43200`), et regarder les
+3. Faire tourner la manivelle sans bocal, à 120 tr/min (`$J=G53 A<H + 43380> F43200`), et regarder les
    lectures : elles bougent un peu (vibrations). L'écart le plus fort, multiplié par 3, est un bon
    départ pour `pesee → saut_kg` (0,3 kg dans l'exemple). Arrêter : `0x85` (bouton « Arrêt » de la
-   console) puis `$J=G53 A180 F3600`.
+   console) puis `$J=G53 A<H + 180> F3600`.
 
 ## Étape 4 : premier dosage
 
 1. Bocal plein dans le porte-bocal, seau A vide sur le plateau.
 2. Lancer un dosage d'une couche depuis la page web (essai du module « mycelium »), vitesses de
    l'exemple. Regarder :
-   - le chariot s'écarte, l'agitateur roule au demi-tour, le bocal se retourne, roule au dosage,
-     manivelle en bas ;
+   - le chariot s'écarte, l'agitateur roule au demi-tour, manivelle en bas, le bocal se retourne,
+     manivelle en haut, roule au dosage, manivelle en bas ;
    - le chariot revient, la casse du bloc (5 s, 200 tr/min), puis l'agitation ;
    - la manivelle s'arrête **pile en bas** quand la dose est atteinte ;
-   - le chariot repart, manivelle en haut, bocal remis debout au demi-tour, retour au garage.
+   - le chariot repart, manivelle en haut, roule au demi-tour, manivelle en bas, bocal remis
+     debout, manivelle en haut, retour au garage.
 3. Peser le seau sur une balance de cuisine : comparer à la dose notée dans le journal
    (« Mycélium : seau ..., couche 1 : ... g »). Si la dose dépasse souvent, augmenter
    `dose → arret_avant_kg` (grains qui tombent pendant l'arrêt).
@@ -92,6 +95,6 @@ par les tests automatiques. Sur la machine, vérifier seulement à l'œil, en d�
 
 ## Ce qu'il faut renvoyer
 
-Les chiffres mesurés (écart de `angle_haut_deg`, `saut_kg`, `agitation_tr_min`, `casse_tr_min`,
+Les chiffres mesurés (`saut_kg`, `agitation_tr_min`, `casse_tr_min`,
 `casse_du_bloc_s`, `temps_max_s`, `arret_avant_kg`, `mycelium_kg` de chaque format), à mettre dans
 `machine.yaml` par une session de correction ; puis passer `mycelium → exemple` à `false`.

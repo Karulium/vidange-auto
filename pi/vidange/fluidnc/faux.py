@@ -2,7 +2,11 @@
 
 Il répond comme une vraie carte : « ok » / « error:N » à chaque ligne, rapport d'état à « ? »,
 pause « ! », reprise « ~ », réinitialisation Ctrl-X, alarmes, déblocage « $X », déplacements
-manuels « $J= » et leur annulation (0x85).
+manuels « $J= » et leur annulation (0x85), prise d'origine de tous les axes (« $H ») ou de
+quelques-uns (« $HY »), palpage sans erreur (« G38.3 », arrêt au contact donné par `palpeur`),
+sorties tout-ou-rien (« M64 P0 » / « M65 P0 », dans `sorties`) et entrées actives (`entrees`,
+rendues dans « Pn: »). `monde` est appelé à chaque mise à l'heure : un faux matériel y lit les
+sorties et y change les entrées.
 Les positions avancent avec le temps, à la vitesse demandée (F, ou la vitesse rapide pour G0),
 en ligne droite et sans accélération.
 
@@ -59,6 +63,7 @@ class FauxFluidnc:
         horloge: Callable[[], float] = time.monotonic,
         delai_lecture_s: float = 0.01,
         en_alarme_au_depart: bool = False,
+        origines: dict[str, float] | None = None,
     ) -> None:
         if not axes or not set(axes) <= set(protocole.LETTRES_AXES):
             raise ValueError(f"axes : lettres parmi {protocole.LETTRES_AXES}")
@@ -72,6 +77,17 @@ class FauxFluidnc:
         self._nouveau = threading.Condition(self._verrou)
 
         self.positions = {axe: 0.0 for axe in axes}
+        # Position de chaque axe après sa prise d'origine (0 si l'axe n'est pas cité).
+        self.origines = dict(origines or {})
+        # Entrées actives (lettres de « Pn: ») et sorties tout-ou-rien (numéro → allumée).
+        self.entrees: set[str] = set()
+        self.sorties: dict[int, bool] = {}
+        # Faux matériel autour de la carte, appelé à chaque mise à l'heure.
+        self.monde: Callable[[], None] | None = None
+        # Palpage : (départ, arrivée voulue) → positions au contact, ou None (pas de contact).
+        self.palpeur: (
+            Callable[[dict[str, float], dict[str, float]], dict[str, float] | None] | None
+        ) = None
         self.etat = "Alarm" if en_alarme_au_depart else "Idle"
         self.en_pause = False
         # Ce qui a été simulé ou constaté, pour les tests.
@@ -196,6 +212,8 @@ class FauxFluidnc:
             if not self._file and self.etat in ("Run", "Home", "Jog"):
                 self.etat = "Idle"
                 self._vitesse_actuelle = 0.0
+            if self.monde is not None:
+                self.monde()
 
     def _deplacer(self, duree: float) -> float | None:
         """Fait avancer le premier bloc pendant au plus « duree ».
@@ -259,10 +277,15 @@ class FauxFluidnc:
             raise _ErreurLigne(2)
         cible: dict[str, float] = {}
         attente = None
+        palpage = False
+        code_m = None
+        sortie = None
         for lettre, nombre in mots:
             valeur = float(nombre)
             if lettre == "G" and valeur in (0, 1):
                 self._mode_mouvement = int(valeur)
+            elif lettre == "G" and valeur == 38.3:
+                palpage = True
             elif lettre == "G" and valeur == 4:
                 attente = 0.0
             elif lettre == "G" and valeur in (90, 91):
@@ -271,6 +294,8 @@ class FauxFluidnc:
                 pass
             elif lettre == "P" and attente is not None:
                 attente = valeur
+            elif lettre == "P" and code_m in (62, 63, 64, 65):
+                sortie = int(valeur)
             elif lettre == "F":
                 if valeur <= 0:
                     raise _ErreurLigne(23)
@@ -278,9 +303,14 @@ class FauxFluidnc:
             elif lettre in self.axes:
                 cible[lettre] = valeur
             elif lettre == "M":
-                pass
+                code_m = int(valeur)
             else:
                 raise _ErreurLigne(20)
+        if sortie is not None:
+            # M62/M63 (avec les mouvements) font ici comme M64/M65 (tout de suite).
+            self.sorties[sortie] = code_m in (62, 64)
+        if palpage and (not cible or self._vitesse_mm_min is None):
+            raise _ErreurLigne(22 if cible else 26)
         if attente is not None:
             # G4 attend d'abord la fin des mouvements d'avant, puis la durée : « ok » à la fin.
             bloc = _Bloc(duree_s=attente)
@@ -297,6 +327,18 @@ class FauxFluidnc:
                     depart = dict(bloc.cible)
             for axe, valeur in cible.items():
                 depart[axe] = valeur if self._absolu else depart[axe] + valeur
+            if palpage:
+                # Arrêt au contact ; « ok » quand le palpage est fini (pas d'erreur sans contact).
+                assert self._vitesse_mm_min is not None
+                avant = dict(self.positions)
+                for bloc in self._file:
+                    if bloc.cible is not None:
+                        avant = dict(bloc.cible)
+                contact = None if self.palpeur is None else self.palpeur(avant, depart)
+                bloc = _Bloc(cible=contact or depart, vitesse_mm_min=self._vitesse_mm_min)
+                self._file.append(bloc)
+                self._attente_ok = bloc
+                return
             if self._mode_mouvement == 0:
                 vitesse = self.vitesse_rapide_mm_min
             else:
@@ -314,12 +356,15 @@ class FauxFluidnc:
                 self.etat = "Idle"
                 self._sorties.append("[MSG:Caution: Unlocked]")
             self._sorties.append("ok")
-        elif commande == protocole.PRISE_ORIGINE:
+        elif commande.startswith(protocole.PRISE_ORIGINE) and set(
+            commande.removeprefix(protocole.PRISE_ORIGINE)
+        ) <= set(self.axes):
             if self._file:
                 raise _ErreurLigne(8)
+            axes = commande.removeprefix(protocole.PRISE_ORIGINE) or self.axes
             self.etat = "Home"
             bloc = _Bloc(
-                cible={axe: 0.0 for axe in self.axes},
+                cible={axe: self.origines.get(axe, 0.0) for axe in axes},
                 vitesse_mm_min=self.vitesse_rapide_mm_min,
                 prise_origine=True,
             )
@@ -411,7 +456,8 @@ class FauxFluidnc:
             etat = self.etat
         positions = ",".join(f"{self.positions[axe]:.3f}" for axe in self.axes)
         vitesse = 0 if self.en_pause else self._vitesse_actuelle
-        return f"<{etat}|MPos:{positions}|FS:{vitesse:g},0>"
+        entrees = f"|Pn:{''.join(sorted(self.entrees))}" if self.entrees else ""
+        return f"<{etat}|MPos:{positions}|FS:{vitesse:g},0{entrees}>"
 
 
 class FauxPort:

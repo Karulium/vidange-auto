@@ -3,6 +3,7 @@
     regles = ReglesMycelium(reglages.machine)
     regles.refus_glissiere(pose, x, chariot)        # raison du refus, ou None
     regles.refus_manivelle(pose, chariot)
+    regles.refus_demi_tour(pose, chariot)            # le bocal peut-il se retourner ?
     regles.refus_chariot(pose, en_mouvement)        # le chariot de remplissage peut-il rouler ?
     regles.camera_peut_pivoter(pose)
 
@@ -164,6 +165,20 @@ class ReglesMycelium:
                 "au dosage, la manivelle ne tourne pas pendant que le chariot de remplissage roule"
             )
         return "la manivelle ne tourne qu'au garage, au demi-tour ou au dosage"
+
+    def refus_demi_tour(self, pose: PoseAgitateur, chariot: EtatChariot | None) -> str | None:
+        """Le bocal ne se retourne qu'agitateur au demi-tour, manivelle en bas (page du Mycélium
+        du 24/10), chariot de remplissage écarté."""
+        if not self.au_demi_tour(pose):
+            return "l'agitateur n'est pas au demi-tour"
+        if not self.en_bas(pose):
+            return "le demi-tour du bocal ne se fait que manivelle en bas"
+        if not self.chariot_ecarte(chariot):
+            return (
+                f"le demi-tour du bocal ne se fait que chariot de remplissage à y ≥ "
+                f"{_m(self.reglages.chariot.y_ecarte_min)} m"
+            )
+        return None
 
     def refus_chariot(self, pose: PoseAgitateur | None, en_mouvement: bool) -> str | None:
         """Le chariot de remplissage ne roule que si l'agitateur est au garage manivelle en haut,

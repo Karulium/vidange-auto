@@ -33,6 +33,19 @@ cartes:
   mycelium_lavage:
     description: Axes du mycélium et du lavage
     numero_serie_usb: "EXEMPLE-MYCELIUM-LAVAGE"
+    # Entrées que le Pi lit dans le rapport d'état de la carte (« Pn: ») : le capteur de la
+    # manivelle est le fin de course de l'axe A (jamais une butée) ; verrou et inclinaison du
+    # porte-bocal sont sur les broches macro0 et macro1 (lettres 0 et 1), sans macro.
+    # À VÉRIFIER à l'essai de la carte (pi/systeme/essai-porte-bocal.md).
+    entrees:
+      origine_manivelle: A
+      verrou_plateau_engage: "0"
+      inclinaison_bocal: "1"
+    # Sorties du porte-bocal (« user_outputs » digital0 à 2 de fluidnc/mycelium_lavage.yaml).
+    sorties:
+      demi_tour_vers_tete_en_bas: 0
+      demi_tour_vers_debout: 1
+      electroaimant_verrou_plateau: 2
   prehension:
     description: Axes de la préhension
     numero_serie_usb: "EXEMPLE-PREHENSION"

@@ -21,9 +21,10 @@ from vidange.mycelium import (
     module_mycelium,
 )
 from vidange.mycelium.agitateur import QUOI_FAIRE_SAUT
+from vidange.mycelium.regles import ecart_angle
 from vidange.mycelium.simulation import mycelium_du_simulateur
 from vidange.registre import Registre
-from vidange.reglages import charger_reglages
+from vidange.reglages import Machine, charger_reglages
 from vidange.simulateur import Simulateur
 from vidange.simulateur.outil import main as simulateur
 
@@ -194,7 +195,7 @@ def test_simulateur_un_seau_a_puis_deux_petits_seaux_avec_un_bocal():
     etapes = [ligne.etape for ligne in planning.lignes]
     assert etapes.count("agiter") == 8 and etapes.count("changer_de_bocal") == 2
     # Bocal retourné tête en bas puis remis debout à chaque couche (8 fois).
-    gestes = mycelium.porte_bocal.gestes
+    gestes = mycelium.materiel_porte_bocal.gestes
     assert gestes == ["tete_en_bas", "debout"] * 8
     # La manivelle ne s'arrête jamais entre le haut et le bas, et reste près de 0.
     angle = mycelium.agitateur.position().angle
@@ -280,24 +281,51 @@ def test_outil_simulateur_mycelium(capsys):
 # ---------------------------------------------------------------- le vrai agitateur
 
 
-class BancAgitateur:
-    """Le vrai agitateur sur un faux FluidNC (glissière X, manivelle A), avec une fausse balance."""
+def machine_rapide(**origine) -> Machine:
+    """machine.yaml, avec un tour lent de la prise d'origine plus rapide (essais en vrai temps)."""
+    donnees = MACHINE.model_dump()
+    donnees["mycelium"]["manivelle"]["origine"].update({"vitesse_deg_s": 300, **origine})
+    return Machine.model_validate(donnees)
 
-    def __init__(self) -> None:
+
+class BancAgitateur:
+    """Le vrai agitateur sur un faux FluidNC (glissière X, manivelle A), avec une fausse balance
+    et un faux capteur de la manivelle : du métal partout sauf à ± `demi_zone` degrés du haut
+    (`haut` : angle du moteur)."""
+
+    def __init__(self, haut: float = 37.0, demi_zone: float = 95.0, **origine) -> None:
         self.faux = FauxFluidnc(axes="XYZA")
-        self.faux.positions.update(X=925.0, A=180.0)
+        self.faux.positions.update(X=925.0, A=180.0 + haut)
+        self.haut, self.demi_zone = haut, demi_zone
+        self.faux.monde = self._capteur
         self.balance = FausseForce(5.0 * G)
         self.liaison = Liaison("portique", reglages_essai(), ouvrir=self.faux.ouvrir)
+        self.machine = machine_rapide(**origine)
+
+    def _capteur(self) -> None:
+        if ecart_angle(self.faux.positions["A"], self.haut) > self.demi_zone:
+            self.faux.entrees.add("A")
+        else:
+            self.faux.entrees.discard("A")
 
     def __enter__(self) -> "BancAgitateur":
         self.liaison.demarrer()
         self.liaison.attendre_connexion(DELAI)
-        self.agitateur = AgitateurFluidnc(MACHINE, self.liaison, self.balance)
+        carte = REGLAGES.fluidnc.cartes["mycelium_lavage"]
+        self.agitateur = AgitateurFluidnc(self.machine, self.liaison, self.balance, carte)
         self.arret = threading.Event()
         self.agitateur.demarrer(self.arret)
-        # Position inconnue tant que la carte n'a pas répondu.
-        attendre(lambda: self.agitateur.position().angle == pytest.approx(180), ignorer=ErreurEtape)
         return self
+
+    def prendre_origine(self) -> None:
+        """Prise d'origine de la manivelle, puis manivelle remise en bas pile (180°)."""
+        attendre(lambda: self.agitateur.glissiere_x() == pytest.approx(0.925), ignorer=ErreurEtape)
+        self.agitateur.executer(Pas("origine", origine=True), None)
+        attendre(self.agitateur.fini, 5)
+        haut = self.agitateur.angle_haut_moteur
+        assert haut is not None and ecart_angle(haut, self.haut) <= 3
+        self.faux.positions["A"] = 180.0 + haut
+        attendre(lambda: self.agitateur.position().angle == pytest.approx(180, abs=0.01))
 
     def __exit__(self, *_: object) -> None:
         self.arret.set()
@@ -318,20 +346,27 @@ def attendre(condition, delai: float = DELAI, ignorer=()) -> None:
 
 def test_agitateur_va_a_une_pose():
     with BancAgitateur() as banc:
+        # Pas de position de la manivelle avant sa prise d'origine.
+        attendre(lambda: banc.agitateur.glissiere_x() == pytest.approx(0.925), ignorer=ErreurEtape)
+        with pytest.raises(ErreurEtape, match="origine de la manivelle pas faite"):
+            banc.agitateur.position()
+        banc.prendre_origine()
         pose = banc.agitateur.position()
-        assert pose == PoseAgitateur(x=0.925, angle=180.0)
+        assert pose.x == 0.925 and pose.angle == pytest.approx(180, abs=0.01)
         banc.agitateur.executer(Pas("vers le demi-tour", x=0.9), pose.avec(x=0.9))
         assert banc.faux.lignes_recues[-1] == "$J=G53 X900.000 F6000"
         attendre(banc.agitateur.fini)
         banc.agitateur.executer(Pas("manivelle", angle=0, tr_min=20), pose.avec(x=0.9, angle=0))
-        # 20 tr/min = 7200 °/min.
-        assert banc.faux.lignes_recues[-1] == "$J=G53 A0.000 F7200"
+        # 20 tr/min = 7200 °/min ; l'angle envoyé est celui du moteur.
+        haut = banc.agitateur.angle_haut_moteur
+        assert banc.faux.lignes_recues[-1] == f"$J=G53 A{haut:.3f} F7200"
         attendre(banc.agitateur.fini)
-        assert banc.agitateur.position().angle == pytest.approx(0)
+        assert banc.agitateur.position().angle == pytest.approx(0, abs=0.01)
 
 
 def test_agitation_s_arrete_a_la_dose():
     with BancAgitateur() as banc:
+        banc.prendre_origine()
         time.sleep(0.2)
         depart = time.monotonic()
         # Les grains tombent : +0,5 kg/s sur le plateau.
@@ -347,6 +382,7 @@ def test_agitation_s_arrete_a_la_dose():
 
 def test_saut_de_poids_arrete_la_manivelle():
     with BancAgitateur() as banc:
+        banc.prendre_origine()
         time.sleep(0.2)
         pose = banc.agitateur.position()
         pas = Pas("agitation", angle=180 + 360 * 50, tr_min=120, jusqu_a_kg=6.0)
@@ -363,6 +399,7 @@ def test_saut_de_poids_arrete_la_manivelle():
 
 def test_balance_muette_arrete_l_agitation():
     with BancAgitateur() as banc:
+        banc.prendre_origine()
         time.sleep(0.2)
         pose = banc.agitateur.position()
         pas = Pas("agitation", angle=180 + 360 * 50, tr_min=120, jusqu_a_kg=6.0)

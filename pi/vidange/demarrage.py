@@ -367,6 +367,13 @@ def principal(
             "machine.yaml, mycelium : vitesses, dose, pesée et course de l'agitation d'EXEMPLE : "
             "les régler aux essais (pi/systeme/essai-mycelium.md), puis passer « exemple » à false."
         )
+    porte_bocal = reglages.machine.porte_bocal
+    if porte_bocal is not None and porte_bocal.exemple:
+        journal.warning(
+            "machine.yaml, porte_bocal : tolérance, palpage et durées du demi-tour d'EXEMPLE : "
+            "les régler aux essais (pi/systeme/essai-porte-bocal.md), puis passer « exemple » à "
+            "false."
+        )
     exemples = entrees_sorties.exemples()
     if exemples:
         journal.warning(

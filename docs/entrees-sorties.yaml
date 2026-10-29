@@ -186,6 +186,11 @@ cartes:
 # (tâche 19, mycélium : tous sur la carte FluidNC n° 3, lus par FluidNC) :
 #   fdc_agitateur_garage, fdc_agitateur_dosage, origine_manivelle, alarme_glissiere_agitateur,
 #   alarme_manivelle, moteur_glissiere_agitateur, moteur_manivelle.
+# (tâche 20, porte-bocal : sur la carte FluidNC n° 3 ; le Pi lit origine_manivelle,
+#   verrou_plateau_engage et inclinaison_bocal dans l'état de la carte, et commande les 3 sorties
+#   du demi-tour par elle : leurs lettres et numéros sont dans pi/reglages/fluidnc.yaml) :
+#   fdc_mors_ouverts, moteur_mors, verrou_plateau_engage, inclinaison_bocal,
+#   demi_tour_vers_tete_en_bas, demi_tour_vers_debout, electroaimant_verrou_plateau.
 # (tâche 15, accéléromètre) :
 #   accelerometre_fil : fil série unique vers le RP2040 de l'accéléromètre (half-duplex) ;
 #     TX du Pi par une résistance de 1 kΩ, RX directement, les deux sur le même fil.
@@ -406,11 +411,12 @@ signaux:
     tension: 24
     repos: ouvert
     module: mycelium
-  # Pas dans la fiche : demandé dans la PR de la tâche 19 (question n° 1). Sans lui, la carte ne
-  # sait pas où est « manivelle en haut » après une mise sous tension.
+  # Capteur inductif M8 PNP (fiche des pièces v9, décision du 29/10/2026). Il voit du MÉTAL
+  # (actionné) quand la manivelle n'est PAS en haut, et rien sur ≈ ± 95° autour du haut : la
+  # prise d'origine (faite par le Pi) prend le milieu de cette zone. Jamais une butée.
   origine_manivelle:
     exemple: true
-    description: Capteur « manivelle en haut » (prise d'origine de la manivelle)
+    description: Capteur de la manivelle (actionné = métal = manivelle PAS en haut)
     carte: fluidnc_mycelium_lavage
     broche: E3
     type: pnp
@@ -451,3 +457,68 @@ signaux:
     type: logique
     tension: 5
     module: mycelium
+  # Porte-bocal (fiche du module, validé définitivement le 24/10/2026 ; carte n° 3).
+  # Repères et types : EXEMPLES (plan de câblage). Pas de capteur de capsule (supprimé le
+  # 23/10) ni de capteur sur les mors.
+  fdc_mors_ouverts:
+    exemple: true
+    description: Fin de course « mors ouverts » (origine des mors, reprise à chaque ouverture)
+    carte: fluidnc_mycelium_lavage
+    broche: E6
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: porte_bocal
+  moteur_mors:
+    exemple: true
+    description: >-
+      Pas et sens du TMC2209 des mors (NEMA 17, axe Y de la carte n° 3), réglé par UART ; sa
+      sortie DIAG (StallGuard) va sur l'entrée « probe » de la carte
+    carte: fluidnc_mycelium_lavage
+    broche: [S5, S6]
+    type: logique
+    tension: 5
+    module: porte_bocal
+  verrou_plateau_engage:
+    exemple: true
+    description: Contact « verrou engagé » (le doigt du verrou est entré dans un trou du plateau)
+    carte: fluidnc_mycelium_lavage
+    broche: E7
+    type: contact
+    tension: 24
+    repos: ouvert
+    module: porte_bocal
+  inclinaison_bocal:
+    exemple: true
+    # Ce qu'il dit actionné : pi/reglages/machine.yaml → porte_bocal → inclinaison_actionne.
+    description: Capteur d'inclinaison du bocal (debout ou tête en bas)
+    carte: fluidnc_mycelium_lavage
+    broche: E8
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: porte_bocal
+  demi_tour_vers_tete_en_bas:
+    exemple: true
+    description: Pont en H du motoréducteur JGY370 24 V du demi-tour, sens « vers tête en bas »
+    carte: fluidnc_mycelium_lavage
+    broche: S7
+    type: logique
+    tension: 5
+    module: porte_bocal
+  demi_tour_vers_debout:
+    exemple: true
+    description: Pont en H du motoréducteur JGY370 24 V du demi-tour, sens « vers debout »
+    carte: fluidnc_mycelium_lavage
+    broche: S8
+    type: logique
+    tension: 5
+    module: porte_bocal
+  electroaimant_verrou_plateau:
+    exemple: true
+    description: Électroaimant 24 V du verrou du plateau (commandé = doigt retiré), par l'armoire
+    carte: fluidnc_mycelium_lavage
+    broche: S9
+    type: logique
+    tension: 5
+    module: porte_bocal

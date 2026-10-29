@@ -342,7 +342,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 - [x] **19 bis. Ne jamais envoyer à une carte un fichier FluidNC d'exemple** — Modèle : Sonnet, effort bas.
   L'envoi de `fluidnc/<carte>.yaml` à une carte est refusé si le fichier est marqué EXEMPLE, avec un message clair
   qui dit quoi faire. Le simulateur et les tests peuvent toujours s'en servir. Tests.
-- [ ] **20. Porte-bocal (mors et demi-tour du bocal)** — Modèle : Opus, effort moyen.
+- [x] **20. Porte-bocal (mors et demi-tour du bocal)** — Modèle : Opus, effort moyen.
   Sources (recopiées ici le 29/10/2026) : fiche du module « Porte-bocal », **validé définitivement le 24/10/2026**
   (fiche des pièces v10c), plan de commande v221, page « Passage de l'agitateur » du Mycélium (24/10).
   Les chiffres vont dans `pi/reglages/machine.yaml`, `docs/entrees-sorties.yaml` et `fluidnc/`, jamais dans le code.
