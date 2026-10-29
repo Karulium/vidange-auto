@@ -220,6 +220,23 @@ si l'une pose problème, elle le dit dans sa PR.
      montage (exemples d'ici là).
   3. Cartes HX711 à **80 mesures/s** : broche RATE accessible (pont « RATE » type SparkFun) ou piste à couper ;
      contrôle à l'étape 4 de `pesee/essai-etabli.md`.
+- **Préhension** (réponses à la PR n° 34, tâche 37, 29/10/2026) :
+  1. Isolation du fût et porte-bocal : la règle reste **stricte** dans le code (sous x 0,71, panneau pas vu
+     rabattu ⇒ face à 1,10). Elle empêcherait de poser un bocal en production : la limite exacte (par exemple
+     seulement côté fût, y ≥ 0,215, la paroi haute) est **demandée au projet mécanique** ; sa réponse sera
+     recopiée ici et appliquée avant que la Préhension et le Mycélium travaillent ensemble.
+  2. Boîtier de la caméra du bocal : on garde le calcul depuis la boîte de `machine.yaml` (x 1,045-1,085,
+     bord limité à 1,085 par la raclette de la griffe dans le plan de commande), soit x 0,99-1,14. Le « 1,16 » de
+     la fiche venait d'un boîtier plus large.
+  3. Griffe et préhension sur le même pont : quand la préhension est au porte-bocal (axe x 0,565), le mât de la
+     griffe est à x 0,249, dans une bande où `garage_glissiere` lui demande y ≥ 0,23. **Demandé au projet
+     mécanique** (Maquette) avec la vraie position en y du bocal au garage (0,155 en exemple). Le verrou commun
+     du pont sera branché par le chef d'orchestre quand les deux modules travailleront ensemble.
+  4. Mode manuel : la décision de la PR n° 14 reste (le pilotage à distance « en cas de problème » ne vérifie pas
+     les règles), **sauf** le verrou du noyau et de la couronne du lavage (jamais de rotation sans objet tenu),
+     qui sera appliqué aussi en pilotage à distance (tâche 21). `refus_manuel()` servira au mode guidé (tâche 32).
+  5. Capteur de vide 3,3 V : sa conversion (2 points tension → kPa) est relevée sur la notice du capteur acheté
+     ou mesurée à l'étape 2 de l'essai ; c'est un réglage.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
