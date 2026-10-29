@@ -1,0 +1,77 @@
+# Cartes de pesée embarquées (tâche 22 bis) : une carte RP2040 près de chaque HX711 (griffe,
+# préhension, plateau du remplissage) lit son HX711 et répond au Pi sur le bus RS485 des pesées
+# (adaptateur « rs485_pesee » de docs/entrees-sorties.yaml), en Modbus RTU.
+#
+# Le programme des cartes est dans pesee/ (pesee/README.md). Les sections « carte », « broches »
+# et « programme » y sont copiées quand on le fabrique : les changer = refabriquer et recharger
+# les cartes. L'adresse de chaque carte et la vitesse du bus viennent de entrees-sorties.yaml.
+# Les autres sections ne servent qu'au Pi.
+#
+# ATTENTION : tout ce fichier est un EXEMPLE (carte, broches et étalonnage pas encore faits).
+# Les vraies valeurs se trouvent à l'essai à l'établi (pesee/essai-etabli.md). Quand il sera
+# vrai, passer « exemple » à false.
+#
+# Vérifié au démarrage du Pi et quand on fabrique le programme : une broche prise deux fois, des
+# broches série qui ne vont pas ensemble, une carte lue sans étalonnage, une carte de
+# entrees-sorties.yaml absente d'ici.
+
+exemple: true
+
+# Carte RP2040, avec le nom que lui donne le Pico SDK
+# (pico, waveshare_rp2040_zero, seeed_xiao_rp2040, adafruit_qtpy_rp2040...).
+carte: pico
+
+# Broches du RP2040 (numéros GPIO, de 0 à 29), les mêmes sur les 3 cartes.
+broches:
+  # Le HX711 (alimenté en 3,3 V). Sa broche RATE au 3,3 V : 80 mesures par seconde.
+  hx711_dt: 2
+  hx711_sck: 3
+  # L'émetteur-récepteur RS485 3,3 V (MAX3485, SP3485...). TX et RX d'un même UART du RP2040
+  # (UART0 : TX 0, 12, 16, 28 et RX 1, 13, 17, 29 ; UART1 : TX 4, 8, 20, 24 et RX 5, 9, 21, 25).
+  rs485_tx: 0
+  rs485_rx: 1
+  # Ses entrées DE et /RE, reliées ensemble : 1 pour parler, 0 pour écouter.
+  rs485_sens: 6
+  # Petit voyant de la carte (allumé = HX711 mesure, clignote = HX711 muet). null : pas de voyant.
+  voyant: 25
+
+# Le programme des cartes.
+programme:
+  # Plus de mesure du HX711 depuis ce temps (ms) : « HX711 muet » (capteur débranché ?).
+  # À 80 mesures par seconde, il en vient une toutes les 12,5 ms.
+  sans_mesure_ms: 100
+  # Attente avant de répondre (µs), le temps que l'adaptateur USB-RS485 du Pi repasse en écoute.
+  delai_avant_reponse_us: 100
+  # Chien de garde du RP2040 (ms) : programme figé plus longtemps = la carte redémarre. Au plus 8000.
+  chien_de_garde_ms: 100
+  # Fenêtre texte sur le câble USB (essais à l'établi) : une ligne d'état tous les ... (ms).
+  periode_affichage_ms: 1000
+
+# Côté Pi : l'ordre des questions, répété sans fin. Une carte peut revenir plusieurs fois par
+# tour : la griffe doit avoir 80 mesures par seconde (une question et sa réponse ≈ 3 à 4 ms).
+tour:
+  - pesee_griffe
+  - pesee_prehension
+  - pesee_griffe
+  - pesee_plateau_remplissage
+# Pause entre deux tours (ms) : 1 ms laisse respirer le reste du programme. 0 : aucune.
+pause_entre_tours_ms: 1
+# Une mesure plus vieille que ça (ms) est refusée par qui la lit (griffe, préhension, dosage) :
+# « pesée muette ». Doit rester au-dessus du temps d'un tour.
+age_max_ms: 100
+# Plus aucune carte ne répond (adaptateur débranché...) : nouvel essai toutes les ... (s).
+reconnexion_s: 2
+
+# Étalonnage de chaque carte (pesee/essai-etabli.md, étape « étalonnage ») : mesure brute à vide,
+# et nombre de points de la mesure brute par kilogramme posé (négatif si le capteur est monté à
+# l'envers). Poids = (mesure brute − zero_brut) / brut_par_kg.
+etalonnage:
+  pesee_griffe:
+    zero_brut: 0
+    brut_par_kg: 40000
+  pesee_prehension:
+    zero_brut: 0
+    brut_par_kg: 40000
+  pesee_plateau_remplissage:
+    zero_brut: 0
+    brut_par_kg: 40000

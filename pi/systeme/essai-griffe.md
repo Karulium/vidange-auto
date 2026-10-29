@@ -41,7 +41,7 @@ Dans les commandes ci-dessous, `vidange-fluidnc` veut dire
 
 ## Étape 2 : la pesée de la griffe
 
-1. Godet vide, tête en haut : lire la charge (outil de la tâche 22 bis). Noter la valeur : c'est la
+1. Godet vide, tête en haut : lire la charge (`vidange-pesees lire`, `pesee/essai-etabli.md`). Noter la valeur : c'est la
    charge pendue à vide.
 2. Descendre lentement le godet ouvert sur un bac de substrat : la charge doit **baisser** quand le godet
    touche. Noter de combien elle baisse au premier contact franc : régler `descente → seuil_contact_n`

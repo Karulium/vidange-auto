@@ -59,7 +59,7 @@ par les tests automatiques. Sur la machine, vérifier seulement à l'œil, en d�
 
 ## Étape 3 : la balance du plateau
 
-1. Seau vide sur le plateau, chariot au dosage : lire la balance (outil de la tâche 22 bis). Noter la
+1. Seau vide sur le plateau, chariot au dosage : lire la balance (`vidange-pesees lire`). Noter la
    valeur.
 2. Poser 100 g dans le seau : la balance doit monter de 100 g (± 2 g).
 3. Faire tourner la manivelle sans bocal, à 120 tr/min (`$J=G53 A<H + 43380> F43200`), et regarder les

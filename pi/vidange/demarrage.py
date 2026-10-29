@@ -82,6 +82,8 @@ from vidange.materiel.materiel import Fabrique
 from vidange.mises_a_jour import DOSSIER as DOSSIER_MISES_A_JOUR
 from vidange.mises_a_jour import CarteEsp32, MisesAJour, ProgrammePi, preparer_cartes
 from vidange.mode import ModeMachine
+from vidange.pesees.tour import TourPesees
+from vidange.pesees.verification import cartes_de_pesee, verifier_avec_liste
 from vidange.poste_fut import PosteFut
 from vidange.quoi_faire import COUPURE_COURANT, PLANTAGE
 from vidange.registre import (
@@ -273,6 +275,14 @@ def constats_accelerometre(liaison: LiaisonAccelerometre | None) -> list[Constat
     return liaison.constats()
 
 
+def constats_pesees(pesees: TourPesees | None) -> list[Constat]:
+    """Pour la check-list. Jamais bloquant : chaque module refuse de bouger sans sa pesée."""
+    if pesees is None:
+        texte = "bus des pesées pas ouvert (entrées/sorties en panne, ou aucune carte de pesée)"
+        return [Constat("pesées", "attention", texte)]
+    return pesees.constats()
+
+
 def preparer_accelerometre(
     reglages: Reglages,
     liste: EntreesSorties,
@@ -328,6 +338,13 @@ def principal(
     except ErreurReglages as erreur:
         journal.error("%s", erreur)
         return CODE_REGLAGES_FAUX
+    erreurs_pesees = verifier_avec_liste(reglages.pesees, entrees_sorties)
+    if erreurs_pesees:
+        journal.error(
+            "Réglages des pesées qui ne vont pas ensemble :\n%s",
+            "\n".join(f"  - {erreur}" for erreur in erreurs_pesees),
+        )
+        return CODE_REGLAGES_FAUX
 
     if reglages.machine.exemple:
         journal.warning(
@@ -348,6 +365,11 @@ def principal(
         journal.warning(
             "accelerometre.yaml contient des valeurs d'EXEMPLE (exemple: true) : carte, broches "
             "et seuil de choc à choisir à l'essai (accelerometre/essai-etabli.md)."
+        )
+    if reglages.pesees.exemple:
+        journal.warning(
+            "pesees.yaml contient des valeurs d'EXEMPLE (exemple: true) : carte, broches et "
+            "étalonnage des cartes de pesée à faire à l'essai (pesee/essai-etabli.md)."
         )
     poste_reglages = reglages.machine.poste_fut
     if poste_reglages is not None and poste_reglages.pesee.exemple:
@@ -433,6 +455,10 @@ def principal(
     poste: PosteFut | None = None
     if poste_reglages is not None and materiel is not None and erreur_materiel is None:
         poste = PosteFut(poste_reglages, materiel, registre)
+    # Les cartes de pesée du bus RS485, interrogées en fond (griffe, préhension, plateau).
+    pesees: TourPesees | None = None
+    if materiel is not None and erreur_materiel is None and cartes_de_pesee(entrees_sorties):
+        pesees = TourPesees(reglages.pesees, materiel)
     sante = Sante(dossier_donnees, fiabilite.sante, registre, sauvegarde.copies, raccords.sondes)
     bilans = Bilans(
         dossier_donnees,
@@ -518,6 +544,8 @@ def principal(
             fils.append(accelerometre.demarrer(arret))
         if poste is not None:
             fils += poste.demarrer(arret)
+        if pesees is not None:
+            fils.append(pesees.demarrer(arret))
         checklist = CheckList(
             {
                 "réglages": lambda: constats_reglages(reglages, entrees_sorties),
@@ -536,6 +564,7 @@ def principal(
                 "envois": facteur.constats,
                 "caméras": cameras.constats,
                 "accéléromètre": lambda: constats_accelerometre(accelerometre),
+                "pesées": lambda: constats_pesees(pesees),
             }
         )
         serveur = preparer_api(

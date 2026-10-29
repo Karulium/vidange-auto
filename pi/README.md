@@ -24,7 +24,9 @@ Pas encore de vrai module de la machine.
 | `vidange/fluidnc/outil.py` | Commande `vidange-fluidnc` (lister les ports, console) pour les essais |
 | `vidange/materiel/materiel.py` | Entrées/sorties du Pi par leur nom : lire, commander, mesurer |
 | `vidange/materiel/puces.py` | GPIO du Pi, bus I2C, PCF8574, MCP23017, ADS1115, SHT31, carte de pesée HX711 |
-| `vidange/materiel/modbus.py` | Modbus RTU sur RS485 (transmetteurs d'ozone) |
+| `vidange/materiel/modbus.py` | Modbus RTU sur RS485 (transmetteurs d'ozone, cartes de pesée) |
+| `vidange/materiel/carte_pesee.py` | Table des registres d'une carte de pesée RP2040 + HX711 du bus RS485 |
+| `vidange/pesees/` | Cartes de pesée du bus RS485 lues à tour de rôle ; commande `vidange-pesees` (essais) |
 | `vidange/materiel/faux.py` | Faux capteurs et fausses cartes pour les tests et le simulateur |
 | `vidange/materiel/outil.py` | Commande `vidange-es` (lister, surveiller, commander) pour les essais |
 | `vidange/chef/chef.py` | Chef d'orchestre : fait avancer les modules, pause, reprise, alarmes, Go, carnet |
@@ -373,7 +375,7 @@ le 25/10/2026). Tous les chiffres sont dans `reglages/machine.yaml` (partie `gri
 (`systeme/essai-griffe.md`).
 
 ```python
-bras = BrasFluidnc(reglages.machine, liaison_portique, pesee_griffe)  # pesée : tâche 22 bis
+bras = BrasFluidnc(reglages.machine, liaison_portique, pesees.capteur("pesee_griffe"))
 bras.demarrer(arret)  # lit la pesée 80 fois par seconde
 griffe = Griffe(reglages.machine, bras, poste, registre)
 chef.lancer(module_griffe(griffe, seau_pret=..., pont_libre=...))
@@ -406,8 +408,8 @@ chiffres sont dans `reglages/machine.yaml` (partie `mycelium`, axes `agitateur_x
 ```python
 carte = reglages.fluidnc.cartes["mycelium_lavage"]
 agitateur = AgitateurFluidnc(
-    reglages.machine, liaison_mycelium_lavage, balance_plateau, carte
-)  # balance : tâche 22 bis
+    reglages.machine, liaison_mycelium_lavage, pesees.capteur("pesee_plateau_remplissage"), carte
+)
 agitateur.demarrer(arret)  # lit la balance 80 fois par seconde (et le capteur de la manivelle)
 porte_bocal = PorteBocalFluidnc(
     reglages.machine,
@@ -445,3 +447,22 @@ mycelium.demander(Demande("S1293", "seau_a", couche=1, variete="pleurote_grise",
   `photo(raison)` et `controle()` du porte-bocal (Vision).
 - **Porte-bocal** (`vidange/porte_bocal/`, tâche 20) : `vidange-porte-bocal etat | origine | ouvrir | serrer |
   tete-en-bas | debout` pour l'essayer sur la carte (`systeme/essai-porte-bocal.md`).
+
+## Cartes de pesée du bus RS485 (tâche 22 bis)
+
+Trois cartes RP2040 + HX711 (griffe, préhension, plateau du remplissage) sur un bus RS485 à elles
+(adaptateur `rs485_pesee`), lues en Modbus RTU. Leur programme est dans `../pesee/` ; leurs adresses
+dans `docs/entrees-sorties.yaml` ; l'ordre des questions et l'étalonnage dans `reglages/pesees.yaml`.
+
+```python
+pesees = TourPesees(reglages.pesees, materiel)  # lancé au démarrage du Pi
+pesees.demarrer(arret)  # questions sans fin, à tour de rôle
+pesees.capteur("pesee_griffe").lire_n()  # newtons (CapteurForce) ; lire_kg() en kg
+```
+
+- Chaque carte mesure seule, 80 fois par seconde ; le Pi garde sa dernière mesure. Une mesure plus vieille
+  que `age_max_ms`, ou un HX711 muet, lève une erreur : jamais une vieille valeur prise pour bonne.
+- La griffe revient deux fois par tour (`tour`) : elle est lue plus de 80 fois par seconde.
+- Check-list : une ligne par carte (répond, mesures par seconde, HX711 muet), jamais bloquante.
+- `vidange-pesees lire | zero <carte> | etalonner <carte> <kg>` pour les essais
+  (`../pesee/essai-etabli.md`).

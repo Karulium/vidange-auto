@@ -14,8 +14,9 @@ des déplacements manuels). C'est ce que fait le fil de la pesée :
   est refaite (après le Go), la griffe remonte d'abord lentement.
 Pesée muette pendant une descente ou un trajet : arrêt aussi (jamais de descente « à l'aveugle »).
 
-La pesée de la griffe est lue par une carte RP2040 sur le bus RS485 des pesées (tâche 22 bis) :
-ici, seulement l'interface `CapteurForce`, et une fausse pesée pour les tests.
+La pesée de la griffe est lue par une carte RP2040 sur le bus RS485 des pesées : sur la
+machine, `TourPesees(...).capteur("pesee_griffe")` (vidange.pesees) ; une fausse pesée pour les
+tests (vidange.griffe.simulation.FausseForce).
 """
 
 import math

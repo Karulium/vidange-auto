@@ -14,3 +14,6 @@ pi/donnees/
 
 # Programme de l'accéléromètre fabriqué (accelerometre/README.md)
 accelerometre/build*/
+
+# Programme des cartes de pesée fabriqué (pesee/README.md)
+pesee/build*/
