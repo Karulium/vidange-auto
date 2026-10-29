@@ -339,6 +339,9 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 
   Simulateur : un seau de format A dosé en 4 couches, puis 2 petits seaux B avec un seul bocal. Tests, dont les
   verrous avec le chariot et la casse du bocal.
+- [ ] **19 bis. Ne jamais envoyer à une carte un fichier FluidNC d'exemple** — Modèle : Sonnet, effort bas.
+  L'envoi de `fluidnc/<carte>.yaml` à une carte est refusé si le fichier est marqué EXEMPLE, avec un message clair
+  qui dit quoi faire. Le simulateur et les tests peuvent toujours s'en servir. Tests.
 - [ ] 20. Porte-bocal
 - [ ] 21. Lavage
 - [ ] 22. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage

@@ -224,7 +224,8 @@ class FauxHx711:
     Débranchée : DT reste à 1 (tirage haut du Pi), comme une prise de pesée débranchée.
 
     Elle a sa propre horloge, qui n'avance que quand le lecteur attend (`dormir`) : une prise
-    débranchée ne fait pas attendre les tests ni le simulateur."""
+    débranchée ne fait pas attendre les tests ni le simulateur, et une impulsion n'est jamais
+    jugée trop longue parce que l'ordinateur d'essai est chargé."""
 
     def __init__(self) -> None:
         self.temps = 0.0
@@ -244,6 +245,9 @@ class FauxHx711:
 
     def horloge(self) -> float:
         return self.temps
+
+    def horloge_ns(self) -> int:
+        return round(self.temps * 1e9)
 
     def dormir(self, duree_s: float) -> None:
         self.temps += duree_s
@@ -396,7 +400,9 @@ class FausseFabrique:
         for nom, branchement in self.branchements.items():
             if branchement.ressource == ("hx711", fichier, dt, sck):
                 faux = self.balances[nom]
-                return Hx711(faux, horloge=faux.horloge, dormir=faux.dormir)
+                return Hx711(
+                    faux, horloge_ns=faux.horloge_ns, horloge=faux.horloge, dormir=faux.dormir
+                )
         raise OSError(f"faux : aucune carte de pesée sur {dt}, {sck}")
 
     # ------------------------------------------------ réglage par les noms
