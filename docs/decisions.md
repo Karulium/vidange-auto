@@ -296,20 +296,31 @@ si l'une pose problème, elle le dit dans sa PR.
 - **Remplissage** (réponses à la PR n° 43, tâche 34, 30/10/2026) :
   1. Dosage à y 0,155, plateau haut : **permis**. C'est la règle 11 du fichier des positions, vérifiée sur volumes
      réels par le fil Mycélium (24/10). La zone libre du poste va de y 0,13 à 0,16, comme dans la PR.
-  2. et 3. Poussée en bande du haut (plateau à 0,4985) et arrêt du lot C à y 0,205 : question posée au projet. En
-     attendant, le verrou refuse ces poussées (choix prudent de la PR).
-  4. **Pousseur (correction d'une erreur de recopie)** : son zéro est le fin de course **en bout de rail côté fût**,
-     et c'est la position « rentré ». Il pousse **toujours vers le stockage**, course ≈ 0,325 (fiche). Il n'est pas
-     rentré « au milieu ». À corriger dans la tâche 34 bis (confirmation demandée au projet).
-  5. Ordre de la prise double : demandé au projet. Le geste reste tel quel en attendant ; ne pas l'essayer sur le
-     vrai matériel avant la réponse.
+  2. et 3. **Pas de poussée en bande du haut** (réponse du fil Remplissage, 30/10) : la tête du micropore est montée
+     SUR le chariot, donc au-dessus du plateau à toutes les places en y. Le pousseur ne sort que **plateau ≤ 0,20**
+     (règle 9), partout. Les valeurs « 0,4985 » et « lot C, y 0,205 » ne viennent pas de la fiche Remplissage : on
+     les retire. Les règles s'additionnent, la plus stricte s'applique. Un arrêt à y 0,205 reste permis pousseur
+     rentré. Les places des files viennent du Stockage (tâche 35).
+  4. **Pousseur (correction d'une erreur de recopie, confirmé par le fil Remplissage)** : son zéro est le fin de
+     course **en bout de rail côté fût**, et c'est la position « rentré ». Il pousse **toujours vers le stockage**,
+     course 0,325 : la palette va de −0,165 (rentré) à +0,16 de l'axe du plateau. Il n'est pas rentré « au milieu ».
+  5. **Ordre de la prise double** (fil Remplissage, page Barres séparatrices v4). Le plateau ne bouge pas avant e :
+     a) la tête monte de 2 cm ; b) lâcher : chaque barre s'écarte de 1,5 cm ; c) la tête descend de 4,8 cm (2,8 cm
+     plus bas qu'à la pose ; les deux seaux emboîtés descendent avec elle, la rainure du seau du haut arrive au
+     niveau des barres) ; d) les barres se resserrent contre la lèvre du seau du dessous (entraxe = Ø haut + 6 mm) ;
+     e) le plateau monte toucher le fond du seau du dessous ; f) la tête remonte et emporte le seau du haut ; g) lâcher ;
+     h) le plateau remonte de 2,8 cm. Contrôle : faisceau libre ET un seul seau sur la balance, sinon alarme. Puis
+     centrage et suite normale. Les courses (2 ; 1,5 ; 4,8 ; 2,8 cm) sont des réglages, à vérifier sur la maquette.
   6. **Pas de courant réduit** (réponse du fil Implantation, 30/10) : le pilote boucle fermée de tous les axes
      (CL57T V4.1 ou équivalent) n'a que PUL, DIR, ENA et une sortie d'alarme ALM ; le courant se règle une fois pour
      toutes. Le centrage se fait donc **en position** (`centrage_hw_m` du format + un petit jeu en réglage). La
      sortie « courant réduit » est retirée. Si les barres forcent trop, le pilote lève **ALM** : le Pi la lit (comme
      les autres alarmes de pilote) pour arrêter le geste et alerter.
   7. Hauteurs de pose des seaux A, C et D : exemples, mesurées à l'essai (étape 3 de la procédure).
-  8. Distance entre l'axe du plateau et le bout du chariot (règle 7) : 0,09 en exemple, cote demandée au projet.
+  8. **Bout du chariot côté allée : 0,40 de l'axe du plateau** (fil Remplissage ; point le plus loin 0,396, renvoi
+     d'angle et moteur de montée). Chariot du fût absent : axe du plateau à y ≤ 0,875 − 0,40 = **0,475**. Cette règle
+     est plus stricte que « poste ou files 1 et 2 » : elle gagne (une file au-delà est refusée tant que le chariot du
+     fût n'est pas en place).
   9. Retourneur des couvercles : **oui, c'est une exception** à la règle 9 (descente de la préhension barres
      ouvertes). Elle a été vérifiée par le fil Lavage le 25/10 (aucun contact, plateau 0,459, barres 0,19 à 0,30).
      Dans tous les autres cas, la règle 9 est branchée dans la préhension (tâche 34 bis).
