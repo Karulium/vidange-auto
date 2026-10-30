@@ -284,6 +284,15 @@ si l'une pose problème, elle le dit dans sa PR.
   5. Retour à 0 de la rotation : pas de relecture du capteur d'origine à chaque passe pour l'instant ; à ajouter si
      la mise en service montre une dérive.
   6. Hauteur du lâcher au-dessus de la tige et contact dans le bac : EXEMPLES (0,78 et 0,49), mesurés à l'essai.
+- **Vision de base** (réponses à la PR n° 41, tâche 22, 30/10/2026) :
+  1. Règle 4 du plafond : tout fût plein que les règles 2 et 3 n'ont pas pris donne l'alerte « rien à remplir »
+     (jamais d'attente silencieuse, la fiabilité d'abord).
+  2. Contrôle du lave-bocal par le plafond : **désactivé** (`controle_lave_bocal: false`) jusqu'à ce que la
+     reconnaissance du fût vide marche (tâche 22 ter). Ensuite : une photo pont garé **au début de chaque série** de
+     seaux, et à nouveau **après toute pause, porte ouverte ou arrêt** (quelqu'un a pu intervenir), en plus de la
+     confirmation à l'écran ; pas de garage du pont avant chaque seau.
+  3. Servo de la caméra du dosage sur la sortie PWM matérielle du Pi (**GPIO 18**), servo alimenté à part (5 à
+     6,8 V, régulateur de la fiche), 0 V commun ; signal en paire torsadée avec le 0 V. Transmis au plan de câblage.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
