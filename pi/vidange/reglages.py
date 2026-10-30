@@ -6,6 +6,7 @@ quel réglage, et ce qui ne va pas. Toutes les erreurs sont listées d'un coup.
 """
 
 import math
+import re
 from pathlib import Path
 from typing import Annotated, Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -1279,6 +1280,53 @@ class Lavage(Modele):
     lave_bocal: LaveBocal | None = None
 
 
+class ImpulsionServo(Modele):
+    """Impulsion du servo (µs) pour deux angles (°) : droite entre les deux."""
+
+    angles_deg: Intervalle
+    us: Intervalle
+
+
+class PwmServo(Modele):
+    """Sortie PWM matérielle du Pi 5 (overlay « pwm-2chan ») : dossier de Linux et canal."""
+
+    fichier: Annotated[str, StringConstraints(pattern=r"^/sys/class/pwm/pwmchip[0-9]+$")]
+    canal: int = Field(ge=0, le=3)
+    periode_us: int = Field(gt=0)
+
+
+class CameraDosage(Modele):
+    """La caméra du dosage sur son servo DS3225 (docs/decisions.md, règle 2). La boîte interdite
+    à la griffe et à la préhension pendant qu'elle pivote est « prehension → camera_dosage » ;
+    l'agitateur garé, « mycelium → camera_x_max »."""
+
+    exemple: bool = False
+    # Nom du signal du servo dans docs/entrees-sorties.yaml.
+    signal: Nom
+    angle_bocal_deg: float
+    angle_seau_deg: float
+    # Temps (s) pour aller d'un angle à l'autre (le servo ne dit pas où il est).
+    pivot_s: float = Field(gt=0)
+    impulsion: ImpulsionServo
+    pwm: PwmServo
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "CameraDosage":
+        erreurs = []
+        (a0, a1), (u0, u1) = self.impulsion.angles_deg, self.impulsion.us
+        if a0 >= a1:
+            erreurs.append("impulsion → angles_deg : du plus petit au plus grand")
+        if not 0 < u0 < self.pwm.periode_us or not 0 < u1 < self.pwm.periode_us:
+            erreurs.append(f"impulsion → us : entre 0 et pwm → periode_us ({self.pwm.periode_us})")
+        for nom in ("angle_bocal_deg", "angle_seau_deg"):
+            angle = getattr(self, nom)
+            if a0 < a1 and not a0 <= angle <= a1:
+                erreurs.append(f"{nom} ({angle:g}°) hors de impulsion → angles_deg")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -1309,6 +1357,9 @@ class Machine(Modele):
     prehension: Prehension | None = None
     # Lavage des seaux (None : pas de lavage). Demande la préhension.
     lavage: Lavage | None = None
+    # Caméra du dosage sur son servo (None : pas de servo). Demande la préhension (sa boîte)
+    # et le mycélium (agitateur garé).
+    camera_dosage: CameraDosage | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -1376,6 +1427,10 @@ class Machine(Modele):
         erreurs += self._verifier_porte_bocal()
         erreurs += self._verifier_prehension()
         erreurs += self._verifier_lavage()
+        if self.camera_dosage is not None and (self.prehension is None or self.mycelium is None):
+            erreurs.append(
+                "camera_dosage : il faut aussi les parties « prehension » et « mycelium »"
+            )
         for i, nom_a in enumerate(zones_correctes):
             for nom_b in zones_correctes[i + 1 :]:
                 if self._se_chevauchent(nom_a, nom_b):
@@ -2671,6 +2726,251 @@ class ReglagesPesees(Modele):
         return self
 
 
+# --------------------------------------------------------------- vision.yaml
+
+# Caméras que le code de la vision connaît par leur nom (tâche 22).
+CAMERAS_VISION = ("plafond", "tete_griffe", "dosage")
+
+# Dictionnaires de repères ArUco d'OpenCV → nombre de repères qu'ils contiennent.
+DICTIONNAIRES_ARUCO = {
+    "DICT_4X4_50": 50,
+    "DICT_4X4_100": 100,
+    "DICT_4X4_250": 250,
+    "DICT_5X5_50": 50,
+    "DICT_5X5_100": 100,
+    "DICT_5X5_250": 250,
+    "DICT_6X6_50": 50,
+    "DICT_6X6_250": 250,
+}
+
+# Ce que la caméra du plafond sait dire d'une photo (vidange.vision.plafond.faits) : les
+# conditions des règles « situation → travail ». « pas <fait> » : le contraire.
+FAITS_PLAFOND = (
+    "doute",
+    "objet_inconnu",
+    "piece_mal_placee",
+    "fut_plein",
+    "fut_plein_mais",
+    "bocaux_vides_propres",
+    "seaux_vides_propres",
+    "bocal_semence_pret",
+    "bocaux_sales",
+    "seaux_sales",
+    "couvercles_sales",
+    "lave_bocal_pose",
+    "places_libres",
+)
+
+
+class TeteCameraVision(Modele):
+    """Caméra portée par la tête de la griffe : son objectif par rapport à l'axe du mât (tête à
+    0°, m) et au-dessus des axes de la tête (m)."""
+
+    decalage_m: tuple[float, float]
+    au_dessus_axes_m: float
+
+
+class CameraVision(Modele):
+    description: Annotated[str, StringConstraints(min_length=1)]
+    # Nom de la vidéo dans programme.yaml (cameras → liste). None : caméra seulement déclarée
+    # (servie par la tâche qui s'en sert).
+    video: Nom | None = None
+    # Champ de vision (horizontal, vertical, °) : mesure grossière tant qu'il n'y a pas de
+    # fichier de calibration.
+    champ_deg: tuple[Annotated[float, Field(gt=0, lt=180)], Annotated[float, Field(gt=0, lt=180)]]
+    # Fichier de calibration (dans le dossier des calibrations), fait par « vidange-vision
+    # calibrer ».
+    calibration: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_.-]+$")] | None = None
+    # Caméra fixe : objectif (x, y, z) dans le repère du portique, vue vers le bas.
+    position: tuple[float, float, float] | None = None
+    # Caméra sur la tête de la griffe.
+    tete: TeteCameraVision | None = None
+    # Angle (°) du bord haut de l'image (de gauche à droite) avec l'axe x du portique (tête à
+    # 0° pour une caméra de tête).
+    orientation_deg: float = 0
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "CameraVision":
+        if self.position is not None and self.tete is not None:
+            raise ValueError("une caméra est fixe (position) ou sur la tête (tete), pas les deux")
+        return self
+
+
+class CalibrationVision(Modele):
+    """Mire en damier (OpenCV) pour corriger la déformation du grand angle."""
+
+    # Dossier des fichiers de calibration, dans le dossier des données du Pi.
+    dossier: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_.-]+$")]
+    # Coins intérieurs du damier (une case de plus de chaque côté), et côté d'une case (m).
+    colonnes: int = Field(ge=3, le=30)
+    lignes: int = Field(ge=3, le=30)
+    case_m: float = Field(gt=0)
+    # Photos prises par l'outil, et photos où le damier doit être trouvé (au moins).
+    photos: int = Field(ge=3, le=100)
+    photos_min: int = Field(ge=3)
+    attente_entre_s: float = Field(ge=0)
+    # Erreur moyenne de la calibration au-dessus de laquelle elle est refusée (points).
+    erreur_max_px: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "CalibrationVision":
+        if self.photos_min > self.photos:
+            raise ValueError(
+                f"photos_min ({self.photos_min}) plus grand que photos ({self.photos})"
+            )
+        if self.colonnes == self.lignes:
+            # Un damier carré n'a pas de sens : OpenCV ne sait pas où est le haut.
+            raise ValueError("colonnes et lignes doivent être différentes (damier pas carré)")
+        return self
+
+
+class LectureTeteQr(Modele):
+    """Lecture des QR par la caméra de tête : godet grand ouvert, axes à cette hauteur."""
+
+    axes_z: float
+    godet_ouvert: float = Field(gt=0, le=1)
+    # Hauteur des axes de la photo de secours (QR illisible deux fois).
+    autre_axes_z: float
+
+
+class QrVision(Modele):
+    # Forme des codes du registre (« S1293 », « B327 »...) : un QR d'une autre forme est ignoré.
+    forme: Annotated[str, StringConstraints(min_length=1)]
+    lecture_tete: LectureTeteQr
+    # Angle de l'objet = angle du QR + ce décalage (repère d'angle, plan v181).
+    angle_objet_deg: float = Field(ge=-180, le=180)
+    # Photos à la même hauteur avant la photo de secours (2 : la première et un deuxième tour).
+    essais_meme_hauteur: int = Field(ge=1, le=5)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "QrVision":
+        try:
+            re.compile(self.forme)
+        except re.error as erreur:
+            raise ValueError(f"forme : expression mal écrite ({erreur})") from None
+        return self
+
+
+class ArucoVision(Modele):
+    dictionnaire: Literal[tuple(DICTIONNAIRES_ARUCO)]  # type: ignore[valid-type]
+    # Repère de 40 mm sur le plateau du rince-verre du lave-bocal.
+    lave_bocal: int = Field(ge=0)
+    taille_lave_bocal_m: float = Field(gt=0)
+    # Repères du calibrage du plafond.
+    calibrage_plafond: list[Annotated[int, Field(ge=0)]] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "ArucoVision":
+        numeros = [self.lave_bocal, *self.calibrage_plafond]
+        erreurs = []
+        if len(set(numeros)) != len(numeros):
+            erreurs.append("un numéro de repère est pris deux fois")
+        taille = DICTIONNAIRES_ARUCO[self.dictionnaire]
+        erreurs += [
+            f"repère n° {n} : le dictionnaire {self.dictionnaire} va de 0 à {taille - 1}"
+            for n in numeros
+            if n >= taille
+        ]
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class RegleVision(Modele):
+    """Une règle « situation → travail » de la caméra du plafond. Elle correspond si toutes les
+    conditions de « si » sont vraies, et au moins une de « si_un_de » (si elle en a)."""
+
+    numero: int = Field(ge=1)
+    si: list[str] = Field(default_factory=list)
+    si_un_de: list[str] = Field(default_factory=list)
+    # Nom du travail, et ce que le Pi en fait : alerte (rien ne bouge), proposer (attend le Go),
+    # demander (à Karulium de faire quelque chose), attendre (nouvelle photo plus tard).
+    travail: Nom
+    sorte: Literal["alerte", "proposer", "demander", "attendre"]
+    message: Annotated[str, StringConstraints(min_length=1)]
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "RegleVision":
+        inconnus = [
+            condition
+            for condition in (*self.si, *self.si_un_de)
+            if condition.removeprefix("pas ") not in FAITS_PLAFOND
+        ]
+        if inconnus:
+            raise ValueError(
+                f"règle n° {self.numero} : condition inconnue {', '.join(inconnus)} (connues : "
+                f"{', '.join(FAITS_PLAFOND)}, et « pas » devant)"
+            )
+        return self
+
+
+class PlafondVision(Modele):
+    # Une photo plus vieille que ça (s) est refusée.
+    photo_age_max_s: float = Field(gt=0)
+    # Photo seulement pont garé au bout opposé : pont à x ≥ ... (m).
+    pont_gare_x_min: float
+    # Règle « rien à faire » : nouvelle photo après ce temps (s).
+    attente_s: float = Field(gt=0)
+    # Contrôle du lave-bocal par la caméra avant chaque geste dangereux pour lui.
+    controle_lave_bocal: bool
+    # Dans l'ordre : la première qui correspond gagne. La dernière n'a pas de condition.
+    regles: list[RegleVision] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "PlafondVision":
+        erreurs = [
+            f"regles : la règle n° {regle.numero} est à la place n° {place}"
+            for place, regle in enumerate(self.regles, start=1)
+            if regle.numero != place
+        ]
+        derniere = self.regles[-1]
+        if derniere.si or derniere.si_un_de:
+            erreurs.append(
+                f"regles : la dernière (n° {derniere.numero}) doit être sans condition (« rien "
+                "de tout cela »)"
+            )
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class ReglagesVision(Modele):
+    """vision.yaml : caméras, QR, repères ArUco, caméra du plafond (tâche 22)."""
+
+    exemple: bool = False
+    # Photos de mesure : à l'arrêt, après ce temps (s).
+    stabilisation_s: float = Field(ge=0)
+    # Une photo qui n'arrive pas dans ce délai (s) : caméra en panne.
+    delai_photo_s: float = Field(gt=0)
+    cameras: dict[Nom, CameraVision]
+    calibration: CalibrationVision
+    qr: QrVision
+    aruco: ArucoVision
+    plafond: PlafondVision
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "ReglagesVision":
+        erreurs = [
+            f"cameras : il manque « {nom} »" for nom in CAMERAS_VISION if nom not in self.cameras
+        ]
+        if self.delai_photo_s <= self.stabilisation_s:
+            erreurs.append(
+                f"delai_photo_s ({self.delai_photo_s:g} s) doit dépasser stabilisation_s "
+                f"({self.stabilisation_s:g} s)"
+            )
+        for nom in ("plafond", "dosage"):
+            camera = self.cameras.get(nom)
+            if camera is not None and camera.video is None:
+                erreurs.append(f"cameras → {nom} : il faut sa vidéo (video)")
+        if "plafond" in self.cameras and self.cameras["plafond"].position is None:
+            erreurs.append("cameras → plafond : il faut sa position")
+        if "tete_griffe" in self.cameras and self.cameras["tete_griffe"].tete is None:
+            erreurs.append("cameras → tete_griffe : il faut sa place sur la tête (tete)")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 # --------------------------------------------------------------- l'ensemble
 
 
@@ -2681,6 +2981,7 @@ class Reglages(Modele):
     simulateur: ReglagesSimulateur
     accelerometre: ReglagesAccelerometre
     pesees: ReglagesPesees
+    vision: ReglagesVision
 
 
 # Nom du fichier → (nom dans Reglages, modèle). Ajouter ici chaque nouveau fichier.
@@ -2691,6 +2992,7 @@ FICHIERS: dict[str, tuple[str, type[Modele]]] = {
     "simulateur.yaml": ("simulateur", ReglagesSimulateur),
     "accelerometre.yaml": ("accelerometre", ReglagesAccelerometre),
     "pesees.yaml": ("pesees", ReglagesPesees),
+    "vision.yaml": ("vision", ReglagesVision),
 }
 
 
@@ -2797,6 +3099,15 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
                         f"fluidnc.yaml : « {nom} » (lavage) doit être dans les {quoi} d'une seule "
                         f"carte ({ou})"
                     )
+    vision = valeurs["vision"]
+    assert isinstance(vision, ReglagesVision)
+    videos = ", ".join(programme.cameras.liste) or "aucune"
+    erreurs += [
+        f"vision.yaml, cameras → {nom} : vidéo « {camera.video} » absente de programme.yaml "
+        f"(cameras → liste : {videos})"
+        for nom, camera in vision.cameras.items()
+        if camera.video is not None and camera.video not in programme.cameras.liste
+    ]
     simulateur = valeurs["simulateur"]
     assert isinstance(simulateur, ReglagesSimulateur)
     erreurs += [

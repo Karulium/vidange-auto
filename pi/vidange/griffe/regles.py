@@ -11,8 +11,9 @@ trajet (jamais en diagonale entre le fût et le poste de remplissage).
 
 L'encombrement de la tête (`griffe → tete`) compte pour les obstacles : poignée du volet,
 boîtier de la caméra du bocal, bout côté fût, porte du spray, garage de l'agitateur (tête
-tournée). Vue de dessus, la tête est un rectangle autour du mât (le long du bras, en travers)
-plus la lame de la raclette (un segment en travers) ; en hauteur, elle va de son bas vers le haut.
+tournée), boîte de la caméra du dosage pendant qu'elle pivote. Vue de dessus, la tête est un
+rectangle autour du mât (le long du bras, en travers) plus la lame de la raclette (un segment en
+travers) ; en hauteur, elle va de son bas vers le haut.
 
 Tous les chiffres viennent de machine.yaml (`griffe`, `poste_fut`, courses des axes).
 Ces verrous ne protègent que la MACHINE : la sécurité des personnes reste câblée.
@@ -52,6 +53,7 @@ class Contexte:
     volet_releve: bool = False
     porte_spray_ouverte: bool = False
     dosage_en_cours: bool = False
+    camera_dosage_pivote: bool = False
 
 
 def _m(valeur: float) -> str:
@@ -70,6 +72,8 @@ class ReglesGriffe:
         self.poste = machine.poste_fut
         self.courses = {nom: machine.axes[nom].course for nom in ("pont_x", "chariot_y")}
         self.courses.update(z=machine.axes["griffe_z"].course, a=machine.axes["griffe_a"].course)
+        # Boîte de la caméra du dosage (la même que pour la préhension, docs/decisions.md, règle 2).
+        self.boite_camera = machine.prehension.camera_dosage if machine.prehension else None
 
     # ------------------------------------------------------------ outils
 
@@ -142,6 +146,16 @@ class ReglesGriffe:
     ) -> bool:
         return any(touche_rectangle(forme, x, y) for forme in self.encombrement(pose, longueur))
 
+    def dans_boite_camera_dosage(self, pose: Pose) -> bool:
+        """La tête est-elle dans la boîte de la caméra du dosage (x < x_max, y < y_max, bas sous
+        le haut de la boîte) ? Sans boîte dans les réglages : non."""
+        boite = self.boite_camera
+        if boite is None:
+            return False
+        return self.bas(pose) < boite.z[1] - _EGAL and self._touche(
+            pose, (-_LOIN, boite.x_max), (-_LOIN, boite.y_max)
+        )
+
     def _classe_ouverture(self, b: float) -> int:
         """0 : fermé ; 1 : à moitié ouvert au plus ; 2 : plus ouvert."""
         if b <= _EGAL:
@@ -198,6 +212,13 @@ class ReglesGriffe:
             return (
                 f"dosage du mycélium en cours : mât à x ≤ {_m(g.dosage.mat_x_max)} m ou "
                 f"y ≥ {_m(g.dosage.mat_y_min)} m"
+            )
+        if contexte.camera_dosage_pivote and self.dans_boite_camera_dosage(pose):
+            boite = self.boite_camera
+            assert boite is not None
+            return (
+                f"la caméra du dosage pivote : tête interdite dans x < {_m(boite.x_max)}, "
+                f"y < {_m(boite.y_max)}, z {_m(boite.z[0])} à {_m(boite.z[1])} m"
             )
         camera = g.camera_bocal
         # Seule la partie haute de la tête (les bras) arrive à la hauteur du boîtier : elle seule

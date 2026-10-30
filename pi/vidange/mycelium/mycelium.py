@@ -32,8 +32,10 @@ changement de bocal, ses mors s'ouvrent, le bocal neuf est posé, puis serré.
 
 Les modules pas encore écrits sont des cases vides, derrière des interfaces simples :
 - chariot de remplissage (Remplissage, pas figé) : `ChariotRemplissage` ;
-- pose du bocal neuf (Préhension) et QR (tâche 22) : `nouveau_bocal(variete)` ;
-- caméra du dosage (tâche 22) : `photo(raison)`.
+- pose du bocal neuf (Préhension) et QR (tâche 22) : `nouveau_bocal(variete)`.
+
+La caméra du dosage (vidange.vision.dosage, tâche 22) : `photo(raison)` pour les alertes, et
+`camera` pour la photo du seau après chaque dose (agitateur rentré au garage), notée avec sa dose.
 """
 
 import math
@@ -99,6 +101,16 @@ class ChariotRemplissage(Protocol):
         ...
 
 
+class CameraDosage(Protocol):
+    """La caméra du dosage sur son servo (vidange.vision.dosage.CameraDosage)."""
+
+    def commencer_photo_seau(
+        self, seau: str, couche: int, bocal: str, grammes: float, cycle: int | None = None
+    ) -> None: ...
+
+    def photo_seau_finie(self) -> bool: ...
+
+
 @dataclass(frozen=True)
 class Bocal:
     code: str  # QR du bocal
@@ -154,10 +166,12 @@ class Mycelium:
         registre: Registre | None = None,
         horloge: Callable[[], float] = time.monotonic,
         photo: Callable[[str], object] = lambda raison: None,
+        camera: CameraDosage | None = None,
     ) -> None:
         """`nouveau_bocal(variete)` : un bocal neuf de cette variété est mis dans le porte-bocal
         (gestes du Porte-bocal et de la Préhension, QR lu par la vision) ; il rend ce bocal.
-        `photo(raison)` : photo de la caméra du dosage, notée avec l'alarme."""
+        `photo(raison)` : photo de la caméra du dosage, notée avec l'alarme. `camera` : la caméra
+        du dosage, pour la photo du seau après chaque dose (None : pas de photo)."""
         assert machine.mycelium is not None and machine.griffe is not None
         self.reglages = machine.mycelium
         self.formats = machine.griffe.formats
@@ -169,6 +183,9 @@ class Mycelium:
         self._nouveau_bocal = nouveau_bocal
         self._horloge = horloge
         self._photo = photo
+        self.camera = camera
+        # Dose (et cycle) dont le seau attend sa photo.
+        self._a_photographier: tuple[Dose, int | None] | None = None
         self.plan = Plan()
         self.doses: list[Dose] = []
         # Simulateur seulement : le faux matériel du porte-bocal (vidange.porte_bocal.faux).
@@ -560,7 +577,9 @@ class Mycelium:
     def _noter_dose(self, demande: Demande, kg: float) -> None:
         bocal = self.plan.bocal
         assert bocal is not None
-        self.doses.append(Dose(demande.seau, demande.couche, bocal.code, bocal.variete, kg))
+        dose = Dose(demande.seau, demande.couche, bocal.code, bocal.variete, kg)
+        self.doses.append(dose)
+        self._a_photographier = (dose, demande.cycle)
         journal.info(
             "Mycélium : seau %s, couche %d : %.0f g du bocal %s",
             demande.seau,
@@ -645,6 +664,19 @@ class Mycelium:
         self._demandes.popleft()
         self.plan.poids_depart_kg = None
         return None
+
+    def photographier_le_seau(self) -> None:
+        """Agitateur rentré au garage : la caméra du dosage pivote vers le seau qui vient d'être
+        dosé, le photographie, revient au bocal (son verrou est vérifié par elle)."""
+        if self.camera is None or self._a_photographier is None:
+            return
+        dose, cycle = self._a_photographier
+        self._a_photographier = None
+        self.camera.commencer_photo_seau(dose.seau, dose.couche, dose.bocal, dose.kg * 1000, cycle)
+
+    def photo_du_seau_finie(self) -> bool:
+        """La caméra est revenue au bocal : l'agitateur peut repartir."""
+        return self.camera is None or self.camera.photo_seau_finie()
 
     def apres_retour(self) -> str:
         return "attendre_une_couche"

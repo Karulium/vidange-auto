@@ -284,6 +284,15 @@ si l'une pose problème, elle le dit dans sa PR.
   5. Retour à 0 de la rotation : pas de relecture du capteur d'origine à chaque passe pour l'instant ; à ajouter si
      la mise en service montre une dérive.
   6. Hauteur du lâcher au-dessus de la tige et contact dans le bac : EXEMPLES (0,78 et 0,49), mesurés à l'essai.
+- **Vision de base** (réponses à la PR n° 41, tâche 22, 30/10/2026) :
+  1. Règle 4 du plafond : tout fût plein que les règles 2 et 3 n'ont pas pris donne l'alerte « rien à remplir »
+     (jamais d'attente silencieuse, la fiabilité d'abord).
+  2. Contrôle du lave-bocal par le plafond : **désactivé** (`controle_lave_bocal: false`) jusqu'à ce que la
+     reconnaissance du fût vide marche (tâche 22 ter). Ensuite : une photo pont garé **au début de chaque série** de
+     seaux, et à nouveau **après toute pause, porte ouverte ou arrêt** (quelqu'un a pu intervenir), en plus de la
+     confirmation à l'écran ; pas de garage du pont avant chaque seau.
+  3. Servo de la caméra du dosage sur la sortie PWM matérielle du Pi (**GPIO 18**), servo alimenté à part (5 à
+     6,8 V, régulateur de la fiche), 0 V commun ; signal en paire torsadée avec le 0 V. Transmis au plan de câblage.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
@@ -326,7 +335,24 @@ La liste des fonctions retenues, déjà faites ailleurs ou refusées est dans `d
 
 Les chiffres ci-dessous vont dans `pi/reglages/machine.yaml`, jamais dans le code.
 
-1. **Caméra du plafond** : 9 règles « situation → travail » validées (tableau à recopier ici quand la tâche Vision arrive). Le Pi PROPOSE le travail et attend le « Go » de Karulium. Repère ArUco 40 mm sur le plateau du rince-verre du lave-bocal. Corrections après essais réels.
+1. **Caméra du plafond** : 9 règles « situation → travail » validées le 24/10/2026 (dans
+   `pi/reglages/vision.yaml`, tâche 22). Le Pi PROPOSE le travail et attend le « Go » de Karulium. Repère ArUco
+   40 mm sur le plateau du rince-verre du lave-bocal. Corrections après essais réels. Dans l'ordre, la première
+   qui correspond gagne :
+   1. objet inconnu, ou pièce mal placée sur un trajet ⇒ rien ne bouge, alerte avec la photo ;
+   2. fût plein de maïs + bocaux vides et propres au stockage ⇒ remplir les bocaux ;
+   3. fût plein + pas de bocaux vides + seaux vides propres + bocal de semence prêt ⇒ remplir les seaux et
+      ajouter le mycélium ;
+   4. fût plein mais rien de vide et propre où le mettre ⇒ alerte « rien à remplir » ;
+   5. bocaux sales + lave-bocal posé ⇒ laver les bocaux ;
+   6. bocaux sales + lave-bocal absent ⇒ demander de poser le lave-bocal ;
+   7. seaux ou couvercles sales + lave-bocal absent ⇒ laver les seaux ;
+   8. seaux sales + lave-bocal posé ⇒ demander de retirer le lave-bocal ;
+   9. rien de tout cela ⇒ attendre, nouvelle photo toutes les 5 min.
+   Photo seulement pont garé au bout opposé, refusée si elle a plus de 5 s ; sans reconnaissance sûre : cas 1.
+   Lave-bocal, avant chaque geste dangereux pour lui (seau dans le fût de lavage, noyau, couronne) : repère vu
+   ⇒ posé (seau, noyau, couronne interdits) ; fût vide vu clairement ⇒ seaux permis ; doute ⇒ rien ne bouge,
+   alerte avec la photo, bouton « Vérifié ». Caméra et confirmation à l'écran d'accord, sinon doute.
 2. **Caméra du dosage** sur servo DS3225 : 0° = bocal, 63° = seau. Photo du seau après chaque godet, avec sa dose. Elle pivote SEULEMENT si l'agitateur est garé (bocal x ≤ 0,62) ET si griffe et préhension sont hors de la zone x < 1,10, y < 0,34, z 0,95 à 1,08. Elle remonte avant le retour de l'agitateur ou du godet.
 3. **Porte du spray ouverte** : portique arrêté, griffe interdite en x < 0,50 et y < 0,33, ozone et UV coupés.
 4. **Reed du panneau du poste du fût** : production seulement contact fermé ; lavage seulement contact ouvert.

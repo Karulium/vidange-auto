@@ -125,6 +125,7 @@ class Griffe:
         mode: Callable[[], str] = lambda: "production",
         porte_spray_ouverte: Callable[[], bool] = lambda: False,
         dosage_en_cours: Callable[[], bool] = lambda: False,
+        camera_dosage_pivote: Callable[[], bool] = lambda: False,
         machouiller: Callable[[], bool] = lambda: True,
         prochain_format: Callable[[], str | None] = lambda: None,
         tourner_seau: Callable[[bool], object] = lambda tourne: None,
@@ -135,7 +136,7 @@ class Griffe:
         celui par défaut). `tourner_seau` : faire tourner le seau du poste de remplissage
         (Remplissage, pas figé). `couche_finie` : une couche de substrat est vidée et tassée,
         le mycélium peut être versé dessus (Mycélium). `seau_fini` : un seau est plein (numéro
-        dans le fût)."""
+        dans le fût). `camera_dosage_pivote` : la caméra du dosage pivote (Vision)."""
         assert machine.griffe is not None and machine.poste_fut is not None
         self.reglages = machine.griffe
         self.fut = machine.poste_fut
@@ -150,6 +151,7 @@ class Griffe:
         self._mode = mode
         self._porte_spray = porte_spray_ouverte
         self._dosage = dosage_en_cours
+        self._camera_dosage_pivote = camera_dosage_pivote
         self._machouiller = machouiller
         self._prochain_format = prochain_format
         self.tourner_seau = tourner_seau
@@ -171,12 +173,19 @@ class Griffe:
             volet_releve=self.poste.volet_considere_releve(mode),
             porte_spray_ouverte=self._porte_spray(),
             dosage_en_cours=self._dosage(),
+            camera_dosage_pivote=self._camera_dosage_pivote(),
         )
 
     def hors_du_fut(self) -> bool:
         """Pour la pesée du fût : elle n'est lue que si la griffe n'est pas dans le fût."""
         pose = self.pose
         return pose is None or not self.regles.dans_le_fut(pose)
+
+    def hors_boite_camera_dosage(self) -> bool:
+        """Pour le verrou de la caméra du dosage : elle ne pivote que si la tête est hors de sa
+        boîte (position inconnue : non)."""
+        pose = self.pose
+        return pose is not None and not self.regles.dans_boite_camera_dosage(pose)
 
     @property
     def format(self) -> FormatSeau:

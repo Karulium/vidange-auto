@@ -15,6 +15,8 @@ Les étapes se répètent (une couche, la suivante...) : `ensuite` dit laquelle 
     liberer_le_seau      le chariot repart (vers la griffe ou le stockage)
     rentrer              manivelle en haut, demi-tour du bocal debout (manivelle en bas),
                          garage
+    photographier_le_seau  la caméra du dosage pivote vers le seau dosé, photo notée avec sa
+                         dose, retour au bocal (sauté si son verrou l'interdit)
     fin                  plus de couche à doser (simulateur, essais)
 
 Le Go de Karulium n'est pas demandé : la couche tassée par la griffe suffit à lancer le dosage.
@@ -104,7 +106,17 @@ def module_mycelium(mycelium: Mycelium) -> Module:
             ),
             geste("agiter", mycelium.geste_agiter, mycelium.apres_agitation, AGITATION),
             chariot("liberer_le_seau", mycelium.ecarter_le_chariot, ecarte),
-            geste("rentrer", mycelium.geste_rentrer, mycelium.apres_retour, entree=(ecarte,)),
+            geste("rentrer", mycelium.geste_rentrer, entree=(ecarte,)),
+            Etape(
+                "photographier_le_seau",
+                "Regarder la caméra du dosage : son servo est-il bloqué ? Corriger, puis acquitter "
+                "et donner le Go.",
+                action=mycelium.photographier_le_seau,
+                fin=Condition("caméra du dosage revenue au bocal", mycelium.photo_du_seau_finie),
+                delai_max=GESTE,
+                entree=(garage,),
+                ensuite=mycelium.apres_retour,
+            ),
             Etape("fin", "Rien à faire : plus de couche à doser.", ensuite=lambda: None),
         ),
         surveillances=(

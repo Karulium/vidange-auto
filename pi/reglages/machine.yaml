@@ -906,6 +906,23 @@ lavage:
     duree_s: 5
     egouttage_s: 5
 
+# Caméra du dosage sur son servo DS3225 (docs/decisions.md, règle 2) : 0° = bocal, 63° = seau.
+# Photo du seau après chaque dose, enregistrée avec sa dose au registre. Elle pivote SEULEMENT si
+# l'agitateur est garé (mycelium → camera_x_max) et si griffe et préhension sont hors de la boîte
+# « prehension → camera_dosage » ; elle remonte avant le retour de l'agitateur ou du godet.
+# Signal : docs/entrees-sorties.yaml. Temps de pivot, impulsions et sortie PWM : EXEMPLES (à
+# mesurer, pi/systeme/essai-vision.md).
+camera_dosage:
+  exemple: true
+  signal: servo_camera_dosage
+  angle_bocal_deg: 0
+  angle_seau_deg: 63
+  pivot_s: 0.8
+  # DS3225 (version 180°) : 500 µs à 0°, 2500 µs à 180°.
+  impulsion: {angles_deg: [0, 180], us: [500, 2500]}
+  # Pi 5 : GPIO18 = canal 2 de la puce PWM (le numéro de pwmchip est à vérifier sur le Pi).
+  pwm: {fichier: /sys/class/pwm/pwmchip0, canal: 2, periode_us: 20000}
+
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :
 #   - prise_origine: <carte>   prise d'origine ($H) d'une carte FluidNC (fluidnc.yaml) ;

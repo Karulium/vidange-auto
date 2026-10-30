@@ -62,11 +62,13 @@ Pas encore de vrai module de la machine.
 | `vidange/porte_bocal/` | Porte-bocal (carte n° 3) : mors (serrage par palpage, ouverture), demi-tour du bocal (pont en H, verrou, inclinaison, photo de contrôle), signaux de la carte par leur nom (`signaux.py`), faux plateau et faux bocal (`faux.py`) ; commande `vidange-porte-bocal` |
 | `vidange/prehension/` | Préhension (cartes n° 1 et n° 4) : règles de mouvement (`regles.py`), tête sur ses deux cartes avec le vide et la force (`tete.py`), gestes : prendre, poser, porte-bocal, visser (`prehension.py`), scénario du simulateur (`module.py`, `simulation.py`) ; commande `vidange-prehension` |
 | `vidange/lavage/` | Lavage des seaux (cartes n° 1, 3 et 4) : eau du fût de lavage, chauffage, jet d'air (`eau.py`), signaux répartis sur les cartes (`signaux.py`), verrou du noyau et gestes du lavage d'un seau (`lavage.py`), scénario du simulateur (`module.py`, `simulation.py`) ; commande `vidange-lavage` |
+| `vidange/vision/` | Vision : photos de mesure (`photo.py`), calibration et passage au repère du portique (`calibration.py`), QR (`qr.py`), repères ArUco (`aruco.py`), caméra du plafond : lave-bocal et « deviner le travail » (`plafond.py`), caméra du dosage sur son servo (`dosage.py`), images fabriquées (`fabrique.py`) ; commande `vidange-vision` |
 | `vidange/poste_fut/` | Poste du fût : état (absent, en place, prêt), bouton « Prêt » et voyant, pesée (HX711), mode permis par le panneau, verrous pour les autres modules, module « poste_fut » ; commande `vidange-pesee` (étalonnage) |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) ; poste du fût (chiffres **vrais**, pesée à étalonner) |
 | `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran, caméras, pilotage à distance, mises à jour) |
 | `reglages/fluidnc.yaml` | Cartes FluidNC (numéro de série USB) et réglages de leur liaison |
 | `reglages/simulateur.yaml` | Machine imaginaire du simulateur : vitesses des axes, délai du Go, capteurs qui changent (**exemple**) |
+| `reglages/vision.yaml` | Vision : caméras (position, champ, calibration), mire, QR, repères ArUco, caméra du plafond et ses 9 règles (**exemple**) |
 | `reglages/accelerometre.yaml` | Accéléromètre (RP2040 + LIS3DH) : carte, broches, seuil de choc, pannes, fil série vers le Pi, chargeur (**exemple**) |
 | `secrets.exemple.yaml` | Modèle **vide** du fichier de secrets |
 | `systeme/vidange.service` | Service qui démarre avec le Pi et se relance s'il plante |
@@ -564,3 +566,36 @@ pesees.capteur("pesee_griffe").lire_n()  # newtons (CapteurForce) ; lire_kg() en
 - Check-list : une ligne par carte (répond, mesures par seconde, HX711 muet), jamais bloquante.
 - `vidange-pesees lire | zero <carte> | etalonner <carte> <kg>` pour les essais
   (`../pesee/essai-etabli.md`).
+
+## Vision (tâche 22)
+
+OpenCV (`opencv-python-headless`) et numpy, rien d'autre. Réglages : `reglages/vision.yaml` (caméras, mire,
+QR, ArUco, plafond) et `machine.yaml → camera_dosage` (servo). Tout est testé avec des images fabriquées.
+
+```python
+photographe = Photographe(cameras, reglages.vision, registre)
+photo = photographe.mesure("plafond")  # à l'arrêt, 0,3 s de stabilisation
+codes = lire_vue(
+    Vue(photo.image(), calibration, PoseCamera(x, y, z, angle), z_plan), reglages.vision.qr
+)
+camera = CameraDosage(
+    reglages.machine,
+    photographe,
+    ServoPwm(reglages.machine.camera_dosage),
+    mycelium.camera_peut_pivoter,
+    griffe.hors_boite_camera_dosage,
+    prehension.hors_boite_camera_dosage,
+)
+```
+
+- **QR** : code, centre, angle de l'objet (repère d'angle + `angle_objet_deg`), place dans le repère du
+  portique ; illisible : deuxième tour, photo de secours, sinon « à vérifier » au registre (`a_verifier`).
+- **Calibration** : mire en damier, une fois par caméra (`vidange-vision calibrer CAMERA`) ; sans fichier,
+  mesure grossière d'après le champ de vision.
+- **Caméra du dosage** : pivote seulement agitateur garé et griffe et préhension hors de la boîte ; photo du
+  seau après chaque dose (étape `photographier_le_seau` du Mycélium), notée avec sa dose ; `photo(raison)`
+  pour les alertes. Griffe et préhension refusent la boîte pendant qu'elle pivote.
+- **Plafond** : contrôle du lave-bocal (`ControleLaveBocal`, branché sur `Lavage(controle_plafond=...)`, actif
+  seulement avec `controle_lave_bocal: true`) ; « deviner le travail » (`DevinerTravail`) : la première des 9
+  règles qui correspond, le Pi propose et attend le Go. La reconnaissance des objets n'a qu'un faux.
+- Essai : `vidange-vision fabriquer | photo | calibrer | qr | aruco | plafond | servo` (`systeme/essai-vision.md`).

@@ -247,6 +247,14 @@ _VERSION_6 = (
     "ALTER TABLE seaux ADD COLUMN defaut TEXT",
 )
 
+# Version 7 (tâche 22) : un objet dont le QR est resté illisible (ou que la vision a trouvé
+# douteux) garde la raison pour laquelle il est « à vérifier » (vide : rien à vérifier).
+_VERSION_7 = (
+    "ALTER TABLE futs ADD COLUMN a_verifier TEXT",
+    "ALTER TABLE seaux ADD COLUMN a_verifier TEXT",
+    "ALTER TABLE bocaux ADD COLUMN a_verifier TEXT",
+)
+
 # Montée n° i (en partant de 1) : ce qui fait passer la base de la version i - 1 à la version i.
 MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_1,
@@ -255,6 +263,7 @@ MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_4,
     _VERSION_5,
     _VERSION_6,
+    _VERSION_7,
 )
 
 VERSION = len(MONTEES)

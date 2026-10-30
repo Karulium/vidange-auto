@@ -40,11 +40,14 @@ SORTIES = ("relais", "logique")
 BUS = ("i2c", "serie")
 # Carte de pesée HX711 lue directement par 2 broches du Pi : [DT, SCK] (données, horloge).
 PESEE = "pesee"
+# Sortie PWM matérielle du Pi (servo de la caméra du dosage) : commandée par la vision, pas par
+# le matériel tout-ou-rien.
+PWM = "pwm"
 # Types qui ont un état au repos (contact ouvert ou fermé).
 AVEC_REPOS = ("contact", "pnp", "npn", "relais")
 
 TypeSignal = Literal[
-    "contact", "pnp", "npn", "mesure", "relais", "logique", "i2c", "serie", "pesee"
+    "contact", "pnp", "npn", "mesure", "relais", "logique", "i2c", "serie", "pesee", "pwm"
 ]
 # Entrées et sorties tout-ou-rien (pas les mesures).
 TOUT_OU_RIEN = ("contact", "pnp", "npn", "relais", "logique")
@@ -481,8 +484,9 @@ class EntreesSorties(Modele):
             if puce == "ads1115":
                 permis = ("mesure",)
             elif directe:
-                # Le Pi lui-même : pas d'entrée analogique, mais ses bus et la pesée (HX711).
-                permis = (*TOUT_OU_RIEN, *BUS, PESEE)
+                # Le Pi lui-même : pas d'entrée analogique, mais ses bus, la pesée (HX711) et
+                # ses sorties PWM.
+                permis = (*TOUT_OU_RIEN, *BUS, PESEE, PWM)
             else:
                 permis = TOUT_OU_RIEN
             if signal.type not in permis:
