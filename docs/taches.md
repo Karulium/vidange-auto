@@ -531,11 +531,13 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   conditions (manivelle en bas, course déclarée 7 cm ; mors ouverts pour poser, serrés pour prendre ; griffe en
   butée haute) ; refus de passer la tête au-dessus du bocal au garage manivelle en haut ; la griffe peut être dans
   la bande `garage_glissiere` seulement en butée haute. Tests de chaque condition refusée.
-- [ ] **37 ter. Préhension : bocal de l'agitateur partout sur la glissière** — Modèle : Sonnet, effort bas.
+- [ ] **37 ter. Préhension : bocal de l'agitateur partout sur la glissière ; rinçage des couvercles** — Modèle : Sonnet, effort bas.
   Réponse à la PR n° 37 (`docs/decisions.md`, Préhension) : la zone interdite au-dessus du bocal (manivelle pas en
   bas) suit la position de l'agitateur (x du bocal = position de la glissière, y 0,150), du garage au dosage ; sans
   information sur l'agitateur, toute la glissière est interdite à la tête. Tests : agitateur au demi-tour et au
   dosage manivelle en haut, glissière inconnue.
+  Dans la même session : rinçage propre des couvercles à la fin de chaque face, comme pour les seaux
+  (`docs/decisions.md`, « Couvercles et bocaux au lavage », point 3), avec son test.
 - [ ] 22. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage
 - [x] **22 bis. Cartes de pesée RS485 (RP2040 + HX711) : griffe, préhension, plateau du remplissage** — Modèle : Opus.
   Programme C (Pico SDK, comme l'accéléromètre) : lecture du HX711 en 3,3 V, jusqu'à 80 mesures/s, réponse sur le
