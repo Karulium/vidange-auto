@@ -131,6 +131,8 @@ remplissage:
   stockage: {x: 1.6, y: 0.6, contact_z: 0.6}
   rendu: {x: 1.9, y: 0.6, contact_z: 0.6}
   versement_s: 20
+  # Deux seaux emboîtés : le fond de celui du dessous est ≈ 3 cm plus bas (décisions, point 5).
+  double_plus_bas_m: 0.03
   seaux:
     - {seau: S0101, format: seau_a, variete: pleurote_grise, file: file_1, prise_double: true, anse_deg: 10}
     - {seau: S0102, format: seau_b, variete: pleurote_grise, file: file_2, anse_deg: 70}

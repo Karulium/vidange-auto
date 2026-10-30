@@ -566,11 +566,12 @@ vidange-remplissage --faux etat          # l'outil d'essai, sur un faux FluidNC
   poste et du milieu), joues de l'élévateur, barres ouvertes au-dessus de 0,515, pousseur rentré dès que le
   plateau n'est pas en bas (il ne sort que plateau ≤ 0,20), bras du galet, spray, chariot du fût absent
   (axe du plateau ≤ 0,475), Mycélium (rouler près du poste, monter au poste), préhension (règle 9, branchée
-  dans la préhension par `brancher_prehension`, sauf en mode couvercles). Un trajet est vérifié tous les
+  dans la préhension par `brancher_prehension`, sauf en mode couvercles et pendant la pose d'un seau vide). Un trajet est vérifié tous les
   5 mm. Les gestes font d'eux-mêmes les détours.
-- **Gestes** (`Remplissage`) : `geste_aller_a_la_pose`, `geste_poser_seau` (joué par la préhension :
-  barrière coupée → prise double séparée dans l'ordre a) à h), le plateau fixe avant e, la tête garde le
-  seau du dessus), `geste_orienter_anse` (QR du flanc, oreilles à 45° des barres), `geste_centrer` (en
+- **Gestes** (`Remplissage`) : `geste_aller_a_la_pose` (barres à l'approche hw 0,225 plateau ≤ 0,48),
+  `geste_poser_seau` (joué par la préhension : la tête descend le seau, le plateau monte au contact lu par
+  la balance, centrage ; barrière coupée → prise double séparée dans l'ordre a) à i), barres toujours sous
+  0,235, la tête garde le seau du dessus), `geste_orienter_anse` (QR du flanc, oreilles à 45° des barres), `geste_centrer` (en
   position ; l'alarme ALM des barres arrête le geste), `geste_ramener_au_poste`, `tourner_seau` (griffe),
   `geste_ranger` (plateau en bas), `geste_mode_couvercles`, `geste_mode_inspection`.
 - **Pour les autres** : `etat`, `ecarter`, `amener_au_dosage` (Mycélium) ; `regler_barres`, `ecart_barres`,

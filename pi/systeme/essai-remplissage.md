@@ -85,15 +85,22 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
 
 ## Étape 3 : un seau vide posé à la main
 
-1. `vidange-remplissage --galet-range --agitateur-au-garage pose seau_a` : barres ouvertes, chariot à y 0,50,
-   plateau à la hauteur de pose du seau A.
-2. Poser à la main **un** seau A vide au centre du plateau : la barrière doit rester **libre**. En poser un
-   2e emboîté dans le premier : elle doit être **coupée** (sinon, régler `formats → seau_a → pose_plateau_z`
-   pour que le bord d'un seul seau passe sous le faisceau, celui de deux au-dessus). Refaire pour chaque
-   format (B : 0,5125, fiche).
+1. `vidange-remplissage --galet-range --agitateur-au-garage pose seau_a` : chariot à y 0,50, barres **à
+   l'approche** (hw 0,225), plateau **sous** la hauteur de pose (0,4625 − 0,05 pour le seau A). Si le plateau
+   était au-dessus de 0,48, il doit descendre **avant** que les barres bougent (elles traversent les joues
+   de l'élévateur, hw 0,235-0,255). Vérifier que les barres à 0,225 ne touchent aucun seau : c'est
+   l'approche de tous les formats.
+2. Poser à la main **un** seau A vide au centre du plateau, puis `vidange-remplissage --galet-range plateau
+   0.4625` : la barrière doit rester **libre**. Redescendre (`plateau 0.4125`), poser un 2e seau emboîté
+   dans le premier, remonter à 0,4625 : elle doit être **coupée** (sinon, régler `formats → seau_a →
+   pose_plateau_z` pour que le bord d'un seul seau passe sous le faisceau, celui de deux au-dessus).
+   Refaire pour chaque format (B : 0,5125, fiche). Mesurer aussi de combien le fond du seau du dessous
+   dépasse sous celui du dessus (≈ 3 cm) : le plateau d'approche (`pose_seau → plateau_sous_pose_m`) doit
+   être plus bas que ça.
 3. Un seul seau : `vidange-remplissage --galet-range centrer seau_a` : les barres vont **en position** au
    contact du corps du seau sous le rebord (`formats → seau_a → centrage_hw_m` + `barres → jeu_centrage_m`),
-   puis s'ouvrent. Le seau doit être centré sans être écrasé. Régler `centrage_hw_m` (hw au contact) et le
+   puis s'ouvrent : le plateau doit **descendre sous 0,48 avant** qu'elles passent au-delà de 0,235, puis
+   remonter. Le seau doit être centré sans être écrasé. Régler `centrage_hw_m` (hw au contact) et le
    petit jeu. Si les barres forcent trop, le pilote lève ALM : l'outil dit « alarme du pilote des barres »
    et s'arrête ; c'est le comportement voulu (réduire `centrage_hw_m` d'un cran trop serré, ou augmenter le
    jeu).
@@ -110,32 +117,43 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
    stockage et rentre à son zéro. Le seau doit glisser droit, sans basculer. Il n'y a pas de poussée
    « plateau en haut » (bande du haut) : c'est voulu.
 
-## Étape 5 : prise double et séparation (avec la préhension)
+## Étape 5 : pose et prise double (avec la préhension)
 
-À faire d'abord sur la maquette, avec la page « Barres séparatrices v4 » du projet sous les yeux.
-**Main sur l'arrêt d'urgence.**
+L'ordre est celui du point 5 de la section « Remplissage » de `docs/decisions.md` (corrigé le 30/10 au
+soir). À faire d'abord sur la maquette. **Main sur l'arrêt d'urgence.**
 
 1. Simulateur sur un PC : `vidange-simulateur remplissage` doit aller au bout (2 seaux, le 1er avec une
    prise double).
-2. Sur la machine, avec la vraie préhension et deux seaux A emboîtés (posés ensemble : la barrière est
-   coupée). Regarder chaque pas, dans cet ordre ; **le plateau ne doit pas bouger avant e** :
-   - avant a : les barres viennent au centrage du format (en position) ;
-   - a) la tête monte de 2 cm (avec les deux seaux) ;
-   - b) lâcher : chaque barre s'écarte de 1,5 cm ;
-   - c) la tête descend de 4,8 cm (2,8 cm plus bas qu'à la pose) : les deux seaux descendent avec elle, la
-     rainure du seau du haut arrive au niveau des barres ;
-   - d) les barres se resserrent contre la lèvre du seau du dessous (entraxe = Ø haut + 6 mm) ;
-   - e) le plateau monte lentement toucher le fond du seau du dessous (la balance le sent) ;
-   - f) la tête remonte et emporte le seau du haut ;
+2. Pose d'un seul seau A, avec la vraie préhension. Regarder chaque pas, dans cet ordre :
+   - 1) avant la pose : barres à l'approche (hw 0,225), plateau sous 0,48 et sous la hauteur de pose ;
+   - la tête descend avec le seau jusqu'à la hauteur de pose (lente sur les derniers cm) ; le seau ne
+     touche ni les barres ni le plateau ;
+   - 2) le plateau monte **lentement** jusqu'au contact du fond du seau : il doit s'arrêter dès que la
+     balance le sent (`pose_seau → contact_kg`), sans soulever la tête. Noter la hauteur du contact
+     (`vidange-remplissage etat`) : c'est la vraie hauteur de pose du format ;
+   - 3) centrage : les barres serrent le seau (en position) ;
+   - 4) barrière libre : la tête lâche le seau et remonte, puis les barres reviennent à l'approche, la
+     balance lit un seul seau.
+3. Prise double : deux seaux A emboîtés tenus par la tête (la barrière est coupée après le centrage). Le
+   contact du plateau doit venir ≈ 3 cm plus bas qu'au point 2. Puis, dans cet ordre :
+   - a) lâcher : chaque barre s'écarte de 1,5 cm ;
+   - b) le plateau descend de 5 cm ;
+   - c) la tête descend de 2,8 cm : la lèvre du seau du dessous arrive au niveau de la rainure des barres ;
+   - d) les barres serrent sur la lèvre (entraxe = Ø haut + 6 mm) ;
+   - e) le plateau monte lentement jusqu'au contact du fond du seau du dessous (la balance le sent) ;
+   - f) la tête remonte avec le seau du haut ;
    - g) lâcher : les barres s'écartent de 1,5 cm ;
-   - h) le plateau remonte de 2,8 cm.
-   Puis la barrière doit être libre et la balance lire un seul seau. Noter ce qui ne va pas, et mesurer les
-   courses vraies (`prise_double → remontee_tete_m`, `redescente_tete_m`, `tirage_m`,
-   `remontee_plateau_m` ; `barres → lacher_m`, `jeu_rainure_m`).
-3. Force du tirage (f) : elle ne doit pas dépasser 35 N par barre (70 N lus par la tête) ; sinon la tête
+   - h) le plateau monte de 2,8 cm ;
+   - i) la barrière doit être libre et la balance lire un seul seau ; puis centrage, la tête remonte avec le
+     seau du dessus (à rendre au stockage) et les barres reviennent à l'approche.
+   **Pendant toute la pose et la prise double, les barres restent sous 0,235** (elles ne traversent jamais
+   les joues de l'élévateur plateau haut). Noter ce qui ne va pas, et mesurer les courses vraies
+   (`prise_double → descente_plateau_m`, `descente_tete_m`, `tirage_m`, `remontee_plateau_m` ; `barres →
+   lacher_m`, `jeu_rainure_m` ; `pose_seau → plateau_sous_pose_m`, `contact_kg`).
+4. Force du tirage (f) : elle ne doit pas dépasser 35 N par barre (70 N lus par la tête) ; sinon la tête
    s'arrête et l'alarme le dit.
-4. Seau B (pose à 0,5125) : voir la question de la PR de la tâche 34 bis avant d'essayer (les barres ne
-   peuvent pas passer les joues de l'élévateur plateau au-dessus de 0,48 sans que le plateau bouge).
+5. Refaire les points 2 et 3 avec des seaux B (pose à 0,5125, au-dessus des joues) : la prise double doit
+   aller au bout, sans alarme.
 
 ## Étape 6 : modes couvercles et inspection, règle 9 de la préhension
 
@@ -152,7 +170,8 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
 ## Ce qu'il faut renvoyer
 
 Les valeurs mesurées (origine des barres, hauteurs de pose, centrage et son jeu, bout du chariot, emprise
-du chariot pour la règle 9 (`verrous → emprise_demi_x_m`, `emprise_mur_y_m`), courses de la prise double,
+du chariot pour la règle 9 (`verrous → emprise_demi_x_m`, `emprise_mur_y_m`), approche et contact de la
+pose (`pose_seau`), courses de la prise double,
 files, vitesses, pas par tour des pilotes), à
 écrire dans `machine.yaml` et `fluidnc/chariot.yaml` par une session de correction ; passer `exemple` à false
 dans la partie `remplissage` quand tout est vrai.

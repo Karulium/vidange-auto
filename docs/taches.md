@@ -749,7 +749,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   Tests : chacun des 7 points (dont prise double dans le nouvel ordre, poussée refusée plateau > 0,20, file refusée
   au-delà de 0,475 sans chariot du fût, prise d'origine vers le bas, ALM des barres pendant le centrage, préhension
   refusée barres fermées hors mode couvercles). « Testé sur le vrai matériel : non ».
-- [ ] **34 ter. Remplissage : ordre de la pose et de la prise double** — Modèle : Sonnet, effort moyen. Refaire la
+- [x] **34 ter. Remplissage : ordre de la pose et de la prise double** — Modèle : Sonnet, effort moyen. Refaire la
   pose d'un seau vide et la prise double dans l'ordre du point 5 de la section « Remplissage » de `docs/decisions.md`
   (corrigé le 30/10 au soir ; il remplace l'ordre a) à h) de la tâche 34 bis) : barres à l'approche (hw 0,225)
   plateau ≤ 0,48 AVANT la pose, plateau qui monte jusqu'au contact lu par la balance, centrage, puis prise double

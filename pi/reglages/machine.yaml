@@ -1076,21 +1076,33 @@ remplissage:
     pousseur: 0.1
     centrage: 0.02
     contact: 0.005
-  # Prise double (fil Remplissage, page Barres séparatrices v4 ; décisions, point 5). Le plateau
-  # ne bouge pas avant e : a) la tête monte de 2 cm ; b) lâcher : chaque barre s'écarte de 1,5 cm ;
-  # c) la tête descend de 4,8 cm ; d) les barres se resserrent contre la lèvre du seau du dessous ;
-  # e) le plateau monte toucher le fond du seau du dessous ; f) la tête remonte (tirage) et emporte
-  # le seau du haut ; g) lâcher ; h) le plateau remonte de 2,8 cm. Courses : à vérifier sur la
-  # maquette. Au plus 35 N par barre (capteur de force de la tête). Tirage, course maximale et
-  # seuil du contact du plateau (balance) : EXEMPLES.
+  # Pose d'un seau vide (décisions, Remplissage, point 5, corrigé le 30/10 au soir) : 1) plateau
+  # ≤ 0,48, barres à l'approche hw 0,225 (fiche) AVANT la pose ; la tête descend, le seau tenu,
+  # fond d'un seul seau à formats → pose_plateau_z ; 2) le plateau monte jusqu'au contact (la
+  # balance gagne contact_kg) ; 3) centrage ; 4) barrière libre = seau seul, coupée = prise
+  # double. Plateau d'approche : pose_plateau_z − plateau_sous_pose_m (≤ 0,48), sous le contact
+  # d'une prise double (≈ 3 cm plus bas). Montée au plus jusqu'à pose_plateau_z +
+  # contact_au_dessus_m. EXEMPLES, sauf l'approche des barres.
+  pose_seau:
+    barres_approche_hw_m: 0.225
+    plateau_sous_pose_m: 0.05
+    contact_au_dessus_m: 0.01
+    contact_kg: 0.3
+  # Prise double (décisions, point 5, corrigé le 30/10 au soir ; barres déjà serrées, centrage
+  # fait, contact Hc ≈ 3 cm plus bas qu'un seau seul) : a) lâcher ; b) le plateau descend de 5 cm ;
+  # c) la tête descend de 2,8 cm (lèvre du seau du dessous au niveau de la rainure des barres) ;
+  # d) les barres serrent sur la lèvre ; e) le plateau monte jusqu'au contact du fond (≈ Hc −
+  # 0,028 ; au plus toucher_max_m) ; f) la tête remonte avec le seau du haut (tirage) ; g) lâcher ;
+  # h) le plateau monte de 2,8 cm ; i) contrôle. Les barres restent sous 0,235 tout du long.
+  # Courses : à vérifier sur la maquette. Au plus 35 N par barre (capteur de force de la tête).
+  # Tirage et course maximale du contact : EXEMPLES.
   prise_double:
-    remontee_tete_m: 0.02
-    redescente_tete_m: 0.048
+    descente_plateau_m: 0.05
+    descente_tete_m: 0.028
     tirage_m: 0.02
     remontee_plateau_m: 0.028
     traction_max_par_barre_n: 35
     toucher_max_m: 0.06
-    contact_kg: 0.3
   # Balance 30 kg du plateau (pesee_plateau_remplissage). EXEMPLES ; un seau vide ≈ 5 N (fiche
   # de la préhension) quand son format n'a pas de tare ; plus de 1,5 fois son poids : 2 seaux.
   # Mode inspection : la tête et la balance d'accord à 0,1 kg près sur le poids du bocal posé.
@@ -1109,9 +1121,9 @@ remplissage:
     files:
       file_1: {y: 0.215, pousseur_m: 0.325}
       file_2: {y: 0.785, pousseur_m: 0.325}
-  # Par format : plateau à la pose (seau B : 0,5125, fiche ; les autres : EXEMPLES, bord d'un seul
-  # seau 19 mm sous la barrière à 0,7315, comme le B, mesurés à l'essai), barres au contact du
-  # corps (EXEMPLES).
+  # Par format : plateau au contact d'un seul seau posé (seau B : 0,5125, fiche ; les autres :
+  # EXEMPLES, bord d'un seul seau 19 mm sous la barrière à 0,7315, comme le B, mesurés à l'essai),
+  # barres au contact du corps (EXEMPLES).
   formats:
     seau_a: {pose_plateau_z: 0.4625, centrage_hw_m: 0.125}
     seau_b: {pose_plateau_z: 0.5125, centrage_hw_m: 0.1195}

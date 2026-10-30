@@ -1405,21 +1405,36 @@ class VitessesRemplissage(Modele):
     contact: float = Field(gt=0)
 
 
-class PriseDoubleRemplissage(Modele):
-    """Séparation de deux seaux emboîtés posés ensemble (barrière coupée après la pose) : la
-    tête monte de remontee_tete_m, descend de redescente_tete_m, tire de tirage_m ; le plateau
-    remonte de remontee_plateau_m à la fin."""
+class PoseSeauRemplissage(Modele):
+    """Pose d'un seau vide (docs/decisions.md, Remplissage, point 5) : barres à l'approche et
+    plateau sous la hauteur de pose avant que la tête descende ; puis le plateau monte jusqu'au
+    contact du fond, lu par la balance."""
 
-    remontee_tete_m: float = Field(gt=0)
-    redescente_tete_m: float = Field(gt=0)
+    # Barres à l'approche (hw, m) : sous les joues de l'élévateur, plus larges que tout seau.
+    barres_approche_hw_m: float = Field(gt=0)
+    # Plateau d'approche : formats → pose_plateau_z − tant (et pas au-dessus des joues). Il doit
+    # rester sous le contact d'une prise double (≈ 3 cm plus bas qu'un seau seul).
+    plateau_sous_pose_m: float = Field(gt=0)
+    # Le plateau monte au plus jusqu'à formats → pose_plateau_z + tant pour trouver le contact.
+    contact_au_dessus_m: float = Field(ge=0)
+    # Contact du plateau : la balance gagne tant de kg (pose et prise double e).
+    contact_kg: float = Field(gt=0)
+
+
+class PriseDoubleRemplissage(Modele):
+    """Séparation de deux seaux emboîtés posés ensemble (barrière coupée après la pose, barres
+    déjà serrées) : le plateau descend de descente_plateau_m (b), la tête de descente_tete_m (c),
+    le plateau remonte au contact du seau du dessous (e), la tête tire de tirage_m (f), le
+    plateau remonte de remontee_plateau_m à la fin (h)."""
+
+    descente_plateau_m: float = Field(gt=0)
+    descente_tete_m: float = Field(gt=0)
     tirage_m: float = Field(gt=0)
     remontee_plateau_m: float = Field(ge=0)
     # Au plus tant de newtons par barre pendant le tirage (capteur de force de la tête).
     traction_max_par_barre_n: float = Field(gt=0)
-    # Le plateau monte au plus de tant pour toucher le fond du seau du dessous ; contact quand
-    # la balance gagne contact_kg.
+    # Le plateau monte au plus de tant pour toucher le fond du seau du dessous (e).
     toucher_max_m: float = Field(gt=0)
-    contact_kg: float = Field(gt=0)
 
 
 class PeseeRemplissage(Modele):
@@ -1506,6 +1521,7 @@ class Remplissage(Modele):
     verrous: VerrousRemplissage
     barres: BarresRemplissage
     vitesses: VitessesRemplissage
+    pose_seau: PoseSeauRemplissage
     prise_double: PriseDoubleRemplissage
     pesee: PeseeRemplissage
     rangement: RangementRemplissage
@@ -2063,6 +2079,14 @@ class Machine(Modele):
         dans("inspection → plateau_z", "plateau_z", r.inspection.plateau_z)
         dans("pousseur_rentre_m", "pousseur", r.pousseur_rentre_m)
         dans("barres → ouvertes_m", "barres", r.barres.ouvertes_m)
+        approche = r.pose_seau.barres_approche_hw_m
+        dans("pose_seau → barres_approche_hw_m", "barres", approche)
+        joues = r.verrous.joues_barres[0]
+        if approche >= joues:
+            erreurs.append(
+                f"remplissage → pose_seau → barres_approche_hw_m : sous les joues de l'élévateur "
+                f"(moins de {joues:g})"
+            )
         for nom, file in r.rangement.files.items():
             dans(f"rangement → files → {nom} → y", "remplissage_y", file.y)
             dans(f"rangement → files → {nom} → pousseur_m", "pousseur", file.pousseur_m)
@@ -2080,6 +2104,22 @@ class Machine(Modele):
                 continue
             dans(f"formats → {nom} → pose_plateau_z", "plateau_z", reglage.pose_plateau_z)
             dans(f"formats → {nom} → centrage_hw_m", "barres", reglage.centrage_hw_m)
+            approche_z = min(
+                r.verrous.joues_plateau_max_z,
+                reglage.pose_plateau_z - r.pose_seau.plateau_sous_pose_m,
+            )
+            dans(f"formats → {nom} (plateau d'approche de la pose)", "plateau_z", approche_z)
+            # Pose et prise double : les barres restent sous les joues de l'élévateur (elles
+            # ne les traversent que plateau ≤ 0,48, avant la pose), et sous l'approche.
+            levre = max(seau.rayon_haut + r.barres.jeu_rainure_m / 2, self.axes["barres"].course[0])
+            centrage = reglage.centrage_hw_m + r.barres.jeu_centrage_m
+            plus_large = max(centrage, levre) + r.barres.lacher_m
+            if plus_large >= min(joues, approche):
+                erreurs.append(
+                    f"remplissage → formats → {nom} : pendant la prise double, les barres iraient "
+                    f"à {plus_large:g} : il faut moins que l'approche ({approche:g}) et que les "
+                    f"joues ({joues:g})"
+                )
             plateau = min(seau.haut_z - seau.hauteur, self.axes["plateau_z"].course[1])
             dans(f"formats → {nom} (plateau au poste)", "plateau_z", plateau)
         for nom in r.formats:
@@ -2735,6 +2775,8 @@ class RemplissageSimule(Modele):
     rendu: PlaceSimulee
     # Durée d'un versement de la griffe (le seau tourne), substrat versé par couche (kg).
     versement_s: float = Field(gt=0)
+    # Deux seaux emboîtés : le fond de celui du dessous dépasse de tant sous celui du dessus.
+    double_plus_bas_m: float = Field(default=0.03, ge=0)
     seaux: list[SeauRemplissageSimule] = Field(min_length=1)
 
 
