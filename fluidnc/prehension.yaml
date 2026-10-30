@@ -74,7 +74,8 @@ axes:
     steps_per_mm: 22.222
     max_rate_mm_per_min: 5400
     acceleration_mm_per_sec2: 360
-    max_travel_mm: 740
+    # ± 500° (machine.yaml → prehension_a, réponse de la Préhension du 29/10).
+    max_travel_mm: 1000
     soft_limits: true
     homing:
       cycle: 2

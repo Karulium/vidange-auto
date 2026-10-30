@@ -8,6 +8,8 @@
   vidange-simulateur mycelium                  dosage du mycélium (« dosage_mycelium »)
   vidange-simulateur prehension                gestes de la préhension (« prehension »)
   vidange-simulateur lavage                    3 seaux lavés, eau comprise (« lavage »)
+  vidange-simulateur lavage_couvercles         2 couvercles lavés et retournés
+  vidange-simulateur lavage_bocaux             3 bocaux et capsules au lave-bocal
 
 Les durées se règlent dans reglages/simulateur.yaml (vitesses des axes, délai du Go, capteurs).
 Tourne sur n'importe quel PC, sans la machine. Code de sortie 0 si le cycle va au bout, 1 sinon.
@@ -25,8 +27,12 @@ from vidange.demarrage import DOSSIER_PI, _chemin
 from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.griffe.module import module_griffe
 from vidange.griffe.simulation import griffe_du_simulateur
-from vidange.lavage.module import module_lavage
-from vidange.lavage.simulation import lavage_du_simulateur
+from vidange.lavage.module import module_lavage, module_lavage_bocaux, module_lavage_couvercles
+from vidange.lavage.simulation import (
+    bocaux_du_simulateur,
+    couvercles_du_simulateur,
+    lavage_du_simulateur,
+)
 from vidange.mycelium.module import module_mycelium
 from vidange.mycelium.simulation import mycelium_du_simulateur
 from vidange.poste_fut.module import module_echange_fut
@@ -54,6 +60,12 @@ MODULES: dict[str, Callable[[Simulateur], Module]] = {
     "lavage": lambda simulateur: module_lavage(
         lavage_du_simulateur(simulateur), _lavage(simulateur).seaux
     ),
+    "lavage_couvercles": lambda simulateur: module_lavage_couvercles(
+        couvercles_du_simulateur(simulateur), _lavage(simulateur).couvercles
+    ),
+    "lavage_bocaux": lambda simulateur: module_lavage_bocaux(
+        bocaux_du_simulateur(simulateur), _lavage(simulateur).bocaux
+    ),
 }
 # Scénario de simulateur.yaml joué par défaut avec un module (sinon : le haut du fichier).
 SCENARIOS = {
@@ -62,6 +74,8 @@ SCENARIOS = {
     "mycelium": "dosage_mycelium",
     "prehension": "prehension",
     "lavage": "lavage",
+    "lavage_couvercles": "lavage_couvercles",
+    "lavage_bocaux": "lavage_bocaux",
 }
 
 

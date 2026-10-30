@@ -1,7 +1,8 @@
-# Essai du lavage des seaux sur le vrai matériel
+# Essai du lavage des seaux, des couvercles et des bocaux sur le vrai matériel
 
 **Testé sur le vrai matériel : non.** Les tests automatiques (GitHub Actions) n'utilisent que de **faux**
-FluidNC, une **fausse** eau (faux flotteur), un **faux** vide et des seaux **imaginaires** (simulateur).
+FluidNC, une **fausse** eau (faux flotteur), un **faux** vide, des seaux **imaginaires** (simulateur), un
+**faux** retourneur de couvercles et une **fausse** caméra (repère du couvercle, photo du bac).
 
 Cette procédure se fait une fois le fût de lavage monté (noyau, couronne, rampes, buse du jet d'air,
 flotteur, pompe, vannes, thermoplongeur), la carte n° 3 et la carte n° 4 câblées, et la préhension
@@ -82,31 +83,72 @@ Dans les commandes ci-dessous, `vidange-fluidnc` et `vidange-lavage` veulent dir
 2. `vidange-lavage laver seau_a 1.3 0.74 0.95` en regardant, main sur l'arrêt d'urgence :
    - la tête prend le seau, va en y 0,74, vers −x jusqu'au coude (0,45 ; 0,74), puis droit vers le fût ;
      **regarder la paroi côté stockage** : le seau doit passer au-dessus avec de la marge ;
-   - elle tourne au départ des tours du seau (−350°), descend dans les brosses (le seau écarte les brosses
+   - elle tourne au départ de la passe 1 (−500°), descend dans les brosses (le seau écarte les brosses
      extérieures), puis lentement jusqu'à l'appui de 80 N. Si l'appui ne vient pas (« appui de 80 N sur le
      noyau pas atteint »), régler `lavage → brossage → face_contact_z` (face quand le fond du seau touche le
      noyau) et `course_appui_m` ;
-   - arrosage, passe 1 (noyau 100 puis 200 tr/min, le seau tourne), passe 2 (couronne, le seau tourne dans
-     l'autre sens), rinçage, la pompe remet le niveau, remontée, jet d'air (un tour en ≈ 4 s), égouttage,
+   - arrosage, passe 1 (noyau 100 puis 200 tr/min, le seau tourne), la tête revient à 0, puis à +500°,
+     passe 2 (couronne, le seau tourne dans l'autre sens, **sans remonter**), la tête revient à 0 ;
+     rinçage, la pompe vide jusqu'au flotteur bas, la vanne 3 voies revient sur « rampes », l'eau du réseau
+     remet le flotteur haut (quelques secondes) ; remontée, jet d'air (un tour en ≈ 4 s), égouttage,
      retour au coude, seau reposé.
+   - **Cordon spiralé** : pendant les passes, la tête va jusqu'à ± 500°. Regarder le cordon du vide et des
+     fils : s'il force ou frotte, arrêter et passer `prehension_a → course` à [-370, 370] et
+     `depart_passe_deg` à 370 dans `machine.yaml` (en raccourcissant les tours des passes).
 3. Regarder le seau : intérieur, fond, paroi, **bord** et **col** propres ? Sinon, régler les durées et les
    vitesses des passes (`brossage → passe_1`, `passe_2` ; les tours du seau doivent tenir dans la course
    de la tête, c'est vérifié au démarrage), le décalage du brossage par format (`decalage_brossage_m`,
-   vers +x), la remontée avant la passe 2 (`remontee_passe_2_m`) et, pour le jet d'air, le décalage vers la
-   buse et la hauteur du bord (`jet_decalage_m`, `jet_bord_z`).
+   vers +x) et, pour le jet d'air, le centre du seau devant la buse et la hauteur du bord (`jet_centre`,
+   `jet_bord_z`, par format).
 4. Recommencer avec un seau B, C et D (`seau_b`...), en mesurant leur `contact_z`. Noter le temps donné
    (« Seau lavé en … s ») : la fiche estime 60 à 70 s.
 5. Pendant un lavage, soulever le panneau du poste du fût **un peu** (sans l'ouvrir en grand) : la tête doit
    s'arrêter (« le panneau du poste du fût a bougé ») et l'eau se couper.
-6. `vidange-lavage vider` à la fin.
+6. **Fuite ou siphon** : fût plein, pompe arrêtée, vanne à bille ouverte, ouvrir un instant la vidange à
+   la main (ou soulever le flotteur puis le laisser retomber pendant un `vidange-lavage laver …`) : l'outil
+   doit s'arrêter (« fuite ou siphon ») et la vanne à bille se fermer.
+7. `vidange-lavage vider` à la fin.
 
-## Étape 5 : le simulateur avec les vrais chiffres
+## Étape 5 : les bocaux au lave-bocal
+
+1. Fût **vidé** (fin de la série de seaux). Poser le lave-bocal sur l'anneau de rive du fût de lavage,
+   ouvrir son robinet (vanne quart de tour). Mesurer la hauteur de son plateau (≈ 5 mm au-dessus de
+   l'anneau) et l'écrire dans `lavage → lave_bocal → plateau_z`, avec son centre (`centre`).
+2. Peser un bocal vide (page web, pesée de la préhension) et corriger `prehension → objets → bocal_vide`
+   (`poids_n`).
+3. Poser un bocal vide **retourné** sur une table (par exemple axe de la tête en (1,4 ; 0,75)), mesurer
+   `contact_z` (face de la tête quand elle touche son fond), puis
+   `vidange-lavage bocal bocal_vide 1.4 0.75 0.95` : la tête prend le bocal, l'appuie sur le plateau (l'eau
+   doit jaillir dans le bocal), attend, remonte, égoutte au-dessus du fût, et le repose. Régler l'appui et le
+   temps (`appui_n`, `duree_s`) : le bocal doit être propre et le rince-verre ne pas forcer.
+4. Même chose avec une capsule (`vidange-lavage bocal capsule …`, tenue par les aimants).
+5. `vidange-lavage vider` à la fin (la vidange évacue l'eau du rince-verre), puis enlever le lave-bocal.
+
+## Étape 6 : les couvercles (après les tâches 22 et 34)
+
+Le lavage des couvercles a besoin de la caméra du plafond (repère du couvercle, photo du bac : tâche 22)
+et des barres du chariot de remplissage (retourneur : tâche 34). Tant qu'elles ne sont pas faites, on ne
+peut l'essayer qu'au simulateur (`vidange-simulateur lavage_couvercles`). Quand elles le seront :
+
+1. Coller le repère sur le dessus de chaque couvercle, près du bord. Vérifier le sens du repère : quand la
+   tête tourne dans le sens +, l'angle vu par la caméra doit grandir (sinon `sens_repere: -1`).
+2. Couvercle tenu face « dessous » vers le bas, descendre doucement au-dessus du noyau : noter la hauteur de
+   la face quand le couvercle touche les brosses avec ≈ 15 N (`bas_dessous_z` par format = cette hauteur −
+   l'épaisseur sous la face). Même chose couvercle retourné (`bas_dessus_z`, EXEMPLE aujourd'hui).
+3. Retourneur : mesurer la hauteur du lâcher (`lacher_face_z`, au-dessus de 0,75), la face au contact d'un
+   couvercle à plat dans le bac (`bac_contact_z`), et vérifier que le couvercle se retourne sur la tige.
+4. Couper la barrière lumineuse avec la main pendant le mode couvercles : la machine doit se mettre en
+   pause avec le message.
+
+## Étape 7 : le simulateur avec les vrais chiffres
 
 Une fois les chiffres réglés, `vidange-simulateur lavage` rejoue une série (remplissage, 3 seaux,
-vidange) avec eux. Puis passer `exemple: false` dans la partie `lavage` de `machine.yaml`, et
+vidange) avec eux, `vidange-simulateur lavage_bocaux` et `vidange-simulateur lavage_couvercles` les
+deux autres séries. Puis passer `exemple: false` dans la partie `lavage` de `machine.yaml`, et
 `exemple: false` sur les lignes du lavage de `docs/entrees-sorties.yaml` devenues vraies.
 
 ## Si quelque chose ne va pas
 
 Noter ce qui s'est passé (message de l'outil, photo, vidéo) et le mettre dans une PR de correction : une
-nouvelle session corrige la tâche 21 (phrase à copier dans `docs/taches.md`).
+nouvelle session corrige la tâche 21 (seaux) ou 21 bis (couvercles, bocaux) (phrase à copier dans
+`docs/taches.md`).

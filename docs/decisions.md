@@ -273,6 +273,17 @@ si l'une pose problème, elle le dit dans sa PR.
      A (0,352 ; 0,6348), B (0,352 ; 0,6270), C (0,352 ; 0,650), D (0,352 ; 0,6385) ; bords inchangés (0,711 /
      0,698 / 0,714 / 0,712). Jeu ≥ 26 mm avec l'anneau de rive. Réglages par format (centre x, y), ajustés à
      l'essai. La règle « x ≥ 0,340 » de la fiche du jet d'air est périmée.
+- **Couvercles et bocaux au lavage** (réponses à la PR n° 38, tâche 21 bis, 30/10/2026) :
+  1. Décalage du couvercle (A 21 mm, B 0, C 21, D 23) fait **avant** la descente, gardé pendant les 5 s du noyau :
+     la règle de la préhension (pas de pont tête basse) reste sans exception. Même position que la fiche.
+  2. Face « dessus » (repère caché) : pas d'orientation ni de contrôle de glissement, vide surveillé ; hauteur
+     d'appui `bas_dessus_z` mesurée à l'essai (étape 6).
+  3. Couvercles : bain par les rampes pendant le brossage **et rinçage propre** à la fin de chaque face, comme pour
+     les seaux (tâche 37 ter).
+  4. Barrière lumineuse à 0,7315 : câblée avec les barres, dans le Remplissage (tâche 34).
+  5. Retour à 0 de la rotation : pas de relecture du capteur d'origine à chaque passe pour l'instant ; à ajouter si
+     la mise en service montre une dérive.
+  6. Hauteur du lâcher au-dessus de la tige et contact dans le bac : EXEMPLES (0,78 et 0,49), mesurés à l'essai.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
