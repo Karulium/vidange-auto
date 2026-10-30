@@ -566,6 +566,10 @@ class Prehension:
     def attendre_vide(self) -> Geste:
         return self._attendre_vide()
 
+    def descendre(self, contact_z: float, texte: str) -> Geste:
+        """Descente au contact attendu à `contact_z` (face de la tête), lente à la fin."""
+        return self._descendre(contact_z, texte)
+
     def lacher(self) -> Geste:
         """Lâcher l'objet tenu là où est la tête (retourneur de couvercles)."""
         return self._lacher_ici()

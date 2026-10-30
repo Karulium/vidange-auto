@@ -161,6 +161,15 @@ cartes:
     sorties: 18
     tension_max: 24
     isolee: true
+  # Carte FluidNC n° 2 (chariot de remplissage) : comme la n° 3, le Pi ne la lit pas lui-même.
+  # Les vrais numéros de broches vont dans fluidnc/chariot.yaml (plan de câblage attendu).
+  fluidnc_chariot:
+    exemple: true
+    description: Carte FluidNC n° 2 (chariot de remplissage), 6 axes, pilotes externes
+    entrees: 10
+    sorties: 18
+    tension_max: 24
+    isolee: true
   # Carte FluidNC n° 4 (tête de préhension) : comme la n° 3, le Pi ne la lit pas lui-même. Les
   # vrais numéros de broches vont dans fluidnc/prehension.yaml (plan de câblage attendu).
   fluidnc_prehension:
@@ -225,6 +234,13 @@ cartes:
 #   contact_tete, fdc_prehension_haut, origine_rotation_tete, alarme_prehension_z,
 #   alarme_rotation_tete, moteur_prehension_z, moteur_rotation_tete, vanne_vide,
 #   electroaimants_capsule, vide_venturi.
+# (tâche 34, remplissage : sur la carte FluidNC n° 2 ; le Pi lit barriere_remplissage dans l'état
+#   de la carte et commande courant_reduit_barres par elle : lettre et numéro dans
+#   pi/reglages/fluidnc.yaml ; la balance est pesee_plateau_remplissage, sur le bus des pesées) :
+#   fdc_plateau_haut, origine_barres, origine_remplissage_y, origine_pousseur,
+#   barriere_remplissage, alarme_remplissage_y, alarme_plateau_z, alarme_plateau_a,
+#   alarme_barres, alarme_pousseur, moteur_remplissage_y, moteur_plateau_z, moteur_plateau_a,
+#   moteur_barres, moteur_pousseur, courant_reduit_barres.
 # (tâche 22, vision) :
 #   servo_camera_dosage : servo DS3225 de la caméra du dosage (0° = bocal, 63° = seau), sur une
 #     sortie PWM matérielle du Pi (GPIO18 = canal 2 avec « dtoverlay=pwm,pin=18,func=3 », à vérifier :
@@ -609,6 +625,149 @@ signaux:
     adresse: 3
     module: remplissage
     appareil: carte_pesee
+  # Remplissage (fiche du module, gelé le 27/10/2026 ; carte n° 2). Repères, types et références
+  # des fins de course : EXEMPLES (plan de câblage ; « références encore à choisir »).
+  fdc_plateau_haut:
+    exemple: true
+    description: Fin de course haut du plateau (coupe la montée vers 0,578)
+    carte: fluidnc_chariot
+    broche: E1
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: remplissage
+  origine_barres:
+    exemple: true
+    description: Origine des barres côté mur (plaque de barre, hw ≈ 0,309)
+    carte: fluidnc_chariot
+    broche: E2
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: remplissage
+  origine_remplissage_y:
+    exemple: true
+    description: Origine de l'avance du chariot de remplissage (référence à choisir)
+    carte: fluidnc_chariot
+    broche: E3
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: remplissage
+  origine_pousseur:
+    exemple: true
+    description: Origine du pousseur (référence à choisir)
+    carte: fluidnc_chariot
+    broche: E4
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: remplissage
+  # Barrière lumineuse sur la barre côté mur, à 0,7315 (fiche) : actionnée = faisceau coupé.
+  barriere_remplissage:
+    exemple: true
+    description: Barrière lumineuse de la barre côté mur (actionnée = coupée)
+    carte: fluidnc_chariot
+    broche: E5
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: remplissage
+  alarme_remplissage_y:
+    exemple: true
+    description: Alarme du pilote boucle fermée de l'avance du chariot
+    carte: fluidnc_chariot
+    broche: E6
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: remplissage
+  alarme_plateau_z:
+    exemple: true
+    description: Alarme du pilote boucle fermée de la montée du plateau (à frein)
+    carte: fluidnc_chariot
+    broche: E7
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: remplissage
+  alarme_plateau_a:
+    exemple: true
+    description: Alarme du pilote boucle fermée de la rotation du plateau
+    carte: fluidnc_chariot
+    broche: E8
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: remplissage
+  alarme_barres:
+    exemple: true
+    description: Alarme du pilote boucle fermée des barres (vis T8 au pas de 8)
+    carte: fluidnc_chariot
+    broche: E9
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: remplissage
+  alarme_pousseur:
+    exemple: true
+    description: Alarme du pilote boucle fermée du pousseur
+    carte: fluidnc_chariot
+    broche: E10
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: remplissage
+  moteur_remplissage_y:
+    exemple: true
+    description: Pas et sens du pilote de l'avance du chariot (axe Y de la carte n° 2)
+    carte: fluidnc_chariot
+    broche: [S1, S2]
+    type: logique
+    tension: 5
+    module: remplissage
+  moteur_plateau_z:
+    exemple: true
+    description: Pas et sens du pilote de la montée du plateau (axe Z de la carte n° 2)
+    carte: fluidnc_chariot
+    broche: [S3, S4]
+    type: logique
+    tension: 5
+    module: remplissage
+  moteur_plateau_a:
+    exemple: true
+    description: Pas et sens du pilote de la rotation du plateau (axe A de la carte n° 2)
+    carte: fluidnc_chariot
+    broche: [S5, S6]
+    type: logique
+    tension: 5
+    module: remplissage
+  moteur_barres:
+    exemple: true
+    description: Pas et sens du pilote des barres (axe B de la carte n° 2)
+    carte: fluidnc_chariot
+    broche: [S7, S8]
+    type: logique
+    tension: 5
+    module: remplissage
+  moteur_pousseur:
+    exemple: true
+    description: Pas et sens du pilote du pousseur (axe C de la carte n° 2)
+    carte: fluidnc_chariot
+    broche: [S9, S10]
+    type: logique
+    tension: 5
+    module: remplissage
+  # Centrage au courant réduit (≈ 30 N par barre) : comment le pilote le reçoit est À CONFIRMER
+  # (question de la PR de la tâche 34) ; ici, une sortie vers son entrée « courant réduit ».
+  courant_reduit_barres:
+    exemple: true
+    description: Courant réduit du pilote des barres (commandée = réduit)
+    carte: fluidnc_chariot
+    broche: S11
+    type: logique
+    tension: 5
+    module: remplissage
   # Préhension (fiche du module, validé définitivement le 27/10/2026 ; carte n° 4). Repères et
   # types : EXEMPLES (plan de câblage).
   # Plateau flottant de la tête (course 3 mm, ≈ 10 N) vu par un inductif M8 24 V du moyeu. C'est

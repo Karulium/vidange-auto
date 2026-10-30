@@ -15,6 +15,7 @@ Pannes pour les essais (attributs de TeteSimulee) :
 - `poids_n` : poids lu à la place du poids estimé (deux seaux : 10 N) ;
 - `choc_au_trajet` : le prochain trajet du pont s'arrête sur un choc ;
 - `appui_vissage_n` : appui lu pendant le vissage (au-delà de 150 N : arrêt).
+- `traction_n` : traction lue pendant un tirage (séparation de deux seaux du Remplissage).
 """
 
 from collections.abc import Callable
@@ -93,6 +94,7 @@ class TeteSimulee:
         self.poids_n: float | None = None
         self.choc_au_trajet = False
         self.appui_vissage_n = 80.0
+        self.traction_n = 0.0
         # Ce qui a été fait, pour les tests.
         self.sorties: list[str] = []
         self.accelerations: list[bool] = []
@@ -159,6 +161,8 @@ class TeteSimulee:
                 arret = "appui_max"
             elif pas.appui_arret_n is not None and appui >= pas.appui_arret_n:
                 arret = "appui"
+        if pas.traction_max_n is not None and self.traction_n > pas.traction_max_n:
+            cible, arret = depart, "traction"
         bougent = {self._noms[cle] for cle in pas.cibles}
         axes = {nom: valeur for nom, valeur in self._axes(cible).items() if nom in bougent}
         positions = self._etat.positions

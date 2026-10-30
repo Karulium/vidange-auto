@@ -1327,6 +1327,217 @@ class CameraDosage(Modele):
         return self
 
 
+# Délais (machine.yaml → durees) d'un geste du Remplissage et du dosage d'une couche.
+DUREES_REMPLISSAGE = ("remplissage_geste_max", "remplissage_dosage_max")
+# Les 5 axes du chariot de remplissage (carte n° 2) et leur unité.
+AXES_REMPLISSAGE = {
+    "remplissage_y": "m",  # avance du chariot (repère du portique)
+    "plateau_z": "m",  # dessus du plateau
+    "plateau_a": "deg",  # rotation du plateau
+    "barres": "m",  # écartement hw : axe d'une barre à l'axe du plateau
+    "pousseur": "m",
+}
+
+
+class VerrousRemplissage(Modele):
+    """Les positions interdites du chariot (fichier des positions, règles 1 à 11). Ces verrous
+    ne protègent que la machine : la sécurité des personnes reste câblée."""
+
+    # Règle 1 : anneaux du fût (bandes de y) : plateau en bas (dessus ≤ anneaux_plateau_max_z),
+    # sauf dans la zone du poste et du dosage (libre_poste_y).
+    anneaux_y: list[Intervalle] = Field(min_length=1)
+    anneaux_plateau_max_z: float
+    libre_poste_y: Intervalle
+    # Règle 2 : barres entre les joues de l'élévateur (bande de hw) : plateau ≤ tant.
+    joues_barres: Intervalle
+    joues_plateau_max_z: float
+    # Règle 3 : plateau au-dessus de tant : barres ouvertes (hw ≥ barres_ouvertes_min).
+    barres_ouvertes_au_dessus_z: float
+    barres_ouvertes_min: float
+    # Règle 4 : pousseur sorti seulement plateau dans une de ces plages (dessus du plateau).
+    pousseur_plages_z: list[Intervalle] = Field(min_length=1)
+    # Règle 5 : plateau au-dessus de tant seulement bras du galet rangé.
+    galet_plateau_max_z: float
+    # Règle 6 (spray, tâche 39) : plateau ≤ min(spray_plateau_max_z ; spray_bord_max_z − h),
+    # entraxe des barres > spray_entraxe_min_m.
+    spray_plateau_max_z: float
+    spray_bord_max_z: float
+    spray_entraxe_min_m: float = Field(gt=0)
+    # Règle 7 : chariot du fût pas en place : bout du chariot (y + bout_y_m) ≤
+    # poste_fut → remplissage_y_bout_max.
+    bout_y_m: float = Field(ge=0)
+    # Règle 9 (préhension) : pas de descente de la tête sous tant au-dessus du chariot, sauf
+    # barres ouvertes et tête du micropore rentrée.
+    prehension_libre_z: float
+
+
+class BarresRemplissage(Modele):
+    # hw (m) où la plaque de barre actionne l'origine côté mur : FluidNC compte 0 là, le Pi
+    # ajoute ce décalage (réglé une fois sur la machine).
+    origine_hw_m: float
+    # « Ouvertes » pour les gestes (hw, m).
+    ouvertes_m: float
+    # Lâcher pendant la prise double : chaque barre s'écarte de tant (m).
+    lacher_m: float = Field(gt=0)
+    # Dans la rainure sous la jupe du seau du dessus : entraxe = Ø haut + jeu.
+    jeu_rainure_m: float = Field(ge=0)
+    # Ouverture complète (s), pour mémoire et pour le simulateur.
+    ouverture_s: float = Field(gt=0)
+
+
+class VitessesRemplissage(Modele):
+    """Vitesses (m/s, °/s pour la rotation)."""
+
+    y: float = Field(gt=0)
+    plateau: float = Field(gt=0)
+    rotation: float = Field(gt=0)
+    barres: float = Field(gt=0)
+    pousseur: float = Field(gt=0)
+    # Barres au contact du seau (courant réduit), plateau qui monte au contact.
+    centrage: float = Field(gt=0)
+    contact: float = Field(gt=0)
+
+
+class PriseDoubleRemplissage(Modele):
+    """Séparation de deux seaux emboîtés posés ensemble (barrière coupée après la pose)."""
+
+    remontee_tete_m: float = Field(gt=0)
+    redescente_tete_m: float = Field(gt=0)
+    tirage_m: float = Field(gt=0)
+    remontee_plateau_m: float = Field(ge=0)
+    # Au plus tant de newtons par barre pendant le tirage (capteur de force de la tête).
+    traction_max_par_barre_n: float = Field(gt=0)
+    # Le plateau monte au plus de tant pour toucher le fond du seau du dessous ; contact quand
+    # la balance gagne contact_kg.
+    toucher_max_m: float = Field(gt=0)
+    contact_kg: float = Field(gt=0)
+
+
+class PeseeRemplissage(Modele):
+    """La balance du plateau (carte de pesée RS485, tâche 22 bis)."""
+
+    frequence_hz: float = Field(gt=0)
+    # Médiane de tant de lectures, après attente_s plateau arrêté.
+    lectures: int = Field(ge=1)
+    attente_s: float = Field(ge=0)
+    # Poids d'un seau vide quand son format n'a pas de tare (kg), et le seuil « deux seaux » :
+    # au-delà de seuil_deux_seaux × poids d'un seau, il y en a plus d'un.
+    seau_vide_kg: float = Field(gt=0)
+    seuil_deux_seaux: float = Field(gt=1, lt=2)
+    # Mode inspection : poids du bocal posé, lu par la tête et par la balance, d'accord à tant
+    # près (kg).
+    accord_kg: float = Field(gt=0)
+
+
+class FileRemplissage(Modele):
+    """Une file de rangement (place exacte : Stockage, tâche 35)."""
+
+    y: float
+    bande: Literal["haut", "bas"]
+    # Le pousseur va jusque-là pour pousser le seau sur la file (m, axe « pousseur »).
+    pousseur_m: float
+
+
+class RangementRemplissage(Modele):
+    # Bande du haut : plateau à cette hauteur, dans cette plage.
+    bande_haut_plateau_z: float
+    bande_haut_plage_z: Intervalle
+    files: dict[Nom, FileRemplissage] = Field(default_factory=dict)
+
+
+class FormatRemplissage(Modele):
+    """Ce que le Remplissage sait d'un format de seau (en plus de la table de la griffe)."""
+
+    # Plateau à la pose du seau vide (dessus, m) : bord d'un seul seau sous la barrière.
+    pose_plateau_z: float
+    # Barres au contact du corps, sous le rebord (hw, m).
+    centrage_hw_m: float
+
+
+class CouverclesRemplissage(Modele):
+    """Mode couvercles (retourneur, tâche 21 bis) : chariot à y, plateau fixe, sans rotation."""
+
+    y: float
+    plateau_z: float
+
+
+class InspectionRemplissage(Modele):
+    """Mode inspection des bocaux : plateau fixe, barres ouvertes, arrêts de pas_deg."""
+
+    plateau_z: float
+    pas_deg: float = Field(gt=0, le=180)
+
+
+class Remplissage(Modele):
+    """Module Remplissage, gelé le 27/10/2026 : le chariot des seaux (avance, plateau, rotation,
+    barres, pousseur, balance). Repère du portique, en mètres ; y = axe du plateau. Un verrou du
+    logiciel ne protège que la machine : la sécurité des personnes reste câblée."""
+
+    exemple: bool = False
+    # Axe du plateau en x (le chariot roule en y).
+    axe_x: float
+    # Positions en y : poste (sous la griffe), dosage du mycélium, recul pendant le passage de
+    # l'agitateur (au moins), pose du seau vide et du couvercle.
+    poste_y: float
+    dosage_y: float
+    ecarte_y: float
+    pose_y: float
+    # Écarts permis (m, °) ; un mouvement est vérifié point par point, tous les tant (m).
+    tolerance_y_m: float = Field(gt=0)
+    tolerance_m: float = Field(gt=0)
+    tolerance_deg: float = Field(gt=0)
+    pas_verification_m: float = Field(gt=0)
+    # Plateau « en bas » : dessus ≤ tant.
+    plateau_en_bas_z: float
+    # Pousseur rentré (m, axe « pousseur »).
+    pousseur_rentre_m: float
+    # Direction des barres (° depuis +x, vue de dessus) ; oreilles de l'anse à anse_deg de cette
+    # direction, modulo 90°.
+    barres_direction_deg: float
+    anse_deg: float
+    # La face de la tête de préhension touche le fond intérieur du seau à tant au-dessus du
+    # plateau (pose du seau vide).
+    face_au_dessus_plateau_m: float = Field(ge=0)
+    verrous: VerrousRemplissage
+    barres: BarresRemplissage
+    vitesses: VitessesRemplissage
+    prise_double: PriseDoubleRemplissage
+    pesee: PeseeRemplissage
+    rangement: RangementRemplissage
+    formats: dict[Nom, FormatRemplissage] = Field(min_length=1)
+    couvercles: CouverclesRemplissage
+    inspection: InspectionRemplissage
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Remplissage":
+        erreurs = []
+        v = self.verrous
+        for nom, (debut, fin) in [
+            ("verrous → libre_poste_y", v.libre_poste_y),
+            ("verrous → joues_barres", v.joues_barres),
+            ("rangement → bande_haut_plage_z", self.rangement.bande_haut_plage_z),
+            *((f"verrous → anneaux_y n° {i}", a) for i, a in enumerate(v.anneaux_y, start=1)),
+            *(
+                (f"verrous → pousseur_plages_z n° {i}", p)
+                for i, p in enumerate(v.pousseur_plages_z, start=1)
+            ),
+        ]:
+            if debut >= fin:
+                erreurs.append(f"{nom} : du plus petit au plus grand")
+        if not v.libre_poste_y[0] <= self.poste_y <= v.libre_poste_y[1]:
+            erreurs.append("poste_y doit être dans verrous → libre_poste_y")
+        if not self.poste_y < self.ecarte_y:
+            erreurs.append("ecarte_y doit être au-delà de poste_y")
+        if v.barres_ouvertes_min > self.barres.ouvertes_m:
+            erreurs.append("barres → ouvertes_m doit être au moins verrous → barres_ouvertes_min")
+        bas, haut = self.rangement.bande_haut_plage_z
+        if not bas <= self.rangement.bande_haut_plateau_z <= haut:
+            erreurs.append("rangement → bande_haut_plateau_z hors de bande_haut_plage_z")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -1360,6 +1571,9 @@ class Machine(Modele):
     # Caméra du dosage sur son servo (None : pas de servo). Demande la préhension (sa boîte)
     # et le mycélium (agitateur garé).
     camera_dosage: CameraDosage | None = None
+    # Remplissage : le chariot des seaux (None : pas de remplissage). Demande la griffe (table
+    # des formats) et le poste du fût.
+    remplissage: Remplissage | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -1427,6 +1641,7 @@ class Machine(Modele):
         erreurs += self._verifier_porte_bocal()
         erreurs += self._verifier_prehension()
         erreurs += self._verifier_lavage()
+        erreurs += self._verifier_remplissage()
         if self.camera_dosage is not None and (self.prehension is None or self.mycelium is None):
             erreurs.append(
                 "camera_dosage : il faut aussi les parties « prehension » et « mycelium »"
@@ -1808,6 +2023,92 @@ class Machine(Modele):
                     erreurs.append(
                         f"lavage → lave_bocal : appui d'un(e) {nom} sous la course de prehension_z"
                     )
+        return erreurs
+
+    def _verifier_remplissage(self) -> list[str]:
+        """Les 5 axes du chariot sur une même carte ; chaque position, hauteur et file dans la
+        course de son axe ; un réglage par format de la griffe ; mêmes y que le Mycélium."""
+        remplissage = self.remplissage
+        if remplissage is None:
+            return []
+        if self.griffe is None or self.poste_fut is None:
+            return ["remplissage : il faut aussi les parties « griffe » et « poste_fut »"]
+        erreurs = []
+        for nom, unite in AXES_REMPLISSAGE.items():
+            axe = self.axes.get(nom)
+            if axe is None or axe.unite != unite or axe.carte is None:
+                erreurs.append(
+                    f"remplissage : il faut l'axe « {nom} » en « {unite} », avec sa carte"
+                )
+        if erreurs:
+            return erreurs
+        if len({self.axes[nom].carte for nom in AXES_REMPLISSAGE}) > 1:
+            erreurs.append("remplissage : les 5 axes du chariot sont sur la même carte")
+        for nom in DUREES_REMPLISSAGE:
+            if nom not in self.durees:
+                erreurs.append(f"remplissage : délai « {nom} » absent de durees")
+
+        def dans(quoi: str, axe: str, valeur: float) -> None:
+            debut, fin = self.axes[axe].course
+            if not debut - 1e-9 <= valeur <= fin + 1e-9:
+                erreurs.append(
+                    f"remplissage → {quoi} : {valeur:g} hors de la course de {axe} "
+                    f"({debut:g} à {fin:g})"
+                )
+
+        r = remplissage
+        for nom in ("poste_y", "dosage_y", "ecarte_y", "pose_y"):
+            dans(nom, "remplissage_y", getattr(r, nom))
+        dans("couvercles → y", "remplissage_y", r.couvercles.y)
+        dans("plateau_en_bas_z", "plateau_z", r.plateau_en_bas_z)
+        dans("couvercles → plateau_z", "plateau_z", r.couvercles.plateau_z)
+        dans("inspection → plateau_z", "plateau_z", r.inspection.plateau_z)
+        dans("rangement → bande_haut_plateau_z", "plateau_z", r.rangement.bande_haut_plateau_z)
+        dans("pousseur_rentre_m", "pousseur", r.pousseur_rentre_m)
+        dans("barres → ouvertes_m", "barres", r.barres.ouvertes_m)
+        for nom, file in r.rangement.files.items():
+            dans(f"rangement → files → {nom} → y", "remplissage_y", file.y)
+            dans(f"rangement → files → {nom} → pousseur_m", "pousseur", file.pousseur_m)
+        if r.barres.origine_hw_m < self.axes["barres"].course[1]:
+            erreurs.append("remplissage → barres → origine_hw_m : au-delà de la course des barres")
+        if self.axes["plateau_z"].course[0] > r.plateau_en_bas_z:
+            erreurs.append("remplissage → plateau_en_bas_z : sous la course du plateau")
+        for nom, seau in self.griffe.formats.items():
+            reglage = r.formats.get(nom)
+            if reglage is None or seau.hauteur is None:
+                erreurs.append(
+                    f"remplissage : il faut « formats → {nom} » et la hauteur du seau (griffe → "
+                    "formats)"
+                )
+                continue
+            dans(f"formats → {nom} → pose_plateau_z", "plateau_z", reglage.pose_plateau_z)
+            dans(f"formats → {nom} → centrage_hw_m", "barres", reglage.centrage_hw_m)
+            plateau = min(seau.haut_z - seau.hauteur, self.axes["plateau_z"].course[1])
+            dans(f"formats → {nom} (plateau au poste)", "plateau_z", plateau)
+        for nom in r.formats:
+            if nom not in self.griffe.formats:
+                erreurs.append(f"remplissage → formats → {nom} : absent de griffe → formats")
+        mycelium = self.mycelium
+        if mycelium is not None:
+            if abs(mycelium.chariot.y_dosage - r.dosage_y) > 1e-9:
+                erreurs.append("remplissage → dosage_y : le même que mycelium → chariot → y_dosage")
+            if abs(mycelium.chariot.y_ecarte_min - r.ecarte_y) > 1e-9:
+                erreurs.append(
+                    "remplissage → ecarte_y : le même que mycelium → chariot → y_ecarte_min"
+                )
+        lavage = self.lavage
+        if lavage is not None and lavage.couvercles is not None:
+            retourneur = lavage.couvercles.retourneur
+            dans(
+                "lavage → couvercles → retourneur → barres_fermees_m",
+                "barres",
+                retourneur.barres_fermees_m,
+            )
+            dans(
+                "lavage → couvercles → retourneur → barres_ouvertes_m",
+                "barres",
+                retourneur.barres_ouvertes_m,
+            )
         return erreurs
 
     def _se_chevauchent(self, nom_a: str, nom_b: str) -> bool:
@@ -2415,6 +2716,31 @@ class LavageSimule(Modele):
     bocaux: list[ObjetLaveBocalSimule] = Field(default_factory=list)
 
 
+class SeauRemplissageSimule(Modele):
+    """Un seau vide à remplir dans le simulateur : QR, format, variété, file de rangement ; deux
+    seaux emboîtés posés ensemble (prise double) ; angle des oreilles de l'anse vu par la
+    caméra (°)."""
+
+    seau: str
+    format: Nom
+    variete: str
+    file: Nom
+    prise_double: bool = False
+    anse_deg: float = 0.0
+
+
+class RemplissageSimule(Modele):
+    """Les seaux imaginaires du Remplissage (scénario « remplissage »)."""
+
+    # Où la tête prend les seaux vides (Stockage, pas encore écrit), où elle rend le seau du
+    # dessus après une prise double.
+    stockage: PlaceSimulee
+    rendu: PlaceSimulee
+    # Durée d'un versement de la griffe (le seau tourne), substrat versé par couche (kg).
+    versement_s: float = Field(gt=0)
+    seaux: list[SeauRemplissageSimule] = Field(min_length=1)
+
+
 class ScenarioSimule(Modele):
     """Un scénario : capteurs actionnés au départ et événements, à la place de ceux du haut."""
 
@@ -2449,6 +2775,8 @@ class ReglagesSimulateur(Modele):
     prehension: PrehensionSimulee | None = None
     # L'eau et les seaux imaginaires du lavage.
     lavage: LavageSimule | None = None
+    # Les seaux imaginaires du remplissage.
+    remplissage: RemplissageSimule | None = None
 
 
 # ---------------------------------------------------------- accelerometre.yaml

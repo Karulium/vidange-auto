@@ -293,6 +293,36 @@ si l'une pose problème, elle le dit dans sa PR.
      confirmation à l'écran ; pas de garage du pont avant chaque seau.
   3. Servo de la caméra du dosage sur la sortie PWM matérielle du Pi (**GPIO 18**), servo alimenté à part (5 à
      6,8 V, régulateur de la fiche), 0 V commun ; signal en paire torsadée avec le 0 V. Transmis au plan de câblage.
+- **Remplissage** (réponses à la PR n° 43, tâche 34, 30/10/2026) :
+  1. Dosage à y 0,155, plateau haut : **permis**. C'est la règle 11 du fichier des positions, vérifiée sur volumes
+     réels par le fil Mycélium (24/10). La zone libre du poste va de y 0,13 à 0,16, comme dans la PR.
+  2. et 3. Poussée en bande du haut (plateau à 0,4985) et arrêt du lot C à y 0,205 : question posée au projet. En
+     attendant, le verrou refuse ces poussées (choix prudent de la PR).
+  4. **Pousseur (correction d'une erreur de recopie)** : son zéro est le fin de course **en bout de rail côté fût**,
+     et c'est la position « rentré ». Il pousse **toujours vers le stockage**, course ≈ 0,325 (fiche). Il n'est pas
+     rentré « au milieu ». À corriger dans la tâche 34 bis (confirmation demandée au projet).
+  5. Ordre de la prise double : demandé au projet. Le geste reste tel quel en attendant ; ne pas l'essayer sur le
+     vrai matériel avant la réponse.
+  6. **Pas de courant réduit** (réponse du fil Implantation, 30/10) : le pilote boucle fermée de tous les axes
+     (CL57T V4.1 ou équivalent) n'a que PUL, DIR, ENA et une sortie d'alarme ALM ; le courant se règle une fois pour
+     toutes. Le centrage se fait donc **en position** (`centrage_hw_m` du format + un petit jeu en réglage). La
+     sortie « courant réduit » est retirée. Si les barres forcent trop, le pilote lève **ALM** : le Pi la lit (comme
+     les autres alarmes de pilote) pour arrêter le geste et alerter.
+  7. Hauteurs de pose des seaux A, C et D : exemples, mesurées à l'essai (étape 3 de la procédure).
+  8. Distance entre l'axe du plateau et le bout du chariot (règle 7) : 0,09 en exemple, cote demandée au projet.
+  9. Retourneur des couvercles : **oui, c'est une exception** à la règle 9 (descente de la préhension barres
+     ouvertes). Elle a été vérifiée par le fil Lavage le 25/10 (aucun contact, plateau 0,459, barres 0,19 à 0,30).
+     Dans tous les autres cas, la règle 9 est branchée dans la préhension (tâche 34 bis).
+  10. **Capteurs d'origine (correction d'une erreur de recopie, fiche du 28/10)** : la fiche a aussi un **fin de
+      course bas de la montée** (zéro de la montée, plateau en bas), un fin de course de l'avance (contre le tampon
+      côté mur), un fin de course du pousseur (côté fût) et un **capteur Hall du zéro de rotation** (un aimant passe
+      une fois par tour). La prise d'origine de la montée se fait donc **vers le bas**, sans danger. Le fin de course
+      haut reste une butée de sécurité (il coupe vers 0,578). Il n'y a plus de condition sur l'agitateur pour la prise
+      d'origine.
+  11. **Moteurs (correction d'une erreur de recopie, fiche du 28/10)** : l'avance, la rotation et les barres ont un
+      seul modèle, un NEMA 17 boucle fermée (17HS19-2004-ME1K ou équivalent). La rotation est **sans réducteur** :
+      pignon 15 dents sur une roue de 120 dents, **rapport 8** (et non 40). Montée et pousseur : NEMA 23 boucle fermée
+      à frein.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr

@@ -183,7 +183,7 @@ def test_fluidnc_silence_trop_court(reglages):
 
 
 def test_axe_sur_carte_inconnue(reglages):
-    remplacer(reglages / "machine.yaml", "carte: chariot\n", "carte: chariot_inconnu\n")
+    remplacer(reglages / "machine.yaml", "carte: mycelium_lavage\n", "carte: chariot_inconnu\n")
     message = erreur_de(reglages)
     assert "machine.yaml, axes → exemple_x : carte « chariot_inconnu » absente de fluidnc.yaml" in (
         message
@@ -196,13 +196,13 @@ def test_axe_avec_carte_sans_lettre(reglages):
 
 
 def test_deux_axes_avec_la_meme_lettre(reglages):
-    remplacer(reglages / "machine.yaml", "lettre: Y", "lettre: X")
+    remplacer(reglages / "machine.yaml", "lettre: B", "lettre: Z")
     message = erreur_de(reglages)
-    assert "les axes « exemple_x » et « exemple_y » ont la même lettre X" in message
+    assert "les axes « exemple_x » et « exemple_y » ont la même lettre Z" in message
 
 
 def test_lettre_d_axe_inconnue(reglages):
-    remplacer(reglages / "machine.yaml", "lettre: Y", "lettre: W")
+    remplacer(reglages / "machine.yaml", "lettre: B", "lettre: W")
     assert "exemple_y → lettre : doit être l'un de" in erreur_de(reglages)
 
 
@@ -225,7 +225,7 @@ def test_lieu_sur_du_depot():
     reglages = charger_reglages(DOSSIER_PI / "reglages")
     gestes = reglages.machine.lieu_sur
     assert [(g.prise_origine, g.aller) for g in gestes] == [
-        ("chariot", None),
+        ("mycelium_lavage", None),
         (None, "exemple_repos"),
     ]
     assert reglages.programme.fiabilite.onduleur.commande_arret[0] == "sudo"
@@ -233,7 +233,7 @@ def test_lieu_sur_du_depot():
 
 def test_lieu_sur_verifie(reglages):
     machine = reglages / "machine.yaml"
-    remplacer(machine, "  - prise_origine: chariot\n", "  - prise_origine: inconnue\n")
+    remplacer(machine, "  - prise_origine: mycelium_lavage\n", "  - prise_origine: inconnue\n")
     remplacer(machine, "  - aller: exemple_repos\n", "  - aller: nulle_part\n")
     ajouter(machine, "  - prise_origine: portique\n    delai: absent\n")
     message = erreur_de(reglages)
@@ -248,7 +248,11 @@ def test_un_seul_geste_par_ligne_de_lieu_sur(reglages):
 
 
 def test_lieu_sur_carte_inconnue(reglages):
-    remplacer(reglages / "machine.yaml", "  - prise_origine: chariot\n", "  - prise_origine: zut\n")
+    remplacer(
+        reglages / "machine.yaml",
+        "  - prise_origine: mycelium_lavage\n",
+        "  - prise_origine: zut\n",
+    )
     assert "lieu_sur n° 1 : carte « zut » absente de fluidnc.yaml" in erreur_de(reglages)
 
 

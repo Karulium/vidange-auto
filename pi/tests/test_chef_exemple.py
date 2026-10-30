@@ -30,7 +30,7 @@ def banc(tmp_path):
     reglages = charger_reglages(DOSSIER_PI / "reglages")
     liste = charger_entrees_sorties(DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml")
     fabrique = FausseFabrique(liste)
-    faux = FauxFluidnc(vitesse_rapide_mm_min=300_000)  # 1 m en 0,2 s
+    faux = FauxFluidnc(axes="ZBC", vitesse_rapide_mm_min=300_000)  # 1 m en 0,2 s
     chef = Chef(
         reglages.machine,
         ReglagesChef(periode_s=0.01, alarme_pause_tout=True),
@@ -41,7 +41,7 @@ def banc(tmp_path):
         Liaison("portique", reglages_essai(), ouvrir=faux.ouvrir) as portique,
     ):
         portique.attendre_connexion(DELAI)
-        module = module_exemple(Axes(reglages.machine, {"chariot": portique}), materiel)
+        module = module_exemple(Axes(reglages.machine, {"mycelium_lavage": portique}), materiel)
         chef.demarrer()
         try:
             yield chef, module, faux, fabrique
@@ -57,17 +57,17 @@ def test_cycle_de_l_exemple(banc):
     chef, module, faux, fabrique = banc
     chef.lancer(module)
     attendre(lambda: etat(chef).attend == "panneau du poste du fût fermé")
-    assert faux.positions == {"X": 0, "Y": 0, "Z": 0}
+    assert faux.positions == {"Z": 0, "B": 0, "C": 0}
 
     fabrique.actionner("reed_panneau_poste_fut")
     attendre(lambda: chef.etat().attendent_go == ["exemple"])
-    assert faux.positions == {"X": 800, "Y": 500, "Z": 1000}
+    assert faux.positions == {"Z": 800, "B": 500, "C": 1000}
     assert etat(chef).zones == ()
 
     chef.donner_go("exemple")
     attendre(lambda: etat(chef).statut == "fini")
-    assert faux.positions == {"X": 800, "Y": 500, "Z": 1000}
-    assert "G90 G0 X300.000 Y200.000 Z900.000" in faux.lignes_recues
+    assert faux.positions == {"Z": 800, "B": 500, "C": 1000}
+    assert "G90 G0 Z300.000 B200.000 C900.000" in faux.lignes_recues
     assert etat(chef).zones == ()
 
 

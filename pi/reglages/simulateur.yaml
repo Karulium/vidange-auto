@@ -44,6 +44,13 @@ axes:
   # Brosses du lavage (°/s) : noyau jusqu'à 200 tr/min, couronne 100 tr/min.
   lavage_noyau: {vitesse: 1200, acceleration: 2400}
   lavage_couronne: {vitesse: 600, acceleration: 1200}
+  # Chariot de remplissage : ses vitesses (machine.yaml → remplissage → vitesses) passent avant
+  # celles-ci. Rotation du plateau en °/s.
+  remplissage_y: {vitesse: 0.2, acceleration: 0.5}
+  plateau_z: {vitesse: 0.05, acceleration: 0.3}
+  plateau_a: {vitesse: 60, acceleration: 120}
+  barres: {vitesse: 0.08, acceleration: 0.5}
+  pousseur: {vitesse: 0.1, acceleration: 0.5}
 
 # Position (machine.yaml) des axes au départ. Sans « depart », chaque axe est au début de sa course.
 # Les axes que la position ne cite pas sont au début de leur course.
@@ -115,6 +122,19 @@ lavage:
     - {sorte: bocal_vide, x: 1.4, y: 0.75, contact_z: 0.95}
     - {sorte: capsule, x: 1.5, y: 0.5, contact_z: 0.85}
 
+# Les seaux imaginaires du remplissage (scénario « remplissage ») : où la tête prend les seaux
+# vides (le Stockage n'est pas écrit) et où elle rend le seau du dessus d'une prise double ; durée
+# d'un versement de la griffe (le seau tourne) ; les seaux : un seau A posé avec un 2e seau
+# emboîté (prise double), puis un petit seau B. Le Mycélium dose chaque couche (bocaux de la
+# partie « mycelium » plus haut). Le chariot part du poste (position remplissage_poste).
+remplissage:
+  stockage: {x: 1.6, y: 0.6, contact_z: 0.6}
+  rendu: {x: 1.9, y: 0.6, contact_z: 0.6}
+  versement_s: 20
+  seaux:
+    - {seau: S0101, format: seau_a, variete: pleurote_grise, file: file_1, prise_double: true, anse_deg: 10}
+    - {seau: S0102, format: seau_b, variete: pleurote_grise, file: file_2, anse_deg: 70}
+
 # Capteurs (entrées tout-ou-rien de docs/entrees-sorties.yaml) actionnés au départ.
 capteurs_actionnes: []
 
@@ -135,7 +155,8 @@ evenements:
 #         vidange-simulateur mycelium    (scénario « dosage_mycelium » par défaut),
 #         vidange-simulateur prehension  (scénario « prehension » par défaut),
 #         vidange-simulateur lavage      (scénario « lavage » par défaut),
-#         vidange-simulateur lavage_couvercles, vidange-simulateur lavage_bocaux.
+#         vidange-simulateur lavage_couvercles, vidange-simulateur lavage_bocaux,
+#         vidange-simulateur remplissage (scénario « remplissage » par défaut).
 scenarios:
   # Échange d'un fût au poste : le chariot du fût vide s'en va, le suivant arrive.
   echange_fut:
@@ -199,4 +220,9 @@ scenarios:
   # Lavage de 3 bocaux et capsules au lave-bocal (mêmes capteurs) : lave-bocal confirmé (Go),
   # bocaux lavés, vidange, lave-bocal enlevé (Go), série finie.
   lavage_bocaux:
+    capteurs_actionnes: [chariot_fut_en_place]
+  # Remplissage de 2 seaux (partie « remplissage » plus haut) : chariot du fût au fond. Seau A posé
+  # avec un 2e seau emboîté (barrière coupée : prise double séparée, le seau du dessus rendu),
+  # anse orientée, centré, 4 couches versées et dosées (Mycélium), rangé ; puis un seau B.
+  remplissage:
     capteurs_actionnes: [chariot_fut_en_place]
