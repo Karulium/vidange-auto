@@ -538,7 +538,87 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   dosage manivelle en haut, glissière inconnue.
   Dans la même session : rinçage propre des couvercles à la fin de chaque face, comme pour les seaux
   (`docs/decisions.md`, « Couvercles et bocaux au lavage », point 3), avec son test.
-- [ ] 22. Vision : caméra du plafond (9 règles), caméra de tête, QR, caméra du dosage
+- [ ] **22. Vision de base : caméras, QR, repères ArUco, caméra du dosage, caméra du plafond** — Modèle : Opus,
+  effort moyen.
+  Sources (recopiées ici le 30/10/2026) : fiche du module « Guidage caméra », **validé définitivement le 24/10/2026**,
+  page « Caméra du plafond : deviner le travail » (tableau des 9 règles validé tel quel le 24/10), plan de commande
+  v223, règles déjà dans `docs/decisions.md`. Les chiffres vont dans les fichiers de réglages, jamais dans le code.
+  Bibliothèques : **OpenCV** (`opencv-python-headless`) et numpy, rien d'autre (pas de YOLO tant qu'il n'y a pas de
+  photos réelles pour l'entraîner). Tout se teste avec des **images fabriquées** (QR et ArUco dessinés par OpenCV).
+
+  *Ce qui existe* : `pi/vidange/cameras/` (tâche 12) lit le flux de chaque caméra (`programme.yaml`), sert la vidéo et
+  garde les clips. Les modules déjà écrits appellent la vision par des **points d'appel avec un faux** : Mycélium
+  (`photo(raison)`, QR du bocal), Porte-bocal (photo « bon / douteux »), Préhension (`anse_levee`,
+  `camera_dosage_pivote`, `photo`), Lavage des couvercles (`VisionCouvercles`), Poste du fût (QR du fût). Cette tâche
+  écrit les outils de vision et relie ceux qui ne demandent pas de photos réelles ; les autres gardent leur faux
+  (tâche 22 ter).
+
+  *Les caméras* (positions et modèles dans les réglages, marqués `exemple: true` jusqu'au montage) :
+  - **Plafond** : Camera Module 3 Wide (102° × 67°) dans le toit, en (1,45 ; 0,50), objectif à ≈ 2,35 m ; voit toute
+    la machine (≈ 1 mm par point). Photo seulement **pont garé au bout opposé** (sinon il cache la vue).
+  - **Tête de griffe** : caméra USB ≥ 5 Mpx dans le boîtier de tête, qui voit par une fenêtre Ø 25 au centre du toit
+    de la chape (le boîtier porte aussi un ToF VL53L1X, 2 LED et un thermomètre IR MLX90614, lus par une XIAO RP2040
+    en USB : ici, seulement la caméra ; les capteurs ont une case vide).
+  - **Dosage** : caméra Wide à filtre IR sur un servo DS3225 : **0° = bocal, 63° = seau**.
+  - **Micropore** (lit aussi le QR du seau) et **vue A** (vers le haut, place A (2,50 ; 0,22)) : déclarées seulement,
+    servies par les tâches qui s'en servent.
+  - Toutes les photos de mesure se prennent **à l'arrêt, après 0,3 s de stabilisation**, LED de l'enceinte allumées
+    (toujours les mêmes).
+
+  *Calibration* : une fois par caméra, avec une mire en damier (OpenCV), pour corriger la déformation du grand angle.
+  Un outil d'essai prend les photos et calcule le fichier de calibration ; les mesures s'en servent.
+
+  *QR* (codes « S1293 », « B327 »... déjà utilisés par le registre) :
+  - Caméra de tête, **godet grand ouvert, axes à 1,05**, lecture par paquets (≈ 9-10 photos pour 95 couvercles) ;
+    une fonction rend les codes lus et leur position dans le repère du portique.
+  - QR du bocal de semence relu de près juste avant que la préhension le prenne.
+  - Le QR donne aussi **l'angle** de l'objet (repère d'angle, plan v181) : rendu avec le code.
+  - QR illisible : deuxième tour, puis photo à une autre hauteur, sinon objet marqué « à vérifier » au registre.
+
+  *Repères ArUco* : un repère de 40 mm sur le plateau du rince-verre du lave-bocal (et ceux du calibrage du plafond).
+  Dictionnaire et numéros : réglages.
+
+  *Caméra du dosage* : brancher le servo (sortie à déclarer, `exemple: true`) et le verrou **déjà dans
+  `docs/decisions.md`** (pivote seulement agitateur garé, bocal x ≤ 0,62, et griffe et préhension hors de la boîte
+  x < 1,10, y < 0,34, z 0,95-1,08 ; remonte avant le retour de l'agitateur ou du godet). Photo du seau **après
+  chaque godet**, enregistrée avec sa dose au registre. Brancher le vrai point d'appel `photo(raison)` du Mycélium et
+  `camera_dosage_pivote` de la Préhension.
+
+  *Caméra du plafond* :
+  1. **Lave-bocal** : juste avant chaque geste dangereux pour lui (lever un seau dans le fût de lavage, faire tourner
+     noyau ou couronne), une photo de **moins de 5 s**, pont garé. Repère ArUco vu ⇒ lave-bocal posé (seau, noyau,
+     couronne interdits) ; fût vide vu clairement ⇒ seaux permis ; doute (vue cachée, buée, objet inconnu) ⇒ rien ne
+     bouge, alerte avec la photo, on attend le bouton « Vérifié ». La caméra et la confirmation à l'écran de la tâche
+     21 bis doivent être d'accord ; sinon, doute.
+  2. **Deviner le travail** : la photo devient une liste d'objets (fût du poste plein ou vide ; bocaux au stockage,
+     avec ou sans capsule, propres ou sales ; seaux vides, pleins, avec ou sans couvercle ; places libres ; bocal de
+     semence au garage ; fût de lavage vide, avec un seau, ou lave-bocal ; objet inconnu ou mal placé). Puis le
+     tableau, dans l'ordre, le premier cas qui correspond gagne :
+     1. objet inconnu, ou pièce mal placée sur un trajet ⇒ rien ne bouge, alerte avec la photo ;
+     2. fût plein de maïs + bocaux vides et propres au stockage ⇒ remplir les bocaux ;
+     3. fût plein + pas de bocaux vides + seaux vides propres + bocal de semence prêt ⇒ remplir les seaux et ajouter
+        le mycélium ;
+     4. fût plein mais rien de vide et propre où le mettre ⇒ alerte « rien à remplir » ;
+     5. bocaux sales + lave-bocal posé ⇒ laver les bocaux ;
+     6. bocaux sales + lave-bocal absent ⇒ demander de poser le lave-bocal ;
+     7. seaux ou couvercles sales + lave-bocal absent ⇒ laver les seaux ;
+     8. seaux sales + lave-bocal posé ⇒ demander de retirer le lave-bocal ;
+     9. rien de tout cela ⇒ attendre, nouvelle photo toutes les 5 min (réglage).
+     Le Pi **propose** le travail et attend le « Go » de Karulium (règle 6 de `CLAUDE.md`). Le tableau est dans un
+     fichier de réglages (il sera corrigé après les premiers essais). La **reconnaissance** des objets demande une
+     trentaine de photos réelles par situation : ici, une interface `Reconnaissance` et un faux ; le vrai viendra
+     avec les photos. Sans reconnaissance sûre, c'est le cas 1 (doute).
+
+  *Ce qui n'est pas dans cette tâche* : l'analyse d'images des points d'appel qui demandent des photos réelles
+  (bocal « bon / douteux », anse levée, repère et bac des couvercles : tâche 22 ter), l'inspection après lavage
+  (vues A et B, polarisation croisée, stéréophotométrie, speckle : plus tard), les capteurs ToF et IR de la tête.
+
+  Simulateur et tests : QR lus sur des images fabriquées (droits, tournés, flous, illisibles), angle rendu par le QR,
+  ArUco du lave-bocal vu / absent / caché, verrou du servo du dosage, les 9 règles du plafond (chacune, et leur
+  ordre), photo trop vieille refusée. Outil d'essai pour la calibration et la lecture des QR, procédure pas à pas
+  sur le vrai matériel ; « testé sur le vrai matériel : non ».
+- [ ] 22 ter. Vision : analyses qui demandent des photos réelles (bocal « bon / douteux » au retour debout, anse
+  levée, repère et bac des couvercles). Règles à recopier quand les premières photos existeront.
 - [x] **22 bis. Cartes de pesée RS485 (RP2040 + HX711) : griffe, préhension, plateau du remplissage** — Modèle : Opus.
   Programme C (Pico SDK, comme l'accéléromètre) : lecture du HX711 en 3,3 V, jusqu'à 80 mesures/s, réponse sur le
   bus RS485 `rs485_pesee` quand le Pi l'interroge (une adresse par carte, contrôle CRC), mise à jour depuis le Pi
