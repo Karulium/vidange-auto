@@ -179,6 +179,8 @@ cartes:
 #               mesure (valeur analogique) ;
 #     sorties : relais, logique (sortie transistor ou GPIO direct) ;
 #     bus : i2c, serie (UART, RS485) ;
+#     pwm : sortie PWM matérielle du Pi (servo) ; le dossier de Linux et le canal sont dans
+#           pi/reglages/machine.yaml (camera_dosage → pwm).
 #     pesee : une carte de pesée HX711 lue directement par 2 broches du Pi, dans cet ordre :
 #             [DT, SCK]. Carte HX711 alimentée en 3,3 V (sinon DT grillerait la broche du Pi).
 #   tension : en volts (pour un relais : la tension qu'il commute).
@@ -223,6 +225,10 @@ cartes:
 #   contact_tete, fdc_prehension_haut, origine_rotation_tete, alarme_prehension_z,
 #   alarme_rotation_tete, moteur_prehension_z, moteur_rotation_tete, vanne_vide,
 #   electroaimants_capsule, vide_venturi.
+# (tâche 22, vision) :
+#   servo_camera_dosage : servo DS3225 de la caméra du dosage (0° = bocal, 63° = seau), sur une
+#     sortie PWM matérielle du Pi (GPIO18 = canal 2 avec « dtoverlay=pwm,pin=18,func=3 », à vérifier :
+#     voir pi/systeme/essai-vision.md). Servo alimenté à part (5 à 6,8 V), masse commune au Pi.
 # (tâche 15, accéléromètre) :
 #   accelerometre_fil : fil série unique vers le RP2040 de l'accéléromètre (half-duplex) ;
 #     TX du Pi par une résistance de 1 kΩ, RX directement, les deux sur le même fil.
@@ -281,6 +287,14 @@ signaux:
     type: logique
     tension: 3.3
     module: armoire
+  servo_camera_dosage:
+    exemple: true
+    description: Servo DS3225 de la caméra du dosage (impulsion PWM, 50 Hz)
+    carte: pi
+    broche: GPIO18
+    type: pwm
+    tension: 3.3
+    module: mycelium
   voyant_buzzer:
     exemple: true
     description: Voyant + buzzer « attention » avant un mouvement lancé à distance

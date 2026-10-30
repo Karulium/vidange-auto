@@ -1,0 +1,156 @@
+# Vision (tâche 22) : caméras, QR, repères ArUco, caméra du plafond. La caméra du dosage (servo,
+# verrou) est dans machine.yaml (camera_dosage) ; la vidéo de chaque caméra, dans programme.yaml.
+#
+# Sources : fiche du module « Guidage caméra » (validée définitivement le 24/10/2026), page
+# « Caméra du plafond : deviner le travail » (9 règles validées telles quelles le 24/10), plan de
+# commande v223, docs/decisions.md. Repère du portique, en mètres.
+#
+# ATTENTION : positions des caméras, mire, repères et hauteurs sont des EXEMPLES tant que les
+# caméras ne sont pas montées (pi/systeme/essai-vision.md). Quand tout est vrai : « exemple »
+# à false.
+#
+# Vérifié au démarrage : une caméra qui manque, une vidéo absente de programme.yaml, un repère
+# pris deux fois, une règle mal numérotée ou une condition inconnue.
+
+exemple: true
+
+# Toutes les photos de mesure se prennent à l'arrêt, après 0,3 s de stabilisation, LED de
+# l'enceinte allumées (toujours les mêmes). Une photo qui n'arrive pas en 3 s : caméra en panne.
+stabilisation_s: 0.3
+delai_photo_s: 3
+
+# Les caméras. « video » : nom de sa vidéo dans programme.yaml (sans « video » : seulement
+# déclarée, servie par la tâche qui s'en sert). « champ_deg » : champ de vision (horizontal,
+# vertical), pour une mesure grossière tant que la caméra n'est pas calibrée. « orientation_deg » :
+# angle du bord haut de l'image (de gauche à droite) avec l'axe x du portique : EXEMPLES.
+cameras:
+  plafond:
+    description: Plafond, Camera Module 3 Wide dans le toit (voit toute la machine, ≈ 1 mm par point)
+    video: plafond
+    champ_deg: [102, 67]
+    calibration: plafond.json
+    # Objectif en (1,45 ; 0,50), à ≈ 2,35 m.
+    position: [1.45, 0.50, 2.35]
+    orientation_deg: 0
+  tete_griffe:
+    description: Tête de griffe, caméra USB ≥ 5 Mpx (fenêtre Ø 25 au centre du toit de la chape)
+    video: tete_griffe
+    champ_deg: [70, 55]
+    calibration: tete_griffe.json
+    # Objectif sur l'axe du mât, 5 cm au-dessus des axes de la tête : EXEMPLE.
+    tete: {decalage_m: [0, 0], au_dessus_axes_m: 0.05}
+    orientation_deg: 0
+  dosage:
+    description: Dosage, caméra Wide à filtre IR sur servo (0° = bocal, 63° = seau)
+    video: dosage
+    champ_deg: [102, 67]
+    calibration: dosage.json
+  micropore:
+    description: Micropore (lit aussi le QR du seau) ; servie par la tâche Micropore
+    champ_deg: [70, 55]
+  vue_a:
+    description: Vue A, vers le haut, place A (2,50 ; 0,22) ; servie par l'inspection après lavage
+    champ_deg: [70, 55]
+    position: [2.50, 0.22, 0.30]
+
+# Calibration, une fois par caméra : mire en damier imprimée (coins intérieurs : 9 × 6, cases de
+# 25 mm), collée bien à plat. L'outil prend 15 photos (bouger la mire entre deux : 2 s), il en
+# faut 10 où le damier est trouvé ; erreur moyenne au plus 1 point.
+calibration:
+  dossier: calibration
+  colonnes: 9
+  lignes: 6
+  case_m: 0.025
+  photos: 15
+  photos_min: 10
+  attente_entre_s: 2
+  erreur_max_px: 1.0
+
+# QR (codes du registre : « S1293 » seau, « B327 » bocal...).
+qr:
+  forme: "^[A-Z][0-9]+$"
+  # Caméra de tête : godet grand ouvert, axes à 1,05 (≈ 9-10 photos pour 95 couvercles). Photo
+  # de secours à 1,20 si un QR reste illisible au deuxième tour : EXEMPLE.
+  lecture_tete: {axes_z: 1.05, godet_ouvert: 1.0, autre_axes_z: 1.20}
+  # Angle de l'objet = angle du QR + ce décalage (repère d'angle, plan v181) : EXEMPLE.
+  angle_objet_deg: 0
+  # Première photo et deuxième tour à la même hauteur, puis photo de secours, sinon objet marqué
+  # « à vérifier » au registre.
+  essais_meme_hauteur: 2
+
+# Repères ArUco : un repère de 40 mm sur le plateau du rince-verre du lave-bocal, et ceux du
+# calibrage du plafond. Numéros : EXEMPLES (imprimer avec « vidange-vision fabriquer »).
+aruco:
+  dictionnaire: DICT_4X4_50
+  lave_bocal: 7
+  taille_lave_bocal_m: 0.040
+  calibrage_plafond: [0, 1, 2, 3]
+
+# Caméra du plafond : photo seulement pont garé au bout opposé (sinon il cache la vue), plus
+# vieille que 5 s refusée.
+plafond:
+  photo_age_max_s: 5
+  # Pont garé : pont à x ≥ 2,30 (côté stockage, butée à 2,495) : EXEMPLE.
+  pont_gare_x_min: 2.30
+  # Règle 9 : nouvelle photo toutes les 5 min.
+  attente_s: 300
+  # Contrôle du lave-bocal avant chaque geste dangereux pour lui (lever un seau dans le fût de
+  # lavage, tourner noyau ou couronne). Laissé à false tant que la reconnaissance des objets
+  # (photos réelles) et le garage du pont avant la photo n'existent pas : sinon tout serait
+  # « doute » et le lavage ne partirait jamais (voir la PR de la tâche 22).
+  controle_lave_bocal: false
+  # « Deviner le travail » : dans l'ordre, la première règle qui correspond gagne. Le Pi PROPOSE
+  # et attend le Go de Karulium. À corriger après les premiers essais.
+  # Conditions : doute (reconnaissance pas sûre), objet_inconnu, piece_mal_placee (sur un
+  # trajet), fut_plein, fut_plein_mais, bocaux_vides_propres, seaux_vides_propres,
+  # bocal_semence_pret, bocaux_sales, seaux_sales, couvercles_sales, lave_bocal_pose,
+  # places_libres ; « pas » devant : le contraire. « si » : toutes vraies ; « si_un_de » : au
+  # moins une.
+  regles:
+    - numero: 1
+      si_un_de: [doute, objet_inconnu, piece_mal_placee]
+      travail: rien_ne_bouge
+      sorte: alerte
+      message: Objet inconnu, pièce mal placée sur un trajet, ou photo pas claire. Rien ne bouge. Regarder la photo.
+    - numero: 2
+      si: [fut_plein_mais, bocaux_vides_propres]
+      travail: remplir_les_bocaux
+      sorte: proposer
+      message: Remplir les bocaux.
+    - numero: 3
+      si: [fut_plein, pas bocaux_vides_propres, seaux_vides_propres, bocal_semence_pret]
+      travail: remplir_les_seaux
+      sorte: proposer
+      message: Remplir les seaux et ajouter le mycélium.
+    # « Fût plein mais rien de vide et propre où le mettre » : tout fût plein que les règles 2 et
+    # 3 n'ont pas pris (voir la PR de la tâche 22, question 1).
+    - numero: 4
+      si: [fut_plein]
+      travail: rien_a_remplir
+      sorte: alerte
+      message: Rien à remplir. Le fût est plein mais rien de vide et propre où le mettre.
+    - numero: 5
+      si: [bocaux_sales, lave_bocal_pose]
+      travail: laver_les_bocaux
+      sorte: proposer
+      message: Laver les bocaux.
+    - numero: 6
+      si: [bocaux_sales, pas lave_bocal_pose]
+      travail: poser_le_lave_bocal
+      sorte: demander
+      message: Des bocaux sont sales. Poser le lave-bocal sur le fût de lavage.
+    - numero: 7
+      si: [pas lave_bocal_pose]
+      si_un_de: [seaux_sales, couvercles_sales]
+      travail: laver_les_seaux
+      sorte: proposer
+      message: Laver les seaux et les couvercles.
+    - numero: 8
+      si: [seaux_sales, lave_bocal_pose]
+      travail: retirer_le_lave_bocal
+      sorte: demander
+      message: Des seaux sont sales. Retirer le lave-bocal du fût de lavage.
+    - numero: 9
+      travail: attendre
+      sorte: attendre
+      message: Rien à faire. Nouvelle photo dans 5 minutes.

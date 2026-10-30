@@ -409,6 +409,18 @@ def principal(
             "machine.yaml, lavage : hauteurs, décalages, vitesses des brosses, durées d'EXEMPLE : "
             "les régler aux essais (pi/systeme/essai-lavage.md), puis passer « exemple » à false."
         )
+    camera_dosage = reglages.machine.camera_dosage
+    if camera_dosage is not None and camera_dosage.exemple:
+        journal.warning(
+            "machine.yaml, camera_dosage : temps de pivot, impulsions et sortie PWM d'EXEMPLE : "
+            "les régler aux essais (pi/systeme/essai-vision.md), puis passer « exemple » à false."
+        )
+    if reglages.vision.exemple:
+        journal.warning(
+            "vision.yaml contient des valeurs d'EXEMPLE (exemple: true) : positions des caméras, "
+            "mire, repères ; les régler aux essais (pi/systeme/essai-vision.md), puis passer "
+            "« exemple » à false."
+        )
     exemples = entrees_sorties.exemples()
     if exemples:
         journal.warning(

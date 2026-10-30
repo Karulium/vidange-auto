@@ -22,6 +22,9 @@ dependencies = [
     # Écriture du programme des cartes ESP32 par USB (tâche 13), l'outil officiel d'Espressif.
     # Lancé à part (« python -m esptool ») : il n'est jamais chargé dans le programme lui-même.
     "esptool>=5,<6",
+    # Vision (tâche 22) : QR, repères ArUco, calibration. Sans écran (pas de Qt) : « headless ».
+    "opencv-python-headless>=4.8,<5",
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]
@@ -47,6 +50,7 @@ vidange-pesees = "vidange.pesees.outil:lancer"
 vidange-porte-bocal = "vidange.porte_bocal.outil:lancer"
 vidange-prehension = "vidange.prehension.outil:lancer"
 vidange-lavage = "vidange.lavage.outil:lancer"
+vidange-vision = "vidange.vision.outil:lancer"
 
 [tool.setuptools.packages.find]
 include = ["vidange*"]

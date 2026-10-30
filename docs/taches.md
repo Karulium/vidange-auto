@@ -538,7 +538,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   dosage manivelle en haut, glissière inconnue.
   Dans la même session : rinçage propre des couvercles à la fin de chaque face, comme pour les seaux
   (`docs/decisions.md`, « Couvercles et bocaux au lavage », point 3), avec son test.
-- [ ] **22. Vision de base : caméras, QR, repères ArUco, caméra du dosage, caméra du plafond** — Modèle : Opus,
+- [x] **22. Vision de base : caméras, QR, repères ArUco, caméra du dosage, caméra du plafond** — Modèle : Opus,
   effort moyen.
   Sources (recopiées ici le 30/10/2026) : fiche du module « Guidage caméra », **validé définitivement le 24/10/2026**,
   page « Caméra du plafond : deviner le travail » (tableau des 9 règles validé tel quel le 24/10), plan de commande

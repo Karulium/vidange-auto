@@ -12,8 +12,8 @@ def test_lister(entrees_sorties, capsys):
     assert "vide_venturi (mesure) : 12.49 kPa" in sortie  # 0 V sur la voie → 12,49 kPa (la droite)
     assert "ozone_1 (modbus) : 0 ppm" in sortie
     assert (
-        "Pas lus par le Pi lui-même : ads1115_bus, ecran_nextion, accelerometre_fil, relais_1_bus"
-        in sortie
+        "Pas lus par le Pi lui-même : servo_camera_dosage, ads1115_bus, ecran_nextion, "
+        "accelerometre_fil, relais_1_bus" in sortie
     )
 
 

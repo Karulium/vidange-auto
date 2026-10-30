@@ -83,6 +83,11 @@ QUOI_FAIRE_APPUI = (
     "L'appui du seau sur le noyau n'est pas venu : regarder la vidéo (seau mal tenu, noyau "
     "absent, fût de lavage pas en place ?). Corriger, puis acquitter et donner le Go."
 )
+QUOI_FAIRE_PLAFOND = (
+    "La caméra du plafond n'est pas sûre que le fût de lavage soit vide (photo dans le registre et "
+    "sur la page web). Aller voir : enlever le lave-bocal ou l'objet, le confirmer à l'écran, puis "
+    "appuyer sur « Vérifié » et donner le Go."
+)
 QUOI_FAIRE_LAVE_BOCAL = (
     "Bocaux et seaux ne se lavent jamais en même temps. Poser ou enlever le lave-bocal sur le fût "
     "de lavage comme demandé, le confirmer à l'écran, puis donner le Go."
@@ -110,10 +115,14 @@ class Lavage:
         refus_panneau: Callable[[], str | None],
         panneau_rabattu: Callable[[], bool],
         horloge: Callable[[], float] = time.monotonic,
+        controle_plafond: Callable[[bool], str | None] = lambda lave_bocal_pose: None,
     ) -> None:
         """`mode` : le mode de la machine (ModeMachine.actuel). `refus_panneau` : pourquoi le
         panneau du poste du fût interdit le lavage (PosteFut.refus_lancement("lavage")).
-        `panneau_rabattu` : PosteFut.panneau_vu_rabattu (contact ouvert et stable)."""
+        `panneau_rabattu` : PosteFut.panneau_vu_rabattu (contact ouvert et stable).
+        `controle_plafond(lave_bocal_pose)` : la caméra du plafond, juste avant de lever un seau
+        dans le fût ou de tourner noyau et couronne (vidange.vision.plafond.ControleLaveBocal) :
+        raison du refus, ou None."""
         assert machine.lavage is not None and machine.griffe is not None
         assert machine.poste_fut is not None
         self.reglages = machine.lavage
@@ -125,6 +134,7 @@ class Lavage:
         self._refus_panneau = refus_panneau
         self._panneau_rabattu = panneau_rabattu
         self._horloge = horloge
+        self._controle_plafond = controle_plafond
         # Seaux lavés depuis le dernier remplissage, et depuis le début de la série.
         self.seaux_eau = 0
         self.seaux_serie = 0
@@ -153,6 +163,14 @@ class Lavage:
         elif self.lave_bocal_pose:
             return f"lave-bocal posé sur le fût de lavage : pas de {quoi} (l'enlever, le confirmer)"
         return None
+
+    def verifier_plafond(self) -> None:
+        """Juste avant un geste dangereux pour le lave-bocal (seau dans le fût, noyau et couronne
+        qui tournent) : la caméra du plafond doit voir le fût de lavage vide, d'accord avec
+        l'écran ; sinon, rien ne bouge (alarme, photo)."""
+        refus = self._controle_plafond(self.lave_bocal_pose)
+        if refus is not None:
+            raise ErreurEtape(f"lavage refusé : {refus}", QUOI_FAIRE_PLAFOND)
 
     def confirmer_lave_bocal(self, pose: bool) -> None:
         """L'écran : Karulium a posé (ou enlevé) le lave-bocal. Refusé pendant une série de
@@ -289,6 +307,7 @@ class Lavage:
             raise ErreurEtape(f"lavage refusé : {refus}", QUOI_FAIRE_LAVE_BOCAL)
         if not self.eau.eau_dans_le_fut:
             raise ErreurEtape("lavage : le fût de lavage n'est pas rempli", QUOI_FAIRE)
+        self.verifier_plafond()
         brossage = self.reglages.brossage
         centre_x, centre_y = self.reglages.centre_fut
         journal.info("Lavage d'un seau %s", format)

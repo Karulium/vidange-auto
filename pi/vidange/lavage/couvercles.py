@@ -303,6 +303,8 @@ class LavageCouvercles:
         if reglage is None:
             raise ErreurEtape(f"couvercles : format inconnu « {format} »")
         self._verifier_objet()
+        # Noyau et couronne vont tourner : la caméra du plafond regarde le fût de lavage.
+        self.lavage.verifier_plafond()
         if not self.eau.eau_dans_le_fut:
             raise ErreurEtape("couvercles : le fût de lavage n'est pas rempli", QUOI_FAIRE)
         p = self.prehension
