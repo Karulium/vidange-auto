@@ -721,7 +721,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   Simulateur : un scénario `remplissage` : seau vide posé, prise double séparée, anse orientée, versements, dosage avec
   l'agitateur, rangement. Tests de chaque règle de position, prise double qui échoue (deux seaux sur la balance),
   barrière coupée, chariot du fût absent, ordre avec l'agitateur. Outil d'essai et procédure sur le vrai matériel.
-- [ ] **34 bis. Remplissage : corrections après la tâche 34** — Modèle : Opus, effort moyen. Même branche de travail
+- [x] **34 bis. Remplissage : corrections après la tâche 34** — Modèle : Opus, effort moyen. Même branche de travail
   que d'habitude (une PR). Tout vient des réponses à la PR n° 43, déjà dans `docs/decisions.md` (section
   « Remplissage », points 1 à 11) : les lire d'abord. Trois erreurs venaient des règles recopiées ici, pas du code.
   Les chiffres restent dans les réglages, marqués `exemple: true`.

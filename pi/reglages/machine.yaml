@@ -172,16 +172,18 @@ axes:
     carte: chariot
     lettre: Y
   # Montée du plateau (m) : hauteur du DESSUS du plateau. 0,175 à 0,575 au plus, toujours
-  # (règle 9 du fichier des positions : butée logicielle) ; le fin de course haut coupe la
-  # montée vers 0,578 (fiche). Frein, maintien réduit.
+  # (règle 9 du fichier des positions : butée logicielle). Zéro au fin de course BAS (plateau en
+  # bas, 0,175) ; le fin de course haut est une butée de sécurité, il coupe la montée vers 0,578
+  # (fiche du 28/10). NEMA 23 boucle fermée à frein.
   plateau_z:
     longueur_rail: 0.578
     course: [0.175, 0.575]
     carte: chariot
     lettre: Z
-  # Rotation du plateau (°), axe rotatif de FluidNC (rapport 40, 8 000 pas par tour : fiche). Il
-  # tourne sans fin pendant les versements (le Pi revient au plus près de 0 entre deux seaux).
-  # EXEMPLE : 100 tours de chaque côté.
+  # Rotation du plateau (°), axe rotatif de FluidNC : NEMA 17 boucle fermée sans réducteur, pignon
+  # 15 dents sur roue 120, rapport 8 (fiche du 28/10) ; zéro par un capteur Hall (un aimant par
+  # tour). Il tourne sans fin pendant les versements (le Pi revient au plus près de 0 entre deux
+  # seaux). EXEMPLE : 100 tours de chaque côté.
   plateau_a:
     unite: deg
     longueur_rail: 36000
@@ -189,18 +191,20 @@ axes:
     carte: chariot
     lettre: A
   # Barres séparatrices (m) : écartement hw = de l'axe d'une barre à l'axe du plateau, 0,1195 à
-  # 0,305 (fiche). Vis T8 au pas de 8, ouverture complète ≈ 2,3 s. Origine côté mur à hw ≈ 0,309
+  # 0,305 (fiche). NEMA 17 boucle fermée, vis T8 au pas de 8, ouverture complète ≈ 2,3 s. Origine
+  # côté mur à hw ≈ 0,309
   # (remplissage → barres → origine_hw_m : FluidNC compte 0 à l'origine, le Pi ajoute ce décalage).
   barres:
     longueur_rail: 0.309
     course: [0.1195, 0.305]
     carte: chariot
     lettre: B
-  # Pousseur (m) : course 0,32 (fiche : de −0,16 à +0,16) ; ici de 0 à 0,32, le milieu (0,16) est
-  # « rentré » (remplissage → pousseur_rentre_m, À CONFIRMER : question de la PR de la tâche 34).
+  # Pousseur (m) : NEMA 23 boucle fermée à frein. Zéro au fin de course en bout de rail côté fût :
+  # c'est « rentré » (remplissage → pousseur_rentre_m). Il pousse toujours vers le stockage,
+  # course 0,325 (la palette va de −0,165, rentré, à +0,16 de l'axe du plateau : fiche du 28/10).
   pousseur:
-    longueur_rail: 0.32
-    course: [0.0, 0.32]
+    longueur_rail: 0.325
+    course: [0.0, 0.325]
     carte: chariot
     lettre: C
 
@@ -235,7 +239,7 @@ positions:
     plateau_z: 0.175
     plateau_a: 0
     barres: 0.30
-    pousseur: 0.16
+    pousseur: 0.0
 
 zones:
   exemple_zone_a:
@@ -1004,8 +1008,8 @@ remplissage:
   pas_verification_m: 0.005
   # Plateau « en bas » : dessus ≤ 0,18 (règle 1).
   plateau_en_bas_z: 0.18
-  # Pousseur rentré : le milieu de sa course (fiche : −0,16 à +0,16). À CONFIRMER (question).
-  pousseur_rentre_m: 0.16
+  # Pousseur rentré : son zéro, au fin de course côté fût (décisions, Remplissage, point 4).
+  pousseur_rentre_m: 0.0
   # Oreilles de l'anse à 45° (modulo 90°) des barres, donc des files (fiche). Direction des
   # barres vue de dessus (° depuis +x) : EXEMPLE.
   barres_direction_deg: 0
@@ -1027,11 +1031,10 @@ remplissage:
     # 3. Plateau au-dessus de 0,515 : barres ouvertes seulement (hw ≥ 0,29).
     barres_ouvertes_au_dessus_z: 0.515
     barres_ouvertes_min: 0.29
-    # 4. Pousseur : rentré dès que le plateau n'est pas en bas, toujours rentré au-dessus de 0,20.
-    #    Plages du plateau où il peut sortir. (La fiche fait pousser les seaux de la bande du haut
-    #    plateau à 0,4985 : contraire à cette règle, question de la PR. Si le projet confirme,
-    #    ajouter [0.496, 0.501] ici, sans toucher au code.)
-    pousseur_plages_z: [[0.175, 0.18]]
+    # 4. Pousseur : rentré dès que le plateau n'est pas en bas, et il ne sort que plateau ≤ 0,20,
+    #    partout (la tête du micropore est montée sur le chariot). Pas de poussée en bande du haut
+    #    (décisions, Remplissage, points 2 et 3) : la plus stricte des deux règles s'applique.
+    pousseur_plateau_max_z: 0.20
     # 5. Bras du galet (tâche 41) : plateau au-dessus de 0,26 seulement bras rangé.
     galet_plateau_max_z: 0.26
     # 6. Spray (tâche 39) : pendant le pivot du bras et la pulvérisation, plateau
@@ -1039,18 +1042,28 @@ remplissage:
     spray_plateau_max_z: 0.50
     spray_bord_max_z: 0.71
     spray_entraxe_min_m: 0.50
-    # 7. Chariot du fût pas « en place » : bout du chariot à y ≤ 0,875 (poste_fut →
-    #    remplissage_y_bout_max). Du y de l'axe du plateau au bout : EXEMPLE (question).
-    bout_y_m: 0.09
-    # 9. Préhension : pas de descente sous ≈ 0,84 au-dessus du chariot, sauf barres ouvertes et
-    #    tête du micropore rentrée.
+    # 7. Chariot du fût pas « en place » : bout du chariot côté allée à y ≤ 0,875 (poste_fut →
+    #    remplissage_y_bout_max). Bout à 0,40 de l'axe du plateau (fil Remplissage : point le plus
+    #    loin 0,396, renvoi d'angle et moteur de montée) : axe du plateau à y ≤ 0,475.
+    bout_y_m: 0.40
+    # 9. Préhension : pas de descente de sa face sous ≈ 0,84 au-dessus du chariot, sauf barres
+    #    ouvertes et tête du micropore rentrée (sauf en mode couvercles : le retourneur, vérifié
+    #    par le fil Lavage le 25/10). « Au-dessus du chariot » : axe de la tête à moins de
+    #    emprise_demi_x_m de l'axe du plateau en x, et entre y − emprise_mur_y_m et y + bout_y_m.
+    #    Emprise : EXEMPLE (à mesurer, avec une marge pour le rayon de la tête et de l'objet).
     prehension_libre_z: 0.84
+    emprise_demi_x_m: 0.25
+    emprise_mur_y_m: 0.40
   # Barres (fiche) : origine côté mur à hw ≈ 0,309 (décalage réglé dans le Pi, à mesurer une
   # fois : EXEMPLE) ; ouvertes à 0,30 (≥ 0,29, règle 3) ; prise double : lâcher = + 1,5 cm
-  # chacune, rainure : entraxe = Ø haut + 6 mm (seau B : 0,118 → 0,1195, le minimum des barres).
+  # chacune, lèvre du seau du dessous : entraxe = Ø haut + 6 mm (seau B : 0,118 → 0,1195, le
+  # minimum des barres). Centrage EN POSITION (pas de courant réduit : le pilote n'a que PUL,
+  # DIR, ENA et ALM) : barres à formats → centrage_hw_m + jeu_centrage_m (EXEMPLE). Si elles
+  # forcent trop, le pilote lève son alarme ALM : le geste s'arrête, alerte.
   barres:
     origine_hw_m: 0.309
     ouvertes_m: 0.30
+    jeu_centrage_m: 0.002
     lacher_m: 0.015
     jeu_rainure_m: 0.006
     ouverture_s: 2.3
@@ -1063,10 +1076,13 @@ remplissage:
     pousseur: 0.1
     centrage: 0.02
     contact: 0.005
-  # Prise double (fiche) : la tête remonte de 2 cm, lâcher, la tête redescend de 4,8 cm, barres
-  # dans la rainure, plateau au contact du fond du seau du dessous, tirage de 2 cm, lâcher, le
-  # plateau remonte de 2,8 cm. Au plus 35 N par barre (capteur de force de la tête). Course
-  # maximale et seuil du contact du plateau (balance) : EXEMPLES.
+  # Prise double (fil Remplissage, page Barres séparatrices v4 ; décisions, point 5). Le plateau
+  # ne bouge pas avant e : a) la tête monte de 2 cm ; b) lâcher : chaque barre s'écarte de 1,5 cm ;
+  # c) la tête descend de 4,8 cm ; d) les barres se resserrent contre la lèvre du seau du dessous ;
+  # e) le plateau monte toucher le fond du seau du dessous ; f) la tête remonte (tirage) et emporte
+  # le seau du haut ; g) lâcher ; h) le plateau remonte de 2,8 cm. Courses : à vérifier sur la
+  # maquette. Au plus 35 N par barre (capteur de force de la tête). Tirage, course maximale et
+  # seuil du contact du plateau (balance) : EXEMPLES.
   prise_double:
     remontee_tete_m: 0.02
     redescente_tete_m: 0.048
@@ -1085,18 +1101,17 @@ remplissage:
     seau_vide_kg: 0.5
     seuil_deux_seaux: 1.5
     accord_kg: 0.1
-  # Rangement : bande du haut plateau à 0,4985 (plage 0,496-0,501), files du bas plateau en bas
-  # (fiche). Les files (y et sens de la poussée) viennent du Stockage (tâche 35) : EXEMPLES. En lot
-  # C, arrêt à y 0,205 pour la bande du haut côté paroi (fiche) : contraire aux règles 1 et 4,
-  # question de la PR ; pas de file ici en attendant.
+  # Rangement : toujours plateau en bas, le pousseur pousse vers le stockage jusqu'au bout de sa
+  # course (0,325). Pas de bande du haut (décisions, Remplissage, points 2 et 3). Les files (y)
+  # viennent du Stockage (tâche 35) : EXEMPLES. La file 2 (0,785) n'est permise que chariot du fût
+  # en place (règle 7 : axe ≤ 0,475 sinon).
   rangement:
-    bande_haut_plateau_z: 0.4985
-    bande_haut_plage_z: [0.496, 0.501]
     files:
-      file_1: {y: 0.215, bande: bas, pousseur_m: 0.32}
-      file_2: {y: 0.785, bande: bas, pousseur_m: 0.32}
+      file_1: {y: 0.215, pousseur_m: 0.325}
+      file_2: {y: 0.785, pousseur_m: 0.325}
   # Par format : plateau à la pose (seau B : 0,5125, fiche ; les autres : EXEMPLES, bord d'un seul
-  # seau 19 mm sous la barrière à 0,7315, comme le B), barres au contact du corps (EXEMPLES).
+  # seau 19 mm sous la barrière à 0,7315, comme le B, mesurés à l'essai), barres au contact du
+  # corps (EXEMPLES).
   formats:
     seau_a: {pose_plateau_z: 0.4625, centrage_hw_m: 0.125}
     seau_b: {pose_plateau_z: 0.5125, centrage_hw_m: 0.1195}

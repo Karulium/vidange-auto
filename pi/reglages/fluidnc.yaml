@@ -30,13 +30,12 @@ cartes:
   chariot:
     description: Axes du chariot de remplissage
     numero_serie_usb: "EXEMPLE-CHARIOT"
-    # Barrière lumineuse du chariot (broche macro0, lettre 0, sans macro) ; courant réduit des
-    # barres (« user_outputs » digital0 de fluidnc/chariot.yaml). À VÉRIFIER à l'essai de la carte
+    # Barrière lumineuse du chariot (broche macro0, lettre 0) et alarme ALM du pilote des barres
+    # (broche macro1, lettre 1), sans macro. À VÉRIFIER à l'essai de la carte
     # (pi/systeme/essai-remplissage.md).
     entrees:
       barriere_remplissage: "0"
-    sorties:
-      courant_reduit_barres: 0
+      alarme_barres: "1"
   mycelium_lavage:
     description: Axes du mycélium et du lavage
     numero_serie_usb: "EXEMPLE-MYCELIUM-LAVAGE"

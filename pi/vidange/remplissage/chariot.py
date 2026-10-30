@@ -1,5 +1,6 @@
 """Le chariot de remplissage sur sa carte (n° 2, « chariot ») : avance, plateau, rotation, barres,
-pousseur ; sa balance (carte de pesée RS485) et sa barrière lumineuse.
+pousseur ; sa balance (carte de pesée RS485), sa barrière lumineuse et l'alarme ALM du pilote des
+barres.
 
     chariot = ChariotFluidnc(reglages.machine, liaison_chariot, balance, signaux)
     chariot.demarrer(arret)        # lit la balance en fond
@@ -12,7 +13,9 @@ rejouable, et on peut l'arrêter tout de suite sans perdre la position (0x85). L
 bougent ensemble, en ligne droite.
 - Barres : la carte compte 0 à l'origine côté mur ; le Pi ajoute `barres → origine_hw_m`
   (position de la carte en mm = (hw − origine) × 1000).
-- Centrage (`courant_reduit`) : la sortie « courant_reduit_barres » est commandée pendant le pas.
+- Centrage : en position (barres au contact du format + un petit jeu), à la vitesse lente
+  « centrage ». Le pilote boucle fermée n'a pas de courant réduit (PUL, DIR, ENA, ALM) : si les
+  barres forcent trop, il lève ALM (`alarme_barres`), lue dans l'état de la carte.
 - Contact du plateau (`contact_kg`) : le plateau monte lentement ; dès que la balance a gagné
   tant de kg, le fil de la balance arrête le mouvement (0x85).
 La balance est lue `pesee → frequence_hz` fois par seconde : une pesée est la médiane des
@@ -42,7 +45,7 @@ journal = donner_journal("remplissage.chariot")
 
 # Noms des signaux (docs/entrees-sorties.yaml, fluidnc.yaml).
 BARRIERE = "barriere_remplissage"
-COURANT_REDUIT = "courant_reduit_barres"
+ALARME_BARRES = "alarme_barres"
 # Vitesse nommée d'un pas → l'axe qu'elle ralentit.
 VITESSES_LENTES = {"centrage": "barres", "contact": "z"}
 
@@ -60,8 +63,6 @@ class Pas:
     cibles: dict[str, float] = field(default_factory=dict)
     # Vitesse lente (« centrage » : barres, « contact » : plateau), sinon celle de chaque axe.
     vitesse: Literal["centrage", "contact"] | None = None
-    # Barres au courant réduit pendant le pas (centrage).
-    courant_reduit: bool = False
     # Le plateau monte jusqu'à ce que la balance gagne tant de kg (contact du fond d'un seau).
     contact_kg: float | None = None
     # Le plateau monte pour le dosage du mycélium (verrou : bocal au-dessus).
@@ -96,6 +97,10 @@ class Chariot(Protocol):
         """Faisceau de la barrière lumineuse coupé ; None : pas lu."""
         ...
 
+    def alarme_barres(self) -> bool | None:
+        """Alarme ALM du pilote des barres (elles forcent) ; None : pas lue."""
+        ...
+
     def pauser(self) -> None: ...
 
     def reprendre(self) -> None: ...
@@ -104,7 +109,7 @@ class Chariot(Protocol):
 
 
 def signaux_chariot(liaison: Liaison, carte: CarteFluidnc) -> SignauxFluidnc:
-    return SignauxFluidnc(liaison, carte, entrees=(BARRIERE,), sorties=(COURANT_REDUIT,))
+    return SignauxFluidnc(liaison, carte, entrees=(BARRIERE, ALARME_BARRES))
 
 
 class ChariotFluidnc:
@@ -220,6 +225,9 @@ class ChariotFluidnc:
     def barriere_coupee(self) -> bool | None:
         return self.signaux.entree(BARRIERE)
 
+    def alarme_barres(self) -> bool | None:
+        return self.signaux.entree(ALARME_BARRES)
+
     # ------------------------------------------------------------ mouvements
 
     def executer(self, pas: Pas, cible: Pose) -> None:
@@ -254,8 +262,6 @@ class ChariotFluidnc:
             )
         if not positions:
             return
-        if pas.courant_reduit:
-            self.signaux.sortie(COURANT_REDUIT, True)
         commande = self.liaison.deplacer_manuel(positions, self._f)
         if commande.erreur is not None:
             raise ErreurEtape(f"chariot de remplissage, « {commande.ligne} » : {commande.erreur}")
@@ -277,14 +283,9 @@ class ChariotFluidnc:
                         f"chariot de remplissage arrêté avant la fin de « {pas.texte} »"
                     )
                 self._fin_mouvement = self._horloge()
-                courant = pas.courant_reduit
-            else:
-                courant = False
             attente = pas.attente_s
             if pas.pesee:
                 attente = max(attente, self.reglages.pesee.attente_s)
-        if courant:
-            self.signaux.sortie(COURANT_REDUIT, False)
         assert self._fin_mouvement is not None
         return self._horloge() - self._fin_mouvement >= attente
 
@@ -330,7 +331,5 @@ class ChariotFluidnc:
 
     def arreter(self) -> None:
         with self._verrou:
-            pas, self._pas = self._pas, None
+            self._pas = None
         self.liaison.annuler_deplacement()
-        if pas is not None and pas.courant_reduit:
-            self.signaux.sortie(COURANT_REDUIT, False)

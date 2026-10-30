@@ -10,12 +10,12 @@ le solveur (tâche 23). C'est le scénario « remplissage » du simulateur, et u
     poser_le_seau          posé sur le plateau ; barrière coupée : prise double séparée
     rendre_le_seau_du_dessus   après une prise double : le seau du dessus rendu au stockage
     orienter_l_anse        QR du flanc lu, oreilles de l'anse à 45° des barres
-    centrer                barres au contact du corps (courant réduit), puis ouvertes
+    centrer                barres en position au contact du corps, puis ouvertes
     ramener_au_poste       plateau en bas, y 0,135, plateau remonté (agitateur au garage)
     verser                 versement de la griffe : le seau tourne
     doser                  le Mycélium dose la couche (il mène le chariot)
     revenir_au_poste       couche suivante : retour au poste (agitateur au garage)
-    ranger                 anse à son angle, chariot à sa file, le pousseur pousse le seau
+    ranger                 anse à son angle, chariot à sa file plateau en bas, le pousseur pousse
     fin                    plus de seau
 """
 
@@ -67,6 +67,8 @@ def module_remplissage(
     remplissage: Remplissage, prehension: Prehension, mycelium: Mycelium, plan: Plan
 ) -> Module:
     chariot, tete = remplissage.chariot, prehension.tete
+    # Règle 9 : la tête ne descend au-dessus du chariot que barres ouvertes, micropore rentré.
+    remplissage.brancher_prehension(prehension)
     fin = Condition("geste du chariot de remplissage fini", remplissage.geste_fini)
     fin_tete = Condition("geste de la préhension fini", prehension.geste_fini)
     garage = Condition(
@@ -77,6 +79,15 @@ def module_remplissage(
         ),
     )
     libre = Condition("chariot de remplissage libre", remplissage.libre)
+    # Règle 7 : sans le chariot du fût en place, l'axe du plateau reste à y ≤ 0,475.
+    pose_permise = Condition(
+        "chariot du fût en place (le chariot de remplissage va à la pose du seau vide)",
+        lambda: remplissage.place_permise(remplissage.reglages.pose_y),
+    )
+    file_permise = Condition(
+        "chariot du fût en place (le chariot de remplissage va à la file du seau)",
+        lambda: remplissage.place_permise(remplissage.reglages.rangement.files[plan.seau.file].y),
+    )
 
     def geste(nom: str, fabrique, ensuite=None, entree=()) -> Etape:
         return Etape(
@@ -148,7 +159,7 @@ def module_remplissage(
             geste(
                 "aller_a_la_pose",
                 lambda: remplissage.geste_aller_a_la_pose(plan.seau.format),
-                entree=(garage,),
+                entree=(garage, pose_permise),
             ),
             geste_tete("prendre_le_seau", prendre),
             geste_tete("poser_le_seau", poser, apres_pose),
@@ -177,7 +188,7 @@ def module_remplissage(
                 "ranger",
                 lambda: remplissage.geste_ranger(plan.seau.file),
                 apres_rangement,
-                entree=(libre, garage),
+                entree=(libre, garage, file_permise),
             ),
             Etape("fin", "Rien à faire : plus de seau à remplir.", ensuite=lambda: None),
         ),

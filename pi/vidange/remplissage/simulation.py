@@ -10,6 +10,7 @@ seau vide) et ce qui y tombe (substrat des versements, grains du mycélium). Un 
 plateau quand la tête le lâche au-dessus du plateau (vanne fermée). La barrière est coupée tant
 que deux seaux emboîtés y sont (`double`) : ils sont séparés quand le plateau touche le fond de
 celui du dessous, sauf `separation_ratee`. Le pousseur qui sort fait partir le seau.
+`alarme_barres_active` : le pilote des barres est en alarme (ALM).
 """
 
 from collections.abc import Callable
@@ -63,6 +64,7 @@ class ChariotSimule:
         self.separation_ratee = False
         self.barriere_muette = False
         self.sans_contact = False
+        self.alarme_barres_active = False
         self.pretes = Condition("cartes simulées prêtes", lambda: True)
         self.surveillance = Condition("cartes simulées sans alarme", lambda: True)
 
@@ -82,6 +84,9 @@ class ChariotSimule:
 
     def barriere_coupee(self) -> bool | None:
         return None if self.barriere_muette else self.double
+
+    def alarme_barres(self) -> bool | None:
+        return self.alarme_barres_active
 
     def executer(self, pas: Pas, cible: Pose) -> None:
         depart = self.position()

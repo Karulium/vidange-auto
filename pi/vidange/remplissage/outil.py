@@ -1,14 +1,15 @@
 """Outil « vidange-remplissage » : essayer le chariot de remplissage (carte n° 2, balance).
 
-  vidange-remplissage etat                    position des 5 axes, barrière, balance
+  vidange-remplissage etat                    position des 5 axes, barrière, alarme des barres,
+                                              balance
   vidange-remplissage barriere                barrière et balance lues 20 fois (10 s)
   vidange-remplissage aller 0.5               rouler jusqu'à y (plateau baissé d'abord s'il faut)
   vidange-remplissage plateau 0.45            plateau à cette hauteur (dessus, m)
   vidange-remplissage barres 0.2              barres à cet écartement hw (m)
-  vidange-remplissage pousseur 0.16           pousseur à cette position (m)
+  vidange-remplissage pousseur 0.325          pousseur à cette position (m ; 0 = rentré)
   vidange-remplissage tourner 90              plateau tourné de tant de degrés
   vidange-remplissage pose seau_a             chariot à la pose du seau vide de ce format
-  vidange-remplissage centrer seau_a          barres au contact (courant réduit), puis ouvertes
+  vidange-remplissage centrer seau_a          barres au contact (en position), puis ouvertes
   vidange-remplissage poste seau_a            ramener au poste (plateau à la hauteur du format)
   vidange-remplissage ranger seau_a file_1    pousser le seau du plateau sur cette file
   vidange-remplissage couvercles              mode couvercles (retourneur)
@@ -186,6 +187,7 @@ def _etat(remplissage: Remplissage, chariot: ChariotFluidnc) -> None:
     print(f"chariot : y {pose.y:.4f} m ; plateau : dessus à {pose.z:.4f} m, {pose.a:.1f}°")
     print(f"barres : hw {pose.barres:.4f} m ; pousseur : {pose.pousseur:.4f} m")
     print(f"barrière coupée : {chariot.barriere_coupee()}")
+    print(f"alarme du pilote des barres : {chariot.alarme_barres()}")
     try:
         print(f"balance : {chariot.peser():.3f} kg")
     except ErreurEtape as erreur:

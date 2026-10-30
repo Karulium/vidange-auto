@@ -10,18 +10,25 @@ monte, descend et tourne, deux barres qui tiennent ou centrent le seau, un pouss
 seau plein sur sa file, et une balance. Les gestes :
 - poser un seau vide (avec la Préhension) : chariot à y 0,50, plateau à la hauteur de pose ; la
   tête pose le seau ; barrière lumineuse libre : la tête le lâche, la balance vérifie qu'il n'y en
-  a qu'un. Barrière coupée : prise double, les deux seaux sont séparés (la tête garde celui du
-  dessus, à rendre au stockage) ; à la fin, barrière libre ET un seul seau, sinon alarme ;
+  a qu'un. Barrière coupée : prise double, les deux seaux sont séparés dans l'ordre a) à h) de
+  docs/decisions.md (le plateau ne bouge pas avant e ; la tête garde le seau du dessus, à rendre
+  au stockage) ; à la fin, barrière libre ET un seul seau, sinon alarme ;
 - orienter l'anse : la caméra lit le QR du flanc (angle des oreilles de l'anse, corrigé de
   l'écart attaches/QR du seau) ; le plateau tourne pour les mettre à 45° (modulo 90°) des
   barres. Cet angle est gardé jusqu'à la poussée ;
-- centrer : barres au contact du corps sous le rebord, au courant réduit, puis ouvertes ;
+- centrer : barres en position au contact du corps sous le rebord (+ un petit jeu), puis
+  ouvertes ; l'alarme ALM du pilote des barres (elles forcent) arrête le geste et alerte ;
 - ramener au poste : plateau en bas, y 0,135, plateau remonté (bord du seau à 0,78) ;
 - tourner pendant le versement de la griffe (`tourner_seau`) ;
 - dosage du mycélium : le Mycélium mène le chariot (`ecarter`, `amener_au_dosage`) ;
-- ranger : le plateau revient à l'angle de l'anse, va à la file, le pousseur pousse le seau ; le
-  registre reçoit son poids (les doses et la variété viennent du Mycélium) et une photo ;
+- ranger : le plateau revient à l'angle de l'anse, va à la file plateau en bas, le pousseur pousse
+  le seau vers le stockage ; le registre reçoit son poids (les doses et la variété viennent du
+  Mycélium) et une photo ;
 - mode couvercles (retourneur du lavage) et mode inspection des bocaux.
+
+La règle 9 est branchée dans la préhension (`refus_prehension`, par module_remplissage) : sa tête
+ne descend sous ≈ 0,84 au-dessus du chariot que barres ouvertes et tête du micropore rentrée, sauf
+en mode couvercles (retourneur) et pendant la séparation d'une prise double (geste du chariot).
 
 Chaque pas est vérifié avant de partir (vidange.remplissage.regles) : un pas refusé met le module
 en alarme, il ne bouge pas. Les gestes passent d'eux-mêmes par les bons détours (plateau baissé
@@ -44,6 +51,7 @@ from vidange.journal import donner_journal
 from vidange.mycelium.regles import EtatChariot
 from vidange.prehension.prehension import Attente, Prehension
 from vidange.prehension.prehension import Geste as GestePrehension
+from vidange.prehension.regles import Pose as PosePrehension
 from vidange.prehension.tete import Pas as PasTete
 from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import FormatSeau, Machine
@@ -73,6 +81,11 @@ QUOI_FAIRE_QR = (
 )
 QUOI_FAIRE_BARRIERE = (
     "La barrière lumineuse du chariot ne répond pas : vérifier son câble et la carte n° 2, puis "
+    "acquitter et donner le Go."
+)
+QUOI_FAIRE_ALARME_BARRES = (
+    "Le pilote des barres est en alarme (ALM) : elles forcent (seau mal centré, coincé, barre "
+    "bloquée ?). Regarder la vidéo, dégager, vérifier le réglage du centrage du format, puis "
     "acquitter et donner le Go."
 )
 QUOI_FAIRE_BOCAL = (
@@ -164,6 +177,8 @@ class Remplissage:
         self._geste: Geste | None = None
         self._pas: Pas | None = None
         self._rotation = False
+        # Séparation d'une prise double en cours : la tête descend barres fermées (règle 9).
+        self._separation = False
 
     # ------------------------------------------------------------ état
 
@@ -243,6 +258,15 @@ class Remplissage:
     def geste_fini(self) -> bool:
         """Condition de fin des étapes : fait partir les pas l'un après l'autre."""
         while self._geste is not None:
+            pas = self._pas
+            if pas is not None and "barres" in pas.cibles and self.chariot.alarme_barres():
+                self.arreter()
+                self._photo("alarme du pilote des barres")
+                raise ErreurEtape(
+                    f"remplissage : alarme du pilote des barres pendant « {pas.texte} » (elles "
+                    "forcent)",
+                    QUOI_FAIRE_ALARME_BARRES,
+                )
             if not self.chariot.fini():
                 return False
             resultat = self.chariot.resultat()
@@ -261,6 +285,7 @@ class Remplissage:
     def arreter(self) -> None:
         self._geste = self._pas = None
         self._rotation = False
+        self._separation = False
         self.chariot.arreter()
 
     def _dans_prehension(self, texte: str, geste: Callable[[], Geste]) -> GestePrehension:
@@ -290,11 +315,18 @@ class Remplissage:
             yield from self._plateau_en_bas()
             yield Pas("pousseur rentré", {"pousseur": self.reglages.pousseur_rentre_m})
 
-    def _barres(self, hw: float, texte: str = "barres", centrage: bool = False) -> Geste:
+    def _barres(
+        self, hw: float, texte: str = "barres", centrage: bool = False, plateau_fixe: bool = False
+    ) -> Geste:
         """Barres à hw ; le plateau descend d'abord s'il le faut (joues de l'élévateur, barres
-        fermées au-dessus de 0,515), puis remonte où il était si c'est permis."""
+        fermées au-dessus de 0,515), puis remonte où il était si c'est permis. `centrage` : à la
+        vitesse lente du centrage. `plateau_fixe` : le plateau ne bouge pas (prise double) ; un
+        pas que les verrous refusent met le module en alarme."""
         pose = self._pose()
         if abs(pose.barres - hw) <= _EGAL:
+            return
+        if plateau_fixe:
+            yield Pas(texte, {"barres": hw}, vitesse="centrage" if centrage else None)
             return
         v = self.reglages.verrous
         bas, haut = sorted((pose.barres, hw))
@@ -307,7 +339,7 @@ class Remplissage:
         if plafond < z - _EGAL:
             yield Pas("plateau plus bas, pour bouger les barres", {"z": plafond})
         if centrage:
-            yield Pas(texte, {"barres": hw}, vitesse="centrage", courant_reduit=True)
+            yield Pas(texte, {"barres": hw}, vitesse="centrage")
         else:
             yield Pas(texte, {"barres": hw})
         if plafond < z - _EGAL:
@@ -460,6 +492,14 @@ class Remplissage:
 
     # ------------------------------------------------------------ pour les autres modules
 
+    def place_permise(self, y: float) -> bool:
+        """Le chariot peut-il aller en y (règle 7) : chariot du fût en place, ou bout du chariot
+        côté allée assez loin de la 3e file (axe du plateau ≤ 0,475) ?"""
+        if self._chariot_fut():
+            return True
+        bout_max = self.regles.bout_max_y
+        return y + self.reglages.verrous.bout_y_m <= bout_max + _EGAL
+
     def refus_bras_galet(self) -> str | None:
         """Pour la fermeture (tâche 41) : le bras du galet ne tourne que plateau ≤ 0,26."""
         return self.regles.refus_bras_galet(self.chariot.position())
@@ -474,6 +514,32 @@ class Remplissage:
         if not self.libre():
             return "le chariot de remplissage bouge"
         return self.regles.refus_descente_prehension(self.chariot.position(), self._micropore())
+
+    def refus_prehension(self, depart: PosePrehension, arrivee: PosePrehension) -> str | None:
+        """Verrou de la préhension (`Prehension.verrou_chariot`, règle 9) : sa face ne descend
+        sous ≈ 0,84 au-dessus du chariot que barres ouvertes et tête du micropore rentrée. Sauf en
+        mode couvercles (retourneur : vérifié par le fil Lavage le 25/10) et pendant la séparation
+        d'une prise double (le geste du chariot lui-même)."""
+        v = self.reglages.verrous
+        if arrivee.z >= depart.z - _EGAL or arrivee.z >= v.prehension_libre_z - _EGAL:
+            return None
+        if self.mode == "couvercles" or self._separation:
+            return None
+        if not self.libre():
+            if self.regles.au_dessus_du_chariot(arrivee.x, arrivee.y, None):
+                return (
+                    f"descente sous {_m(v.prehension_libre_z)} au-dessus du chariot de "
+                    "remplissage refusée : il bouge"
+                )
+            return None
+        pose = self.chariot.position()
+        if not self.regles.au_dessus_du_chariot(arrivee.x, arrivee.y, pose):
+            return None
+        return self.regles.refus_descente_prehension(pose, self._micropore())
+
+    def brancher_prehension(self, prehension: Prehension) -> None:
+        """La préhension applique la règle 9 à chacun de ses pas (et en mode manuel)."""
+        prehension.verrou_chariot = self.refus_prehension
 
     # ------------------------------------------------------------ les gestes des seaux
 
@@ -541,64 +607,73 @@ class Remplissage:
             )
 
     def _separer(self, prehension: Prehension, format: str) -> GestePrehension:
-        """Prise double (fiche) : la tête tient les deux seaux emboîtés, au contact. Barres au
-        contact du corps ; la tête remonte de 2 cm ; lâcher (barres + 1,5 cm chacune) ; la tête
-        redescend de 4,8 cm ; barres dans la rainure sous la jupe du seau du dessus (entraxe =
-        Ø haut + 6 mm) ; le plateau monte toucher le fond du seau du dessous ; la tête remonte
-        (tirage de 2 cm, au plus 35 N par barre) ; lâcher ; le plateau remonte de 2,8 cm.
-        Contrôle : barrière libre ET un seul seau sur la balance."""
+        """Prise double (fil Remplissage, page Barres séparatrices v4 ; docs/decisions.md,
+        Remplissage, point 5) : la tête tient les deux seaux emboîtés, au contact. D'abord les
+        barres au centrage du format (en position). Puis a) la tête monte de 2 cm ; b) lâcher :
+        chaque barre s'écarte de 1,5 cm ; c) la tête descend de 4,8 cm (les deux seaux avec elle) ;
+        d) les barres se resserrent contre la lèvre du seau du dessous (entraxe = Ø haut + 6 mm) ;
+        e) le plateau monte toucher le fond du seau du dessous ; f) la tête remonte et emporte le
+        seau du haut (au plus 35 N par barre) ; g) lâcher ; h) le plateau remonte de 2,8 cm.
+        Le plateau ne bouge pas avant e, ni pour les barres après (un pas refusé par les verrous
+        met le module en alarme). Contrôle : barrière libre ET un seul seau sur la balance."""
         reglages = self.reglages
         double, barres = reglages.prise_double, reglages.barres
         seau = self.format(format)
-        centrage = reglages.formats[format].centrage_hw_m
-        rainure = max(seau.rayon_haut + barres.jeu_rainure_m / 2, self.regles.courses["barres"][0])
+        centrage = reglages.formats[format].centrage_hw_m + barres.jeu_centrage_m
+        levre = max(seau.rayon_haut + barres.jeu_rainure_m / 2, self.regles.courses["barres"][0])
 
         def tete(texte: str, dz: float, **options: object) -> PasTete:
             assert prehension.pose is not None
             return PasTete(texte, {"z": prehension.pose.z + dz}, **options)  # type: ignore[arg-type]
 
-        def ecarter_barres() -> Geste:
-            yield from self._barres(self._pose().barres + barres.lacher_m, "lâcher (barres)")
-
-        yield from self._dans_prehension(
-            "barres au contact du corps",
-            lambda: self._barres(centrage, "barres au contact du corps", centrage=True),
-        )
-        yield tete("prise double : la tête remonte", double.remontee_tete_m, vitesse="levee_lente")
-        yield from self._dans_prehension("lâcher (barres)", ecarter_barres)
-        yield tete(
-            "prise double : la tête redescend",
-            -double.redescente_tete_m,
-            vitesse="approche",
-            choc=True,
-        )
-        yield from self._dans_prehension(
-            "barres dans la rainure",
-            lambda: self._barres(rainure, "barres dans la rainure sous la jupe"),
-        )
-        yield from self._dans_prehension("plateau au contact du seau du dessous", self._toucher)
-        resultat = yield tete(
-            "tirage du seau du dessus",
-            double.tirage_m,
-            vitesse="levee_lente",
-            traction_max_n=2 * double.traction_max_par_barre_n,
-        )
-        if resultat is not None and resultat.arret == "traction":
-            self._photo("seaux emboîtés qui ne se séparent pas")
-            raise ErreurEtape(
-                f"remplissage : les seaux ne se séparent pas (plus de "
-                f"{double.traction_max_par_barre_n:g} N par barre)",
-                QUOI_FAIRE_SEPARATION,
+        def barres_a(hw: Callable[[], float], texte: str, centrer: bool = False) -> GestePrehension:
+            return self._dans_prehension(
+                texte, lambda: self._barres(hw(), texte, centrage=centrer, plateau_fixe=True)
             )
-        yield from self._dans_prehension("lâcher (barres)", ecarter_barres)
 
-        def remonter() -> Geste:
-            yield from self._plateau(
-                self._pose().z + double.remontee_plateau_m, "le plateau remonte"
+        def lacher() -> float:
+            return self._pose().barres + barres.lacher_m
+
+        self._separation = True
+        try:
+            yield from barres_a(lambda: centrage, "prise double : barres au centrage", True)
+            yield tete(
+                "prise double a) : la tête monte", double.remontee_tete_m, vitesse="levee_lente"
             )
-            yield from self._peser("pesée")
+            yield from barres_a(lacher, "prise double b) : lâcher (barres)")
+            yield tete(
+                "prise double c) : la tête descend",
+                -double.redescente_tete_m,
+                vitesse="approche",
+                choc=True,
+            )
+            yield from barres_a(
+                lambda: levre, "prise double d) : barres contre la lèvre du seau du dessous"
+            )
+            yield from self._dans_prehension("prise double e) : plateau au contact", self._toucher)
+            resultat = yield tete(
+                "prise double f) : la tête emporte le seau du haut",
+                double.tirage_m,
+                vitesse="levee_lente",
+                traction_max_n=2 * double.traction_max_par_barre_n,
+            )
+            if resultat is not None and resultat.arret == "traction":
+                self._photo("seaux emboîtés qui ne se séparent pas")
+                raise ErreurEtape(
+                    f"remplissage : les seaux ne se séparent pas (plus de "
+                    f"{double.traction_max_par_barre_n:g} N par barre)",
+                    QUOI_FAIRE_SEPARATION,
+                )
+            yield from barres_a(lacher, "prise double g) : lâcher (barres)")
 
-        yield from self._dans_prehension("le plateau remonte", remonter)
+            def remonter() -> Geste:
+                z = self._pose().z + double.remontee_plateau_m
+                yield Pas("prise double h) : le plateau remonte", {"z": z})
+                yield from self._peser("pesée")
+
+            yield from self._dans_prehension("prise double h) : le plateau remonte", remonter)
+        finally:
+            self._separation = False
         if self._barriere():
             self._photo("barrière encore coupée après la séparation")
             raise ErreurEtape(
@@ -621,7 +696,7 @@ class Remplissage:
         if self.regles.dans_les_joues(pose.barres):
             haut = min(haut, v.joues_plateau_max_z)
         resultat = yield Pas(
-            "le plateau monte toucher le fond du seau du dessous",
+            "prise double e) : le plateau monte toucher le fond du seau du dessous",
             {"z": haut},
             vitesse="contact",
             contact_kg=double.contact_kg,
@@ -663,11 +738,12 @@ class Remplissage:
         )
 
     def geste_centrer(self) -> Geste:
-        """Barres au contact du corps sous le rebord (courant réduit), puis ouvertes."""
+        """Barres en position au contact du corps sous le rebord (+ le jeu du centrage), puis
+        ouvertes. Si elles forcent, l'alarme ALM du pilote arrête le geste (geste_fini)."""
         seau = self.seau
         if seau is None or seau.angle_anse is None:
             raise ErreurEtape("remplissage : l'anse est orientée avant de serrer les barres")
-        hw = self.reglages.formats[seau.format].centrage_hw_m
+        hw = self.reglages.formats[seau.format].centrage_hw_m + self.reglages.barres.jeu_centrage_m
         yield from self._barres(hw, "centrer le seau (barres au contact)", centrage=True)
         yield from self._barres_ouvertes()
 
@@ -683,8 +759,8 @@ class Remplissage:
         )
 
     def geste_ranger(self, file: str) -> Geste:
-        """Le plateau revient à l'angle de l'anse, va à la file (bande du haut : plateau à
-        0,4985 ; files du bas : plateau en bas), le pousseur pousse le seau sur la file."""
+        """Le plateau revient à l'angle de l'anse, va à la file, plateau en bas (le pousseur ne
+        sort que plateau ≤ 0,20, partout), le pousseur pousse le seau vers le stockage."""
         seau = self.seau
         place = self.reglages.rangement.files.get(file)
         if place is None:
@@ -697,12 +773,7 @@ class Remplissage:
         )
         yield from self._barres_ouvertes()
         yield from self._a_la_place(place.y, f"chariot à la {file}")
-        if place.bande == "haut":
-            yield from self._plateau(
-                self.reglages.rangement.bande_haut_plateau_z, "plateau à la bande du haut"
-            )
-        else:
-            yield from self._plateau_en_bas()
+        yield from self._plateau_en_bas()
         yield from self._peser("pesée du seau plein")
         self._noter(seau, file)
         yield Pas("le pousseur pousse le seau", {"pousseur": place.pousseur_m})
