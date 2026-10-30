@@ -5,29 +5,40 @@
 # broches (plan de câblage), les vrais pas par mm et les vitesses. Chiffres de la fiche du module
 # « Remplissage » (gelé le 27/10/2026) marqués « (fiche) ».
 #
+# Moteurs (fiche du 28/10) : avance, rotation et barres = NEMA 17 boucle fermée (17HS19-2004-ME1K ou
+# équivalent) ; montée et pousseur = NEMA 23 boucle fermée à frein. Pilotes boucle fermée (CL57T V4.1 ou
+# équivalent) : PUL, DIR, ENA et une sortie d'alarme ALM, sans courant réduit. Pas par tour des pilotes :
+# EXEMPLES.
+#
 # Repère : la position machine de chaque axe est celle de pi/reglages/machine.yaml
 # (mm = mètres × 1000 ; degrés pour la rotation), SAUF les barres (voir B).
 #   Y : avance du chariot. Position machine = y de l'axe du plateau (repère du portique).
-#       Prise d'origine sur origine_remplissage_y (référence à choisir) : EXEMPLE côté poste.
-#   Z : montée du plateau, à frein, maintien réduit (fiche). Position machine = DESSUS du plateau.
-#       Prise d'origine en haut, sur le fin de course fdc_plateau_haut qui coupe vers 578 mm
-#       (fiche) ; limite logicielle haute à 575 mm, TOUJOURS (règle 9 du fichier des positions).
-#       ATTENTION : la prise d'origine fait MONTER le plateau (question de la PR de la tâche 34).
-#   A : rotation du plateau, axe rotatif (rapport 40, 8 000 pas par tour : fiche → 888,889 pas
-#       par degré). Pas de prise d'origine : l'angle de l'anse vient de la caméra (QR du flanc).
-#       Elle tourne sans fin pendant les versements : pas de limites logicielles.
+#       Prise d'origine sur le fin de course de l'avance (origine_remplissage_y), contre le tampon
+#       côté mur (fiche du 28/10) ; la position de l'axe là (mpos_mm) : EXEMPLE, mesurée à l'essai.
+#   Z : montée du plateau, à frein. Position machine = DESSUS du plateau. Prise d'origine VERS LE
+#       BAS, sur le fin de course bas fdc_plateau_bas : c'est le zéro de la montée, plateau en bas
+#       à 175 mm (fiche du 28/10). Le fin de course haut fdc_plateau_haut reste une butée de
+#       sécurité (limite dure, il coupe vers 578 mm) ; limite logicielle haute à 575 mm, TOUJOURS
+#       (règle 9 du fichier des positions).
+#   A : rotation du plateau, axe rotatif, sans réducteur : pignon 15 dents sur roue 120, rapport 8
+#       (fiche du 28/10). EXEMPLE : 8 000 pas par tour du pilote → 64 000 pas par tour du plateau
+#       = 177,778 pas par degré. Prise d'origine sur le capteur Hall hall_rotation_plateau (un
+#       aimant passe une fois par tour). L'angle de l'anse vient de la caméra (QR du flanc). Elle
+#       tourne sans fin pendant les versements : pas de limites logicielles.
 #   B : barres séparatrices, vis T8 au pas de 8 (fiche), ouverture complète ≈ 2,3 s. Prise
 #       d'origine côté mur sur origine_barres : la carte compte 0 là ; le Pi ajoute le décalage
 #       (machine.yaml → remplissage → barres → origine_hw_m ≈ 0,309) : position de la carte en mm
 #       = (hw − 0,309) × 1000, de −189,5 (hw 0,1195) à −4 (hw 0,305).
-#   C : pousseur, course 320 mm (fiche : −160 à +160) ; ici 0 à 320, rentré au milieu (160).
-#       Prise d'origine sur origine_pousseur (référence à choisir).
-#   Barrière lumineuse (barre côté mur, à 0,7315) : broche macro0 (lettre 0 de « Pn: »), sans
-#       macro. Courant réduit des barres : « user_outputs » digital0 (M64 / M65 par le Pi).
-#       Lettres et numéros : pi/reglages/fluidnc.yaml.
+#   C : pousseur, course 325 mm. Zéro au fin de course en bout de rail côté fût (origine_pousseur) :
+#       c'est « rentré » ; il pousse toujours vers le stockage, de 0 à 325 (la palette va de −0,165
+#       à +0,16 de l'axe du plateau, fiche du 28/10).
+#   Entrées lues par le Pi dans « Pn: » : barrière lumineuse (barre côté mur, à 0,7315) sur macro0
+#       (lettre 0), alarme ALM du pilote des barres sur macro1 (lettre 1), sans macro : le Pi arrête
+#       le geste et alerte si les barres forcent. Lettres : pi/reglages/fluidnc.yaml. Les alarmes
+#       des autres pilotes sont câblées comme sur les autres cartes (plan de câblage).
 #   Le vérin du galet (fermeture, tâche 41) est sur cette carte : il viendra avec sa tâche.
 #   À VÉRIFIER à l'essai de la carte (pi/systeme/essai-remplissage.md, étapes 1 et 2) : sens de
-#   chaque axe, origines, les lettres de « Pn: », M64/M65.
+#   chaque axe, origines, les lettres de « Pn: ».
 
 name: "Vidange carte 2 - chariot de remplissage (EXEMPLE)"
 board: "ESP32 6 axes, pilotes externes (EXEMPLE)"
@@ -56,12 +67,13 @@ axes:
     homing:
       cycle: 2
       positive_direction: false
+      # EXEMPLE : axe du plateau à y 0,130 quand le chariot touche le tampon côté mur.
       mpos_mm: 130
       feed_mm_per_min: 300
       seek_mm_per_min: 3000
       settle_ms: 250
     motor0:
-      # EXEMPLE de broche : origine_remplissage_y.
+      # EXEMPLE de broche : origine_remplissage_y (fin de course contre le tampon côté mur).
       limit_neg_pin: gpio.36:low
       hard_limits: false
       pulloff_mm: 2
@@ -78,31 +90,43 @@ axes:
     # 175 à 575 mm (fiche).
     max_travel_mm: 400
     soft_limits: true
+    # Prise d'origine vers le bas, sur fdc_plateau_bas (plateau en bas à 175 mm).
     homing:
       cycle: 1
-      positive_direction: true
-      mpos_mm: 578
+      positive_direction: false
+      mpos_mm: 175
       feed_mm_per_min: 120
       seek_mm_per_min: 1200
       settle_ms: 250
     motor0:
-      # EXEMPLE de broche : fdc_plateau_haut.
+      # EXEMPLES de broches : fdc_plateau_bas (origine), fdc_plateau_haut (butée de sécurité).
+      limit_neg_pin: gpio.17:low
       limit_pos_pin: gpio.39:low
       hard_limits: true
-      pulloff_mm: 3
+      pulloff_mm: 0
       standard_stepper:
         step_pin: gpio.26
         direction_pin: gpio.27
         disable_pin: NO_PIN
 
   a:
-    # 8 000 pas par tour, rapport 40 (fiche) : 320 000 pas par tour du plateau.
-    steps_per_mm: 888.889
+    # Rapport 8 (fiche du 28/10). EXEMPLE : 8 000 pas par tour du pilote → 177,778 pas par degré.
+    steps_per_mm: 177.778
     max_rate_mm_per_min: 7200
     acceleration_mm_per_sec2: 120
     max_travel_mm: 72000
     soft_limits: false
+    # Zéro sur le capteur Hall (un aimant par tour).
+    homing:
+      cycle: 1
+      positive_direction: true
+      mpos_mm: 0
+      feed_mm_per_min: 360
+      seek_mm_per_min: 3600
+      settle_ms: 250
     motor0:
+      # EXEMPLE de broche : hall_rotation_plateau.
+      limit_pos_pin: gpio.5:low
       hard_limits: false
       pulloff_mm: 0
       standard_stepper:
@@ -140,7 +164,7 @@ axes:
     steps_per_mm: 40
     max_rate_mm_per_min: 6000
     acceleration_mm_per_sec2: 400
-    max_travel_mm: 320
+    max_travel_mm: 325
     soft_limits: true
     homing:
       cycle: 1
@@ -150,7 +174,7 @@ axes:
       seek_mm_per_min: 2400
       settle_ms: 250
     motor0:
-      # EXEMPLE de broche : origine_pousseur.
+      # EXEMPLE de broche : origine_pousseur (fin de course en bout de rail côté fût = rentré).
       limit_neg_pin: gpio.35:low
       hard_limits: false
       pulloff_mm: 2
@@ -159,16 +183,14 @@ axes:
         direction_pin: gpio.4
         disable_pin: NO_PIN
 
-# Sorties (pi/reglages/fluidnc.yaml → sorties). EXEMPLE de broche.
-#   digital0 : courant_reduit_barres.
-user_outputs:
-  digital0_pin: gpio.2
-
-# Entrées lues par le Pi dans « Pn: » (pi/reglages/fluidnc.yaml → entrees). EXEMPLE de broche.
+# Entrées lues par le Pi dans « Pn: » (pi/reglages/fluidnc.yaml → entrees). EXEMPLES de broches.
 #   macro0 (lettre 0) : barriere_remplissage.
+#   macro1 (lettre 1) : alarme_barres (ALM du pilote des barres).
 control:
   macro0_pin: gpio.32:low
+  macro1_pin: gpio.2:low
 
-# Aucune macro : cette broche sert seulement à être lue.
+# Aucune macro : ces broches servent seulement à être lues.
 macros:
   macro0: ""
+  macro1: ""

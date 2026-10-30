@@ -1354,8 +1354,9 @@ class VerrousRemplissage(Modele):
     # Règle 3 : plateau au-dessus de tant : barres ouvertes (hw ≥ barres_ouvertes_min).
     barres_ouvertes_au_dessus_z: float
     barres_ouvertes_min: float
-    # Règle 4 : pousseur sorti seulement plateau dans une de ces plages (dessus du plateau).
-    pousseur_plages_z: list[Intervalle] = Field(min_length=1)
+    # Règle 4 : pousseur sorti seulement plateau en bas (plateau_en_bas_z) et au plus à tant
+    # (dessus du plateau) : la plus stricte des deux s'applique.
+    pousseur_plateau_max_z: float
     # Règle 5 : plateau au-dessus de tant seulement bras du galet rangé.
     galet_plateau_max_z: float
     # Règle 6 (spray, tâche 39) : plateau ≤ min(spray_plateau_max_z ; spray_bord_max_z − h),
@@ -1363,12 +1364,16 @@ class VerrousRemplissage(Modele):
     spray_plateau_max_z: float
     spray_bord_max_z: float
     spray_entraxe_min_m: float = Field(gt=0)
-    # Règle 7 : chariot du fût pas en place : bout du chariot (y + bout_y_m) ≤
+    # Règle 7 : chariot du fût pas en place : bout du chariot côté allée (y + bout_y_m) ≤
     # poste_fut → remplissage_y_bout_max.
     bout_y_m: float = Field(ge=0)
-    # Règle 9 (préhension) : pas de descente de la tête sous tant au-dessus du chariot, sauf
-    # barres ouvertes et tête du micropore rentrée.
+    # Règle 9 (préhension) : pas de descente de la face de la tête sous tant au-dessus du
+    # chariot, sauf barres ouvertes et tête du micropore rentrée (et en mode couvercles).
+    # « Au-dessus du chariot » : axe de la tête à moins de emprise_demi_x_m de axe_x, et en y entre
+    # y − emprise_mur_y_m et y + bout_y_m (y : axe du plateau).
     prehension_libre_z: float
+    emprise_demi_x_m: float = Field(gt=0)
+    emprise_mur_y_m: float = Field(ge=0)
 
 
 class BarresRemplissage(Modele):
@@ -1377,9 +1382,11 @@ class BarresRemplissage(Modele):
     origine_hw_m: float
     # « Ouvertes » pour les gestes (hw, m).
     ouvertes_m: float
+    # Centrage en position : barres à formats → centrage_hw_m + tant (m).
+    jeu_centrage_m: float = Field(ge=0)
     # Lâcher pendant la prise double : chaque barre s'écarte de tant (m).
     lacher_m: float = Field(gt=0)
-    # Dans la rainure sous la jupe du seau du dessus : entraxe = Ø haut + jeu.
+    # Contre la lèvre du seau du dessous (prise double) : entraxe = Ø haut + jeu.
     jeu_rainure_m: float = Field(ge=0)
     # Ouverture complète (s), pour mémoire et pour le simulateur.
     ouverture_s: float = Field(gt=0)
@@ -1393,13 +1400,15 @@ class VitessesRemplissage(Modele):
     rotation: float = Field(gt=0)
     barres: float = Field(gt=0)
     pousseur: float = Field(gt=0)
-    # Barres au contact du seau (courant réduit), plateau qui monte au contact.
+    # Barres qui centrent le seau, plateau qui monte au contact.
     centrage: float = Field(gt=0)
     contact: float = Field(gt=0)
 
 
 class PriseDoubleRemplissage(Modele):
-    """Séparation de deux seaux emboîtés posés ensemble (barrière coupée après la pose)."""
+    """Séparation de deux seaux emboîtés posés ensemble (barrière coupée après la pose) : la
+    tête monte de remontee_tete_m, descend de redescente_tete_m, tire de tirage_m ; le plateau
+    remonte de remontee_plateau_m à la fin."""
 
     remontee_tete_m: float = Field(gt=0)
     redescente_tete_m: float = Field(gt=0)
@@ -1430,18 +1439,14 @@ class PeseeRemplissage(Modele):
 
 
 class FileRemplissage(Modele):
-    """Une file de rangement (place exacte : Stockage, tâche 35)."""
+    """Une file de rangement (place exacte : Stockage, tâche 35), poussée plateau en bas."""
 
     y: float
-    bande: Literal["haut", "bas"]
     # Le pousseur va jusque-là pour pousser le seau sur la file (m, axe « pousseur »).
     pousseur_m: float
 
 
 class RangementRemplissage(Modele):
-    # Bande du haut : plateau à cette hauteur, dans cette plage.
-    bande_haut_plateau_z: float
-    bande_haut_plage_z: Intervalle
     files: dict[Nom, FileRemplissage] = Field(default_factory=dict)
 
 
@@ -1450,7 +1455,7 @@ class FormatRemplissage(Modele):
 
     # Plateau à la pose du seau vide (dessus, m) : bord d'un seul seau sous la barrière.
     pose_plateau_z: float
-    # Barres au contact du corps, sous le rebord (hw, m).
+    # Barres au contact du corps, sous le rebord (hw, m) : centrage en position.
     centrage_hw_m: float
 
 
@@ -1515,12 +1520,7 @@ class Remplissage(Modele):
         for nom, (debut, fin) in [
             ("verrous → libre_poste_y", v.libre_poste_y),
             ("verrous → joues_barres", v.joues_barres),
-            ("rangement → bande_haut_plage_z", self.rangement.bande_haut_plage_z),
             *((f"verrous → anneaux_y n° {i}", a) for i, a in enumerate(v.anneaux_y, start=1)),
-            *(
-                (f"verrous → pousseur_plages_z n° {i}", p)
-                for i, p in enumerate(v.pousseur_plages_z, start=1)
-            ),
         ]:
             if debut >= fin:
                 erreurs.append(f"{nom} : du plus petit au plus grand")
@@ -1530,9 +1530,6 @@ class Remplissage(Modele):
             erreurs.append("ecarte_y doit être au-delà de poste_y")
         if v.barres_ouvertes_min > self.barres.ouvertes_m:
             erreurs.append("barres → ouvertes_m doit être au moins verrous → barres_ouvertes_min")
-        bas, haut = self.rangement.bande_haut_plage_z
-        if not bas <= self.rangement.bande_haut_plateau_z <= haut:
-            erreurs.append("rangement → bande_haut_plateau_z hors de bande_haut_plage_z")
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self
@@ -2061,9 +2058,9 @@ class Machine(Modele):
             dans(nom, "remplissage_y", getattr(r, nom))
         dans("couvercles → y", "remplissage_y", r.couvercles.y)
         dans("plateau_en_bas_z", "plateau_z", r.plateau_en_bas_z)
+        dans("verrous → pousseur_plateau_max_z", "plateau_z", r.verrous.pousseur_plateau_max_z)
         dans("couvercles → plateau_z", "plateau_z", r.couvercles.plateau_z)
         dans("inspection → plateau_z", "plateau_z", r.inspection.plateau_z)
-        dans("rangement → bande_haut_plateau_z", "plateau_z", r.rangement.bande_haut_plateau_z)
         dans("pousseur_rentre_m", "pousseur", r.pousseur_rentre_m)
         dans("barres → ouvertes_m", "barres", r.barres.ouvertes_m)
         for nom, file in r.rangement.files.items():

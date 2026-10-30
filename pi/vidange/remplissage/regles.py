@@ -6,6 +6,7 @@
     regles.refus_bras_galet(pose)                     # pour la fermeture des seaux (tâche 41)
     regles.refus_bras_spray(pose, hauteur_seau)       # pour le spray (tâche 39)
     regles.refus_descente_prehension(pose, micropore_rentre)   # pour la préhension
+    regles.au_dessus_du_chariot(x, y, pose)           # l'axe de la tête est-il au-dessus ?
 
 Une Pose dit où est le chariot : y (axe du plateau), z (dessus du plateau), a (rotation, °),
 barres (hw : axe d'une barre à l'axe du plateau), pousseur. Les règles :
@@ -13,14 +14,17 @@ barres (hw : axe d'une barre à l'axe du plateau), pousseur. Les règles :
    et entre 0,41 et 0,59 : le plateau descend avant de quitter le poste, ne remonte qu'au poste ;
 2. barres entre les joues de l'élévateur (hw 0,235-0,255) : plateau ≤ 0,48 ;
 3. plateau au-dessus de 0,515 : barres ouvertes (hw ≥ 0,29) ;
-4. pousseur sorti seulement plateau en bas ;
+4. pousseur rentré dès que le plateau n'est pas en bas, et sorti seulement plateau ≤ 0,20
+   (partout : la tête du micropore est sur le chariot) ;
 5. plateau au-dessus de 0,26 seulement bras du galet rangé ;
 6. bras du spray sorti : plateau ≤ min(0,50 ; 0,71 − h), entraxe des barres > 0,50 ;
-7. chariot du fût pas en place : bout du chariot à y ≤ 0,875 ;
+7. chariot du fût pas en place : bout du chariot côté allée (axe + 0,40) à y ≤ 0,875, donc axe
+   du plateau à y ≤ 0,475 ;
 8. le chariot ne roule près du poste (y < recul de l'agitateur) que si le Mycélium le permet
    (agitateur au garage manivelle en haut, ou au dosage manivelle en bas) ; et le plateau ne
    monte au poste qu'agitateur au garage, sauf pour le dosage (son bocal est au-dessus) ;
-9. la préhension ne descend sous ≈ 0,84 qu'avec barres ouvertes et tête du micropore rentrée.
+9. la préhension ne descend sous ≈ 0,84 au-dessus du chariot qu'avec barres ouvertes et tête du
+   micropore rentrée (sauf en mode couvercles : vidange.remplissage.remplissage).
 Un mouvement est vérifié point par point (tous les pas_verification_m), axes ensemble en ligne
 droite comme le fait FluidNC. Tous les chiffres viennent de machine.yaml (`remplissage`).
 
@@ -138,10 +142,13 @@ class ReglesRemplissage:
                 f"barres ouvertes seulement (hw ≥ {_m(v.barres_ouvertes_min)}, elles sont à "
                 f"{_m(pose.barres)})"
             )
-        if not self.pousseur_rentre(pose) and not any(
-            debut - _EGAL <= pose.z <= fin + _EGAL for debut, fin in v.pousseur_plages_z
+        if not self.pousseur_rentre(pose) and (
+            not self.en_bas(pose) or pose.z > v.pousseur_plateau_max_z + _EGAL
         ):
-            return f"pousseur sorti avec le plateau à {_m(pose.z)} : il doit être rentré"
+            return (
+                f"pousseur sorti avec le plateau à {_m(pose.z)} : il ne sort que plateau en bas "
+                f"(≤ {_m(min(self.reglages.plateau_en_bas_z, v.pousseur_plateau_max_z))})"
+            )
         if pose.z > v.galet_plateau_max_z + _EGAL and contexte.bras_galet_range is not True:
             etat = "pas connu" if contexte.bras_galet_range is None else "pas rangé"
             return (
@@ -157,7 +164,8 @@ class ReglesRemplissage:
             if bout > self.bout_max_y + _EGAL:
                 return (
                     f"chariot du fût pas en place : le bout du chariot de remplissage doit rester "
-                    f"à y ≤ {_m(self.bout_max_y)} (il serait à {_m(bout)})"
+                    f"à y ≤ {_m(self.bout_max_y)} (axe du plateau ≤ "
+                    f"{_m(self.bout_max_y - v.bout_y_m)}) ; il serait à {_m(bout)}"
                 )
         return None
 
@@ -226,6 +234,16 @@ class ReglesRemplissage:
         if pose.z > limite + _EGAL:
             return f"bras du spray : plateau ≤ {_m(limite)} (il est à {_m(pose.z)})"
         return None
+
+    def au_dessus_du_chariot(self, x: float, y: float, pose: Pose | None) -> bool:
+        """L'axe de la tête de préhension (x, y) est au-dessus du chariot qui est à `pose`
+        (None : n'importe où sur son rail, quand il bouge)."""
+        v = self.verrous
+        if abs(x - self.reglages.axe_x) > v.emprise_demi_x_m + _EGAL:
+            return False
+        if pose is None:
+            return True
+        return pose.y - v.emprise_mur_y_m - _EGAL <= y <= pose.y + v.bout_y_m + _EGAL
 
     def refus_descente_prehension(self, pose: Pose, micropore_rentre: bool | None) -> str | None:
         """La préhension ne descend sous ≈ 0,84 au-dessus du chariot que barres ouvertes et

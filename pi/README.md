@@ -550,10 +550,12 @@ prehension.lancer(lambda: lavage.geste_laver_seau("seau_a"))  # la tête tient l
   geste : alarme, la tête et le pont s'arrêtent.
 - Essai sur la machine : `vidange-lavage etat | sortie NOM S | remplir | vider | brosses | laver FORMAT x y z`.
 
-## Remplissage (tâche 34)
+## Remplissage (tâches 34 et 34 bis)
 
-Le chariot des seaux (module gelé le 27/10/2026), sur la carte n° 2 (« chariot ») : avance en y, plateau
-(montée, rotation), barres, pousseur, balance du plateau (`pesee_plateau_remplissage`), barrière lumineuse.
+Le chariot des seaux (module gelé le 27/10/2026, corrigé le 28/10), sur la carte n° 2 (« chariot ») : avance
+en y, plateau (montée, rotation), barres, pousseur, balance du plateau (`pesee_plateau_remplissage`),
+barrière lumineuse, alarme ALM du pilote des barres. Prises d'origine : montée vers le bas, avance contre le
+tampon côté mur, pousseur côté fût (zéro = rentré), rotation sur un capteur Hall.
 
 ```
 vidange-simulateur remplissage           # 2 seaux : posés (prise double), remplis, dosés, rangés
@@ -562,15 +564,18 @@ vidange-remplissage --faux etat          # l'outil d'essai, sur un faux FluidNC
 
 - **Verrous** (`ReglesRemplissage`, règles du fichier des positions) : anneaux du fût (plateau en bas hors du
   poste et du milieu), joues de l'élévateur, barres ouvertes au-dessus de 0,515, pousseur rentré dès que le
-  plateau monte, bras du galet, spray, chariot du fût absent, Mycélium (rouler près du poste, monter au
-  poste), préhension. Un trajet est vérifié tous les 5 mm. Les gestes font d'eux-mêmes les détours.
+  plateau n'est pas en bas (il ne sort que plateau ≤ 0,20), bras du galet, spray, chariot du fût absent
+  (axe du plateau ≤ 0,475), Mycélium (rouler près du poste, monter au poste), préhension (règle 9, branchée
+  dans la préhension par `brancher_prehension`, sauf en mode couvercles). Un trajet est vérifié tous les
+  5 mm. Les gestes font d'eux-mêmes les détours.
 - **Gestes** (`Remplissage`) : `geste_aller_a_la_pose`, `geste_poser_seau` (joué par la préhension :
-  barrière coupée → prise double séparée, la tête garde le seau du dessus), `geste_orienter_anse` (QR du
-  flanc, oreilles à 45° des barres), `geste_centrer`, `geste_ramener_au_poste`, `tourner_seau` (griffe),
-  `geste_ranger`, `geste_mode_couvercles`, `geste_mode_inspection`.
+  barrière coupée → prise double séparée dans l'ordre a) à h), le plateau fixe avant e, la tête garde le
+  seau du dessus), `geste_orienter_anse` (QR du flanc, oreilles à 45° des barres), `geste_centrer` (en
+  position ; l'alarme ALM des barres arrête le geste), `geste_ramener_au_poste`, `tourner_seau` (griffe),
+  `geste_ranger` (plateau en bas), `geste_mode_couvercles`, `geste_mode_inspection`.
 - **Pour les autres** : `etat`, `ecarter`, `amener_au_dosage` (Mycélium) ; `regler_barres`, `ecart_barres`,
   `chariot_en_place`, `barriere_coupee` (retourneur du Lavage) ; `seau_au_poste`, `tourner_seau` (Griffe) ;
-  `refus_bras_galet` (tâche 41), `refus_bras_spray` (39), `refus_descente_prehension` (Préhension).
+  `refus_bras_galet` (tâche 41), `refus_bras_spray` (39), `refus_prehension` (Préhension).
 - **Registre** : au rangement, le type du seau et son poids plein (`mesures`, `poids_seau_plein`) ; les doses
   et la variété viennent du Mycélium.
 - Cases vides : bras du galet, bras du spray, tête du micropore (prudents : refusés tant qu'ils ne sont pas

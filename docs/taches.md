@@ -721,7 +721,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   Simulateur : un scénario `remplissage` : seau vide posé, prise double séparée, anse orientée, versements, dosage avec
   l'agitateur, rangement. Tests de chaque règle de position, prise double qui échoue (deux seaux sur la balance),
   barrière coupée, chariot du fût absent, ordre avec l'agitateur. Outil d'essai et procédure sur le vrai matériel.
-- [ ] **34 bis. Remplissage : corrections après la tâche 34** — Modèle : Opus, effort moyen. Même branche de travail
+- [x] **34 bis. Remplissage : corrections après la tâche 34** — Modèle : Opus, effort moyen. Même branche de travail
   que d'habitude (une PR). Tout vient des réponses à la PR n° 43, déjà dans `docs/decisions.md` (section
   « Remplissage », points 1 à 11) : les lire d'abord. Trois erreurs venaient des règles recopiées ici, pas du code.
   Les chiffres restent dans les réglages, marqués `exemple: true`.
@@ -749,6 +749,14 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   Tests : chacun des 7 points (dont prise double dans le nouvel ordre, poussée refusée plateau > 0,20, file refusée
   au-delà de 0,475 sans chariot du fût, prise d'origine vers le bas, ALM des barres pendant le centrage, préhension
   refusée barres fermées hors mode couvercles). « Testé sur le vrai matériel : non ».
+- [ ] **34 ter. Remplissage : ordre de la pose et de la prise double** — Modèle : Sonnet, effort moyen. Refaire la
+  pose d'un seau vide et la prise double dans l'ordre du point 5 de la section « Remplissage » de `docs/decisions.md`
+  (corrigé le 30/10 au soir ; il remplace l'ordre a) à h) de la tâche 34 bis) : barres à l'approche (hw 0,225)
+  plateau ≤ 0,48 AVANT la pose, plateau qui monte jusqu'au contact lu par la balance, centrage, puis prise double
+  a) à i) (le plateau descend de 5 cm en b ; plus de montée de 2 cm de la tête). Courses en réglages (`exemple: true`).
+  Les barres ne se rouvrent au-delà de 0,235 qu'après la descente du plateau ≤ 0,48. Mettre à jour le scénario du
+  simulateur et la procédure d'essai. Tests : l'ordre exact de la pose et de a) à i), prise double d'un seau B
+  réussie (plus d'alarme), hw toujours sous 0,235 pendant la prise double, contact lu par la balance.
 - [ ] 35. Stockage
 - [ ] 36. Portique
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**

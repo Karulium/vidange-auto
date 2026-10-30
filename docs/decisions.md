@@ -304,13 +304,22 @@ si l'une pose problème, elle le dit dans sa PR.
   4. **Pousseur (correction d'une erreur de recopie, confirmé par le fil Remplissage)** : son zéro est le fin de
      course **en bout de rail côté fût**, et c'est la position « rentré ». Il pousse **toujours vers le stockage**,
      course 0,325 : la palette va de −0,165 (rentré) à +0,16 de l'axe du plateau. Il n'est pas rentré « au milieu ».
-  5. **Ordre de la prise double** (fil Remplissage, page Barres séparatrices v4). Le plateau ne bouge pas avant e :
-     a) la tête monte de 2 cm ; b) lâcher : chaque barre s'écarte de 1,5 cm ; c) la tête descend de 4,8 cm (2,8 cm
-     plus bas qu'à la pose ; les deux seaux emboîtés descendent avec elle, la rainure du seau du haut arrive au
-     niveau des barres) ; d) les barres se resserrent contre la lèvre du seau du dessous (entraxe = Ø haut + 6 mm) ;
-     e) le plateau monte toucher le fond du seau du dessous ; f) la tête remonte et emporte le seau du haut ; g) lâcher ;
-     h) le plateau remonte de 2,8 cm. Contrôle : faisceau libre ET un seul seau sur la balance, sinon alarme. Puis
-     centrage et suite normale. Les courses (2 ; 1,5 ; 4,8 ; 2,8 cm) sont des réglages, à vérifier sur la maquette.
+  5. **Ordre de la pose et de la prise double** (fil Remplissage, corrigé le 30/10 au soir après les questions de la
+     PR n° 45 ; remplace l'ordre de la page Barres séparatrices v4, qui faisait descendre la tête avec le plateau
+     collé au seau). Les barres ne traversent la zone hw 0,235-0,255 que plateau ≤ 0,48, dans les deux sens.
+     - Pose simple : 1) plateau ≤ 0,48, barres à l'approche hw 0,225 ; 2) le plateau monte jusqu'au contact (balance),
+       B ≈ 0,5125 ; 3) centrage : les barres serrent sur le seau (en position, point 6) ; 4) faisceau libre = seau
+       seul, coupé = prise double. Les barres ne se rouvrent au-delà de 0,235 qu'après la descente du plateau ≤ 0,48.
+     - Prise double (barres déjà serrées, centrage fait ; contact Hc ≈ 3 cm plus bas qu'un seau seul, B ≈ 0,4825) :
+       a) lâcher (+1,5 cm par barre) ; b) le plateau descend de 5 cm (Hc − 0,05) ; c) la tête descend de 2,8 cm (lèvre
+       du seau du dessous au niveau de la rainure des barres) ; d) les barres serrent sur la lèvre (entraxe = Ø haut
+       + 6 mm) ; e) le plateau monte jusqu'au contact du fond (≈ Hc − 0,028) ; f) la tête remonte avec le seau du haut
+       (≤ 35 N par barre, sinon alarme) ; g) lâcher ; h) le plateau monte de 2,8 cm ; i) contrôle : faisceau libre et
+       un seul seau sur la balance, sinon alarme ; puis centrage et suite comme un seau seul. Pendant toute la prise
+       double, hw reste sous 0,235 : aucune traversée de la zone. Courses en réglages, à vérifier sur la maquette.
+     - Réponses à la PR n° 45 : (1) la prise double d'un seau B n'est plus bloquée, puisque les barres traversent la
+       zone avant la pose ; (2) oui, au départ de la prise double les barres sont déjà serrées (c'est pourquoi le
+       premier geste est « lâcher »). À faire dans la tâche 34 ter.
   6. **Pas de courant réduit** (réponse du fil Implantation, 30/10) : le pilote boucle fermée de tous les axes
      (CL57T V4.1 ou équivalent) n'a que PUL, DIR, ENA et une sortie d'alarme ALM ; le courant se règle une fois pour
      toutes. Le centrage se fait donc **en position** (`centrage_hw_m` du format + un petit jeu en réglage). La
