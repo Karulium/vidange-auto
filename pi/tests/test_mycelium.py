@@ -263,6 +263,16 @@ def test_verrou_du_chariot_au_simulateur():
         assert mycelium.dosage_en_cours() and not mycelium.camera_peut_pivoter()
 
 
+def test_position_de_l_agitateur_pour_la_prehension():
+    with Simulateur(REGLAGES, LISTE, "dosage_mycelium") as simu:
+        mycelium = mycelium_du_simulateur(simu)
+        # Au garage, manivelle en haut, arrêté.
+        assert mycelium.x_agitateur() == pytest.approx(0.565)
+        assert not mycelium.manivelle_en_bas()
+        simu.etat_axes.positions["agitateur_x"] = 0.865
+        assert mycelium.x_agitateur() == pytest.approx(0.865)
+
+
 def test_agitateur_refuse_de_rouler_chariot_pas_ecarte():
     with Simulateur(REGLAGES, LISTE, "dosage_mycelium") as simu:
         mycelium = mycelium_du_simulateur(simu)

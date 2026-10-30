@@ -18,8 +18,10 @@ Laver une face (la tête tient le couvercle, la face à laver vers le bas) :
    lentement (10 à 20 tr/min), vide surveillé ;
 5. le repère est contrôlé par tranches de controle_s : à plus de 10° de l'angle commandé, le
    couvercle glisse (noyau arrêté, remontée de 2 mm, reprise) ; alerte au 2e glissement ;
-6. repère ramené à son angle de photo, remontée, égouttage, 2e photo : repère à ± 10°, sinon
-   alerte et couvercle « à vérifier » (le lavage continue).
+6. repère ramené à son angle de photo, rinçage propre (comme pour les seaux : eau propre dans
+   les rampes, la pompe garde le même niveau, l'eau du réseau remet le flotteur haut) ;
+7. remontée, égouttage, 2e photo : repère à ± 10°, sinon alerte et couvercle « à vérifier »
+   (le lavage continue).
 Face « dessus » (couvercle retourné) : le repère est dessous, la caméra du plafond ne le voit
 pas : ni orientation ni contrôle de glissement (le vide reste surveillé).
 
@@ -406,11 +408,13 @@ class LavageCouvercles:
                 {"z": p.pose.z + c.remontee_glissement_m},
             )
             a_ref, repere_ref = p.pose.a, mesure
-        # 6. Repère ramené à son angle de photo, remontée, égouttage, 2e photo.
+        # 6. Repère ramené à son angle de photo, rinçage propre (comme pour les seaux).
         if repere_visible:
             cible = a_ref + c.sens_repere * ecart_angle(repere_photo, repere_ref)
             yield from self._tourner(self._angle_proche(cible), "repère ramené à son angle")
         self.eau.arreter_arrosage()
+        yield from self.eau.geste_rincer()
+        # 7. Remontée, égouttage, 2e photo.
         resultat = yield Pas(
             "remonter le couvercle",
             {"z": p.reglages.haut_z},

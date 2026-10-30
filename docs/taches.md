@@ -531,7 +531,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   conditions (manivelle en bas, course déclarée 7 cm ; mors ouverts pour poser, serrés pour prendre ; griffe en
   butée haute) ; refus de passer la tête au-dessus du bocal au garage manivelle en haut ; la griffe peut être dans
   la bande `garage_glissiere` seulement en butée haute. Tests de chaque condition refusée.
-- [ ] **37 ter. Préhension : bocal de l'agitateur partout sur la glissière ; rinçage des couvercles** — Modèle : Sonnet, effort bas.
+- [x] **37 ter. Préhension : bocal de l'agitateur partout sur la glissière ; rinçage des couvercles** — Modèle : Sonnet, effort bas.
   Réponse à la PR n° 37 (`docs/decisions.md`, Préhension) : la zone interdite au-dessus du bocal (manivelle pas en
   bas) suit la position de l'agitateur (x du bocal = position de la glissière, y 0,150), du garage au dosage ; sans
   information sur l'agitateur, toute la glissière est interdite à la tête. Tests : agitateur au demi-tour et au

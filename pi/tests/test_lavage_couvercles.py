@@ -126,6 +126,33 @@ def test_deux_couvercles_laves_et_retournes_au_simulateur():
     assert abs(fin - debut) == pytest.approx(15 * 6 * 0.5)
 
 
+def test_couvercle_rince_a_la_fin_de_chaque_face():
+    rincages = []
+
+    def regler(couvercles):
+        rincer = couvercles.eau.geste_rincer
+        p = couvercles.prehension
+
+        def geste_rincer():
+            # Bain arrêté, couvercle tenu, encore posé sur le noyau (avant la remontée).
+            rincages.append((couvercles.eau.arrosage_en_marche(), p.objet.sorte, p.pose.z))
+            yield from rincer()
+
+        couvercles.eau.geste_rincer = geste_rincer
+
+    planning, couvercles = jouer_couvercles(regler)
+    assert planning.fini, planning.probleme
+    # Comme pour les seaux : rinçage propre à la fin de chaque face (2 couvercles, 2 faces),
+    # puis la pompe garde le même niveau et l'eau du réseau remet le flotteur haut.
+    eau = couvercles.eau.signaux
+    assert eau.historique.count("rincage_lavage oui") == 2 * 2
+    assert eau.historique.count("eau_reseau_lavage oui") == 1 + 2 * 2
+    assert len(rincages) == 4
+    for arrosage, sorte, z in rincages:
+        assert not arrosage and sorte == "couvercle"
+        assert z < COUVERCLES.contact_trop_haut_z
+
+
 def test_couvercle_pose_decale_et_repere_a_son_angle():
     planning, couvercles = jouer_couvercles()
     assert planning.fini, planning.probleme
