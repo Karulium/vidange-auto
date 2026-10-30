@@ -642,9 +642,85 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 
 ## Partie 4 : les autres modules, au fil des gels
 
-Avant chaque tâche, le projet recopie ici les gestes, positions et règles du module.
+Avant chaque tâche, le projet recopie ici les gestes, positions et règles du module. Les modules de cette partie
+passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les modules.
 
-- [ ] 34. Remplissage
+- [ ] **34. Remplissage : le chariot des seaux (avance, plateau, rotation, barres, pousseur, balance)** — Modèle :
+  Opus, effort moyen. **Fait avant le solveur (tâche 23)**, qui a besoin des gestes de tous les modules.
+  Sources (recopiées ici le 30/10/2026) : fiche du module « Remplissage », **gelé le 27/10/2026**, fichier des positions
+  interdites du chariot (`remplissage/fiche/regles-positions.md`, v3.44 à 3.46, règles 1 à 11), plan de commande v223.
+  Les chiffres vont dans `pi/reglages/machine.yaml`, `docs/entrees-sorties.yaml` et `fluidnc/`, jamais dans le code.
+
+  *Ce que fait le module.* Le chariot de remplissage roule en y entre le poste (sous la griffe) et le stockage. Il porte
+  un plateau qui monte, descend et tourne, deux barres séparatrices qui tiennent ou centrent le seau, un pousseur qui
+  range le seau plein sur sa file, et une balance. Il sert aussi au Mycélium (dosage), au Lavage (retourneur des
+  couvercles) et à l'inspection des bocaux. Les modules déjà écrits l'appellent par des interfaces avec un faux
+  (`ChariotRemplissage` du Mycélium, `Retourneur` du lavage des couvercles, verrous de la Préhension) : cette tâche
+  écrit le vrai et garde les faux pour les tests.
+
+  *Moteurs et capteurs* (carte 2 ; à ajouter, marqués `exemple: true` tant que le plan de câblage n'est pas arrivé) :
+  - Avance (y), montée du plateau (avec frein, maintien réduit), rotation du plateau (axe rotatif FluidNC, rapport 40,
+    8 000 pas par tour), pousseur (course 0,32, de −0,16 à +0,16), barres (vis T8 au pas de 8, ouverture complète
+    ≈ 2,3 s). Le vérin du galet (fermeture) est sur cette carte mais appartient à la tâche 41.
+  - Fins de course, dont le **fin de course haut** du plateau (coupe la montée vers 0,578) et l'**origine des barres**
+    côté mur, actionnée par la plaque de barre à un écartement hw ≈ 0,309 (décalage réglé dans le Pi).
+  - **Barrière lumineuse** sur la barre côté mur, à 0,7315 (entrée de la carte 2).
+  - **Balance** 30 kg du plateau : lue par sa carte RS485 (`pesee_plateau_remplissage`, tâche 22 bis).
+
+  *Positions* (repère du portique) : poste y 0,135 (la griffe verse) ; dosage du mycélium y 0,155 ; recul pendant le
+  passage de l'agitateur y ≥ 0,375 ; pose du seau vide et du couvercle y 0,50 ; files de rangement : réglages (les places
+  exactes viennent du Stockage, tâche 35 ; en lot C, arrêt à y 0,205 pour la bande du haut côté paroi). Plateau : course
+  0,175 à **0,575 au plus, toujours** (règle 9, butée logicielle). Barres : écartement hw de 0,1195 à 0,305 (axe d'une
+  barre à l'axe du plateau).
+
+  *Règles de position* (verrous du logiciel : ils protègent la machine, pas les personnes) :
+  1. Anneaux du fût : en y 0,14-0,41 et 0,59-0,86, plateau en bas (dessus ≤ 0,18) ; libre au poste et entre 0,41 et 0,59.
+     Le plateau descend avant de quitter le poste et ne remonte qu'au poste. Les files 0,215 et 0,785 se font plateau en bas.
+  2. Barres entre 0,235 et 0,255 (joues de l'élévateur) : seulement plateau ≤ 0,48.
+  3. Plateau au-dessus de 0,515 : barres **ouvertes** seulement (hw ≥ 0,29). (Prise d'un seau B à 0,5125, barres à
+     0,1195 : permise.)
+  4. Pousseur : **rentré** dès que le plateau n'est pas en bas, et toujours rentré au-dessus de 0,20.
+  5. Bras du galet (fermeture) : ne tourne que plateau ≤ 0,26 ; rangé il ne gêne rien (règle de la tâche 41, à vérifier
+     ici comme verrou : plateau qui monte au-dessus de 0,26 seulement bras rangé).
+  6. Spray : pendant le pivot du bras et la pulvérisation, plateau ≤ min(0,50 ; 0,71 − h) ; le bras ne bouge que barres
+     ouvertes à plus de 0,50 d'entraxe (fonction de verrou pour la tâche 39).
+  7. Chariot du fût pas « en place » : le chariot reste au poste ou aux files 1 et 2 (bout à y ≤ 0,875).
+  8. Mycélium (déjà écrit côté Mycélium, à brancher ici) : le chariot ne roule vers le poste ou depuis le poste que si
+     l'agitateur est au garage manivelle en haut, ou au dosage manivelle en bas ; ordre pour un seau : poste → recul
+     y 0,375 → agitateur au dosage → poste… (fichier des positions, règle 11).
+  9. Préhension : elle ne descend sous ≈ 0,84 au-dessus du chariot que barres ouvertes et tête du micropore rentrée
+     (fonction à fournir à la Préhension).
+
+  *Gestes* :
+  - **Poser un seau vide** (avec la Préhension) : chariot à y 0,50, plateau monté ; la Préhension pose le seau ; la balance
+    vérifie qu'il n'y en a **qu'un**. **Prise double** (faisceau de la barrière coupé après la pose) : la tête remonte de
+    2 cm ; lâcher (barres + 1,5 cm chacune) ; la tête redescend de 4,8 cm ; barres serrées dans la rainure sous la jupe
+    du seau du dessus (entraxe = Ø haut + 6 mm) ; le plateau monte toucher le fond du seau du dessous ; la tête remonte
+    (≈ 2 cm de tirage) ; lâcher ; le plateau remonte de 2,8 cm. Contrôle : faisceau libre ET un seul seau sur la balance,
+    sinon alarme. Efforts : séparation au plus 35 N par barre (capteur de force de la tête, sinon arrêt) ; centrage au
+    courant réduit (≈ 30 N par barre).
+  - **Ramener au poste** : plateau en bas, retour en y 0,135, plateau remonté.
+  - **Orienter l'anse** : avant de serrer les barres, le plateau tourne le seau pour mettre les oreilles de l'anse à
+    **45° (modulo 90°)** des barres, donc des files ; l'angle vient du QR du flanc (vision, tâche 22), corrigé par l'écart
+    attaches/QR enregistré pour ce seau. Cet angle est gardé jusqu'à la poussée.
+  - **Centrer** : barres au contact du corps sous le rebord, courant réduit.
+  - **Tourner pendant le versement** de la griffe ; **arrêts pour le dosage** (plateau à min(0,78 − h ; 0,575), barres
+    ouvertes, pousseur rentré).
+  - **Ranger** : le plateau s'arrête à l'angle de l'anse, puis le pousseur pousse le seau sur sa file (bande du haut :
+    plateau à 0,4985, plage 0,496-0,501 ; files du bas : plateau en bas). Le registre reçoit QR, poids, doses, variété
+    et photo.
+  - **Mode couvercles** (retourneur, tâche 21 bis) : chariot y 0,50, plateau fixe à 0,459, sans rotation ; barres
+    0,19 ↔ 0,30 ; barrière surveillée en continu (coupée = pause avec message). Remplacer le faux `Retourneur`.
+  - **Mode inspection des bocaux** : plateau fixe à 0,575, barres ouvertes, rotation libre par arrêts de 45° (la pose
+    du bocal par la Préhension est vue par sa force et par la balance, qui doivent être d'accord).
+
+  *Ce qui n'est pas dans cette tâche* : le bras du spray (39), la pose du micropore et son capteur VL6180X (40), le galet
+  de fermeture (41), les places exactes des files (Stockage, 35), la lecture du QR (vision, tâche 22 : ici, on appelle
+  sa fonction).
+
+  Simulateur : un scénario `remplissage` : seau vide posé, prise double séparée, anse orientée, versements, dosage avec
+  l'agitateur, rangement. Tests de chaque règle de position, prise double qui échoue (deux seaux sur la balance),
+  barrière coupée, chariot du fût absent, ordre avec l'agitateur. Outil d'essai et procédure sur le vrai matériel.
 - [ ] 35. Stockage
 - [ ] 36. Portique
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
