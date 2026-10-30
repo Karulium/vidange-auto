@@ -54,7 +54,7 @@ CONTACT = "contact_tete"
 VANNE = "vanne_vide"
 AIMANTS = "electroaimants_capsule"
 
-Arret = Literal["vide", "choc", "appui", "appui_max"]
+Arret = Literal["vide", "choc", "appui", "appui_max", "traction"]
 # Les brosses du lavage, par leur nom court dans un Pas → axe de machine.yaml.
 BROSSES = {"noyau": "lavage_noyau", "couronne": "lavage_couronne"}
 
@@ -99,6 +99,9 @@ class Pas:
     # Appui (N) : arrêt quand il atteint appui_arret_n ; arrêt et alerte au-delà de appui_max_n.
     appui_arret_n: float | None = None
     appui_max_n: float | None = None
+    # Tirage (N) : arrêt si la tête tire plus que tant vers le haut (séparation de deux seaux
+    # emboîtés, Remplissage).
+    traction_max_n: float | None = None
     # Vissage : la rotation va à la vitesse du vissage (Z la suit).
     vissage: bool = False
     # Attente après le mouvement (s), puis pesée (médiane de plusieurs lectures).
@@ -122,6 +125,12 @@ class Resultat:
     # Appui (N) à la fin du pas, et le plus fort pendant le pas.
     appui_n: float | None = None
     appui_max_n: float | None = None
+
+
+def _surveille_la_force(pas: Pas) -> bool:
+    return pas.choc or any(
+        valeur is not None for valeur in (pas.appui_arret_n, pas.appui_max_n, pas.traction_max_n)
+    )
 
 
 class Tete(Protocol):
@@ -308,6 +317,8 @@ class TeteFluidnc:
             self._appui_max = appui if self._appui_max is None else max(self._appui_max, appui)
             if pas.vide_perte_kpa is not None and vide is not None and vide > pas.vide_perte_kpa:
                 self._arreter_sur("vide", f"vide perdu pendant « {pas.texte} » ({vide:.0f} kPa)")
+            elif pas.traction_max_n is not None and -appui > pas.traction_max_n:
+                self._arreter_sur("traction", f"traction de {-appui:.0f} N pendant « {pas.texte} »")
             elif pas.appui_max_n is not None and appui > pas.appui_max_n:
                 self._arreter_sur("appui_max", f"appui de {appui:.0f} N pendant « {pas.texte} »")
             elif pas.appui_arret_n is not None and appui >= pas.appui_arret_n:
@@ -333,11 +344,7 @@ class TeteFluidnc:
 
     def _surveille_force(self) -> bool:
         pas = self._pas
-        return (
-            pas is not None
-            and (pas.choc or pas.appui_arret_n is not None or pas.appui_max_n is not None)
-            and self._en_mouvement()
-        )
+        return pas is not None and _surveille_la_force(pas) and self._en_mouvement()
 
     def _arreter_sur(self, arret: Arret, pourquoi: str) -> None:
         self._arret = arret
@@ -451,7 +458,7 @@ class TeteFluidnc:
             self._rapports_a_l_envoi = liaison.etat.rapports_recus
             self._commandes = []
             recente = self._force_recente(8)
-        surveille = pas.choc or pas.appui_arret_n is not None or pas.appui_max_n is not None
+        surveille = _surveille_la_force(pas)
         if surveille and recente is None:
             raise ErreurEtape(
                 "pesée de la préhension sans lecture : pas de mouvement", QUOI_FAIRE_PESEE

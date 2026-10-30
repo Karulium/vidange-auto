@@ -1,0 +1,174 @@
+# Réglages FluidNC de la carte n° 2 : chariot de remplissage (avance, plateau, rotation, barres,
+# pousseur).
+#
+# ATTENTION : EXEMPLE. Ne PAS envoyer ce fichier à la vraie carte avant d'avoir mis les vraies
+# broches (plan de câblage), les vrais pas par mm et les vitesses. Chiffres de la fiche du module
+# « Remplissage » (gelé le 27/10/2026) marqués « (fiche) ».
+#
+# Repère : la position machine de chaque axe est celle de pi/reglages/machine.yaml
+# (mm = mètres × 1000 ; degrés pour la rotation), SAUF les barres (voir B).
+#   Y : avance du chariot. Position machine = y de l'axe du plateau (repère du portique).
+#       Prise d'origine sur origine_remplissage_y (référence à choisir) : EXEMPLE côté poste.
+#   Z : montée du plateau, à frein, maintien réduit (fiche). Position machine = DESSUS du plateau.
+#       Prise d'origine en haut, sur le fin de course fdc_plateau_haut qui coupe vers 578 mm
+#       (fiche) ; limite logicielle haute à 575 mm, TOUJOURS (règle 9 du fichier des positions).
+#       ATTENTION : la prise d'origine fait MONTER le plateau (question de la PR de la tâche 34).
+#   A : rotation du plateau, axe rotatif (rapport 40, 8 000 pas par tour : fiche → 888,889 pas
+#       par degré). Pas de prise d'origine : l'angle de l'anse vient de la caméra (QR du flanc).
+#       Elle tourne sans fin pendant les versements : pas de limites logicielles.
+#   B : barres séparatrices, vis T8 au pas de 8 (fiche), ouverture complète ≈ 2,3 s. Prise
+#       d'origine côté mur sur origine_barres : la carte compte 0 là ; le Pi ajoute le décalage
+#       (machine.yaml → remplissage → barres → origine_hw_m ≈ 0,309) : position de la carte en mm
+#       = (hw − 0,309) × 1000, de −189,5 (hw 0,1195) à −4 (hw 0,305).
+#   C : pousseur, course 320 mm (fiche : −160 à +160) ; ici 0 à 320, rentré au milieu (160).
+#       Prise d'origine sur origine_pousseur (référence à choisir).
+#   Barrière lumineuse (barre côté mur, à 0,7315) : broche macro0 (lettre 0 de « Pn: »), sans
+#       macro. Courant réduit des barres : « user_outputs » digital0 (M64 / M65 par le Pi).
+#       Lettres et numéros : pi/reglages/fluidnc.yaml.
+#   Le vérin du galet (fermeture, tâche 41) est sur cette carte : il viendra avec sa tâche.
+#   À VÉRIFIER à l'essai de la carte (pi/systeme/essai-remplissage.md, étapes 1 et 2) : sens de
+#   chaque axe, origines, les lettres de « Pn: », M64/M65.
+
+name: "Vidange carte 2 - chariot de remplissage (EXEMPLE)"
+board: "ESP32 6 axes, pilotes externes (EXEMPLE)"
+
+stepping:
+  engine: RMT
+  idle_ms: 255
+  pulse_us: 4
+  dir_delay_us: 2
+  disable_delay_us: 0
+
+# Prise d'origine obligatoire à la mise sous tension (docs/decisions.md).
+start:
+  must_home: true
+
+axes:
+  shared_stepper_disable_pin: NO_PIN
+
+  y:
+    # EXEMPLE : 1600 pas par tour, courroie de 40 mm de tour.
+    steps_per_mm: 40
+    max_rate_mm_per_min: 12000
+    acceleration_mm_per_sec2: 500
+    max_travel_mm: 770
+    soft_limits: true
+    homing:
+      cycle: 2
+      positive_direction: false
+      mpos_mm: 130
+      feed_mm_per_min: 300
+      seek_mm_per_min: 3000
+      settle_ms: 250
+    motor0:
+      # EXEMPLE de broche : origine_remplissage_y.
+      limit_neg_pin: gpio.36:low
+      hard_limits: false
+      pulloff_mm: 2
+      standard_stepper:
+        step_pin: gpio.12
+        direction_pin: gpio.14
+        disable_pin: NO_PIN
+
+  z:
+    # EXEMPLE : 1600 pas par tour, vis de 5 mm.
+    steps_per_mm: 320
+    max_rate_mm_per_min: 3000
+    acceleration_mm_per_sec2: 200
+    # 175 à 575 mm (fiche).
+    max_travel_mm: 400
+    soft_limits: true
+    homing:
+      cycle: 1
+      positive_direction: true
+      mpos_mm: 578
+      feed_mm_per_min: 120
+      seek_mm_per_min: 1200
+      settle_ms: 250
+    motor0:
+      # EXEMPLE de broche : fdc_plateau_haut.
+      limit_pos_pin: gpio.39:low
+      hard_limits: true
+      pulloff_mm: 3
+      standard_stepper:
+        step_pin: gpio.26
+        direction_pin: gpio.27
+        disable_pin: NO_PIN
+
+  a:
+    # 8 000 pas par tour, rapport 40 (fiche) : 320 000 pas par tour du plateau.
+    steps_per_mm: 888.889
+    max_rate_mm_per_min: 7200
+    acceleration_mm_per_sec2: 120
+    max_travel_mm: 72000
+    soft_limits: false
+    motor0:
+      hard_limits: false
+      pulloff_mm: 0
+      standard_stepper:
+        step_pin: gpio.13
+        direction_pin: gpio.15
+        disable_pin: NO_PIN
+
+  b:
+    # Vis T8 au pas de 8 (fiche). EXEMPLE : 1600 pas par tour → 200 pas par mm.
+    steps_per_mm: 200
+    # 185,5 mm en ≈ 2,3 s (fiche) ≈ 4 800 mm/min.
+    max_rate_mm_per_min: 4800
+    acceleration_mm_per_sec2: 400
+    max_travel_mm: 190
+    soft_limits: true
+    homing:
+      cycle: 1
+      positive_direction: true
+      mpos_mm: 0
+      feed_mm_per_min: 300
+      seek_mm_per_min: 2400
+      settle_ms: 250
+    motor0:
+      # EXEMPLE de broche : origine_barres (côté mur).
+      limit_pos_pin: gpio.34:low
+      hard_limits: false
+      pulloff_mm: 2
+      standard_stepper:
+        step_pin: gpio.25
+        direction_pin: gpio.33
+        disable_pin: NO_PIN
+
+  c:
+    # EXEMPLE : 1600 pas par tour, courroie de 40 mm de tour.
+    steps_per_mm: 40
+    max_rate_mm_per_min: 6000
+    acceleration_mm_per_sec2: 400
+    max_travel_mm: 320
+    soft_limits: true
+    homing:
+      cycle: 1
+      positive_direction: false
+      mpos_mm: 0
+      feed_mm_per_min: 300
+      seek_mm_per_min: 2400
+      settle_ms: 250
+    motor0:
+      # EXEMPLE de broche : origine_pousseur.
+      limit_neg_pin: gpio.35:low
+      hard_limits: false
+      pulloff_mm: 2
+      standard_stepper:
+        step_pin: gpio.16
+        direction_pin: gpio.4
+        disable_pin: NO_PIN
+
+# Sorties (pi/reglages/fluidnc.yaml → sorties). EXEMPLE de broche.
+#   digital0 : courant_reduit_barres.
+user_outputs:
+  digital0_pin: gpio.2
+
+# Entrées lues par le Pi dans « Pn: » (pi/reglages/fluidnc.yaml → entrees). EXEMPLE de broche.
+#   macro0 (lettre 0) : barriere_remplissage.
+control:
+  macro0_pin: gpio.32:low
+
+# Aucune macro : cette broche sert seulement à être lue.
+macros:
+  macro0: ""

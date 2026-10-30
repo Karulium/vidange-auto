@@ -10,6 +10,7 @@
   vidange-simulateur lavage                    3 seaux lavés, eau comprise (« lavage »)
   vidange-simulateur lavage_couvercles         2 couvercles lavés et retournés
   vidange-simulateur lavage_bocaux             3 bocaux et capsules au lave-bocal
+  vidange-simulateur remplissage               2 seaux posés (prise double), remplis, dosés, rangés
 
 Les durées se règlent dans reglages/simulateur.yaml (vitesses des axes, délai du Go, capteurs).
 Tourne sur n'importe quel PC, sans la machine. Code de sortie 0 si le cycle va au bout, 1 sinon.
@@ -44,6 +45,8 @@ from vidange.reglages import (
     PrehensionSimulee,
     charger_reglages,
 )
+from vidange.remplissage.module import module_remplissage
+from vidange.remplissage.simulation import remplissage_du_simulateur
 from vidange.simulateur.simulateur import ErreurSimulation, Simulateur
 
 # Modules qu'on sait simuler : nom → fabrique (simulateur → module).
@@ -67,6 +70,11 @@ MODULES: dict[str, Callable[[Simulateur], Module]] = {
         bocaux_du_simulateur(simulateur), _lavage(simulateur).bocaux
     ),
 }
+# Modules simulés à plusieurs (le Remplissage avec le Mycélium, qui mène le chariot au dosage) :
+# nom → fabrique (simulateur → modules).
+GROUPES: dict[str, Callable[[Simulateur], list[Module]]] = {
+    "remplissage": lambda simulateur: _remplissage(simulateur),
+}
 # Scénario de simulateur.yaml joué par défaut avec un module (sinon : le haut du fichier).
 SCENARIOS = {
     "poste_fut": "echange_fut",
@@ -76,7 +84,18 @@ SCENARIOS = {
     "lavage": "lavage",
     "lavage_couvercles": "lavage_couvercles",
     "lavage_bocaux": "lavage_bocaux",
+    "remplissage": "remplissage",
 }
+
+
+def _remplissage(simulateur: Simulateur) -> list[Module]:
+    scenario = remplissage_du_simulateur(simulateur)
+    return [
+        module_remplissage(
+            scenario.remplissage, scenario.prehension, scenario.mycelium, scenario.plan
+        ),
+        module_mycelium(scenario.mycelium),
+    ]
 
 
 def _places(simulateur: Simulateur) -> PrehensionSimulee:
@@ -95,7 +114,9 @@ def _lavage(simulateur: Simulateur) -> LavageSimule:
 
 def main(arguments: list[str] | None = None) -> int:
     lecteur = argparse.ArgumentParser(prog="vidange-simulateur", description=__doc__.split("\n")[0])
-    lecteur.add_argument("modules", nargs="+", choices=sorted(MODULES), help="modules à rejouer")
+    lecteur.add_argument(
+        "modules", nargs="+", choices=sorted({*MODULES, *GROUPES}), help="modules à rejouer"
+    )
     lecteur.add_argument("--reglages", help="dossier des réglages (défaut : pi/reglages)")
     lecteur.add_argument(
         "--entrees-sorties",
@@ -137,7 +158,12 @@ def main(arguments: list[str] | None = None) -> int:
         reglages = reglages.model_copy(update={"simulateur": simulateur_reglages})
     try:
         with Simulateur(reglages, liste, scenario) as simulateur:
-            planning = simulateur.jouer([MODULES[nom](simulateur) for nom in noms])
+            modules: list[Module] = []
+            for nom in noms:
+                modules += (
+                    GROUPES[nom](simulateur) if nom in GROUPES else [MODULES[nom](simulateur)]
+                )
+            planning = simulateur.jouer(modules)
     except (ErreurSimulation, ErreurChef) as erreur:
         print(f"Simulation impossible : {erreur}", file=sys.stderr)
         return 2

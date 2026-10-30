@@ -645,7 +645,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 Avant chaque tâche, le projet recopie ici les gestes, positions et règles du module. Les modules de cette partie
 passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les modules.
 
-- [ ] **34. Remplissage : le chariot des seaux (avance, plateau, rotation, barres, pousseur, balance)** — Modèle :
+- [x] **34. Remplissage : le chariot des seaux (avance, plateau, rotation, barres, pousseur, balance)** — Modèle :
   Opus, effort moyen. **Fait avant le solveur (tâche 23)**, qui a besoin des gestes de tous les modules.
   Sources (recopiées ici le 30/10/2026) : fiche du module « Remplissage », **gelé le 27/10/2026**, fichier des positions
   interdites du chariot (`remplissage/fiche/regles-positions.md`, v3.44 à 3.46, règles 1 à 11), plan de commande v223.

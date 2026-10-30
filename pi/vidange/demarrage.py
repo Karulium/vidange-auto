@@ -409,6 +409,13 @@ def principal(
             "machine.yaml, lavage : hauteurs, décalages, vitesses des brosses, durées d'EXEMPLE : "
             "les régler aux essais (pi/systeme/essai-lavage.md), puis passer « exemple » à false."
         )
+    remplissage = reglages.machine.remplissage
+    if remplissage is not None and remplissage.exemple:
+        journal.warning(
+            "machine.yaml, remplissage : vitesses, files, hauteurs de pose, décalage des barres "
+            "d'EXEMPLE : les régler aux essais (pi/systeme/essai-remplissage.md), puis passer "
+            "« exemple » à false."
+        )
     camera_dosage = reglages.machine.camera_dosage
     if camera_dosage is not None and camera_dosage.exemple:
         journal.warning(

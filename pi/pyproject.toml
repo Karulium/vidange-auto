@@ -51,6 +51,7 @@ vidange-porte-bocal = "vidange.porte_bocal.outil:lancer"
 vidange-prehension = "vidange.prehension.outil:lancer"
 vidange-lavage = "vidange.lavage.outil:lancer"
 vidange-vision = "vidange.vision.outil:lancer"
+vidange-remplissage = "vidange.remplissage.outil:lancer"
 
 [tool.setuptools.packages.find]
 include = ["vidange*"]

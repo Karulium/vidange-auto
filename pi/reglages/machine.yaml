@@ -32,6 +32,9 @@
 #     « seau_retourne », un réglage par format de la griffe, chaque position de la tête à sa portée
 #     (course du pont + 0,129), décalage du brossage dans le rayon du verrou, tours du seau des 2
 #     passes dans la course de la rotation de la tête, couloir conforme au passage de la paroi ;
+#   - remplissage : ses 5 axes sur une même carte, chaque position, hauteur et file dans la course de
+#     son axe, un réglage par format de la griffe, dosage et recul égaux à ceux du Mycélium, origine des
+#     barres au-delà de leur course, barres du retourneur dans leur course ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
 
 exemple: true
@@ -40,22 +43,23 @@ exemple: true
 # Le zéro de l'axe ici est le zéro machine de la carte (positions FluidNC en mm = mètres × 1000).
 # Un axe tournant (« unite: deg ») est en degrés, comme dans FluidNC.
 axes:
-  # Axes d'EXEMPLE du module d'exemple (sur la carte « chariot », pas encore figée).
+  # Axes d'EXEMPLE du module d'exemple, sur les 3 lettres libres de la carte n° 3 (la carte
+  # « chariot » porte maintenant les 5 axes du Remplissage).
   exemple_x:
     longueur_rail: 2.0
     course: [0.0, 1.9]
-    carte: chariot
-    lettre: X
+    carte: mycelium_lavage
+    lettre: Z
   exemple_y:
     longueur_rail: 1.0
     course: [0.0, 0.9]
-    carte: chariot
-    lettre: Y
+    carte: mycelium_lavage
+    lettre: B
   exemple_z:
     longueur_rail: 1.2
     course: [0.05, 1.1]
-    carte: chariot
-    lettre: Z
+    carte: mycelium_lavage
+    lettre: C
   # Les 5 axes de la griffe, sur la carte n° 1 (portique). Le Portique n'est pas figé : la fin
   # de course du pont et les rails sont des EXEMPLES ; les débuts et fins (fiche) viennent du plan
   # de commande v221.
@@ -158,6 +162,47 @@ axes:
     course: [-100000000, 100000000]
     carte: prehension
     lettre: C
+  # Les 5 axes du chariot de remplissage, sur la carte n° 2 (chariot). Fiche du module
+  # « Remplissage » gelé le 27/10/2026 et plan de commande v223 ; lettres : EXEMPLES.
+  # Avance du chariot (m) : y de l'axe du plateau, repère du portique. Poste 0,135 (fiche) ; le
+  # bout de la course et la longueur du rail sont des EXEMPLES (places des files : Stockage).
+  remplissage_y:
+    longueur_rail: 0.95
+    course: [0.13, 0.90]
+    carte: chariot
+    lettre: Y
+  # Montée du plateau (m) : hauteur du DESSUS du plateau. 0,175 à 0,575 au plus, toujours
+  # (règle 9 du fichier des positions : butée logicielle) ; le fin de course haut coupe la
+  # montée vers 0,578 (fiche). Frein, maintien réduit.
+  plateau_z:
+    longueur_rail: 0.578
+    course: [0.175, 0.575]
+    carte: chariot
+    lettre: Z
+  # Rotation du plateau (°), axe rotatif de FluidNC (rapport 40, 8 000 pas par tour : fiche). Il
+  # tourne sans fin pendant les versements (le Pi revient au plus près de 0 entre deux seaux).
+  # EXEMPLE : 100 tours de chaque côté.
+  plateau_a:
+    unite: deg
+    longueur_rail: 36000
+    course: [-36000, 36000]
+    carte: chariot
+    lettre: A
+  # Barres séparatrices (m) : écartement hw = de l'axe d'une barre à l'axe du plateau, 0,1195 à
+  # 0,305 (fiche). Vis T8 au pas de 8, ouverture complète ≈ 2,3 s. Origine côté mur à hw ≈ 0,309
+  # (remplissage → barres → origine_hw_m : FluidNC compte 0 à l'origine, le Pi ajoute ce décalage).
+  barres:
+    longueur_rail: 0.309
+    course: [0.1195, 0.305]
+    carte: chariot
+    lettre: B
+  # Pousseur (m) : course 0,32 (fiche : de −0,16 à +0,16) ; ici de 0 à 0,32, le milieu (0,16) est
+  # « rentré » (remplissage → pousseur_rentre_m, À CONFIRMER : question de la PR de la tâche 34).
+  pousseur:
+    longueur_rail: 0.32
+    course: [0.0, 0.32]
+    carte: chariot
+    lettre: C
 
 positions:
   exemple_repos:
@@ -184,6 +229,13 @@ positions:
   agitateur_garage:
     agitateur_x: 0.565
     manivelle: 0
+  # Le chariot de remplissage au poste, plateau en bas, barres ouvertes, pousseur rentré.
+  remplissage_poste:
+    remplissage_y: 0.135
+    plateau_z: 0.175
+    plateau_a: 0
+    barres: 0.30
+    pousseur: 0.16
 
 zones:
   exemple_zone_a:
@@ -209,6 +261,11 @@ durees:
   # lavage (le remplissage a son propre temps maximal, lavage → eau). EXEMPLES.
   lavage_geste_max: 300
   lavage_eau_max: 1200
+  # Remplissage : un geste du chariot (trajet, pose et séparation d'un seau, rangement...).
+  # EXEMPLE.
+  remplissage_geste_max: 300
+  # Le dosage d'une couche, mené par le Mycélium (bocal neuf, trajets, agitation). EXEMPLE.
+  remplissage_dosage_max: 1200
 
 # Poste du fût. Ces chiffres-là sont VRAIS (fiche du module « Poste du fût », validée le
 # 23/10/2026, et plan de commande v221), sauf la partie « pesee » (à étalonner, voir plus bas).
@@ -923,6 +980,134 @@ camera_dosage:
   # Pi 5 : GPIO18 = canal 2 de la puce PWM (le numéro de pwmchip est à vérifier sur le Pi).
   pwm: {fichier: /sys/class/pwm/pwmchip0, canal: 2, periode_us: 20000}
 
+# Remplissage : le chariot des seaux (fiche du module « Remplissage », GELÉ le 27/10/2026 ;
+# fichier des positions interdites du chariot v3.44 à 3.46, règles 1 à 11 ; plan de commande v223).
+# Chiffres VRAIS de la fiche, sauf ceux marqués EXEMPLE (vitesses, tolérances, pesée, et ce que la
+# fiche ne donne pas : questions de la PR de la tâche 34). Repère du portique, en mètres ;
+# y = axe du plateau, z = DESSUS du plateau, barres = hw (axe d'une barre à l'axe du plateau).
+# Les verrous ne protègent que la MACHINE : la sécurité des personnes reste câblée.
+remplissage:
+  exemple: true
+  # Axe du plateau en x : celui du seau au poste de la griffe (griffe → seau_remplissage). EXEMPLE.
+  axe_x: 0.925
+  # Poste (la griffe verse), dosage du mycélium (= mycelium → chariot → y_dosage), recul pendant
+  # le passage de l'agitateur (= mycelium → chariot → y_ecarte_min), pose du seau vide et du
+  # couvercle (fiche).
+  poste_y: 0.135
+  dosage_y: 0.155
+  ecarte_y: 0.375
+  pose_y: 0.50
+  # EXEMPLES : écarts permis, pas de la vérification des trajets.
+  tolerance_y_m: 0.002
+  tolerance_m: 0.001
+  tolerance_deg: 0.5
+  pas_verification_m: 0.005
+  # Plateau « en bas » : dessus ≤ 0,18 (règle 1).
+  plateau_en_bas_z: 0.18
+  # Pousseur rentré : le milieu de sa course (fiche : −0,16 à +0,16). À CONFIRMER (question).
+  pousseur_rentre_m: 0.16
+  # Oreilles de l'anse à 45° (modulo 90°) des barres, donc des files (fiche). Direction des
+  # barres vue de dessus (° depuis +x) : EXEMPLE.
+  barres_direction_deg: 0
+  anse_deg: 45
+  # Face de la tête de préhension au contact du fond intérieur d'un seau posé (au-dessus du
+  # dessus du plateau). EXEMPLE.
+  face_au_dessus_plateau_m: 0.005
+  # Positions interdites du chariot (règles du fichier des positions).
+  verrous:
+    # 1. Anneaux du fût : en y 0,14-0,41 et 0,59-0,86, plateau en bas (dessus ≤ 0,18) ; libre au
+    #    poste et entre 0,41 et 0,59. « Au poste » : la zone du poste ET du dosage du mycélium
+    #    (y 0,155, plateau à la hauteur du dosage) : EXEMPLE, à confirmer (question).
+    anneaux_y: [[0.14, 0.41], [0.59, 0.86]]
+    anneaux_plateau_max_z: 0.18
+    libre_poste_y: [0.13, 0.16]
+    # 2. Barres entre 0,235 et 0,255 (joues de l'élévateur) : seulement plateau ≤ 0,48.
+    joues_barres: [0.235, 0.255]
+    joues_plateau_max_z: 0.48
+    # 3. Plateau au-dessus de 0,515 : barres ouvertes seulement (hw ≥ 0,29).
+    barres_ouvertes_au_dessus_z: 0.515
+    barres_ouvertes_min: 0.29
+    # 4. Pousseur : rentré dès que le plateau n'est pas en bas, toujours rentré au-dessus de 0,20.
+    #    Plages du plateau où il peut sortir. (La fiche fait pousser les seaux de la bande du haut
+    #    plateau à 0,4985 : contraire à cette règle, question de la PR. Si le projet confirme,
+    #    ajouter [0.496, 0.501] ici, sans toucher au code.)
+    pousseur_plages_z: [[0.175, 0.18]]
+    # 5. Bras du galet (tâche 41) : plateau au-dessus de 0,26 seulement bras rangé.
+    galet_plateau_max_z: 0.26
+    # 6. Spray (tâche 39) : pendant le pivot du bras et la pulvérisation, plateau
+    #    ≤ min(0,50 ; 0,71 − h) ; le bras ne bouge que barres ouvertes à plus de 0,50 d'entraxe.
+    spray_plateau_max_z: 0.50
+    spray_bord_max_z: 0.71
+    spray_entraxe_min_m: 0.50
+    # 7. Chariot du fût pas « en place » : bout du chariot à y ≤ 0,875 (poste_fut →
+    #    remplissage_y_bout_max). Du y de l'axe du plateau au bout : EXEMPLE (question).
+    bout_y_m: 0.09
+    # 9. Préhension : pas de descente sous ≈ 0,84 au-dessus du chariot, sauf barres ouvertes et
+    #    tête du micropore rentrée.
+    prehension_libre_z: 0.84
+  # Barres (fiche) : origine côté mur à hw ≈ 0,309 (décalage réglé dans le Pi, à mesurer une
+  # fois : EXEMPLE) ; ouvertes à 0,30 (≥ 0,29, règle 3) ; prise double : lâcher = + 1,5 cm
+  # chacune, rainure : entraxe = Ø haut + 6 mm (seau B : 0,118 → 0,1195, le minimum des barres).
+  barres:
+    origine_hw_m: 0.309
+    ouvertes_m: 0.30
+    lacher_m: 0.015
+    jeu_rainure_m: 0.006
+    ouverture_s: 2.3
+  # Vitesses : EXEMPLES, à trouver aux essais (barres : 0,1855 m en ≈ 2,3 s, fiche).
+  vitesses:
+    y: 0.2
+    plateau: 0.05
+    rotation: 60
+    barres: 0.08
+    pousseur: 0.1
+    centrage: 0.02
+    contact: 0.005
+  # Prise double (fiche) : la tête remonte de 2 cm, lâcher, la tête redescend de 4,8 cm, barres
+  # dans la rainure, plateau au contact du fond du seau du dessous, tirage de 2 cm, lâcher, le
+  # plateau remonte de 2,8 cm. Au plus 35 N par barre (capteur de force de la tête). Course
+  # maximale et seuil du contact du plateau (balance) : EXEMPLES.
+  prise_double:
+    remontee_tete_m: 0.02
+    redescente_tete_m: 0.048
+    tirage_m: 0.02
+    remontee_plateau_m: 0.028
+    traction_max_par_barre_n: 35
+    toucher_max_m: 0.06
+    contact_kg: 0.3
+  # Balance 30 kg du plateau (pesee_plateau_remplissage). EXEMPLES ; un seau vide ≈ 5 N (fiche
+  # de la préhension) quand son format n'a pas de tare ; plus de 1,5 fois son poids : 2 seaux.
+  # Mode inspection : la tête et la balance d'accord à 0,1 kg près sur le poids du bocal posé.
+  pesee:
+    frequence_hz: 40
+    lectures: 10
+    attente_s: 0.5
+    seau_vide_kg: 0.5
+    seuil_deux_seaux: 1.5
+    accord_kg: 0.1
+  # Rangement : bande du haut plateau à 0,4985 (plage 0,496-0,501), files du bas plateau en bas
+  # (fiche). Les files (y et sens de la poussée) viennent du Stockage (tâche 35) : EXEMPLES. En lot
+  # C, arrêt à y 0,205 pour la bande du haut côté paroi (fiche) : contraire aux règles 1 et 4,
+  # question de la PR ; pas de file ici en attendant.
+  rangement:
+    bande_haut_plateau_z: 0.4985
+    bande_haut_plage_z: [0.496, 0.501]
+    files:
+      file_1: {y: 0.215, bande: bas, pousseur_m: 0.32}
+      file_2: {y: 0.785, bande: bas, pousseur_m: 0.32}
+  # Par format : plateau à la pose (seau B : 0,5125, fiche ; les autres : EXEMPLES, bord d'un seul
+  # seau 19 mm sous la barrière à 0,7315, comme le B), barres au contact du corps (EXEMPLES).
+  formats:
+    seau_a: {pose_plateau_z: 0.4625, centrage_hw_m: 0.125}
+    seau_b: {pose_plateau_z: 0.5125, centrage_hw_m: 0.1195}
+    seau_c: {pose_plateau_z: 0.4775, centrage_hw_m: 0.135}
+    seau_d: {pose_plateau_z: 0.4475, centrage_hw_m: 0.128}
+  # Mode couvercles (retourneur, tâche 21 bis) : chariot à y 0,50, plateau fixe à 0,459, sans
+  # rotation ; barres 0,19 ↔ 0,30 (lavage → couvercles → retourneur) ; barrière surveillée.
+  couvercles: {y: 0.50, plateau_z: 0.459}
+  # Mode inspection des bocaux : plateau fixe à 0,575, barres ouvertes, arrêts de 45°.
+  inspection: {plateau_z: 0.575, pas_deg: 45}
+
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :
 #   - prise_origine: <carte>   prise d'origine ($H) d'une carte FluidNC (fluidnc.yaml) ;
@@ -930,7 +1115,7 @@ camera_dosage:
 # Chaque geste a son délai maximal (nom dans durees). L'ordre (quelle carte d'abord, quels axes
 # remontent avant de bouger) vient de la mécanique : il sera rempli avec les modules.
 lieu_sur:
-  - prise_origine: chariot
+  - prise_origine: mycelium_lavage
     delai: exemple_prise_origine_max
   - aller: exemple_repos
     delai: exemple_deplacement_max

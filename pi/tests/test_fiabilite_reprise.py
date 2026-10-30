@@ -29,7 +29,7 @@ class Machine:
 
     def __init__(self, dossier) -> None:
         self.dossier = dossier
-        self.faux = FauxFluidnc(vitesse_rapide_mm_min=300_000)
+        self.faux = FauxFluidnc(axes="XYZABC", vitesse_rapide_mm_min=300_000)
         self.fabrique = FausseFabrique(LISTE)
         self.carnet = Carnet(dossier / "etat-cycle.json")
 
@@ -42,7 +42,7 @@ class Machine:
         chef = Chef(
             REGLAGES.machine, ReglagesChef(periode_s=0.01, alarme_pause_tout=True), self.carnet
         )
-        liaisons = {"chariot": liaison}
+        liaisons = {"mycelium_lavage": liaison}
         exemple = module_exemple(Axes(REGLAGES.machine, liaisons), materiel)
         lieu_sur = module_lieu_sur(REGLAGES.machine, liaisons)
         return Pi(liaison, materiel, chef, exemple, lieu_sur)
@@ -60,6 +60,11 @@ class Pi:
         self.chef.arreter()
         self.liaison.arreter()
         self.materiel.fermer()
+
+
+def exemple(faux) -> dict:
+    """Les 3 axes d'exemple (lettres Z, B et C de la carte n° 3)."""
+    return {lettre: faux.positions[lettre] for lettre in "ZBC"}
 
 
 @pytest.fixture
@@ -97,13 +102,13 @@ def test_coupure_en_plein_geste_puis_reprise(machine):
         pi.chef.donner_go("lieu_sur")
         attendre(lambda: pi.module("lieu_sur").statut == "fini")
         assert "$H" in machine.faux.lignes_recues
-        assert machine.faux.positions == {"X": 800, "Y": 500, "Z": 1000}  # lieu sûr
+        assert exemple(machine.faux) == {"Z": 800, "B": 500, "C": 1000}  # lieu sûr
 
         # Le module repris attend le Go, puis refait son étape depuis le début.
         attendre(lambda: pi.chef.etat().attendent_go == ["exemple"])
         pi.chef.donner_go("exemple")
         attendre(lambda: pi.module("exemple").statut == "fini")
-        assert machine.faux.positions == {"X": 800, "Y": 500, "Z": 1000}
+        assert exemple(machine.faux) == {"Z": 800, "B": 500, "C": 1000}
     finally:
         pi.eteindre()
 
@@ -115,7 +120,7 @@ def test_prise_d_origine_ratee(machine):
     try:
         attendre(lambda: pi.chef.etat().attendent_go == ["lieu_sur"])
         machine.faux.vitesse_rapide_mm_min = 600
-        machine.faux.positions["X"] = 1000
+        machine.faux.positions["Z"] = 1000
         pi.chef.donner_go("lieu_sur")
         attendre(lambda: machine.faux.en_mouvement)
         machine.faux.declencher_alarme(9)
@@ -137,7 +142,7 @@ def test_bilan_d_une_alarme_puis_acquittement(machine, tmp_path):
         ReglagesBilan(lignes_journal=3),
         registre,
         pi.chef,
-        {"chariot": pi.liaison},
+        {"mycelium_lavage": pi.liaison},
         pi.materiel,
         lambda: [],
         journal,
@@ -162,8 +167,8 @@ def test_bilan_d_une_alarme_puis_acquittement(machine, tmp_path):
         bilan = json.loads((tmp_path / alarme["bilan"]).read_text(encoding="utf-8"))
         assert bilan["alarme"]["module"] == "exemple"
         assert bilan["memoire_du_module"] == {"seau": "S12"}
-        assert bilan["cartes"]["chariot"]["etat"] == "Alarm"
-        assert set(bilan["cartes"]["chariot"]["positions"]) == {"X", "Y", "Z"}
+        assert bilan["cartes"]["mycelium_lavage"]["etat"] == "Alarm"
+        assert set(bilan["cartes"]["mycelium_lavage"]["positions"]) == set("XYZABC")
         assert bilan["entrees"]["reed_panneau_poste_fut"] is True
         assert bilan["sorties"]["voyant_buzzer"] is False
         assert bilan["ambiance"]["sht31_armoire"]["temperature_c"] == pytest.approx(25, abs=0.1)
