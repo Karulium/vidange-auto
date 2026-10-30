@@ -721,6 +721,34 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   Simulateur : un scénario `remplissage` : seau vide posé, prise double séparée, anse orientée, versements, dosage avec
   l'agitateur, rangement. Tests de chaque règle de position, prise double qui échoue (deux seaux sur la balance),
   barrière coupée, chariot du fût absent, ordre avec l'agitateur. Outil d'essai et procédure sur le vrai matériel.
+- [ ] **34 bis. Remplissage : corrections après la tâche 34** — Modèle : Opus, effort moyen. Même branche de travail
+  que d'habitude (une PR). Tout vient des réponses à la PR n° 43, déjà dans `docs/decisions.md` (section
+  « Remplissage », points 1 à 11) : les lire d'abord. Trois erreurs venaient des règles recopiées ici, pas du code.
+  Les chiffres restent dans les réglages, marqués `exemple: true`.
+  1. **Pousseur** : « rentré » = zéro au fin de course côté fût (`pousseur_rentre_m` à 0, plus « au milieu ») ; il
+     pousse toujours vers le stockage, course 0,325. Rentré dès que le plateau n'est pas en bas, et il ne sort que
+     plateau ≤ 0,20, partout (tête du micropore montée sur le chariot). Retirer la bande du haut (0,4985) et le
+     « lot C y 0,205 » des réglages et des gestes ; le rangement se fait plateau en bas.
+  2. **Capteurs d'origine** (à ajouter dans `docs/entrees-sorties.yaml` et `fluidnc/chariot.yaml`) : fin de course
+     BAS de la montée = zéro de la montée (prise d'origine vers le bas, plateau en bas à 0,175) ; le fin de course
+     haut reste une butée de sécurité (coupe vers 0,578) ; fin de course de l'avance (contre le tampon côté mur) ;
+     fin de course du pousseur (côté fût) ; capteur Hall du zéro de rotation (un aimant par tour). Retirer
+     l'avertissement « la prise d'origine fait monter le plateau ».
+  3. **Rotation** : sans réducteur, pignon 15 dents sur roue 120, **rapport 8** (et non 40). Moteurs : avance,
+     rotation et barres = NEMA 17 boucle fermée ; montée et pousseur = NEMA 23 boucle fermée à frein ; pilotes
+     boucle fermée (PUL, DIR, ENA, sortie ALM). Pas par tour du pilote : exemple.
+  4. **Centrage en position**, sans courant réduit : barres à `centrage_hw_m` du format + un petit jeu (réglage).
+     Retirer la sortie « courant réduit » (le pilote n'en a pas). L'alarme ALM du pilote des barres arrête le geste
+     et alerte (comme les autres alarmes de pilote).
+  5. **Prise double** : refaire le geste dans l'ordre a) à h) du point 5 des décisions (le plateau ne bouge pas avant
+     e). Courses en réglages. Mettre à jour le scénario du simulateur et la procédure d'essai.
+  6. **Règle 7** : bout du chariot côté allée à 0,40 de l'axe (réglage) ; chariot du fût absent ⇒ axe à y ≤ 0,475.
+  7. **Règle 9 dans la préhension** : sa descente sous ≈ 0,84 au-dessus du chariot est refusée si les barres ne sont
+     pas ouvertes ou si la tête du micropore n'est pas rentrée, **sauf en mode couvercles** (retourneur, exception
+     vérifiée par le Lavage le 25/10).
+  Tests : chacun des 7 points (dont prise double dans le nouvel ordre, poussée refusée plateau > 0,20, file refusée
+  au-delà de 0,475 sans chariot du fût, prise d'origine vers le bas, ALM des barres pendant le centrage, préhension
+  refusée barres fermées hors mode couvercles). « Testé sur le vrai matériel : non ».
 - [ ] 35. Stockage
 - [ ] 36. Portique
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
