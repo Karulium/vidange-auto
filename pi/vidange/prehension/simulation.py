@@ -267,7 +267,7 @@ def prehension_du_simulateur(simulateur: Simulateur, **options: Any) -> Prehensi
         def agitateur() -> PoseAgitateur:
             return PoseAgitateur(etat.positions["agitateur_x"], etat.positions["manivelle"])
 
-        options.setdefault("agitateur_au_garage", lambda: mycelium.au_garage(agitateur()))
+        options.setdefault("agitateur_x", lambda: etat.positions["agitateur_x"])
         options.setdefault("manivelle_en_bas", lambda: mycelium.en_bas(agitateur()))
     prehension = Prehension(machine, tete, porte_bocal, horloge=horloge, **options)
     tete.objet_tenu = lambda: prehension.objet

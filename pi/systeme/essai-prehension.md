@@ -99,7 +99,9 @@ le fond intérieur d'un seau vide posé là (contact_z), et une deuxième place 
    serrés pour descendre, puis ouverts) et reposé. Regarder que les mors ne touchent pas le bocal pendant la
    descente.
 4. Contrôles des verrous (chacun doit s'arrêter **avant** que la tête descende au porte-bocal) :
-   - sans `--manivelle-en-bas` : « bocal au garage, manivelle pas en bas » ;
+   - sans `--manivelle-en-bas` : « position de l'agitateur du mycélium inconnue : la tête ne passe pas
+     au-dessus de sa glissière » (l'outil ne lit pas l'agitateur : sans cette option, toute la glissière,
+     du garage au dosage, est interdite à la tête) ;
    - griffe descendue de 2 cm (`G90 G1 Z1270 F300` à la console de la carte n° 1) : « il faut la griffe en butée
      haute » ; la remonter ensuite (`G90 G1 Z1290 F300`).
 5. Vérifier à la console de la carte n° 3, juste après l'approche, que le courant faible est bien pris par

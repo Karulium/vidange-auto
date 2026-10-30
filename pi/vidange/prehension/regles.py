@@ -18,8 +18,10 @@ Les règles (verrous du logiciel : ils protègent la MACHINE, jamais les personn
    zone_garage_m autour du bocal) : la tête y descend à la verticale, seulement agitateur au
    garage manivelle en bas (avec la course déclarée), griffe en butée haute, et, pour descendre,
    mors ouverts pour poser un bocal, serrés pour le prendre (ces conditions valent aussi panneau
-   rabattu). Manivelle pas en bas, la tête ne passe jamais au-dessus du bocal au garage (sa
-   capsule est plus haute que la butée haute de la tête).
+   rabattu). Manivelle pas en bas, la tête ne passe jamais au-dessus du bocal de l'agitateur
+   (sa capsule est plus haute que la butée haute de la tête), où qu'il soit sur la glissière
+   (bocal en x = position de l'agitateur, y = celui du porte-bocal) ; position de l'agitateur
+   inconnue : toute la glissière est interdite.
 3. Seau tenu : son bord au plus à bord_max_operateur_z côté opérateur, à bord_max_piles_z
    au-dessus des piles.
 4. Boîtier de la caméra du bocal (griffe → camera_bocal) : près de lui, la tête et l'objet tenu
@@ -29,7 +31,7 @@ De plus : la tête ne tourne jamais entre les mors du porte-bocal ; le pont resp
 poste du fût (pas de pont dans la zone du chariot pendant l'échange du fût).
 
 Tous les chiffres viennent de machine.yaml (`prehension`, `griffe → camera_bocal`, `poste_fut`,
-`mycelium → course_agitation_m`).
+`mycelium → course_agitation_m, garage_x, tolerance_x_m`, course de l'axe `agitateur_x`).
 """
 
 import math
@@ -92,8 +94,9 @@ class Contexte:
     echange_fut: bool = False
     # L'objet tenu (None : rien).
     objet: Objet | None = None
-    # L'agitateur du Mycélium au garage (le bocal du porte-bocal y est), sa manivelle en bas.
-    agitateur_au_garage: bool = True
+    # Position de l'agitateur du Mycélium sur sa glissière (m) : son bocal est là, en x ; None :
+    # inconnue ou en mouvement (toute la glissière est interdite à la tête). Sa manivelle en bas.
+    agitateur_x: float | None = None
     manivelle_en_bas: bool = False
     # Les mors du porte-bocal : « ouverts », « serres », ou None (entre les deux, inconnus).
     mors: str | None = None
@@ -113,9 +116,15 @@ class ReglesPrehension:
         self.poste = machine.poste_fut
         self.camera_bocal = machine.griffe.camera_bocal
         # Course de l'agitation déclarée (trou de la manivelle) ; None : pas de Mycélium.
+        self.mycelium = machine.mycelium
         self.course_agitation_m = (
             None if machine.mycelium is None else machine.mycelium.course_agitation_m
         )
+        # Les deux bouts de la glissière de l'agitateur (bocal en x), garage compris.
+        x_bocal = self.reglages.porte_bocal.x
+        glissiere = machine.axes.get("agitateur_x")
+        bouts = (x_bocal,) if glissiere is None else (x_bocal, *glissiere.course)
+        self.glissiere_x = (min(bouts), max(bouts))
         self.courses = {
             "pont": machine.axes["pont_x"].course,
             "y": machine.axes["chariot_y"].course,
@@ -194,11 +203,22 @@ class ReglesPrehension:
         zone = porte_bocal.zone_garage_m + _EGAL
         return abs(pose.x - porte_bocal.x) <= zone and abs(pose.y - porte_bocal.y) <= zone
 
+    def agitateur_au_garage(self, contexte: Contexte) -> bool:
+        """L'agitateur est-il au garage (son bocal dans le porte-bocal) ?"""
+        if contexte.agitateur_x is None:
+            return False
+        mycelium = self.mycelium
+        if mycelium is None:
+            garage, tolerance = self.reglages.porte_bocal.x, self.reglages.porte_bocal.zone_garage_m
+        else:
+            garage, tolerance = mycelium.garage_x, mycelium.tolerance_x_m
+        return abs(contexte.agitateur_x - garage) <= tolerance + _EGAL
+
     def refus_garage(self, contexte: Contexte) -> str | None:
         """Pourquoi la tête ne peut pas être basse dans la zone du garage, ou None."""
         porte_bocal = self.reglages.porte_bocal
         course = self.course_agitation_m
-        if not (contexte.agitateur_au_garage and contexte.manivelle_en_bas):
+        if not (self.agitateur_au_garage(contexte) and contexte.manivelle_en_bas):
             return "il faut l'agitateur au garage, manivelle en bas"
         if course is None or abs(course - porte_bocal.course_manivelle_m) > _EGAL:
             declaree = "inconnue" if course is None else f"{_m(course * 100)} cm"
@@ -210,13 +230,17 @@ class ReglesPrehension:
             return "il faut la griffe en butée haute"
         return None
 
-    def au_dessus_du_bocal(self, pose: Pose, objet: Objet | None) -> bool:
-        """La tête (ou l'objet tenu) touche-t-elle le bocal au garage, manivelle en haut ?"""
+    def au_dessus_du_bocal(
+        self, pose: Pose, objet: Objet | None, x_debut: float, x_fin: float
+    ) -> bool:
+        """La tête (ou l'objet tenu) touche-t-elle le bocal de l'agitateur, manivelle en haut,
+        s'il est n'importe où entre x_debut et x_fin sur la glissière ?"""
         porte_bocal = self.reglages.porte_bocal
         marge = porte_bocal.marge_bocal_m
         rayon = self.rayon(objet) + self.reglages.objets["bocal"].rayon_m + marge
+        dx = max(0.0, x_debut - pose.x, pose.x - x_fin)
         return (
-            math.hypot(pose.x - porte_bocal.x, pose.y - porte_bocal.y) < rayon - _EGAL
+            math.hypot(dx, pose.y - porte_bocal.y) < rayon - _EGAL
             and self.bas(pose, objet) < porte_bocal.capsule_manivelle_haut_z + marge - _EGAL
         )
 
@@ -240,12 +264,21 @@ class ReglesPrehension:
         if refus is not None:
             return refus
         basse = pose.z < p.haut_z - p.tolerance_m
-        if contexte.agitateur_au_garage and not contexte.manivelle_en_bas:
-            if self.au_dessus_du_bocal(pose, objet):
-                capsule = f"{p.porte_bocal.capsule_manivelle_haut_z:g}".replace(".", ",")
+        capsule = f"{p.porte_bocal.capsule_manivelle_haut_z:g}".replace(".", ",")
+        x_agitateur = contexte.agitateur_x
+        if x_agitateur is None:
+            if self.au_dessus_du_bocal(pose, objet, *self.glissiere_x):
+                debut, fin = self.glissiere_x
                 return (
-                    f"bocal au garage, manivelle pas en bas : sa capsule monte à {capsule} m, "
-                    "la tête ne passe pas au-dessus"
+                    f"position de l'agitateur du mycélium inconnue : la tête ne passe pas "
+                    f"au-dessus de sa glissière (bocal entre x {_m(debut)} et {_m(fin)} m, sa "
+                    f"capsule jusqu'à {capsule} m)"
+                )
+        elif not contexte.manivelle_en_bas:
+            if self.au_dessus_du_bocal(pose, objet, x_agitateur, x_agitateur):
+                return (
+                    f"bocal de l'agitateur à x {_m(x_agitateur)} m, manivelle pas en bas : sa "
+                    f"capsule monte à {capsule} m, la tête ne passe pas au-dessus"
                 )
         if basse and self.dans_zone_garage(pose):
             refus = self.refus_garage(contexte)

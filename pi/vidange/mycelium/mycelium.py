@@ -231,6 +231,17 @@ class Mycelium:
         """Pour la caméra du dosage : elle ne pivote vers le seau qu'agitateur garé."""
         return not self._bouge() and self.regles.camera_peut_pivoter(self._position())
 
+    def x_agitateur(self) -> float | None:
+        """Pour la préhension : position de l'agitateur sur sa glissière (son bocal est là, en
+        x), None si elle est inconnue ou s'il bouge (toute la glissière est alors interdite)."""
+        pose = self._position()
+        return None if self._bouge() or pose is None else pose.x
+
+    def manivelle_en_bas(self) -> bool:
+        """Pour la préhension : manivelle en bas, agitateur arrêté."""
+        pose = self._position()
+        return not self._bouge() and pose is not None and self.regles.en_bas(pose)
+
     def dosage_en_cours(self) -> bool:
         """Pour la griffe : l'agitateur a quitté son garage (zone du dosage interdite)."""
         pose = self._position()

@@ -14,7 +14,8 @@ Les gestes sont ceux du programme, avec tous leurs verrous (vidange.prehension).
 en mètres, dans le repère du portique : x, y = axe de la tête ; contact_z = face de la tête quand
 elle touche l'objet. Le panneau du poste du fût est lu (isolation du fût), la hauteur de la
 griffe aussi (en butée haute pour le porte-bocal). L'agitateur n'est pas lu : --manivelle-en-bas
-dit qu'on a vu l'agitateur au garage, manivelle en bas (sinon la tête ne va pas au porte-bocal).
+dit qu'on a vu l'agitateur au garage, manivelle en bas (sinon la tête ne va pas au porte-bocal et
+ne passe pas au-dessus de la glissière de l'agitateur : sa position est inconnue).
 Procédure complète :
 pi/systeme/essai-prehension.md. À ne lancer que programme principal arrêté (une seule liaison
 par carte).
@@ -153,6 +154,7 @@ def main(arguments: list[str] | None = None) -> int:
                 )
             poste = PosteFut(machine.poste_fut, materiel, lecture_directe=True)
             regles_griffe = ReglesGriffe(machine)
+            garage_x = None if machine.mycelium is None else machine.mycelium.garage_x
             lettre_griffe = machine.axes["griffe_z"].lettre or "Z"
 
             def griffe_en_butee_haute() -> bool:
@@ -165,6 +167,7 @@ def main(arguments: list[str] | None = None) -> int:
                 porte_bocal,
                 panneau_rabattu=poste.panneau_vu_rabattu,
                 echange_fut=lambda: poste.echange_en_cours,
+                agitateur_x=lambda: garage_x if options.manivelle_en_bas else None,
                 manivelle_en_bas=lambda: options.manivelle_en_bas,
                 griffe_en_butee_haute=griffe_en_butee_haute,
             )
