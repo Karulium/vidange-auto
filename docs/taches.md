@@ -851,6 +851,20 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   pour chaque k, ordre de vidage, capacité des files (C en quinconce), file 0,785 refusée sans chariot du fût, boucle
   ouverte ⇒ rien ne bouge, coin d'inspection plein, trajets refusés (boîtes, caméra du bocal, pile pleine).
   « Testé sur le vrai matériel : non » ; procédure d'essai (boucle des microrupteurs, cotes des piles, tiroir).
+- [ ] **35 bis. Bande du haut : seaux pleins poussés sur le plateau du Stockage** — Modèle : Sonnet, effort moyen.
+  **Après la tâche 35.** D'après la section « Pousseur côté allée et bande du haut » de `docs/decisions.md` (31/10).
+  1. Remplissage : retirer la règle des anneaux du fût (périmée) et « pousseur rentré au-dessus de 0,20 » ; nouvelle
+     règle 12 : poussée à toute hauteur, barres ouvertes (hw ≥ 0,29) et bras de fermeture rangé, plusieurs seaux à la
+     suite. Garder plateau ≤ 0,575 et l'agitateur immobile tant que le chariot est sous y 0,40.
+  2. Stockage : activer les places de la bande du haut (réglages par format, `exemple: true`), avec leur fin de course
+     logicielle (bord du couvercle à x ≤ 2,44) ; geste « ranger en haut » dans l'ordre a) à f) ; photo du plafond
+     après chaque poussée (y 0,215 ± 0,007, sinon arrêt et alerte ; point d'appel avec un faux tant que la vision ne
+     sait pas lire la photo) ; fin de lot tiroir d'abord, piles de fin de lot de la bande vidées en premier ;
+     capacité A 18, B 19, C 20, D 18 ; la pause « plus de place » reste pour un fût plus gros.
+  Tests : poussée à 0,4985 permise barres ouvertes et bras rangé, refusée sinon ; plateau hors de 0,496-0,501 refusé
+  pour la bande du haut ; chariot à y 0,215 plateau haut permis (plus de règle des anneaux) ; places et capacité par
+  format ; seau mal aligné à la photo ⇒ arrêt ; scénario du simulateur avec 18 seaux A. « Testé sur le vrai
+  matériel : non ».
 - [ ] 36. Portique
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
   (le Lavage a besoin de la Préhension, qui tient le seau pendant tout le lavage).

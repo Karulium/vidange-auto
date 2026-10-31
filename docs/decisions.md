@@ -363,6 +363,26 @@ si l'une pose problème, elle le dit dans sa PR.
   reviennent à l'approche (0,225) quand la tête est partie, le plateau oriente l'anse, puis « centrer » serre : **gardé**
   (les oreilles de l'anse ne frottent pas pendant la rotation). (2) Montée lente avant le contact : on garde les
   réglages actuels ; `plateau_sous_pose_m` et la vitesse `contact` se règlent sur la maquette.
+- **Pousseur côté allée et bande du haut** (Karulium 31/10/2026 15:37 ; fils Remplissage et Stockage, règles 12 et 13 de
+  `remplissage/fiche/regles-positions.md`, section 1.3 de `stockage/logiciel/stockage-pour-logiciel.md`) :
+  1. Le pousseur est monté en miroir côté allée (même course 0,325, même zéro côté fût, même sens vers le stockage ;
+     palette de x −0,12 à +0,20 par rapport à l'axe du plateau). Il ne passe plus sous la tête du micropore.
+  2. Règle 9 : il ne reste que « plateau ≤ 0,575 ». **« Pousseur rentré au-dessus de 0,20 » est supprimé.**
+  3. Règle 12 : poussée permise **à toute hauteur** du plateau, barres **ouvertes** (hw ≥ 0,29) et bras de fermeture
+     **rangé** ; plusieurs seaux peuvent être poussés à la suite.
+  4. **L'ancienne règle des anneaux du fût est périmée et supprimée** (plateau ≤ 0,18 en y 0,14-0,41 et 0,59-0,86 :
+     note de la maquette v3.13). Une tôle fixe à x 0,655 sépare le fût du chariot ; vérifié fût présent ou absent,
+     panneau levé ou rabattu. Ce qui reste : bras rangé, barres ouvertes, plateau ≤ 0,575, et l'agitateur du
+     Mycélium immobile tant que le chariot est sous y 0,40.
+  5. **Bande du haut** (plateau du Stockage, y 0,215) : plateau du chariot à **0,4985** (plage 0,496-0,501 : jamais plus
+     bas que la tôle à 0,496, au plus 5 mm plus haut). Ordre : a) seau fermé, bras rangé ; b) barres ouvertes (elles
+     traversent 0,235-0,255 plateau ≤ 0,48) ; c) chariot à y 0,215 ; d) plateau à 0,4985 ; e) poussée ; f) pousseur
+     rentré, plateau redescendu. Entrée au bord de P1, x 1,155 ; pas de butée : fin de course logicielle, bord du
+     couvercle à x ≤ 2,44 (jamais sur le hublot). Places : A 4 (centres 2,30 / 2,028 / 1,756 / 1,484), B 5 (pas 0,235,
+     de 2,32 à 1,38), C 4 (pas 0,30, de 2,28 à 1,38), D 4 (pas 0,28, de 2,30 à 1,46) ; pas réel = contact des rebords,
+     recalé à la caméra. Pas de guidage en y : photo du plafond après chaque poussée, y 0,215 ± 0,007, sinon arrêt et
+     alerte. Fin de lot : le tiroir d'abord ; les piles de fin de lot de la bande sont vidées en premier pour la
+     libérer. **Capacité d'un lot : A 18, B 19, C 20, D 18** (D : une pile de fin de lot de 3 sur la bande).
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
