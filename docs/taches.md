@@ -860,6 +860,27 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   2 échecs ⇒ alerte), deux seaux pris, contact trop bas, choc, isolation du fût, XY refusé tête basse, vissage
   au-delà de 150 N, zéro du vide au démarrage.
 - [ ] 38. Nettoyage
+- [ ] **38 bis. Capteurs d'ozone Winsen ZE25-O3 en UART (ozone_1 et ozone_2)** — Modèle : Sonnet, effort moyen.
+  Sources (recopiées ici le 31/10/2026) : fiche du module « Nettoyage », de nouveau **gelé le 31/10/2026** (choix du
+  ZE25-O3 validé par Karulium), plan d'implantation. Remplace la lecture Modbus de l'ozone (tâche 2 :
+  `pi/vidange/materiel/modbus.py`, `transmetteur_modbus`).
+  *Matériel* : 2 capteurs ZE25-O3 (0 à 10 ppm), chacun dans son boîtier IP65, alimentés en 5 V par le câble capteurs,
+  avec un convertisseur TTL-RS485 automatique. **Deux liaisons séparées** : un adaptateur USB-RS485 par capteur
+  (`ozone_1` dedans, `ozone_2` dehors), reconnu par son numéro de série comme les autres adaptateurs. Aucune adresse :
+  le ZE25-O3 n'est pas un appareil Modbus.
+  *Protocole* : celui de la notice Winsen du ZE25-O3 (vitesse, trames de 9 octets, somme de contrôle, mode « envoi
+  automatique » ou « question-réponse ») : le recopier depuis la notice, dans les réglages s'il y a des chiffres, et
+  le dire dans la PR. Trame à la somme fausse : ignorée et comptée ; plus de trame valable depuis un délai (réglage)
+  ⇒ capteur « muet », affiché comme tel, alerte.
+  *Valeurs* : en ppm pour l'écran, le journal et le mode UV/ozone. La nuit l'ozone dépasse 10 ppm : une valeur au
+  plafond s'affiche « ≥ 10 ppm » (jamais « 10 »).
+  *Sécurité* : elle reste câblée (indicateur de process sur la sortie analogique du capteur du dedans, 2 relais, store
+  ouvert seulement relais du Pi ET les 2 seuils câblés : docs/decisions.md à compléter si absent). Le Pi lit l'ozone
+  pour **informer et attendre**, jamais pour protéger.
+  Mettre à jour `docs/entrees-sorties.yaml` (`exemple: true`), le faux capteur du simulateur et l'outil d'essai du
+  matériel. Retirer le Modbus de l'ozone s'il ne sert plus à rien d'autre.
+  Tests : trames bonnes, somme fausse, trame coupée, capteur muet, valeur au plafond, deux capteurs indépendants
+  (l'un muet, l'autre lu). Procédure d'essai sur le vrai capteur ; « testé sur le vrai matériel : non ».
 - [ ] 39. Spray (et le programme de sa carte ESP32)
 - [ ] 40. Micropore
 - [ ] 41. Fermeture des seaux
