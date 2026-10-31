@@ -383,10 +383,12 @@ si l'une pose problème, elle le dit dans sa PR.
      recalé à la caméra. Pas de guidage en y : photo du plafond après chaque poussée, y 0,215 ± 0,007, sinon arrêt et
      alerte. Fin de lot : le tiroir d'abord ; les piles de fin de lot de la bande sont vidées en premier pour la
      libérer. **Capacité d'un lot : A 18, B 19, C 20, D 18** (D : une pile de fin de lot de 3 sur la bande).
-- **Mode couvercles, règles 14 et 15 du chariot** (fil Remplissage, contrôle de la maquette v45.98, 31/10/2026) :
-  14. Pendant le demi-tour de la tête de la griffe (axe y 0,68, axes à 1,075), le chariot est à **y ≥ 0,515** ; il ne
-      revient à y 0,50 qu'après (sinon la raclette touche le moteur de la barre côté allée).
-  15. Le plateau descend à **0,459 au poste**, AVANT que le chariot roule vers y 0,50 sous le bac du retourneur.
+- **Mode couvercles, règle 14 du chariot** (fil Remplissage, contrôle de la maquette v45.98, 31/10/2026) :
+  14. Pendant les deux demi-tours de la tête de la griffe (axe y 0,68, axes à 1,075), le chariot est à **y ≥ 0,515** ;
+      il ne revient à y 0,50 qu'après (sinon la raclette touche le moteur de la barre côté allée). Contrôlé sur la
+      maquette v45.99.
+  15. **Retirée** (31/10, 17:12) : la maquette avait dessiné le bac du retourneur en double ; le vrai bac est posé sur le
+      plateau et le suit, donc aucune condition.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
