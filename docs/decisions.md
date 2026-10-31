@@ -343,6 +343,26 @@ si l'une pose problème, elle le dit dans sa PR.
       seul modèle, un NEMA 17 boucle fermée (17HS19-2004-ME1K ou équivalent). La rotation est **sans réducteur** :
       pignon 15 dents sur une roue de 120 dents, **rapport 8** (et non 40). Montée et pousseur : NEMA 23 boucle fermée
       à frein.
+- **Remplissage, changements du 31/10/2026** (fil Remplissage, décisions de Karulium sur les pièces introuvables,
+  « se baser sur du standard ») :
+  1. **Deux barres, deux vis, deux moteurs** : la vis à deux sens n'existe pas en standard. Chaque barre a sa vis T8
+     simple, son NEMA 17 boucle fermée (pilote avec ALM) et son fin de course d'origine, montés en miroir. Le Pi
+     commande les 2 moteurs **ensemble** (mêmes pas, sens inversé) pour garder le seau centré. Zéro de chaque barre
+     sur son fin de course : côté mur hw ≈ 0,309, côté allée hw ≈ 0,306 (décalages réglés dans le Pi). Les règles 2,
+     3, 4 et 8 valent pour chaque barre ; l'effort (≈ 30 N au centrage, 35 N à la séparation) et l'alarme ALM se
+     surveillent **barre par barre**.
+  2. **Agitateur du Mycélium** : il ne roule entre son garage et le dosage que si le chariot est à **y ≥ 0,40** (le
+     moteur de la barre côté mur touche un support SK12 à 0,375). L'ordre pour un seau devient : poste → recul à
+     y 0,40 → agitateur au dosage → poste → dosage → recul à y 0,40 → agitateur au garage → poste.
+  3. **Fin de course haut de la montée : en série dans l'arrêt** (câblé en dur, comme une sécurité de la machine). Ce
+     n'est plus une entrée de la carte : le Pi ne le lit pas. La butée logicielle à 0,575 reste.
+  4. Câbles capteurs (bornier du boîtier) : câble 1 = 24 V, 0 V, avance, montée bas, barre mur, barre allée, et les
+     2 fils du fin de course haut ; câble 2 = 24 V, 0 V, Hall, pousseur, RS485 A et B, barrière, 1 fil libre.
+  5. La règle 7 ne change pas (bout côté allée à 0,40 de l'axe du plateau).
+- **Remplissage, réponses à la PR n° 46** (tâche 34 ter, 31/10/2026) : (1) après la pose d'un seau seul, les barres
+  reviennent à l'approche (0,225) quand la tête est partie, le plateau oriente l'anse, puis « centrer » serre : **gardé**
+  (les oreilles de l'anse ne frottent pas pendant la rotation). (2) Montée lente avant le contact : on garde les
+  réglages actuels ; `plateau_sous_pose_m` et la vitesse `contact` se règlent sur la maquette.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
@@ -406,7 +426,7 @@ Les chiffres ci-dessous vont dans `pi/reglages/machine.yaml`, jamais dans le cod
 2. **Caméra du dosage** sur servo DS3225 : 0° = bocal, 63° = seau. Photo du seau après chaque godet, avec sa dose. Elle pivote SEULEMENT si l'agitateur est garé (bocal x ≤ 0,62) ET si griffe et préhension sont hors de la zone x < 1,10, y < 0,34, z 0,95 à 1,08. Elle remonte avant le retour de l'agitateur ou du godet.
 3. **Porte du spray ouverte** : portique arrêté, griffe interdite en x < 0,50 et y < 0,33, ozone et UV coupés.
 4. **Reed du panneau du poste du fût** : production seulement contact fermé ; lavage seulement contact ouvert.
-5. **Mycélium / Remplissage** : quand l'agitateur roule, le chariot de remplissage reste à y ≥ 0,375.
+5. **Mycélium / Remplissage** : quand l'agitateur roule, le chariot de remplissage reste à y ≥ **0,40** (31/10/2026 ; avant : 0,375).
 
 ## État des modules (26/10/2026)
 
