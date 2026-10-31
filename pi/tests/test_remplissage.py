@@ -90,8 +90,8 @@ def test_un_format_sans_reglage_du_remplissage_est_refuse(reglages):
 
 
 def test_une_file_hors_de_la_course_est_refusee(reglages):
-    remplacer(reglages / "machine.yaml", "file_2: {y: 0.785", "file_2: {y: 0.95")
-    assert "remplissage → rangement → files → file_2 → y : 0.95 hors de la course" in erreur_de(
+    remplacer(reglages / "machine.yaml", "file_3: {y: 0.785", "file_3: {y: 0.95")
+    assert "remplissage → rangement → files → file_3 → y : 0.95 hors de la course" in erreur_de(
         reglages
     )
 
@@ -409,8 +409,12 @@ def test_ranger_loin_refuse_sans_chariot_du_fut():
     with pytest.raises(ErreurEtape, match="chariot du fût pas en place"):
         banc.jouer(lambda: remplissage.geste_aller(0.85))
     assert banc.pose.y == 0.135
-    # La file 2 (0,785) est refusée au-delà de 0,475 sans le chariot du fût ; la file 1 passe.
+    # Les files 2 et 3 (0,500 et 0,785) sont refusées au-delà de 0,475 sans le chariot du fût ;
+    # la file 1 passe.
     remplissage.seau = SeauPlateau("seau_a", "S1", angle_anse=0.0)
+    with pytest.raises(ErreurEtape, match="axe du plateau ≤ 0,475"):
+        banc.jouer(lambda: remplissage.geste_ranger("file_3"))
+    assert banc.pose.y == 0.135
     with pytest.raises(ErreurEtape, match="axe du plateau ≤ 0,475"):
         banc.jouer(lambda: remplissage.geste_ranger("file_2"))
     assert banc.pose.y == 0.135

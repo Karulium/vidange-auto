@@ -11,6 +11,8 @@
   vidange-simulateur lavage_couvercles         2 couvercles lavés et retournés
   vidange-simulateur lavage_bocaux             3 bocaux et capsules au lave-bocal
   vidange-simulateur remplissage               2 seaux posés (prise double), remplis, dosés, rangés
+  vidange-simulateur stockage                  15 seaux pris sur les piles, 14 au tiroir, tiroir
+                                               plein vidé (boucle ouverte puis fermée), reprise
 
 Les durées se règlent dans reglages/simulateur.yaml (vitesses des axes, délai du Go, capteurs).
 Tourne sur n'importe quel PC, sans la machine. Code de sortie 0 si le cycle va au bout, 1 sinon.
@@ -48,6 +50,7 @@ from vidange.reglages import (
 from vidange.remplissage.module import module_remplissage
 from vidange.remplissage.simulation import remplissage_du_simulateur
 from vidange.simulateur.simulateur import ErreurSimulation, Simulateur
+from vidange.stockage.simulation import stockage_du_simulateur
 
 # Modules qu'on sait simuler : nom → fabrique (simulateur → module).
 # Chaque vrai module s'ajoutera ici quand ses gestes seront écrits.
@@ -74,6 +77,7 @@ MODULES: dict[str, Callable[[Simulateur], Module]] = {
 # nom → fabrique (simulateur → modules).
 GROUPES: dict[str, Callable[[Simulateur], list[Module]]] = {
     "remplissage": lambda simulateur: _remplissage(simulateur),
+    "stockage": lambda simulateur: _stockage(simulateur),
 }
 # Scénario de simulateur.yaml joué par défaut avec un module (sinon : le haut du fichier).
 SCENARIOS = {
@@ -85,11 +89,22 @@ SCENARIOS = {
     "lavage_couvercles": "lavage_couvercles",
     "lavage_bocaux": "lavage_bocaux",
     "remplissage": "remplissage",
+    "stockage": "stockage",
 }
 
 
 def _remplissage(simulateur: Simulateur) -> list[Module]:
     scenario = remplissage_du_simulateur(simulateur)
+    return [
+        module_remplissage(
+            scenario.remplissage, scenario.prehension, scenario.mycelium, scenario.plan
+        ),
+        module_mycelium(scenario.mycelium),
+    ]
+
+
+def _stockage(simulateur: Simulateur) -> list[Module]:
+    scenario = stockage_du_simulateur(simulateur).remplissage
     return [
         module_remplissage(
             scenario.remplissage, scenario.prehension, scenario.mycelium, scenario.plan

@@ -558,6 +558,8 @@ griffe:
   # Pour le Mycélium : hauteur du seau (mesurée, h dans « plateau à min(0,78 − h ; 0,575) »),
   # mycelium_kg = mycélium par couche (EXEMPLE, à régler aux essais), seaux_par_bocal = 2 pour
   # les petits seaux (un bocal pour 2 seaux de la même variété au plus, Karulium 26/10).
+  # Pour le Stockage : pas_pile_m = de combien monte le bord quand on ajoute un seau à une pile
+  # (fiche du Stockage, gelée le 27/10).
   formats:
     seau_a:
       haut_z: 0.78
@@ -569,6 +571,7 @@ griffe:
       tassement_bas_max_sous_bord_m: 0.30
       hauteur: 0.25
       mycelium_kg: 0.15
+      pas_pile_m: 0.030
     # Seau de 5 L : tassement de la dernière couche seulement, tête centrée, bas du godet au plus
     # 8 cm sous le bord (fiche).
     seau_b:
@@ -582,6 +585,7 @@ griffe:
       hauteur: 0.20
       mycelium_kg: 0.10
       seaux_par_bocal: 2
+      pas_pile_m: 0.030
     seau_c:
       haut_z: 0.78
       rayon_haut: 0.1475
@@ -592,6 +596,7 @@ griffe:
       tassement_bas_max_sous_bord_m: 0.30
       hauteur: 0.235
       mycelium_kg: 0.15
+      pas_pile_m: 0.035
     seau_d:
       haut_z: 0.78
       rayon_haut: 0.1375
@@ -602,6 +607,7 @@ griffe:
       tassement_bas_max_sous_bord_m: 0.30
       hauteur: 0.265
       mycelium_kg: 0.15
+      pas_pile_m: 0.045
   format_par_defaut: seau_a
   # Poste de vidage de la griffe (Transfert, 7/10, plan de commande) : mât en (0,925 ; 0,14),
   # godet à 1 cm du centre du seau (seau au poste y 0,135). À revoir au gel du Remplissage.
@@ -1132,13 +1138,14 @@ remplissage:
     seuil_deux_seaux: 1.5
     accord_kg: 0.1
   # Rangement : toujours plateau en bas, le pousseur pousse vers le stockage jusqu'au bout de sa
-  # course (0,325). Pas de bande du haut (décisions, Remplissage, points 2 et 3). Les files (y)
-  # viennent du Stockage (tâche 35) : EXEMPLES. La file 2 (0,785) n'est permise que chariot du fût
-  # en place (règle 7 : axe ≤ 0,475 sinon).
+  # course (0,325). Pas de bande du haut (décisions, Remplissage, points 2 et 3). Les 3 files du
+  # tiroir (y 0,215 / 0,500 / 0,785) viennent du Stockage (tâche 35, stockage → tiroir). Règle 7 :
+  # sans le chariot du fût en place, axe ≤ 0,475, donc seule la file 1 est permise.
   rangement:
     files:
       file_1: {y: 0.215, pousseur_m: 0.325}
-      file_2: {y: 0.785, pousseur_m: 0.325}
+      file_2: {y: 0.500, pousseur_m: 0.325}
+      file_3: {y: 0.785, pousseur_m: 0.325}
   # Par format : plateau au contact d'un seul seau posé (seau B : 0,5125, fiche ; les autres :
   # EXEMPLES, bord d'un seul seau 19 mm sous la barrière à 0,7315, comme le B, mesurés à l'essai),
   # barres au contact du corps (EXEMPLES).
@@ -1152,6 +1159,144 @@ remplissage:
   couvercles: {y: 0.50, plateau_z: 0.459}
   # Mode inspection des bocaux : plateau fixe à 0,575, barres ouvertes, arrêts de 45°.
   inspection: {plateau_z: 0.575, pas_deg: 45}
+
+# Stockage (fiche du module « Stockage », GELÉ le 27/10/2026, et fichier écrit pour le logiciel
+# par le fil Stockage, stockage/logiciel/stockage-pour-logiciel.md, 31/10, recopiés dans la
+# tâche 35). Repère du portique, en mètres. Le Stockage est PASSIF : aucun moteur, aucun capteur
+# de présence. Le Pi tient l'inventaire de chaque place (registre) et calcule les places à partir
+# de ces chiffres. Chiffres VRAIS de la fiche, sauf ceux marqués EXEMPLE.
+# Un verrou du logiciel ne protège que la MACHINE : la sécurité des personnes reste câblée.
+stockage:
+  exemple: true
+  # Plateau du haut (dessus de la tôle) et ses 2 panneaux relevables (de x à x).
+  plateau_z: 0.496
+  panneaux:
+    p1: [1.155, 1.870]
+    p2: [1.880, 2.595]
+  # Piles de seaux vides (mode seaux, sans tapis). Un format par pile.
+  #   Seaux par pile : n = min(⌊(bord_max_m − h)/pas⌋ + 1 ; ⌊(sortie_max_m − 2h)/pas⌋ + 1),
+  #   h = hauteur du seau et pas = pas_pile_m (griffe → formats). Contrôle : A 5, B 7, C 5, D 3.
+  #   Bord du seau du haut d'une pile de k seaux = plateau_z + h + (k − 1) × pas.
+  # Ordre de vidage : la rangée y 0,84, puis 0,53, puis la bande 0,215 (l'ordre des rangées est
+  # ici) ; dans une rangée, la pile la plus proche du chariot d'abord ; sortie vers −x.
+  piles:
+    bord_max_m: 0.39
+    sortie_max_m: 0.645
+    ordre_rangees_y: [0.84, 0.53, 0.215]
+    places:
+      pile_1: [1.30, 0.84]
+      pile_2: [1.61, 0.84]
+      pile_3: [1.96, 0.53]
+      pile_4: [1.96, 0.84]
+      pile_5: [2.27, 0.53]
+    # Places de fin de lot sur la bande y 0,215, x choisis par le Pi : la 1re pile au plus près
+    # de x_debut (bord de la pile ; EXEMPLE : 1 cm du bord de P1), mais son axe à x ≥ 1,29
+    # (sortie de la bande, trajets → camera_bocal) ; 1 cm entre piles ; bord de la dernière à
+    # 10 cm au moins de la caméra du fond (hublot) ; au plus 5 places. Toutes du même format.
+    fin_de_lot:
+      y: 0.215
+      x_debut: 1.165
+      ecart_m: 0.01
+      marge_hublot_m: 0.10
+      places_max: 5
+    # Pile des couvercles des seaux (x 2,27 à 2,29 : 2,28 ; y 0,84). Pas de geste ici.
+    couvercles: [2.28, 0.84]
+  # Tiroir du bas, 3 files (celles du Remplissage, remplissage → rangement → files), tôle à
+  # 0,176 (au plus 5 mm sous le plateau du chariot en bas). Entrée à x 1,10, butée de fond à
+  # 2,612. Le pousseur du chariot pousse vers +x : avance ≈ 0,272 par seau, poussée au moins
+  # 0,18 ; le premier seau ne dépasse jamais la butée. Effort pour une file de 6 : 150 à 240 N
+  # (à l'essai). Rangement seulement boucle fermée (tiroir rentré et verrouillé). Oreilles de
+  # l'anse à 45° des files (remplissage → anse_deg).
+  # Seaux par file et par format : 5, sauf la file y 0,215 avec A, B et D : 4 (dernière place
+  # sous la caméra du fond). Seau C : files en quinconce avec une cale de 15 cm, 16 par lot :
+  # la répartition 5 / 6 / 5 est un EXEMPLE (à recopier du fichier du fil Stockage).
+  # Capacité du tiroir : 14 (A, B, D) ou 16 (C).
+  tiroir:
+    tole_z: 0.176
+    entree_x: 1.10
+    butee_x: 2.612
+    avance_par_seau_m: 0.272
+    poussee_min_m: 0.18
+    effort_n: [150, 240]
+    # Remplies dans cet ordre (la file 0,785 en dernier : elle demande le chariot du fût).
+    files: [file_1, file_2, file_3]
+    places:
+      seau_a: {file_1: 4, file_2: 5, file_3: 5}
+      seau_b: {file_1: 4, file_2: 5, file_3: 5}
+      seau_c: {file_1: 5, file_2: 6, file_3: 5}
+      seau_d: {file_1: 4, file_2: 5, file_3: 5}
+    # Formats rangés en quinconce, avec leur cale (posée par l'opérateur).
+    quinconce:
+      seau_c: {cale_m: 0.15}
+  # Bande du haut (seaux pleins poussés sur le plateau, y 0,215) : CASE VIDE, désactivée. Les
+  # places sont dans l'inventaire ; le geste viendra avec la tâche 35 bis.
+  bande_haut:
+    active: false
+    y: 0.215
+    places: {seau_a: 4, seau_b: 5, seau_c: 4, seau_d: 4}
+  # Bocaux (mode bocaux, tapis silicone de 1 mm posé ; avant de relever un panneau : plateau
+  # vidé, tapis enlevé). Quinconce de 95 : 9 rangées j = 0 à 8, y = y0 + pas_y × j ; rangées
+  # paires 11 bocaux x = x0 + pas_x × i, impaires 10 bocaux. Bocal posé à 0,497, haut de la
+  # capsule à 0,644.
+  bocaux:
+    rangees: 9
+    y0: 0.06
+    pas_y: 0.0953
+    pas_x: 0.110
+    paires: {places: 11, x0: 1.2075}
+    impaires: {places: 10, x0: 1.2625}
+    pose_z: 0.497
+    capsule_haut_z: 0.644
+    # Bocaux de semence : 3 × 6 places, x = x0 + pas_x × i (i = 0 à 5), aux 3 y.
+    semence:
+      x0: 1.21
+      pas_x: 0.108
+      colonnes: 6
+      y: [0.415, 0.523, 0.631]
+    # Mode inspection (coin du haut du quinconce) : 9 places « suspects », 6 places vides de
+    # séparation, les 80 autres saines. Places en [rangée j, rang i]. EXEMPLES : la liste exacte
+    # est dans le fichier du fil Stockage, à recopier ici. Coin plein : arrêt et alerte.
+    inspection:
+      suspects: [[8, 0], [8, 1], [8, 2], [7, 0], [7, 1], [7, 2], [6, 0], [6, 1], [6, 2]]
+      separation: [[8, 3], [7, 3], [6, 3], [5, 0], [5, 1], [5, 2]]
+  # Boîtes à capsules (l'opérateur les change) : fond ≈ 0,498, dessus 0,739, Ø 0,12 ; hauteur de
+  # la pile = fond_z + epaisseur_capsule_m × nombre de capsules.
+  boites:
+    fond_z: 0.498
+    dessus_z: 0.739
+    diametre_m: 0.12
+    epaisseur_capsule_m: 0.013
+    places:
+      capsules_enlevees: [2.52, 0.53]
+      couvercles_perces: [2.52, 0.80]
+  # Hublot de la caméra du fond, affleurant : fond du bocal présenté entre 0,70 et 0,73 ; pas de
+  # photo si l'entonnoir est sur le plateau.
+  hublot: {x: 2.50, y: 0.22, fond_bocal_z: [0.70, 0.73]}
+  # Trajets au-dessus du Stockage (verrous de la préhension et de la griffe).
+  trajets:
+    # Griffe : axe du mât à x ≤ 2,325 (butée logicielle).
+    griffe_x_max: 2.325
+    # Seau tenu au-dessus du plateau (x des panneaux) : fond à 0,79 au moins, jamais au-dessus
+    # d'une pile qui a des seaux (sauf à la verticale de la pile qu'il quitte, où son fond reste
+    # à 3 cm au moins au-dessus de la lèvre qui reste).
+    seau_fond_min_z: 0.79
+    sortie_pile_marge_m: 0.03
+    # Rail opérateur : haut du seau ≤ 1,10 tant que l'axe est à y > 0,82 (en plus de la règle 3
+    # de la préhension), sauf à la verticale d'une place de pile (voir la PR de la tâche 35).
+    rail_operateur: {y_min: 0.82, bord_max_z: 1.10}
+    # Boîtes à capsules : au-dessus de leur emprise (cercle agrandi du rayon de l'objet), point le
+    # plus bas à 0,76 au moins.
+    boites_bas_min_z: 0.76
+    # Caméra du bocal (boîtier de la griffe) :
+    #   seau tenu en y < 0,44 : axe à x ≥ 1,29 et fond ≥ 0,80 (sortie de la bande y 0,215 en
+    #   longeant vers −x, puis vers +y jusqu'à 0,44) ;
+    #   tête vide ou autre objet : axe à y ≥ 0,29 + rayon tant que x < 1,115 + rayon (entonnoir,
+    #   rayon 0,09 : x ≥ 1,205 si y < 0,38).
+    camera_bocal:
+      seau_y_libre: 0.44
+      seau_x_min: 1.29
+      seau_fond_min_z: 0.80
+      coin: [1.115, 0.29]
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

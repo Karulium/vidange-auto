@@ -163,6 +163,9 @@ class Griffe:
         self._pas: Pas | None = None
         self._depuis = 0.0
         self._points = self._points_des_couches()
+        # Verrou du Stockage (Stockage.brancher_griffe, tâche 35) pour chaque pas : boucle du
+        # tiroir fermée, mât à x ≤ 2,325. Raison du refus, ou None. Sans stockage : rien.
+        self.verrou_stockage: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
 
     # ------------------------------------------------------------ état
 
@@ -229,6 +232,8 @@ class Griffe:
             return
         cible = self.pose.avec(**pas.cibles)
         refus = self.regles.refus_mouvement(self.pose, cible, self.contexte())
+        if refus is None:
+            refus = self.verrou_stockage(self.pose, cible)
         if refus is not None:
             raise ErreurEtape(f"griffe, « {pas.texte} » refusé : {refus}", QUOI_FAIRE)
         journal.debug("Griffe : %s", pas.texte)

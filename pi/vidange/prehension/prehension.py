@@ -28,7 +28,9 @@ Lâcher : vanne fermée (électroaimants coupés pour une capsule), puis remont�
 
 Les brosses du lavage (un pas avec `brosses`) ne tournent que si `verrou_brosses` (donné par
 le Lavage) l'accepte : tête à sa hauteur de travail au-dessus du fût, objet tenu (vide).
-Chaque pas passe aussi par `verrou_chariot` (donné par le Remplissage, règle 9) : pas de descente
+Chaque pas passe aussi par `verrou_chariot` (donné par le Remplissage, règle 9) et par
+`verrou_stockage` (donné par le Stockage : trajets au-dessus des piles, boucle du tiroir et des
+panneaux) ; `verrou_chariot` : pas de descente
 sous ≈ 0,84 au-dessus du chariot sans barres ouvertes et tête du micropore rentrée.
 
 Ces verrous ne protègent que la MACHINE : la sécurité des personnes reste câblée.
@@ -160,6 +162,9 @@ class Prehension:
         # Verrou du chariot de remplissage (règle 9 : Remplissage.refus_prehension) pour chaque
         # pas, de `depart` à `arrivee` : raison du refus, ou None. Sans remplissage : rien.
         self.verrou_chariot: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
+        # Verrous des trajets au-dessus du Stockage (Stockage.refus_prehension, tâche 35) pour
+        # chaque pas : raison du refus, ou None. Sans stockage : rien.
+        self.verrou_stockage: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
         # Ce que tient la tête, son poids pesé (N), et le vide de la dernière prise (kPa).
         self.objet: Objet | None = None
         self.poids_porte_n = 0.0
@@ -216,7 +221,9 @@ class Prehension:
         except ErreurEtape as erreur:
             return str(erreur)
         refus = self.regles.refus_mouvement(depart, cible, self.contexte())
-        return refus if refus is not None else self.verrou_chariot(depart, cible)
+        if refus is None:
+            refus = self.verrou_chariot(depart, cible)
+        return refus if refus is not None else self.verrou_stockage(depart, cible)
 
     def memoire(self) -> dict:
         """Ce que tient la tête, à noter dans le carnet du chef (reprise après coupure)."""
@@ -280,6 +287,8 @@ class Prehension:
         refus = self.regles.refus_mouvement(self.pose, cible, self.contexte())
         if refus is None:
             refus = self.verrou_chariot(self.pose, cible)
+        if refus is None:
+            refus = self.verrou_stockage(self.pose, cible)
         if refus is None and pas.brosses:
             refus = self.verrou_brosses(self.pose)
         if refus is not None:

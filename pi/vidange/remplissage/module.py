@@ -17,17 +17,28 @@ le solveur (tâche 23). C'est le scénario « remplissage » du simulateur, et u
     revenir_au_poste       couche suivante : retour au poste (agitateur au garage)
     ranger                 anse à son angle, chariot à sa file plateau en bas, le pousseur pousse
     fin                    plus de seau
+
+Avec le Stockage (`Plan.magasin`, tâche 35), les seaux vides viennent des piles (dans l'ordre de
+vidage), le seau du dessus d'une prise double retourne sur sa pile, la file est choisie par
+l'inventaire du tiroir, et chaque geste attend la boucle du stockage fermée (elle est aussi
+surveillée pendant les gestes). Trois étapes de plus :
+
+    verifier_place         une place libre au tiroir pour ce seau ? sinon : vider le tiroir
+    vider_le_tiroir        plus de place (ou fin de lot) : substrat restant noté, le Pi attend que
+                           la boucle s'ouvre (tiroir tiré) puis se referme
+    confirmer_tiroir_vide  Go de Karulium à l'écran : les files repartent vides
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from vidange.chef import Condition, Etape, Module
+from vidange.chef import Condition, ErreurEtape, Etape, Module
 from vidange.mycelium.mycelium import Demande, Mycelium
 from vidange.prehension.prehension import QUOI_FAIRE as QUOI_FAIRE_PREHENSION
 from vidange.prehension.prehension import Prehension
 from vidange.reglages import PlaceSimulee
 from vidange.remplissage.remplissage import QUOI_FAIRE, Remplissage
+from vidange.stockage.stockage import QUOI_FAIRE_TIROIR, Stockage
 
 GESTE = "remplissage_geste_max"
 GESTE_PREHENSION = "prehension_geste_max"
@@ -39,24 +50,33 @@ class SeauAFaire:
     seau: str
     format: str
     variete: str
-    file: str
+    # Sans file : le Stockage la choisit (Plan.magasin).
+    file: str | None = None
     cycle: int | None = None
 
 
 @dataclass
 class Plan:
-    """Les seaux à remplir, où les prendre et où rendre le seau du dessus d'une prise double."""
+    """Les seaux à remplir, où les prendre et où rendre le seau du dessus d'une prise double :
+    places fixes (`stockage`, `rendu` : simulateur, essais), ou le Stockage (`magasin`)."""
 
     seaux: list[SeauAFaire]
-    stockage: PlaceSimulee
-    rendu: PlaceSimulee
     versement_s: float
+    stockage: PlaceSimulee | None = None
+    rendu: PlaceSimulee | None = None
+    magasin: Stockage | None = None
+    # Fin de lot : le tiroir est vidé à la fin, comme quand il est plein (avec le Stockage).
+    fin_de_lot: bool = False
+    # Substrat qui reste dans le fût (kg), noté quand le cycle attend le vidage du tiroir.
+    substrat_restant: Callable[[], float | None] = lambda: None
     # Appelé quand la préhension va prendre ce seau, et à chaque versement (simulateur).
     debut_seau: Callable[[SeauAFaire], object] = lambda seau: None
     versement: Callable[[SeauAFaire, int], object] = lambda seau, couche: None
     numero: int = 0
     couche: int = 1
     faits: list[str] = field(default_factory=list)
+    # La file où le seau en cours est rangé (choisie par le Stockage).
+    file_en_cours: str | None = None
 
     @property
     def seau(self) -> SeauAFaire:
@@ -67,8 +87,14 @@ def module_remplissage(
     remplissage: Remplissage, prehension: Prehension, mycelium: Mycelium, plan: Plan
 ) -> Module:
     chariot, tete = remplissage.chariot, prehension.tete
+    magasin = plan.magasin
     # Règle 9 : la tête ne descend au-dessus du chariot que barres ouvertes, micropore rentré.
     remplissage.brancher_prehension(prehension)
+    # Stockage : verrous des trajets au-dessus des piles, boucle du tiroir et des panneaux.
+    boucle: tuple[Condition, ...] = ()
+    if magasin is not None:
+        magasin.brancher_prehension(prehension)
+        boucle = (magasin.boucle,)
     fin = Condition("geste du chariot de remplissage fini", remplissage.geste_fini)
     fin_tete = Condition("geste de la préhension fini", prehension.geste_fini)
     garage = Condition(
@@ -84,9 +110,20 @@ def module_remplissage(
         "chariot du fût en place (le chariot de remplissage va à la pose du seau vide)",
         lambda: remplissage.place_permise(remplissage.reglages.pose_y),
     )
+
+    def file_du_seau() -> str:
+        if magasin is None:
+            if plan.seau.file is None:
+                raise ErreurEtape(f"remplissage : pas de file pour le seau {plan.seau.seau}")
+            return plan.seau.file
+        file = magasin.file_libre(plan.seau.format)
+        if file is None:
+            raise ErreurEtape("remplissage : plus de place au tiroir du stockage", QUOI_FAIRE)
+        return file
+
     file_permise = Condition(
         "chariot du fût en place (le chariot de remplissage va à la file du seau)",
-        lambda: remplissage.place_permise(remplissage.reglages.rangement.files[plan.seau.file].y),
+        lambda: remplissage.place_permise(remplissage.reglages.rangement.files[file_du_seau()].y),
     )
 
     def geste(nom: str, fabrique, ensuite=None, entree=()) -> Etape:
@@ -96,7 +133,7 @@ def module_remplissage(
             action=lambda: remplissage.lancer(fabrique),
             fin=fin,
             delai_max=GESTE,
-            entree=(chariot.pretes, *entree),
+            entree=(chariot.pretes, *boucle, *entree),
             ensuite=ensuite,
         )
 
@@ -107,13 +144,21 @@ def module_remplissage(
             action=lambda: prehension.lancer(fabrique),
             fin=fin_tete,
             delai_max=GESTE_PREHENSION,
-            entree=(tete.pretes, chariot.pretes),
+            entree=(tete.pretes, chariot.pretes, *boucle),
             ensuite=ensuite,
         )
 
+    def place_fixe(place: PlaceSimulee | None, quoi: str) -> PlaceSimulee:
+        if place is None:
+            raise ErreurEtape(f"remplissage : pas de place pour {quoi} (ni Stockage)")
+        return place
+
     def prendre():
-        seau, place = plan.seau, plan.stockage
+        seau = plan.seau
         plan.debut_seau(seau)
+        if magasin is not None:
+            return magasin.geste_prendre_seau(prehension, seau.format)
+        place = place_fixe(plan.stockage, "prendre les seaux vides")
         return prehension.geste_prendre("seau", place.x, place.y, place.contact_z, seau.format)
 
     def poser():
@@ -121,10 +166,16 @@ def module_remplissage(
         return remplissage.geste_poser_seau(prehension, seau.format, seau.seau, seau.cycle)
 
     def apres_pose() -> str:
-        return "rendre_le_seau_du_dessus" if remplissage.seau_du_dessus else "orienter_l_anse"
+        if not remplissage.seau_du_dessus:
+            return "orienter_l_anse"
+        if magasin is not None:
+            magasin.prise_double()
+        return "rendre_le_seau_du_dessus"
 
     def rendre():
-        place = plan.rendu
+        if magasin is not None:
+            return magasin.geste_rendre_seau(prehension)
+        place = place_fixe(plan.rendu, "rendre le seau du dessus")
         return prehension.geste_poser(place.x, place.y, place.contact_z)
 
     def apres_rendu() -> None:
@@ -144,18 +195,68 @@ def module_remplissage(
             return "revenir_au_poste"
         return "ranger"
 
+    def ranger():
+        plan.file_en_cours = file_du_seau()
+        return remplissage.geste_ranger(plan.file_en_cours)
+
     def apres_rangement() -> str:
+        if magasin is not None and plan.file_en_cours is not None:
+            magasin.seau_range(plan.file_en_cours)
         plan.faits.append(plan.seau.seau)
         plan.numero += 1
         plan.couche = 1
         if plan.numero < len(plan.seaux):
-            return "aller_a_la_pose"
+            return "aller_a_la_pose" if magasin is None else "verifier_place"
         mycelium.terminer()
+        if magasin is not None and plan.fin_de_lot and magasin.seaux_au_tiroir() > 0:
+            magasin.demander_vidage("fin de lot", plan.substrat_restant())
+            return "vider_le_tiroir"
         return "fin"
+
+    def verifier_place() -> str:
+        assert magasin is not None
+        if magasin.file_libre(plan.seau.format) is not None:
+            return "aller_a_la_pose"
+        magasin.demander_vidage("plus de place au tiroir", plan.substrat_restant())
+        return "vider_le_tiroir"
+
+    def apres_vidage() -> str:
+        return "verifier_place" if plan.numero < len(plan.seaux) else "fin"
+
+    etapes_stockage: tuple[Etape, ...] = ()
+    if magasin is not None:
+        etapes_stockage = (
+            Etape(
+                "vider_le_tiroir",
+                QUOI_FAIRE_TIROIR,
+                entree=(
+                    Condition(
+                        "tiroir du stockage vidé (boucle vue ouverte, puis refermée)",
+                        magasin.tiroir_ressorti_et_remis,
+                        QUOI_FAIRE_TIROIR,
+                    ),
+                ),
+            ),
+            Etape(
+                "confirmer_tiroir_vide",
+                "Confirmer à l'écran que le tiroir du stockage est vide (Go).",
+                action=magasin.tiroir_vide,
+                entree=(magasin.boucle,),
+                demande_go=True,
+                ensuite=apres_vidage,
+            ),
+        )
+    debut: tuple[Etape, ...] = ()
+    if magasin is not None:
+        debut = (
+            # La boucle est surveillée à chaque étape : on l'attend ici (le Pi le dit à l'écran).
+            Etape("verifier_place", QUOI_FAIRE_TIROIR, entree=boucle, ensuite=verifier_place),
+        )
 
     return Module(
         nom="remplissage",
         etapes=(
+            *debut,
             geste(
                 "aller_a_la_pose",
                 lambda: remplissage.geste_aller_a_la_pose(plan.seau.format),
@@ -184,15 +285,11 @@ def module_remplissage(
                 lambda: "verser",
                 entree=(libre, garage),
             ),
-            geste(
-                "ranger",
-                lambda: remplissage.geste_ranger(plan.seau.file),
-                apres_rangement,
-                entree=(libre, garage, file_permise),
-            ),
+            geste("ranger", ranger, apres_rangement, entree=(libre, garage, file_permise)),
+            *etapes_stockage,
             Etape("fin", "Rien à faire : plus de seau à remplir.", ensuite=lambda: None),
         ),
-        surveillances=(chariot.surveillance, tete.surveillance),
+        surveillances=(chariot.surveillance, tete.surveillance, *boucle),
         pauser=lambda: (remplissage.pauser(), prehension.pauser()),
         reprendre=lambda: (remplissage.reprendre(), prehension.reprendre()),
         arreter=lambda: (remplissage.arreter(), prehension.arreter()),

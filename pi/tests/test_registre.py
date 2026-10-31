@@ -363,7 +363,7 @@ def test_montee_de_la_version_1_a_la_derniere(tmp_path: Path):
     cnx.close()
     registre = Registre(chemin, tmp_path / "photos")
     try:
-        assert registre.version == montees.VERSION == 7
+        assert registre.version == montees.VERSION == 8
         assert registre.alarmes_ouvertes()[0]["message"] == "avant"
         assert registre.alarmes_ouvertes()[0]["bilan"] is None
         assert registre.compter()["envois"] == registre.compter()["prises_griffe"] == 0

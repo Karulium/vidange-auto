@@ -529,6 +529,9 @@ class FormatSeau(Modele):
     # Poids du seau vide (kg), tare par type de seau (docs/decisions.md). La préhension s'en sert
     # pour confirmer la prise d'un seau vide ; sans lui, elle prend son poids estimé.
     tare_kg: float | None = Field(default=None, gt=0)
+    # Pour le Stockage (obligatoire s'il y a la partie « stockage ») : de combien monte le bord
+    # quand on ajoute un seau à une pile (m).
+    pas_pile_m: float | None = Field(default=None, gt=0)
 
 
 class Griffe(Modele):
@@ -1558,6 +1561,171 @@ class Remplissage(Modele):
         return self
 
 
+# -------------------------------------------------------------- stockage
+
+
+Point = tuple[float, float]
+
+
+class FinDeLotStockage(Modele):
+    """Places de fin de lot, sur une bande en y : x calculés par le Pi (vidange.stockage.places)."""
+
+    y: float
+    # Bord de la 1re pile au plus près de x_debut ; ecart_m entre deux piles ; bord de la dernière
+    # à marge_hublot_m au moins de l'axe du hublot ; au plus places_max piles.
+    x_debut: float
+    ecart_m: float = Field(ge=0)
+    marge_hublot_m: float = Field(ge=0)
+    places_max: int = Field(ge=0)
+
+
+class PilesStockage(Modele):
+    """Piles de seaux vides (mode seaux) : n = min(⌊(bord_max_m − h)/pas⌋ + 1 ;
+    ⌊(sortie_max_m − 2h)/pas⌋ + 1)."""
+
+    bord_max_m: float = Field(gt=0)
+    sortie_max_m: float = Field(gt=0)
+    # Rangées vidées dans cet ordre (y) ; dans une rangée, la pile la plus proche du chariot.
+    ordre_rangees_y: list[float] = Field(min_length=1)
+    places: dict[Nom, Point] = Field(min_length=1)
+    fin_de_lot: FinDeLotStockage
+    couvercles: Point
+
+
+class QuinconceStockage(Modele):
+    cale_m: float = Field(gt=0)
+
+
+class TiroirStockage(Modele):
+    """Tiroir du bas : les files du Remplissage, poussées vers +x jusqu'à la butée."""
+
+    tole_z: float
+    entree_x: float
+    butee_x: float
+    avance_par_seau_m: float = Field(gt=0)
+    poussee_min_m: float = Field(gt=0)
+    effort_n: Intervalle
+    # Noms des files (remplissage → rangement → files), remplies dans cet ordre.
+    files: list[Nom] = Field(min_length=1)
+    # Seaux par file, par format.
+    places: dict[Nom, dict[Nom, Annotated[int, Field(ge=0)]]] = Field(min_length=1)
+    quinconce: dict[Nom, QuinconceStockage] = Field(default_factory=dict)
+
+
+class BandeHautStockage(Modele):
+    """Bande du haut (seaux pleins sur le plateau) : case vide, désactivée (tâche 35 bis)."""
+
+    active: bool = False
+    y: float
+    places: dict[Nom, Annotated[int, Field(ge=0)]] = Field(default_factory=dict)
+
+
+class RangeeBocaux(Modele):
+    places: int = Field(ge=1)
+    x0: float
+
+
+class SemenceStockage(Modele):
+    x0: float
+    pas_x: float = Field(gt=0)
+    colonnes: int = Field(ge=1)
+    y: list[float] = Field(min_length=1)
+
+
+class InspectionStockage(Modele):
+    """Coin d'inspection : places [rangée j, rang i] du quinconce."""
+
+    suspects: list[tuple[int, int]] = Field(min_length=1)
+    separation: list[tuple[int, int]] = Field(default_factory=list)
+
+
+class BocauxStockage(Modele):
+    rangees: int = Field(ge=1)
+    y0: float
+    pas_y: float = Field(gt=0)
+    pas_x: float = Field(gt=0)
+    paires: RangeeBocaux
+    impaires: RangeeBocaux
+    pose_z: float
+    capsule_haut_z: float
+    semence: SemenceStockage
+    inspection: InspectionStockage
+
+
+class BoitesStockage(Modele):
+    fond_z: float
+    dessus_z: float
+    diametre_m: float = Field(gt=0)
+    epaisseur_capsule_m: float = Field(gt=0)
+    places: dict[Nom, Point] = Field(min_length=1)
+
+
+class HublotStockage(Modele):
+    x: float
+    y: float
+    fond_bocal_z: Intervalle
+
+
+class RailOperateurStockage(Modele):
+    y_min: float
+    bord_max_z: float
+
+
+class CameraBocalStockage(Modele):
+    seau_y_libre: float
+    seau_x_min: float
+    seau_fond_min_z: float
+    # Coin du boîtier (x, y) : tête vide ou autre objet, axe à y ≥ coin y + rayon tant que
+    # x < coin x + rayon.
+    coin: Point
+
+
+class TrajetsStockage(Modele):
+    griffe_x_max: float
+    seau_fond_min_z: float
+    sortie_pile_marge_m: float = Field(ge=0)
+    rail_operateur: RailOperateurStockage
+    boites_bas_min_z: float
+    camera_bocal: CameraBocalStockage
+
+
+class Stockage(Modele):
+    """Module Stockage, gelé le 27/10/2026 : passif (aucun moteur, aucun capteur de présence).
+    Le Pi tient l'inventaire et calcule les places (vidange.stockage). Repère du portique (m)."""
+
+    exemple: bool = False
+    plateau_z: float
+    panneaux: dict[Nom, Intervalle] = Field(min_length=1)
+    piles: PilesStockage
+    tiroir: TiroirStockage
+    bande_haut: BandeHautStockage
+    bocaux: BocauxStockage
+    boites: BoitesStockage
+    hublot: HublotStockage
+    trajets: TrajetsStockage
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Stockage":
+        erreurs = []
+        intervalles = [
+            *((f"panneaux → {nom}", valeur) for nom, valeur in self.panneaux.items()),
+            ("tiroir → effort_n", self.tiroir.effort_n),
+            ("hublot → fond_bocal_z", self.hublot.fond_bocal_z),
+        ]
+        for nom, (debut, fin) in intervalles:
+            if debut >= fin:
+                erreurs.append(f"{nom} : du plus petit au plus grand")
+        if self.tiroir.entree_x >= self.tiroir.butee_x:
+            erreurs.append("tiroir : l'entrée (entree_x) avant la butée (butee_x)")
+        if len(set(self.tiroir.files)) != len(self.tiroir.files):
+            erreurs.append("tiroir → files : une file écrite deux fois")
+        if self.boites.dessus_z <= self.boites.fond_z:
+            erreurs.append("boites : le dessus (dessus_z) au-dessus du fond (fond_z)")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -1594,6 +1762,9 @@ class Machine(Modele):
     # Remplissage : le chariot des seaux (None : pas de remplissage). Demande la griffe (table
     # des formats) et le poste du fût.
     remplissage: Remplissage | None = None
+    # Stockage : piles, tiroir, bocaux (None : pas de stockage). Demande la griffe (table des
+    # formats), la préhension et le remplissage (files du tiroir).
+    stockage: Stockage | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -1662,6 +1833,7 @@ class Machine(Modele):
         erreurs += self._verifier_prehension()
         erreurs += self._verifier_lavage()
         erreurs += self._verifier_remplissage()
+        erreurs += self._verifier_stockage()
         if self.camera_dosage is not None and (self.prehension is None or self.mycelium is None):
             erreurs.append(
                 "camera_dosage : il faut aussi les parties « prehension » et « mycelium »"
@@ -2161,6 +2333,126 @@ class Machine(Modele):
                 "barres",
                 retourneur.barres_ouvertes_m,
             )
+        return erreurs
+
+    def _verifier_stockage(self) -> list[str]:
+        """Les places du Stockage, calculées par le Pi, tiennent : seaux par pile, piles qui ne se
+        chevauchent pas, tiroir qui ne dépasse pas la butée, coin d'inspection, courses."""
+        stockage = self.stockage
+        if stockage is None:
+            return []
+        if self.griffe is None or self.prehension is None or self.remplissage is None:
+            return [
+                "stockage : il faut aussi les parties « griffe », « prehension » et « remplissage »"
+            ]
+        # Les calculs des places sont ceux du programme (une seule façon de les faire).
+        from vidange.stockage import places
+
+        erreurs: list[str] = []
+        formats = self.griffe.formats
+        for nom, seau in formats.items():
+            if seau.hauteur is None or seau.pas_pile_m is None:
+                erreurs.append(
+                    f"stockage : il faut la hauteur et pas_pile_m du format « {nom} » "
+                    "(griffe → formats)"
+                )
+        if erreurs:
+            return erreurs
+        for nom in formats:
+            if places.seaux_par_pile(self, nom) < 1:
+                erreurs.append(f"stockage → piles : aucun seau « {nom} » ne tient dans une pile")
+        # Les piles ne se chevauchent pas (rayon du haut du plus grand seau, + celui des boîtes).
+        rayon = max(seau.rayon_haut for seau in formats.values())
+        cercles = {nom: (point, rayon) for nom, point in stockage.piles.places.items()}
+        cercles["couvercles"] = (stockage.piles.couvercles, rayon)
+        for nom, point in stockage.boites.places.items():
+            cercles[f"boîte {nom}"] = (point, stockage.boites.diametre_m / 2)
+        noms = list(cercles)
+        for i, nom_a in enumerate(noms):
+            for nom_b in noms[i + 1 :]:
+                (pa, ra), (pb, rb) = cercles[nom_a], cercles[nom_b]
+                if math.dist(pa, pb) < ra + rb - 1e-9:
+                    erreurs.append(
+                        f"stockage : les places « {nom_a} » et « {nom_b} » se chevauchent"
+                    )
+        rangees = stockage.piles.ordre_rangees_y
+        for nom, (_, y) in [
+            *stockage.piles.places.items(),
+            ("fin_de_lot", (0.0, stockage.piles.fin_de_lot.y)),
+        ]:
+            if not any(abs(y - rangee) < 1e-6 for rangee in rangees):
+                erreurs.append(f"stockage → piles → {nom} : y {y:g} absent de ordre_rangees_y")
+        # Places atteintes par la préhension (pont, chariot) et contact d'un seul seau.
+        pont = self.axes["pont_x"].course
+        chariot = self.axes["chariot_y"].course
+        tete_z = self.axes["prehension_z"].course
+        for format in formats:
+            points = places.places_piles(self, format)
+            for nom, (x, y) in points.items():
+                x_pont = x - self.prehension.decalage_mat_x
+                if not (pont[0] <= x_pont <= pont[1] and chariot[0] <= y <= chariot[1]):
+                    erreurs.append(
+                        f"stockage → {nom} ({format}) : ({x:g} ; {y:g}) hors de portée de la "
+                        "préhension (courses de pont_x et chariot_y)"
+                    )
+            contact = places.contact_prise(self, format, 1)
+            if not tete_z[0] <= contact <= tete_z[1]:
+                erreurs.append(
+                    f"stockage : prise d'un seau « {format} » seul à {contact:g}, hors de la "
+                    "course de prehension_z"
+                )
+            if len(places.places_fin_de_lot(self, format)) < 1:
+                erreurs.append(f"stockage → fin_de_lot : aucune place pour « {format} »")
+        # Tiroir : ses files sont celles du Remplissage ; le premier seau ne dépasse pas la butée.
+        tiroir = stockage.tiroir
+        files = self.remplissage.rangement.files
+        for nom in tiroir.files:
+            if nom not in files:
+                erreurs.append(
+                    f"stockage → tiroir → files : « {nom} » absente de remplissage → "
+                    "rangement → files"
+                )
+        longueur = tiroir.butee_x - tiroir.entree_x
+        for format in formats:
+            par_file = tiroir.places.get(format)
+            if par_file is None:
+                erreurs.append(f"stockage → tiroir → places : il faut le format « {format} »")
+                continue
+            if set(par_file) != set(tiroir.files):
+                erreurs.append(
+                    f"stockage → tiroir → places → {format} : il faut une valeur pour chaque "
+                    "file de tiroir → files, et seulement elles"
+                )
+            if format in tiroir.quinconce:
+                continue
+            for nom, nombre in par_file.items():
+                if nombre * tiroir.avance_par_seau_m > longueur + 1e-9:
+                    erreurs.append(
+                        f"stockage → tiroir → places → {format} → {nom} : {nombre} seaux × "
+                        f"{tiroir.avance_par_seau_m:g} m dépassent la butée (file de "
+                        f"{longueur:g} m)"
+                    )
+        for nom in [*tiroir.places, *tiroir.quinconce, *stockage.bande_haut.places]:
+            if nom not in formats:
+                erreurs.append(f"stockage : format « {nom} » absent de griffe → formats")
+        # Coin d'inspection : des places du quinconce, chacune une seule fois.
+        quinconce = places.places_bocaux(self)
+        inspection = stockage.bocaux.inspection
+        vues: set[tuple[int, int]] = set()
+        coin = (("suspects", inspection.suspects), ("separation", inspection.separation))
+        for quoi, liste in coin:
+            for j, i in liste:
+                if places.nom_bocal(j, i) not in quinconce:
+                    erreurs.append(
+                        f"stockage → bocaux → inspection → {quoi} : pas de place [{j}, {i}]"
+                    )
+                elif (j, i) in vues:
+                    erreurs.append(
+                        f"stockage → bocaux → inspection : place [{j}, {i}] écrite deux fois"
+                    )
+                vues.add((j, i))
+        if places.capacite_boite(self) < 1:
+            erreurs.append("stockage → boites : pas une capsule entre le fond et le dessus")
         return erreurs
 
     def _se_chevauchent(self, nom_a: str, nom_b: str) -> bool:
@@ -2776,7 +3068,8 @@ class SeauRemplissageSimule(Modele):
     seau: str
     format: Nom
     variete: str
-    file: Nom
+    # Sans file : c'est le Stockage qui la choisit (scénario « stockage »).
+    file: Nom | None = None
     prise_double: bool = False
     anse_deg: float = 0.0
 
@@ -2792,6 +3085,19 @@ class RemplissageSimule(Modele):
     versement_s: float = Field(gt=0)
     # Deux seaux emboîtés : le fond de celui du dessous dépasse de tant sous celui du dessus.
     double_plus_bas_m: float = Field(default=0.03, ge=0)
+    seaux: list[SeauRemplissageSimule] = Field(min_length=1)
+
+
+class PileSimulee(Modele):
+    format: Nom
+    nombre: int = Field(ge=0)
+
+
+class StockageSimule(Modele):
+    """Le stockage imaginaire (scénario « stockage ») : piles de seaux vides chargées au départ
+    (place → format et nombre), et les seaux à remplir (sans file : le Stockage la choisit)."""
+
+    piles: dict[Nom, PileSimulee] = Field(min_length=1)
     seaux: list[SeauRemplissageSimule] = Field(min_length=1)
 
 
@@ -2831,6 +3137,8 @@ class ReglagesSimulateur(Modele):
     lavage: LavageSimule | None = None
     # Les seaux imaginaires du remplissage.
     remplissage: RemplissageSimule | None = None
+    # Le stockage imaginaire (piles de seaux vides, seaux rangés dans le tiroir).
+    stockage: StockageSimule | None = None
 
 
 # ---------------------------------------------------------- accelerometre.yaml

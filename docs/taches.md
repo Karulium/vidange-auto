@@ -769,7 +769,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
      logicielle 0,575 reste. Câbles capteurs : noter la répartition dans `docs/entrees-sorties.yaml`.
   Tests : 2 barres qui bougent ensemble, écart refusé, ALM d'une seule barre, agitateur refusé à y 0,39, permis à
   0,40. Procédure d'essai mise à jour ; « testé sur le vrai matériel : non ».
-- [ ] **35. Stockage : places, inventaire, prise sur les piles, rangement dans le tiroir** — Modèle : Opus, effort
+- [x] **35. Stockage : places, inventaire, prise sur les piles, rangement dans le tiroir** — Modèle : Opus, effort
   moyen. **Avant le solveur (tâche 23).**
   Sources (recopiées ici le 31/10/2026) : fiche du module « Stockage », **gelé le 27/10/2026**, et le fichier écrit
   pour le logiciel par le fil Stockage (`stockage/logiciel/stockage-pour-logiciel.md`, 31/10, repère du portique).
