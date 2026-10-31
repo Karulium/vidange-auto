@@ -861,6 +861,9 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
      après chaque poussée (y 0,215 ± 0,007, sinon arrêt et alerte ; point d'appel avec un faux tant que la vision ne
      sait pas lire la photo) ; fin de lot tiroir d'abord, piles de fin de lot de la bande vidées en premier ;
      capacité A 18, B 19, C 20, D 18 ; la pause « plus de place » reste pour un fût plus gros.
+  3. Mode couvercles (règles 14 et 15 de `docs/decisions.md`, 31/10) : chariot à y ≥ 0,515 pendant le demi-tour de
+     la tête de la griffe, retour à y 0,50 seulement après ; plateau descendu à 0,459 au poste avant de rouler vers
+     y 0,50. Tests : demi-tour refusé chariot à 0,50, trajet refusé plateau pas encore à 0,459.
   Tests : poussée à 0,4985 permise barres ouvertes et bras rangé, refusée sinon ; plateau hors de 0,496-0,501 refusé
   pour la bande du haut ; chariot à y 0,215 plateau haut permis (plus de règle des anneaux) ; places et capacité par
   format ; seau mal aligné à la photo ⇒ arrêt ; scénario du simulateur avec 18 seaux A. « Testé sur le vrai
