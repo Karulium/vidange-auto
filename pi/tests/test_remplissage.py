@@ -1,6 +1,6 @@
-"""Remplissage (tâches 34 et 34 bis) : réglages, positions interdites du chariot, gestes sur le
-chariot imaginaire, scénario « remplissage » du simulateur avec le Mycélium, chariot sur un faux
-FluidNC, outil d'essai."""
+"""Remplissage (tâches 34, 34 bis et 34 ter) : réglages, positions interdites du chariot, gestes
+sur le chariot imaginaire, scénario « remplissage » du simulateur avec le Mycélium, chariot sur un
+faux FluidNC, outil d'essai."""
 
 import threading
 import time
@@ -60,6 +60,10 @@ def test_reglages_du_remplissage():
     assert r.formats["seau_b"].pose_plateau_z == 0.5125
     assert r.couvercles.plateau_z == 0.459 and r.inspection.plateau_z == 0.575
     assert r.prise_double.traction_max_par_barre_n == 35
+    # Tâche 34 ter : barres à l'approche (hw 0,225) avant la pose ; prise double a) à i).
+    assert r.pose_seau.barres_approche_hw_m == 0.225
+    assert (r.prise_double.descente_plateau_m, r.prise_double.descente_tete_m) == (0.05, 0.028)
+    assert r.prise_double.remontee_plateau_m == 0.028
     # Tâche 34 bis : pousseur rentré à son zéro (côté fût), course 0,325 ; bout du chariot à
     # 0,40 de l'axe ; plus de bande du haut.
     assert r.pousseur_rentre_m == 0 and MACHINE.axes["pousseur"].course == (0.0, 0.325)
@@ -86,6 +90,26 @@ def test_une_file_hors_de_la_course_est_refusee(reglages):
     assert "remplissage → rangement → files → file_2 → y : 0.95 hors de la course" in erreur_de(
         reglages
     )
+
+
+def test_les_barres_restent_sous_les_joues_pendant_la_pose(reglages):
+    remplacer(
+        reglages / "machine.yaml", "barres_approche_hw_m: 0.225", "barres_approche_hw_m: 0.24"
+    )
+    assert "pose_seau → barres_approche_hw_m : sous les joues" in erreur_de(reglages)
+
+
+def test_la_prise_double_reste_sous_l_approche(reglages):
+    # Seau C : lèvre 0,1475 + 3 mm, + 1,5 cm au lâcher = 0,1655 : refusé si l'approche est à 0,16.
+    remplacer(
+        reglages / "machine.yaml", "barres_approche_hw_m: 0.225", "barres_approche_hw_m: 0.16"
+    )
+    assert "formats → seau_c : pendant la prise double, les barres iraient" in erreur_de(reglages)
+
+
+def test_le_plateau_d_approche_reste_dans_la_course(reglages):
+    remplacer(reglages / "machine.yaml", "plateau_sous_pose_m: 0.05", "plateau_sous_pose_m: 0.30")
+    assert "plateau d'approche de la pose" in erreur_de(reglages)
 
 
 def test_le_dosage_doit_etre_celui_du_mycelium(reglages):
@@ -270,15 +294,31 @@ class Banc:
 def test_aller_a_la_pose_passe_par_les_bons_detours():
     banc = Banc()
     banc.jouer(lambda: banc.remplissage.geste_aller_a_la_pose("seau_b"))
-    assert banc.pose == Pose(y=0.50, z=0.5125, a=0.0, barres=0.30, pousseur=0.0)
-    # Seau B : centrage (barres à 0,1195 + jeu) plateau à 0,5125 : le plateau descend sous les
-    # joues, les barres passent, le plateau remonte.
+    # Pose 1) : barres à l'approche (0,225) et plateau d'approche (0,5125 − 0,05), sous 0,48.
+    assert banc.pose == Pose(y=0.50, z=pytest.approx(0.4625), a=0.0, barres=0.225, pousseur=0.0)
+    assert banc.pas() == [
+        "chariot à la pose du seau vide",
+        "pose 1) : barres à l'approche",
+        "pose 1) : plateau d'approche",
+    ]
+    # Plateau haut à la pose (après l'inspection) : il descend sous les joues avant que les
+    # barres les traversent, et ne remonte pas (barres fermées : pas au-dessus de 0,515).
+    banc.jouer(lambda: banc.remplissage.geste_barres(0.30))
+    banc.jouer(lambda: banc.remplissage.geste_plateau(0.575))
+    banc.jouer(lambda: banc.remplissage.geste_aller_a_la_pose("seau_b"))
+    assert banc.pas()[-3:] == [
+        "plateau plus bas, pour bouger les barres",
+        "pose 1) : barres à l'approche",
+        "pose 1) : plateau d'approche",
+    ]
+    assert banc.etat.mouvements[-3].axes["plateau_z"][1] == 0.48
+    # Seau B posé (plateau au contact, 0,5125) : centrage puis barres ouvertes ; elles ne
+    # repassent les joues qu'après la descente du plateau sous 0,48, qui remonte ensuite.
+    banc.jouer(lambda: banc.remplissage.geste_plateau(0.5125))
     banc.remplissage.seau = SeauPlateau("seau_b", "S1", angle_anse=0.0)
     banc.jouer(banc.remplissage.geste_centrer)
-    assert banc.pas()[-6:] == [
-        "plateau plus bas, pour bouger les barres",
+    assert banc.pas()[-4:] == [
         "centrer le seau (barres au contact)",
-        "plateau remonté",
         "plateau plus bas, pour bouger les barres",
         "barres ouvertes",
         "plateau remonté",
@@ -495,9 +535,9 @@ def test_le_vrai_chariot_remplace_le_faux_retourneur():
 # ---------------------------------------------------------------- scénario du simulateur
 
 
-def jouer_scenario(regler=lambda scenario: None):
-    with Simulateur(REGLAGES, LISTE, "remplissage") as simulation:
-        scenario = remplissage_du_simulateur(simulation)
+def jouer_scenario(regler=lambda scenario: None, reglages=REGLAGES, **options):
+    with Simulateur(reglages, LISTE, "remplissage") as simulation:
+        scenario = remplissage_du_simulateur(simulation, **options)
         regler(scenario)
         modules = [
             module_remplissage(
@@ -520,33 +560,143 @@ def test_scenario_remplissage_va_au_bout():
     assert scenario.remplissage.seau is None and not scenario.remplissage.seau_du_dessus
 
 
-def test_prise_double_dans_l_ordre_a_a_h():
+POSE_SIMPLE = [
+    "pose 1) : barres à l'approche",
+    "pose 1) : plateau d'approche",
+    "pose : la tête descend avec le seau",
+    "pose : la tête à la hauteur de pose",
+    "pose 2) : le plateau monte jusqu'au contact du seau",
+    "pose 3) : centrage",
+]
+PRISE_DOUBLE = [
+    "prise double a) : lâcher (barres)",
+    "prise double b) : le plateau descend",
+    "prise double c) : la tête descend",
+    "prise double d) : barres serrées sur la lèvre du seau du dessous",
+    "prise double e) : le plateau monte jusqu'au contact du fond du seau du dessous",
+    "prise double f) : la tête remonte avec le seau du haut",
+    "prise double g) : lâcher (barres)",
+    "prise double h) : le plateau monte",
+    "prise double : centrage",
+]
+LACHER = "pose : barres à l'approche (lâcher)"
+
+
+def poses(scenario) -> list[list]:
+    """Les mouvements de chaque pose (de « pose 1) » au lâcher des barres), seau par seau."""
+    tous = [
+        m
+        for m in scenario.chariot._etat.mouvements
+        if m.position.startswith(("pose", "prise double"))
+    ]
+    resultat, courant = [], []
+    for mouvement in tous:
+        courant.append(mouvement)
+        if mouvement.position == LACHER:
+            resultat.append(courant)
+            courant = []
+    return resultat
+
+
+def verifier_prise_double(mouvements, format: str) -> None:
+    """Ordre exact de la pose puis de a) à i), plateau au contact (Hc ≈ 3 cm sous un seau seul),
+    barres toujours sous les joues de l'élévateur (0,235)."""
+    assert [m.position for m in mouvements] == POSE_SIMPLE + PRISE_DOUBLE + [LACHER]
+    plateau = {m.position: m.axes["plateau_z"][1] for m in mouvements if "plateau_z" in m.axes}
+    hc = REMPLISSAGE.formats[format].pose_plateau_z - 0.03
+    assert plateau["pose 2) : le plateau monte jusqu'au contact du seau"] == pytest.approx(hc)
+    assert plateau["prise double b) : le plateau descend"] == pytest.approx(hc - 0.05)
+    assert plateau[PRISE_DOUBLE[4]] == pytest.approx(hc - 0.028)
+    assert plateau["prise double h) : le plateau monte"] == pytest.approx(hc)
+    # Barres : approche, centrage, + 1,5 cm, lèvre (Ø haut + 6 mm), + 1,5 cm, centrage, approche.
+    barres = [m.axes["barres"][1] for m in mouvements if "barres" in m.axes]
+    centrage = REMPLISSAGE.formats[format].centrage_hw_m + 0.002
+    levre = max(MACHINE.griffe.formats[format].rayon_haut + 0.003, 0.1195)  # type: ignore[union-attr]
+    assert barres == pytest.approx(
+        [0.225, centrage, centrage + 0.015, levre, levre + 0.015, centrage, 0.225]
+    )
+    assert max(barres) < 0.235
+    # Les barres traversent les joues à pose 1), plateau ≤ 0,48 (avant que la tête descende) ;
+    # ensuite, plus aucune traversée : hw reste sous 0,235.
+    assert mouvements[0].axes["barres"][1] == 0.225
+    for m in mouvements[1:]:
+        if "barres" in m.axes:
+            assert max(m.axes["barres"]) < 0.235
+
+
+def test_pose_et_prise_double_dans_l_ordre():
     planning, scenario = jouer_scenario()
     assert planning.fini, planning.probleme
-    tous = scenario.chariot._etat.mouvements
-    mouvements = [m for m in tous if m.position.startswith("prise double")]
-    assert [m.position for m in mouvements] == [
-        "prise double : barres au centrage",
-        "prise double a) : la tête monte",
-        "prise double b) : lâcher (barres)",
-        "prise double c) : la tête descend",
-        "prise double d) : barres contre la lèvre du seau du dessous",
-        "prise double e) : le plateau monte toucher le fond du seau du dessous",
-        "prise double f) : la tête emporte le seau du haut",
-        "prise double g) : lâcher (barres)",
-        "prise double h) : le plateau remonte",
+    seau_a, seau_b = poses(scenario)
+    verifier_prise_double(seau_a, "seau_a")
+    # Seau B seul : pose 1) à 3), barrière libre, la tête lâche, les barres reviennent à
+    # l'approche ; le plateau est resté au contact (0,5125).
+    assert [m.position for m in seau_b] == POSE_SIMPLE + [LACHER]
+    contact = [m for m in seau_b if m.position == POSE_SIMPLE[4]][0]
+    assert contact.axes["plateau_z"][1] == pytest.approx(0.5125)
+
+
+def test_prise_double_d_un_seau_b():
+    """Seau B : pose à 0,5125, au-dessus des joues. Les barres les traversent avant la pose,
+    plateau ≤ 0,48 : la prise double n'est plus bloquée."""
+    simule = REGLAGES.simulateur
+    assert simule.remplissage is not None
+    seaux = [
+        seau.model_copy(update={"prise_double": seau.format == "seau_b"})
+        for seau in simule.remplissage.seaux
     ]
-    # Le plateau ne bouge pas avant e.
-    e = [m.position for m in mouvements].index(
-        "prise double e) : le plateau monte toucher le fond du seau du dessous"
+    reglages = REGLAGES.model_copy(
+        update={
+            "simulateur": simule.model_copy(
+                update={"remplissage": simule.remplissage.model_copy(update={"seaux": seaux})}
+            )
+        }
     )
-    assert not any("plateau_z" in m.axes for m in mouvements[:e])
-    assert "plateau_z" in mouvements[-1].axes
-    # Barres : centrage (seau A, 0,125 + jeu), + 1,5 cm, lèvre (Ø haut + 6 mm), + 1,5 cm.
-    barres = [m.axes["barres"][1] for m in mouvements if "barres" in m.axes]
-    seau_a = MACHINE.griffe.formats["seau_a"]  # type: ignore[union-attr]
-    levre = seau_a.rayon_haut + 0.003
-    assert barres == pytest.approx([0.127, 0.142, levre, levre + 0.015])
+    planning, scenario = jouer_scenario(reglages=reglages)
+    assert planning.fini, planning.probleme
+    etapes = [ligne.etape for ligne in planning.lignes if ligne.module == "remplissage"]
+    assert etapes.count("rendre_le_seau_du_dessus") == 1
+    seau_a, seau_b = poses(scenario)
+    assert [m.position for m in seau_a] == POSE_SIMPLE + [LACHER]
+    verifier_prise_double(seau_b, "seau_b")
+    assert scenario.plan.faits == ["S0101", "S0102"]
+
+
+def test_le_contact_est_lu_par_la_balance():
+    pas = []
+
+    def regler(scenario):
+        executer = scenario.chariot.executer
+
+        def espion(un_pas, cible):
+            pas.append(un_pas)
+            executer(un_pas, cible)
+
+        scenario.chariot.executer = espion
+
+    planning, _ = jouer_scenario(regler)
+    assert planning.fini, planning.probleme
+    contacts = [p for p in pas if p.contact_kg is not None]
+    assert [p.texte for p in contacts] == [POSE_SIMPLE[4], PRISE_DOUBLE[4], POSE_SIMPLE[4]]
+    assert all(p.contact_kg == REMPLISSAGE.pose_seau.contact_kg for p in contacts)
+    assert all(p.vitesse == "contact" for p in contacts)
+
+
+def test_pose_sans_contact_du_plateau():
+    def regler(scenario):
+        scenario.chariot.sans_contact = True
+
+    planning, _ = jouer_scenario(regler)
+    assert not planning.fini
+    assert "le plateau n'a pas touché le seau tenu par la tête" in planning.probleme
+
+
+def test_pose_refusee_micropore_pas_rentre():
+    """Pendant la pose, la tête descend barres à l'approche (exception à la règle 9), mais
+    jamais tête du micropore sortie."""
+    planning, scenario = jouer_scenario(micropore_rentre=lambda: False)
+    assert not planning.fini and "tête du micropore rentrée" in planning.probleme
+    assert not any(m.position.startswith("pose :") for m in scenario.chariot._etat.mouvements)
 
 
 def test_prise_double_qui_echoue():

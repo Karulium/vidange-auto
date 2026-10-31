@@ -7,9 +7,11 @@ agitateur et un faux porte-bocal.
 
 La fausse balance pèse les seaux posés sur le plateau (tare de leur format, ou le poids d'un
 seau vide) et ce qui y tombe (substrat des versements, grains du mycélium). Un seau est sur le
-plateau quand la tête le lâche au-dessus du plateau (vanne fermée). La barrière est coupée tant
-que deux seaux emboîtés y sont (`double`) : ils sont séparés quand le plateau touche le fond de
-celui du dessous, sauf `separation_ratee`. Le pousseur qui sort fait partir le seau.
+plateau quand le plateau touche son fond, ou quand la tête le lâche au-dessus du plateau (vanne
+fermée). Le plateau qui monte au contact s'arrête au fond du seau tenu par la tête (`fond_z`),
+≈ 3 cm plus bas pour deux seaux emboîtés. La barrière est coupée tant que deux seaux emboîtés y
+sont (`double`) : ils sont séparés quand la tête tire le seau du dessus (prise double f), sauf
+`separation_ratee`. Le pousseur qui sort fait partir le seau.
 `alarme_barres_active` : le pilote des barres est en alarme (ALM).
 """
 
@@ -22,7 +24,9 @@ from vidange.mycelium.mycelium import Bocal, Mycelium
 from vidange.mycelium.regles import EtatChariot
 from vidange.mycelium.simulation import AgitateurSimule, FauxPorteBocal
 from vidange.prehension.prehension import Prehension
+from vidange.prehension.regles import Pose as PoseTete
 from vidange.prehension.simulation import prehension_du_simulateur
+from vidange.prehension.tete import Pas as PasTete
 from vidange.reglages import Machine
 from vidange.remplissage.chariot import VITESSES_LENTES, Pas, Resultat
 from vidange.remplissage.module import Plan, SeauAFaire
@@ -60,6 +64,9 @@ class ChariotSimule:
         self.seau_pose = False
         self.double = False
         self.contenu_kg = 0.0
+        # Fond du seau tenu au-dessus du plateau (None : rien) ; sans cette fonction, le plateau
+        # touche tout de suite.
+        self.fond_z: Callable[[], float | None] | None = None
         # Pannes.
         self.separation_ratee = False
         self.barriere_muette = False
@@ -92,11 +99,11 @@ class ChariotSimule:
         depart = self.position()
         contact = False
         if pas.contact_kg is not None and not self.sans_contact:
-            # Le plateau touche tout de suite le fond du seau du dessous.
-            cible, contact = depart, True
-            self.seau_pose = True
-            if not self.separation_ratee:
-                self.double = False
+            fond = depart.z if self.fond_z is None else self.fond_z()
+            if fond is not None and depart.z - 1e-9 <= fond <= cible.z + 1e-9:
+                # Le plateau s'arrête au fond du seau : il le porte.
+                cible, contact = cible.avec(z=fond), True
+                self.seau_pose = True
         rentre = self.reglages.pousseur_rentre_m
         if "pousseur" in pas.cibles and abs(cible.pousseur - rentre) > 0.05:
             self.seau_pose, self.double, self.contenu_kg = False, False, 0.0
@@ -271,20 +278,37 @@ def remplissage_du_simulateur(
     def versement(seau: SeauAFaire, couche: int) -> None:
         chariot.contenu_kg += machine.griffe.formats[seau.format].dose_kg  # type: ignore[union-attr]
 
-    vanne = prehension.tete.vanne
+    vanne, executer = prehension.tete.vanne, prehension.tete.executer
 
-    def vanne_simulee(ouverte: bool) -> None:
-        # La tête lâche un seau au-dessus du plateau : il y est posé.
+    def au_dessus() -> bool:
         pose, plateau = prehension.tete.position(), chariot.position()
-        dessus = (
+        return (
             abs(pose.x - machine.remplissage.axe_x) < 0.01  # type: ignore[union-attr]
             and abs(pose.y - plateau.y) < 0.01
         )
-        if not ouverte and dessus and prehension.objet is not None:
+
+    def vanne_simulee(ouverte: bool) -> None:
+        # La tête lâche un seau au-dessus du plateau : il y est posé.
+        if not ouverte and au_dessus() and prehension.objet is not None:
             chariot.seau_pose = True
         vanne(ouverte)
 
+    def executer_simule(pas: PasTete, cible: PoseTete, poids_porte_n: float) -> None:
+        # Prise double f) : la tête tire le seau du dessus, les barres tiennent celui du dessous.
+        if pas.traction_max_n is not None and chariot.double and not chariot.separation_ratee:
+            chariot.double = False
+        executer(pas, cible, poids_porte_n)
+
+    def fond_z() -> float | None:
+        # Fond du seau tenu par la tête (de celui du dessous s'ils sont deux).
+        if prehension.objet is None or not au_dessus():
+            return None
+        fond = prehension.tete.position().z - machine.remplissage.face_au_dessus_plateau_m  # type: ignore[union-attr]
+        return fond - (simule.double_plus_bas_m if chariot.double else 0.0)
+
     prehension.tete.vanne = vanne_simulee  # type: ignore[method-assign]
+    prehension.tete.executer = executer_simule  # type: ignore[method-assign]
+    chariot.fond_z = fond_z
     plan = Plan(
         seaux=[
             SeauAFaire(seau.seau, seau.format, seau.variete, seau.file, cycle)

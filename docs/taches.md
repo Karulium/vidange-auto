@@ -749,7 +749,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   Tests : chacun des 7 points (dont prise double dans le nouvel ordre, poussée refusée plateau > 0,20, file refusée
   au-delà de 0,475 sans chariot du fût, prise d'origine vers le bas, ALM des barres pendant le centrage, préhension
   refusée barres fermées hors mode couvercles). « Testé sur le vrai matériel : non ».
-- [ ] **34 ter. Remplissage : ordre de la pose et de la prise double** — Modèle : Sonnet, effort moyen. Refaire la
+- [x] **34 ter. Remplissage : ordre de la pose et de la prise double** — Modèle : Sonnet, effort moyen. Refaire la
   pose d'un seau vide et la prise double dans l'ordre du point 5 de la section « Remplissage » de `docs/decisions.md`
   (corrigé le 30/10 au soir ; il remplace l'ordre a) à h) de la tâche 34 bis) : barres à l'approche (hw 0,225)
   plateau ≤ 0,48 AVANT la pose, plateau qui monte jusqu'au contact lu par la balance, centrage, puis prise double
@@ -757,6 +757,18 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   Les barres ne se rouvrent au-delà de 0,235 qu'après la descente du plateau ≤ 0,48. Mettre à jour le scénario du
   simulateur et la procédure d'essai. Tests : l'ordre exact de la pose et de a) à i), prise double d'un seau B
   réussie (plus d'alarme), hw toujours sous 0,235 pendant la prise double, contact lu par la balance.
+- [ ] **34 quater. Remplissage : deux moteurs de barres, agitateur à 0,40, fin de course haut câblé** — Modèle :
+  Sonnet, effort moyen. D'après la section « Remplissage, changements du 31/10/2026 » de `docs/decisions.md`.
+  1. Barres : un axe de plus sur la carte 2 (barre côté mur, barre côté allée), chacun avec son pilote boucle fermée
+     (ALM) et son fin de course d'origine (décalages hw ≈ 0,309 et ≈ 0,306 dans les réglages). Les gestes commandent
+     toujours les 2 ensemble (mêmes pas, sens inversé) ; le Pi refuse un écart entre les 2 barres plus grand qu'un
+     réglage (exemple 1 mm). Règles 2, 3, 4 et 8 et alarmes ALM vérifiées pour chaque barre. Mettre à jour
+     `fluidnc/chariot.yaml`, `docs/entrees-sorties.yaml` (`exemple: true`) et `pi/reglages/fluidnc.yaml`.
+  2. Passage de l'agitateur : y ≥ 0,40 au lieu de 0,375, partout où c'est réglé (Mycélium et Remplissage) ; tests.
+  3. Fin de course haut de la montée : retiré des entrées de la carte (il est en série dans l'arrêt) ; la butée
+     logicielle 0,575 reste. Câbles capteurs : noter la répartition dans `docs/entrees-sorties.yaml`.
+  Tests : 2 barres qui bougent ensemble, écart refusé, ALM d'une seule barre, agitateur refusé à y 0,39, permis à
+  0,40. Procédure d'essai mise à jour ; « testé sur le vrai matériel : non ».
 - [ ] 35. Stockage
 - [ ] 36. Portique
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**

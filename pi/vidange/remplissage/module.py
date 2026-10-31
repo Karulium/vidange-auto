@@ -5,9 +5,9 @@ puis `ecarter` et `amener_au_dosage` du Remplissage). Les versements de la griff
 `Plan` (le seau tourne pendant `versement_s`) : le vrai enchaînement avec la griffe viendra avec
 le solveur (tâche 23). C'est le scénario « remplissage » du simulateur, et un essai.
 
-    aller_a_la_pose        chariot à y 0,50, barres ouvertes, plateau à la hauteur de pose
+    aller_a_la_pose        chariot à y 0,50, barres à l'approche, plateau sous la hauteur de pose
     prendre_le_seau        la préhension prend un seau vide au stockage
-    poser_le_seau          posé sur le plateau ; barrière coupée : prise double séparée
+    poser_le_seau          plateau au contact (balance), centrage ; barrière coupée : prise double
     rendre_le_seau_du_dessus   après une prise double : le seau du dessus rendu au stockage
     orienter_l_anse        QR du flanc lu, oreilles de l'anse à 45° des barres
     centrer                barres en position au contact du corps, puis ouvertes

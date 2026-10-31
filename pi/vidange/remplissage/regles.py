@@ -24,7 +24,8 @@ barres (hw : axe d'une barre à l'axe du plateau), pousseur. Les règles :
    (agitateur au garage manivelle en haut, ou au dosage manivelle en bas) ; et le plateau ne
    monte au poste qu'agitateur au garage, sauf pour le dosage (son bocal est au-dessus) ;
 9. la préhension ne descend sous ≈ 0,84 au-dessus du chariot qu'avec barres ouvertes et tête du
-   micropore rentrée (sauf en mode couvercles : vidange.remplissage.remplissage).
+   micropore rentrée (sauf en mode couvercles et pendant la pose d'un seau vide, barres à
+   l'approche : vidange.remplissage.remplissage).
 Un mouvement est vérifié point par point (tous les pas_verification_m), axes ensemble en ligne
 droite comme le fait FluidNC. Tous les chiffres viennent de machine.yaml (`remplissage`).
 
@@ -255,11 +256,16 @@ class ReglesRemplissage:
                 f"que barres ouvertes (hw ≥ {_m(v.barres_ouvertes_min)} ; elles sont à "
                 f"{_m(pose.barres)})"
             )
+        return self.refus_micropore(micropore_rentre)
+
+    def refus_micropore(self, micropore_rentre: bool | None) -> str | None:
+        """Règle 9, seulement le micropore (pose d'un seau vide : les barres sont à l'approche
+        ou serrées par le geste du chariot lui-même)."""
         if micropore_rentre is not True:
             etat = "pas connue" if micropore_rentre is None else "sortie"
             return (
-                f"la préhension ne descend sous {_m(v.prehension_libre_z)} au-dessus du chariot "
-                f"que tête du micropore rentrée (elle est {etat})"
+                f"la préhension ne descend sous {_m(self.verrous.prehension_libre_z)} au-dessus du "
+                f"chariot que tête du micropore rentrée (elle est {etat})"
             )
         return None
 
