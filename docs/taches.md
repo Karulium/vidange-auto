@@ -807,12 +807,14 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
     fût en place). Avance d'environ 0,272 par seau (poussée au moins 0,18) ; le premier seau ne dépasse jamais la
     butée. Effort 150 à 240 N pour une file de 6 (réglage, à l'essai).
   - **5 seaux par file**, sauf la file y 0,215 avec A, B et D : **4** (dernière place vide sous la caméra du fond).
-    Seau C : files en quinconce avec une cale de 15 cm, **16 par lot**. Capacité d'un lot : **14 (A, B, D) ou 16 (C)**.
-    Le plateau du haut ne reçoit **aucun** seau plein (personne ne peut les y poser).
+    Seau C : files en quinconce avec une cale de 15 cm, **16 par lot**. Capacité du tiroir : **14 (A, B, D) ou 16 (C)**.
+  - **Bande du haut (seaux pleins sur le plateau du haut, y 0,215) : case vide.** Karulium veut les y pousser avec le
+    pousseur du chariot (31/10), mais la tête du micropore, montée sur le chariot, gêne au-dessus de 0,40 ; le projet
+    de la mécanique cherche la solution. Ici : prévoir ces places dans l'inventaire (désactivées par un réglage), sans
+    geste. Elles viendront dans une tâche à part, avec leurs règles.
   - Rangement seulement boucle fermée (tiroir rentré et verrouillé). Oreilles de l'anse à 45° des files.
-  - **Tiroir plein** avant la fin du fût : le Pi met le cycle en **pause** (substrat restant noté), invite à vider le
-    tiroir, attend la boucle fermée, repart avec les files vides (choix recommandé à Karulium le 31/10 : à recopier
-    dans `docs/decisions.md` avec sa réponse). Fin de lot : pareil, puis lot suivant.
+  - **Plus aucune place libre** avant la fin du fût : le Pi met le cycle en **pause** (substrat restant noté), invite à
+    vider le tiroir, attend la boucle fermée, repart avec les files vides. Fin de lot : pareil, puis lot suivant.
   - Sortie (opérateur) : vider le plateau (bocaux, tapis), relever P1 et P2, déverrouiller et tirer le tiroir
     (0,50), sortir les seaux, tout remettre. Le Pi attend la boucle fermée et remet l'inventaire des files à zéro
     après confirmation à l'écran.
@@ -845,7 +847,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   écart tôle du tiroir / plateau pour le seau C (réglé aux pieds) ; sortie des seaux pleins par le store (Nettoyage).
 
   Simulateur : un scénario `stockage` : 2 piles de A prises dans l'ordre, 14 seaux rangés dans le tiroir (4 + 5 + 5),
-  pause « tiroir plein », boucle ouverte puis refermée, reprise. Tests : nombre par pile pour A à D, cote du bord
+  pause « plus de place », boucle ouverte puis refermée, reprise. Tests : nombre par pile pour A à D, cote du bord
   pour chaque k, ordre de vidage, capacité des files (C en quinconce), file 0,785 refusée sans chariot du fût, boucle
   ouverte ⇒ rien ne bouge, coin d'inspection plein, trajets refusés (boîtes, caméra du bocal, pile pleine).
   « Testé sur le vrai matériel : non » ; procédure d'essai (boucle des microrupteurs, cotes des piles, tiroir).
