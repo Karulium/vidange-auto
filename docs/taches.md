@@ -769,7 +769,88 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
      logicielle 0,575 reste. Câbles capteurs : noter la répartition dans `docs/entrees-sorties.yaml`.
   Tests : 2 barres qui bougent ensemble, écart refusé, ALM d'une seule barre, agitateur refusé à y 0,39, permis à
   0,40. Procédure d'essai mise à jour ; « testé sur le vrai matériel : non ».
-- [ ] 35. Stockage
+- [ ] **35. Stockage : places, inventaire, prise sur les piles, rangement dans le tiroir** — Modèle : Opus, effort
+  moyen. **Avant le solveur (tâche 23).**
+  Sources (recopiées ici le 31/10/2026) : fiche du module « Stockage », **gelé le 27/10/2026**, et le fichier écrit
+  pour le logiciel par le fil Stockage (`stockage/logiciel/stockage-pour-logiciel.md`, 31/10, repère du portique).
+  Les chiffres vont dans `pi/reglages/machine.yaml` (section `stockage`) et `docs/entrees-sorties.yaml`, jamais
+  dans le code ; le Pi **calcule** les places à partir de ces réglages (formules ci-dessous), vérifiées au démarrage.
+
+  *Ce que fait le module.* Le Stockage est **passif** : aucun moteur, aucun vérin commandé (les 4 vérins à gaz des
+  panneaux sont passifs). En haut, un plateau en tôle (dessus **0,496**, 2 panneaux relevables P1 x 1,155-1,870 et
+  P2 x 1,880-2,595) porte les piles de seaux vides, ou les bocaux (avec un tapis silicone de 1 mm, bocal posé à
+  0,497), les 2 boîtes à capsules et le hublot de la caméra du fond. En bas, un tiroir à 3 files reçoit les seaux
+  pleins poussés par le chariot de remplissage. **Aucun capteur de présence** : le Pi tient l'**inventaire** de
+  chaque place (registre), les caméras vérifient. Cette tâche écrit les places, l'inventaire, les règles de trajet
+  au-dessus du Stockage et les gestes qui appellent la Préhension et le Remplissage (déjà écrits).
+
+  *Entrée* (à ajouter, `exemple: true`) : **une seule** entrée de boucle de 3 microrupteurs NF en série, fermée si
+  le tiroir est rentré ET verrouillé, ET P1 fermé, ET P2 fermé. Boucle ouverte ⇒ **aucun mouvement** du portique ni
+  du chariot (le Pi attend et le dit à l'écran ; il ne sait pas lequel des trois est ouvert). Elle informe et fait
+  attendre : ce n'est pas la sécurité des personnes (portes et arrêt d'urgence restent câblés).
+
+  *Piles de seaux vides* (mode seaux, sans tapis) :
+  - Places, centres (x ; y) : (1,30 ; 0,84), (1,61 ; 0,84), (1,96 ; 0,53), (1,96 ; 0,84), (2,27 ; 0,53), plus 4 à 5
+    places de fin de lot sur la bande y 0,215, x choisis par le Pi : 1 cm entre piles, ≥ 10 cm de la caméra du fond.
+    **Un format par pile.** Couvercles des seaux : une pile en (2,27-2,29 ; 0,84).
+  - Seaux par pile : n = min(⌊(0,39 − h)/pas⌋ + 1 ; ⌊(0,645 − 2h)/pas⌋ + 1). Contrôle : A 5, B 7, C 5, D 3 (pas :
+    A 30 mm, B 30, C 35, D 45, dans la table des formats). Bord du seau du haut d'une pile de k seaux =
+    0,496 + h + (k − 1) × pas.
+  - Prendre le seau du haut (Préhension) : cote attendue du bord ci-dessus, k tenu à jour par le Pi (l'écart de
+    5 mm de la Préhension s'applique). Le seau **se sépare seul** de la pile (essais de Karulium) : pas de geste
+    spécial. Anse rabattue côté y+. Ordre de vidage : rangée y 0,84, puis 0,53, puis 0,215 ; dans une rangée, la
+    pile la plus proche du chariot d'abord ; sortie vers −x.
+
+  *Seaux pleins : le tiroir* (tôle à **0,176**, au plus 5 mm sous le plateau du chariot en bas) :
+  - Files sur l'axe y **0,215 / 0,500 / 0,785** ; entrée x 1,10, butée de fond x **2,612** ; poussés vers +x par le
+    pousseur du chariot (règles du Remplissage : plateau en bas, pousseur ≤ 0,20 ; file 0,785 seulement chariot du
+    fût en place). Avance d'environ 0,272 par seau (poussée au moins 0,18) ; le premier seau ne dépasse jamais la
+    butée. Effort 150 à 240 N pour une file de 6 (réglage, à l'essai).
+  - **5 seaux par file**, sauf la file y 0,215 avec A, B et D : **4** (dernière place vide sous la caméra du fond).
+    Seau C : files en quinconce avec une cale de 15 cm, **16 par lot**. Capacité du tiroir : **14 (A, B, D) ou 16 (C)**.
+  - **Bande du haut (seaux pleins sur le plateau du haut, y 0,215) : case vide.** Karulium veut les y pousser avec le
+    pousseur du chariot (31/10), mais la tête du micropore, montée sur le chariot, gêne au-dessus de 0,40 ; le projet
+    de la mécanique cherche la solution. Ici : prévoir ces places dans l'inventaire (désactivées par un réglage), sans
+    geste. Elles viendront dans une tâche à part, avec leurs règles.
+  - Rangement seulement boucle fermée (tiroir rentré et verrouillé). Oreilles de l'anse à 45° des files.
+  - **Plus aucune place libre** avant la fin du fût : le Pi met le cycle en **pause** (substrat restant noté), invite à
+    vider le tiroir, attend la boucle fermée, repart avec les files vides. Fin de lot : pareil, puis lot suivant.
+  - Sortie (opérateur) : vider le plateau (bocaux, tapis), relever P1 et P2, déverrouiller et tirer le tiroir
+    (0,50), sortir les seaux, tout remettre. Le Pi attend la boucle fermée et remet l'inventaire des files à zéro
+    après confirmation à l'écran.
+
+  *Bocaux* (mode bocaux, tapis posé ; avant de relever un panneau : plateau vidé, tapis enlevé) :
+  - Quinconce de 95 : 9 rangées j = 0 à 8, y = 0,06 + 0,0953 j ; rangées paires 11 bocaux x = 1,2075 + 0,110 i ;
+    impaires 10 bocaux x = 1,2625 + 0,110 i. Bocal posé à 0,497, haut de la capsule à **0,644**.
+  - Bocaux de semence : 18 places 3 × 6, x = 1,21 + 0,108 i (i = 0 à 5), y 0,415 / 0,523 / 0,631.
+  - Mode inspection (coin du haut) : 9 places « suspects », 6 places vides de séparation (liste exacte dans le fichier
+    source, à recopier dans les réglages), 80 saines ; coin plein ⇒ arrêt et alerte.
+  - Boîtes à capsules (2,52 ; 0,53) (capsules enlevées) et (2,52 ; 0,80) (couvercles percés) : fond ≈ 0,498, dessus
+    0,739 ; hauteur de la pile = 0,498 + 0,013 × nombre de capsules (l'opérateur change la boîte).
+  - Hublot de la caméra du fond (2,50 ; 0,22), affleurant : fond du bocal présenté à 0,70-0,73 ; pas de photo si
+    l'entonnoir est sur le plateau.
+
+  *Trajets au-dessus du Stockage* (verrous ; vérifier ce qui existe déjà dans la Préhension et la griffe) :
+  - Griffe x ≤ **2,325** (butée logicielle).
+  - Seau tenu : fond à **0,79 au moins** et jamais au-dessus d'une pile pleine (couloirs libérés par l'ordre de
+    vidage) ; à la sortie d'une pile, fond ≥ 3 cm au-dessus de la lèvre restante. Haut du seau ≤ 1,155 axe à
+    y ≤ 0,86, ≤ 1,10 au-delà (déjà dans la Préhension) ; ≤ 1,10 aussi tant que l'axe est à y > 0,82 (rail opérateur).
+  - Boîtes à capsules : au-dessus de leur emprise (cercle Ø 0,12 agrandi du rayon de l'objet) seulement point le plus
+    bas ≥ 0,76, sinon contourner.
+  - Caméra du bocal : sortie de la rangée y 0,215 en longeant vers −x axe à x ≥ 1,29, fond ≥ 0,80, puis vers +y jusqu'à
+    y ≥ 0,44 ; axe y ≥ 0,44 tant que x < 1,26 ; approches à vide par y ≥ 0,29 + rayon de l'objet (si x < 1,115 +
+    rayon) ; entonnoir dans la colonne 1,2075 : axe x ≥ 1,205 si y < 0,38.
+  - Boucle ouverte : aucun mouvement.
+
+  *Ce qui n'est pas dans cette tâche* : la photo du fond (vision, tâche 22 ter), le remplissage des bocaux par la
+  griffe et l'Entonnoir (43), le choix du travail (solveur, tâche 23). Points encore ouverts (réglages `exemple`) :
+  écart tôle du tiroir / plateau pour le seau C (réglé aux pieds) ; sortie des seaux pleins par le store (Nettoyage).
+
+  Simulateur : un scénario `stockage` : 2 piles de A prises dans l'ordre, 14 seaux rangés dans le tiroir (4 + 5 + 5),
+  pause « plus de place », boucle ouverte puis refermée, reprise. Tests : nombre par pile pour A à D, cote du bord
+  pour chaque k, ordre de vidage, capacité des files (C en quinconce), file 0,785 refusée sans chariot du fût, boucle
+  ouverte ⇒ rien ne bouge, coin d'inspection plein, trajets refusés (boîtes, caméra du bocal, pile pleine).
+  « Testé sur le vrai matériel : non » ; procédure d'essai (boucle des microrupteurs, cotes des piles, tiroir).
 - [ ] 36. Portique
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
   (le Lavage a besoin de la Préhension, qui tient le seau pendant tout le lavage).
