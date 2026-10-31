@@ -18,7 +18,7 @@ la machine : garder la main sur l'arrêt d'urgence, et les doigts loin des mors 
 - `fluidnc/mycelium_lavage.yaml` est complété avec les **vraies broches** (plan de câblage), les vrais pas
   par mm, et envoyé à la carte (page web → « Mises à jour »). Tant qu'il dit « EXEMPLE », il est refusé.
 - Le programme principal est arrêté (`sudo systemctl stop vidange`) : une seule liaison par carte.
-- Le chariot de remplissage est **écarté** (y ≥ 0,375) et y reste : son module n'est pas écrit, l'outil
+- Le chariot de remplissage est **écarté** (y ≥ 0,40) et y reste : son module n'est pas écrit, l'outil
   ne peut pas le vérifier.
 - Pas de bocal pour les étapes 1 à 3.
 

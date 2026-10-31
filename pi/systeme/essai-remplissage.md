@@ -3,11 +3,14 @@
 **Testé sur le vrai matériel : non.** Les tests automatiques (GitHub Actions) n'utilisent qu'un **faux**
 FluidNC, une **fausse** balance, une **fausse** barrière et des seaux **imaginaires** (simulateur).
 
-Cette procédure se fait une fois la carte FluidNC n° 2 câblée (avance, plateau, rotation, barres, pousseur,
-fins de course, capteur Hall de la rotation, barrière lumineuse, alarmes ALM des pilotes), la carte de pesée du plateau étalonnée (`pesee/essai-etabli.md`), le
+Cette procédure se fait une fois la carte FluidNC n° 2 câblée (avance, plateau, rotation, les 2 barres avec
+chacune son moteur et son origine, pousseur, fins de course, capteur Hall de la rotation, barrière lumineuse,
+alarmes ALM des pilotes ; le fin de course haut du plateau est câblé **dans l'arrêt**, pas sur la carte), la
+carte de pesée du plateau étalonnée (`pesee/essai-etabli.md`), le
 Mycélium essayé (`essai-mycelium.md`) et la préhension essayée (`essai-prehension.md`). Elle vérifie que la
 carte fait ce que le Pi attend, puis mesure les chiffres marqués EXEMPLE (`pi/reglages/machine.yaml`, partie
-`remplissage` et les 5 axes `remplissage_y`, `plateau_z`, `plateau_a`, `barres`, `pousseur` ;
+`remplissage` et les 6 axes `remplissage_y`, `plateau_z`, `plateau_a`, `barres` (barre côté mur),
+`barre_allee` (barre côté allée), `pousseur` ;
 `docs/entrees-sorties.yaml` ; `fluidnc/chariot.yaml`). Compter une journée.
 
 La sécurité des personnes est câblée (arrêt d'urgence, portes). Les verrous du logiciel ne protègent que
@@ -31,19 +34,26 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
 ## Étape 1 : ce que la carte n° 2 sait faire (console)
 
 1. `vidange-fluidnc console chariot`, puis `$H` : le plateau **descend** jusqu'à son fin de course bas ; la
-   rotation tourne jusqu'au capteur Hall (moins d'un tour) ; les barres s'ouvrent jusqu'à leur origine côté
-   mur ; le pousseur recule jusqu'à son fin de course côté fût ; puis le chariot va contre le tampon côté
-   mur. `?` : `MPos` doit dire Y = 130, Z = 175, A = 0, B = 0, C = 0.
+   rotation tourne jusqu'au capteur Hall (moins d'un tour) ; les **2 barres** s'ouvrent, chacune jusqu'à son
+   fin de course d'origine (si une barre va dans le mauvais sens, inverser la broche de sens de son axe dans
+   `fluidnc/chariot.yaml`) ; le pousseur recule jusqu'à son fin de course côté fût ; puis le chariot va
+   contre le tampon côté mur. `?` : `MPos` doit dire X = 0, Y = 130, Z = 175, A = 0, B = 0, C = 0.
    - Plateau : mesurer le **dessus** du plateau au-dessus du sol de référence du portique : il doit être à
      0,175. Sinon, régler `mpos_mm` de Z dans `fluidnc/chariot.yaml`.
-   - Fin de course haut (butée de sécurité) : appuyer dessus à la main, plateau à l'arrêt : la carte doit
-     passer en alarme (limite dure). `$X` pour la débloquer. Il ne sert jamais d'origine.
+   - Fin de course haut (câblé en série dans l'arrêt depuis le 31/10) : appuyer dessus à la main, plateau
+     à l'arrêt : **l'arrêt** doit couper (comme l'arrêt d'urgence) ; la carte, elle, ne le voit pas (rien
+     dans `Pn:`). Réarmer comme après un arrêt d'urgence. Il ne sert jamais d'origine.
    - Chariot : mesurer le y de l'**axe du plateau** dans le repère du portique, chariot contre le tampon : il
      doit être celui de `mpos_mm` de Y (130 mm = 0,130, EXEMPLE). Sinon, le régler.
-2. Barres : mesurer, barres à l'origine, la distance de l'axe d'une barre à l'axe du plateau (hw) : la
-   fiche dit ≈ 0,309. Écrire la valeur mesurée dans `machine.yaml → remplissage → barres → origine_hw_m`.
-   `$J=G90 B-189.5 F2400` : les barres se ferment à hw = origine − 0,1895 ; mesurer, c'est le minimum
-   (0,1195 attendu). Chronométrer l'ouverture complète (`$J=G90 B-4 F4800`) : la fiche dit ≈ 2,3 s.
+2. Barres (2 moteurs, B = barre côté mur, X = barre côté allée) : mesurer, barres à l'origine, la distance
+   de l'axe de **chaque** barre à l'axe du plateau (hw) : la fiche dit ≈ 0,309 côté mur et ≈ 0,306 côté
+   allée. Écrire les valeurs mesurées dans `machine.yaml → remplissage → barres → origine_hw_m` (côté mur)
+   et `origine_allee_hw_m` (côté allée). Toujours bouger les 2 **ensemble**, dans la même ligne :
+   `$J=G90 B-189.5 X-186.5 F2400` (avec les décalages de la fiche) : les 2 barres se serrent ensemble, à
+   hw = origine − course ; mesurer les 2 hw, ils doivent être égaux (0,1195 attendu) à 1 mm près
+   (`barres → ecart_max_m`) : sinon, corriger les décalages. Chronométrer l'ouverture complète
+   (`$J=G90 B-4 X-1 F4800`) : la fiche dit ≈ 2,3 s. Le seau doit rester centré pendant tout le
+   mouvement.
 3. Rotation : `$J=G91 A90 F3600` : le plateau tourne d'un **quart de tour exactement** (sens positif = sens
    inverse des aiguilles d'une montre vu d'en haut, comme les angles de la caméra). Sinon, inverser le sens
    du pilote. Un quart de tour faux : régler `steps_per_mm` de A (rapport 8 × pas par tour du pilote / 360).
@@ -53,14 +63,22 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
    bout côté stockage ; mesurer, la palette doit être à ≈ +0,16 de l'axe du plateau. `$J=G90 C0 F3000`.
 5. Barrière lumineuse : `?`, puis couper le faisceau avec la main : la lettre `0` doit apparaître dans
    `Pn:` ; disparaître quand on retire la main.
-6. Alarme ALM du pilote des barres : débrancher le moteur des barres, pilote sous tension : la lettre `1`
-   doit apparaître dans `Pn:`. Rebrancher (pilote hors tension), puis vérifier qu'elle disparaît. Faire de
-   même pour les autres pilotes : leur alarme doit être vue comme prévu au câblage.
+6. Alarmes ALM des pilotes des barres : débrancher le moteur de la barre côté mur, pilote sous tension :
+   la lettre `1` doit apparaître dans `Pn:` (et pas la `2`). Rebrancher (pilote hors tension), puis vérifier
+   qu'elle disparaît. Même chose avec le moteur de la barre côté allée : la lettre `2`. Faire de même pour
+   les autres pilotes : leur alarme doit être vue comme prévu au câblage.
+7. Câbles des capteurs (bornier du boîtier, 31/10) : vérifier que le câble 1 porte 24 V, 0 V, avance,
+   montée bas, barre mur, barre allée et les 2 fils du fin de course haut (vers l'arrêt), et le câble 2
+   24 V, 0 V, Hall, pousseur, RS485 A et B, barrière, 1 fil libre (`docs/entrees-sorties.yaml`).
 
 ## Étape 2 : l'outil du Pi
 
-1. `vidange-remplissage etat` : position des 5 axes (dans le repère du portique), barrière, alarme des
-   barres (`False`), balance (≈ 0 kg à vide), et « pose permise : oui ». Comparer avec les mesures de l'étape 1.
+1. `vidange-remplissage etat` : position des 6 axes (dans le repère du portique ; les 2 barres au même hw),
+   barrière, alarme des pilotes des barres (« aucune »), balance (≈ 0 kg à vide), et « pose permise : oui ».
+   Comparer avec les mesures de l'étape 1.
+   Écart des barres : dans la console, bouger **une seule** barre de 2 mm (`$J=G91 X-2 F600`), puis
+   `vidange-remplissage etat` : « pose permise : non, barres écartées de 2.0 mm » ; tout mouvement de
+   l'outil est refusé. Refaire `$H` dans la console : c'est de nouveau permis.
 2. `vidange-remplissage barriere` : couper le faisceau pendant les 10 s : la ligne doit passer à `True`.
    Poser un seau vide sur le plateau : la balance doit lire son poids (≈ 0,5 kg ; noter la vraie tare de
    chaque format dans `griffe → formats → tare_kg`).
@@ -78,7 +96,12 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
    - plateau à 0,25 : `vidange-remplissage --galet-range pousseur 0.325` : le plateau **descend d'abord**
      en bas, puis le pousseur sort (il ne sort que plateau ≤ 0,20). `vidange-remplissage pousseur 0` : il
      rentre.
-4. Chariot du fût sorti (pas « en place ») : `vidange-remplissage --agitateur-au-garage aller 0.50` →
+4. Passage de l'agitateur (31/10 : recul à y **0,40**, le moteur de la barre côté mur touche un support
+   SK12 à 0,375) : `vidange-remplissage --galet-range aller 0.40` (agitateur vu au garage), puis faire
+   rouler l'agitateur à la main, lentement, du garage au dosage : rien ne touche, il reste au moins
+   quelques mm entre le moteur de la barre côté mur et le support. `vidange-remplissage etat` à y 0,39 :
+   le Mycélium doit refuser de rouler (essai-mycelium.md).
+5. Chariot du fût sorti (pas « en place ») : `vidange-remplissage --agitateur-au-garage aller 0.50` →
    **refusé** (« axe du plateau ≤ 0,475 ») ; `aller 0.47` → permis. Mesurer, chariot à y 0,47, où est son
    bout côté allée (le point le plus loin : renvoi d'angle et moteur de montée) : la fiche dit 0,396 de
    l'axe, `remplissage → verrous → bout_y_m` = 0,40. Il doit rester à y ≤ 0,875.
@@ -101,8 +124,8 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
    contact du corps du seau sous le rebord (`formats → seau_a → centrage_hw_m` + `barres → jeu_centrage_m`),
    puis s'ouvrent : le plateau doit **descendre sous 0,48 avant** qu'elles passent au-delà de 0,235, puis
    remonter. Le seau doit être centré sans être écrasé. Régler `centrage_hw_m` (hw au contact) et le
-   petit jeu. Si les barres forcent trop, le pilote lève ALM : l'outil dit « alarme du pilote des barres »
-   et s'arrête ; c'est le comportement voulu (réduire `centrage_hw_m` d'un cran trop serré, ou augmenter le
+   petit jeu. Si une barre force trop, son pilote lève ALM : l'outil dit « alarme du pilote de la barre
+   côté mur » (ou côté allée) et s'arrête ; c'est le comportement voulu (réduire `centrage_hw_m` d'un cran trop serré, ou augmenter le
    jeu).
 4. `vidange-remplissage --galet-range --agitateur-au-garage poste seau_a` : le plateau descend, le chariot
    va au poste (y 0,135), le plateau remonte : le bord du seau doit être à **0,78** (0,775 pour le 5 L).
@@ -169,7 +192,7 @@ soir). À faire d'abord sur la maquette. **Main sur l'arrêt d'urgence.**
 
 ## Ce qu'il faut renvoyer
 
-Les valeurs mesurées (origine des barres, hauteurs de pose, centrage et son jeu, bout du chariot, emprise
+Les valeurs mesurées (origine de chaque barre, hauteurs de pose, centrage et son jeu, bout du chariot, emprise
 du chariot pour la règle 9 (`verrous → emprise_demi_x_m`, `emprise_mur_y_m`), approche et contact de la
 pose (`pose_seau`), courses de la prise double,
 files, vitesses, pas par tour des pilotes), à

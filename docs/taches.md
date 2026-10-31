@@ -757,7 +757,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   Les barres ne se rouvrent au-delà de 0,235 qu'après la descente du plateau ≤ 0,48. Mettre à jour le scénario du
   simulateur et la procédure d'essai. Tests : l'ordre exact de la pose et de a) à i), prise double d'un seau B
   réussie (plus d'alarme), hw toujours sous 0,235 pendant la prise double, contact lu par la balance.
-- [ ] **34 quater. Remplissage : deux moteurs de barres, agitateur à 0,40, fin de course haut câblé** — Modèle :
+- [x] **34 quater. Remplissage : deux moteurs de barres, agitateur à 0,40, fin de course haut câblé** — Modèle :
   Sonnet, effort moyen. D'après la section « Remplissage, changements du 31/10/2026 » de `docs/decisions.md`.
   1. Barres : un axe de plus sur la carte 2 (barre côté mur, barre côté allée), chacun avec son pilote boucle fermée
      (ALM) et son fin de course d'origine (décalages hw ≈ 0,309 et ≈ 0,306 dans les réglages). Les gestes commandent

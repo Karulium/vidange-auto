@@ -41,7 +41,7 @@ REGLES = ReglesMycelium(MACHINE)
 FORMATS = MACHINE.griffe.formats
 GARAGE = PoseAgitateur(x=0.565, angle=0.0)
 DOSAGE_BAS = PoseAgitateur(x=0.925, angle=180.0)
-ECARTE = EtatChariot(y=0.375, plateau_z=0.53)
+ECARTE = EtatChariot(y=0.40, plateau_z=0.53)
 AU_DOSAGE = EtatChariot(y=0.155, plateau_z=0.53)
 
 
@@ -93,7 +93,11 @@ def test_seaux_du_simulateur_verifies(reglages):
 def test_agitateur_ne_roule_que_chariot_ecarte():
     assert REGLES.refus_glissiere(GARAGE, 0.865, ECARTE) is None
     refus = REGLES.refus_glissiere(GARAGE, 0.865, EtatChariot(y=0.30, plateau_z=0.53))
-    assert "chariot de remplissage est à y ≥ 0,375 m (il est à y 0,3 m)" in refus
+    assert "chariot de remplissage est à y ≥ 0,4 m (il est à y 0,3 m)" in refus
+    # Recul à y 0,40 depuis le 31/10 (tâche 34 quater) : refusé à 0,39, permis à 0,40.
+    refus = REGLES.refus_glissiere(GARAGE, 0.865, EtatChariot(y=0.39, plateau_z=0.53))
+    assert refus is not None and "il est à y 0,39 m" in refus
+    assert REGLES.refus_glissiere(GARAGE, 0.865, EtatChariot(y=0.40, plateau_z=0.53)) is None
     assert "inconnu" in REGLES.refus_glissiere(GARAGE, 0.865, None)
     # Toujours manivelle en haut ; jamais hors de la course.
     assert "manivelle en haut" in REGLES.refus_glissiere(GARAGE.avec(angle=180), 0.865, ECARTE)

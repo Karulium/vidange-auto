@@ -29,7 +29,7 @@ MACHINE = REGLAGES.machine
 CARTE = REGLAGES.fluidnc.cartes["mycelium_lavage"]
 ORIGINE = MACHINE.mycelium.manivelle.origine
 REGLES = ReglesMycelium(MACHINE)
-ECARTE = EtatChariot(y=0.375, plateau_z=0.53)
+ECARTE = EtatChariot(y=0.40, plateau_z=0.53)
 
 
 # ---------------------------------------------------------------- réglages

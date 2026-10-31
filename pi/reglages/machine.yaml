@@ -32,9 +32,10 @@
 #     « seau_retourne », un réglage par format de la griffe, chaque position de la tête à sa portée
 #     (course du pont + 0,129), décalage du brossage dans le rayon du verrou, tours du seau des 2
 #     passes dans la course de la rotation de la tête, couloir conforme au passage de la paroi ;
-#   - remplissage : ses 5 axes sur une même carte, chaque position, hauteur et file dans la course de
-#     son axe, un réglage par format de la griffe, dosage et recul égaux à ceux du Mycélium, origine des
-#     barres au-delà de leur course, barres du retourneur dans leur course ;
+#   - remplissage : ses 6 axes sur une même carte, chaque position, hauteur et file dans la course de
+#     son axe, un réglage par format de la griffe, dosage et recul égaux à ceux du Mycélium, origine de
+#     chaque barre au-delà de sa course, les 2 barres avec la même course, barres du retourneur dans
+#     leur course ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
 
 exemple: true
@@ -162,8 +163,9 @@ axes:
     course: [-100000000, 100000000]
     carte: prehension
     lettre: C
-  # Les 5 axes du chariot de remplissage, sur la carte n° 2 (chariot). Fiche du module
-  # « Remplissage » gelé le 27/10/2026 et plan de commande v223 ; lettres : EXEMPLES.
+  # Les 6 axes du chariot de remplissage, sur la carte n° 2 (chariot). Fiche du module
+  # « Remplissage » gelé le 27/10/2026, plan de commande v223 et changements du 31/10 (deux
+  # moteurs de barres) ; lettres : EXEMPLES.
   # Avance du chariot (m) : y de l'axe du plateau, repère du portique. Poste 0,135 (fiche) ; le
   # bout de la course et la longueur du rail sont des EXEMPLES (places des files : Stockage).
   remplissage_y:
@@ -173,8 +175,8 @@ axes:
     lettre: Y
   # Montée du plateau (m) : hauteur du DESSUS du plateau. 0,175 à 0,575 au plus, toujours
   # (règle 9 du fichier des positions : butée logicielle). Zéro au fin de course BAS (plateau en
-  # bas, 0,175) ; le fin de course haut est une butée de sécurité, il coupe la montée vers 0,578
-  # (fiche du 28/10). NEMA 23 boucle fermée à frein.
+  # bas, 0,175) ; le fin de course haut coupe la montée vers 0,578 : il est câblé en série dans
+  # l'arrêt (31/10), la carte et le Pi ne le lisent pas. NEMA 23 boucle fermée à frein.
   plateau_z:
     longueur_rail: 0.578
     course: [0.175, 0.575]
@@ -191,14 +193,25 @@ axes:
     carte: chariot
     lettre: A
   # Barres séparatrices (m) : écartement hw = de l'axe d'une barre à l'axe du plateau, 0,1195 à
-  # 0,305 (fiche). NEMA 17 boucle fermée, vis T8 au pas de 8, ouverture complète ≈ 2,3 s. Origine
-  # côté mur à hw ≈ 0,309
-  # (remplissage → barres → origine_hw_m : FluidNC compte 0 à l'origine, le Pi ajoute ce décalage).
+  # 0,305 (fiche). Deux barres montées en miroir (31/10), chacune avec sa vis T8 au pas de 8, son
+  # NEMA 17 boucle fermée (ALM) et son fin de course d'origine ; ouverture complète ≈ 2,3 s. Le Pi
+  # les commande ensemble (même hw). « barres » = la barre côté mur, origine à hw ≈ 0,309
+  # (remplissage → barres → origine_hw_m) ; « barre_allee » = la barre côté allée, origine à
+  # hw ≈ 0,306 (remplissage → barres → origine_allee_hw_m). FluidNC compte 0 à l'origine de
+  # chacune, le Pi ajoute le décalage. Les deux ont la même course. Pas de pilotage à distance
+  # (il bouge un seul axe à la fois : une barre seule ferait un écart).
   barres:
     longueur_rail: 0.309
     course: [0.1195, 0.305]
     carte: chariot
     lettre: B
+    pilotage_distance: false
+  barre_allee:
+    longueur_rail: 0.306
+    course: [0.1195, 0.305]
+    carte: chariot
+    lettre: X
+    pilotage_distance: false
   # Pousseur (m) : NEMA 23 boucle fermée à frein. Zéro au fin de course en bout de rail côté fût :
   # c'est « rentré » (remplissage → pousseur_rentre_m). Il pousse toujours vers le stockage,
   # course 0,325 (la palette va de −0,165, rentré, à +0,16 de l'axe du plateau : fiche du 28/10).
@@ -239,6 +252,7 @@ positions:
     plateau_z: 0.175
     plateau_a: 0
     barres: 0.30
+    barre_allee: 0.30
     pousseur: 0.0
 
 zones:
@@ -615,12 +629,12 @@ mycelium:
   # Course de l'agitation, choisie À LA MAIN (bielle dans un des 3 trous de la manivelle).
   # Le Pi ne la change pas : la tenir à jour quand on change de trou. EXEMPLE : 7 cm.
   course_agitation_m: 0.07
-  # Le chariot de remplissage (verrous du 24/10) : l'agitateur ne roule que si le chariot est à
-  # y ≥ 0,375 ; au dosage, le seau est à y 0,155, plateau à min(0,78 − h ; 0,575) (h : hauteur
+  # Le chariot de remplissage (verrous du 24/10, recul changé le 31/10) : l'agitateur ne roule
+  # que si le chariot est à y ≥ 0,40 (le moteur de la barre côté mur touche un support à 0,375) ; au dosage, le seau est à y 0,155, plateau à min(0,78 − h ; 0,575) (h : hauteur
   # du seau dans la table des formats ; bord du seau à 0,78, 0,775 pour le 5 L).
   # Tolérances : EXEMPLES.
   chariot:
-    y_ecarte_min: 0.375
+    y_ecarte_min: 0.40
     y_dosage: 0.155
     tolerance_y_m: 0.003
     bord_seau_z: 0.78
@@ -995,11 +1009,11 @@ remplissage:
   # Axe du plateau en x : celui du seau au poste de la griffe (griffe → seau_remplissage). EXEMPLE.
   axe_x: 0.925
   # Poste (la griffe verse), dosage du mycélium (= mycelium → chariot → y_dosage), recul pendant
-  # le passage de l'agitateur (= mycelium → chariot → y_ecarte_min), pose du seau vide et du
-  # couvercle (fiche).
+  # le passage de l'agitateur (= mycelium → chariot → y_ecarte_min ; 0,40 depuis le 31/10), pose
+  # du seau vide et du couvercle (fiche).
   poste_y: 0.135
   dosage_y: 0.155
-  ecarte_y: 0.375
+  ecarte_y: 0.40
   pose_y: 0.50
   # EXEMPLES : écarts permis, pas de la vérification des trajets.
   tolerance_y_m: 0.002
@@ -1054,14 +1068,18 @@ remplissage:
     prehension_libre_z: 0.84
     emprise_demi_x_m: 0.25
     emprise_mur_y_m: 0.40
-  # Barres (fiche) : origine côté mur à hw ≈ 0,309 (décalage réglé dans le Pi, à mesurer une
-  # fois : EXEMPLE) ; ouvertes à 0,30 (≥ 0,29, règle 3) ; prise double : lâcher = + 1,5 cm
+  # Barres (fiche) : origine de la barre côté mur à hw ≈ 0,309, de la barre côté allée à hw ≈ 0,306
+  # (décalages réglés dans le Pi, à mesurer une fois : EXEMPLES). Les 2 barres bougent ensemble ;
+  # le Pi refuse tout mouvement si elles sont écartées de plus de ecart_max_m (EXEMPLE 1 mm :
+  # refaire la prise d'origine) ; ouvertes à 0,30 (≥ 0,29, règle 3) ; prise double : lâcher = + 1,5 cm
   # chacune, lèvre du seau du dessous : entraxe = Ø haut + 6 mm (seau B : 0,118 → 0,1195, le
   # minimum des barres). Centrage EN POSITION (pas de courant réduit : le pilote n'a que PUL,
   # DIR, ENA et ALM) : barres à formats → centrage_hw_m + jeu_centrage_m (EXEMPLE). Si elles
   # forcent trop, le pilote lève son alarme ALM : le geste s'arrête, alerte.
   barres:
     origine_hw_m: 0.309
+    origine_allee_hw_m: 0.306
+    ecart_max_m: 0.001
     ouvertes_m: 0.30
     jeu_centrage_m: 0.002
     lacher_m: 0.015

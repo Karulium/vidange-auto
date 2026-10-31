@@ -1,9 +1,9 @@
-# Réglages FluidNC de la carte n° 2 : chariot de remplissage (avance, plateau, rotation, barres,
+# Réglages FluidNC de la carte n° 2 : chariot de remplissage (avance, plateau, rotation, 2 barres,
 # pousseur).
 #
 # ATTENTION : EXEMPLE. Ne PAS envoyer ce fichier à la vraie carte avant d'avoir mis les vraies
 # broches (plan de câblage), les vrais pas par mm et les vitesses. Chiffres de la fiche du module
-# « Remplissage » (gelé le 27/10/2026) marqués « (fiche) ».
+# « Remplissage » (gelé le 27/10/2026, changements du 31/10) marqués « (fiche) ».
 #
 # Moteurs (fiche du 28/10) : avance, rotation et barres = NEMA 17 boucle fermée (17HS19-2004-ME1K ou
 # équivalent) ; montée et pousseur = NEMA 23 boucle fermée à frein. Pilotes boucle fermée (CL57T V4.1 ou
@@ -17,28 +17,37 @@
 #       côté mur (fiche du 28/10) ; la position de l'axe là (mpos_mm) : EXEMPLE, mesurée à l'essai.
 #   Z : montée du plateau, à frein. Position machine = DESSUS du plateau. Prise d'origine VERS LE
 #       BAS, sur le fin de course bas fdc_plateau_bas : c'est le zéro de la montée, plateau en bas
-#       à 175 mm (fiche du 28/10). Le fin de course haut fdc_plateau_haut reste une butée de
-#       sécurité (limite dure, il coupe vers 578 mm) ; limite logicielle haute à 575 mm, TOUJOURS
-#       (règle 9 du fichier des positions).
+#       à 175 mm (fiche du 28/10). Le fin de course haut (il coupe vers 578 mm) est câblé en série
+#       dans l'arrêt (31/10) : ce n'est PLUS une entrée de cette carte. Limite logicielle haute à
+#       575 mm, TOUJOURS (règle 9 du fichier des positions).
 #   A : rotation du plateau, axe rotatif, sans réducteur : pignon 15 dents sur roue 120, rapport 8
 #       (fiche du 28/10). EXEMPLE : 8 000 pas par tour du pilote → 64 000 pas par tour du plateau
 #       = 177,778 pas par degré. Prise d'origine sur le capteur Hall hall_rotation_plateau (un
 #       aimant passe une fois par tour). L'angle de l'anse vient de la caméra (QR du flanc). Elle
 #       tourne sans fin pendant les versements : pas de limites logicielles.
-#   B : barres séparatrices, vis T8 au pas de 8 (fiche), ouverture complète ≈ 2,3 s. Prise
-#       d'origine côté mur sur origine_barres : la carte compte 0 là ; le Pi ajoute le décalage
-#       (machine.yaml → remplissage → barres → origine_hw_m ≈ 0,309) : position de la carte en mm
+#   B et X : les 2 barres séparatrices (31/10 : la vis à deux sens n'existe pas en standard).
+#       Chaque barre a sa vis T8 au pas de 8 (fiche), son NEMA 17 boucle fermée et son fin de
+#       course d'origine, montés en miroir ; ouverture complète ≈ 2,3 s. Le Pi les commande
+#       TOUJOURS ensemble, dans le même « $J= » (même hw, donc les mêmes pas) : le sens inversé
+#       du montage en miroir est pris par la broche de sens de X, inversée (« :low »), pour que
+#       les deux comptent dans le même sens (vers le moins = les barres se serrent).
+#       B = barre côté mur : origine sur origine_barre_mur, la carte compte 0 là ; le Pi ajoute
+#       machine.yaml → remplissage → barres → origine_hw_m ≈ 0,309 : position de la carte en mm
 #       = (hw − 0,309) × 1000, de −189,5 (hw 0,1195) à −4 (hw 0,305).
+#       X = barre côté allée : origine sur origine_barre_allee, décalage origine_allee_hw_m
+#       ≈ 0,306 : (hw − 0,306) × 1000, de −186,5 à −1.
+#       Le Pi refuse de bouger si les 2 barres sont écartées de plus de barres → ecart_max_m.
 #   C : pousseur, course 325 mm. Zéro au fin de course en bout de rail côté fût (origine_pousseur) :
 #       c'est « rentré » ; il pousse toujours vers le stockage, de 0 à 325 (la palette va de −0,165
 #       à +0,16 de l'axe du plateau, fiche du 28/10).
 #   Entrées lues par le Pi dans « Pn: » : barrière lumineuse (barre côté mur, à 0,7315) sur macro0
-#       (lettre 0), alarme ALM du pilote des barres sur macro1 (lettre 1), sans macro : le Pi arrête
-#       le geste et alerte si les barres forcent. Lettres : pi/reglages/fluidnc.yaml. Les alarmes
-#       des autres pilotes sont câblées comme sur les autres cartes (plan de câblage).
+#       (lettre 0), alarmes ALM des pilotes des barres : côté mur sur macro1 (lettre 1), côté allée
+#       sur macro2 (lettre 2), sans macro : le Pi arrête le geste et alerte si une barre force.
+#       Lettres : pi/reglages/fluidnc.yaml. Les alarmes des autres pilotes sont câblées comme sur
+#       les autres cartes (plan de câblage).
 #   Le vérin du galet (fermeture, tâche 41) est sur cette carte : il viendra avec sa tâche.
 #   À VÉRIFIER à l'essai de la carte (pi/systeme/essai-remplissage.md, étapes 1 et 2) : sens de
-#   chaque axe, origines, les lettres de « Pn: ».
+#   chaque axe (les 2 barres se serrent ensemble), origines, les lettres de « Pn: ».
 
 name: "Vidange carte 2 - chariot de remplissage (EXEMPLE)"
 board: "ESP32 6 axes, pilotes externes (EXEMPLE)"
@@ -56,6 +65,31 @@ start:
 
 axes:
   shared_stepper_disable_pin: NO_PIN
+
+  x:
+    # Barre côté allée : mêmes réglages que B (vis T8 au pas de 8, EXEMPLE 200 pas par mm).
+    steps_per_mm: 200
+    max_rate_mm_per_min: 4800
+    acceleration_mm_per_sec2: 400
+    max_travel_mm: 187
+    soft_limits: true
+    # Même cycle que B : les 2 barres vont chacune à leur fin de course d'origine.
+    homing:
+      cycle: 1
+      positive_direction: true
+      mpos_mm: 0
+      feed_mm_per_min: 300
+      seek_mm_per_min: 2400
+      settle_ms: 250
+    motor0:
+      # EXEMPLES de broches : origine_barre_allee ; sens inversé (montage en miroir).
+      limit_pos_pin: gpio.21:low
+      hard_limits: false
+      pulloff_mm: 2
+      standard_stepper:
+        step_pin: gpio.22
+        direction_pin: gpio.23:low
+        disable_pin: NO_PIN
 
   y:
     # EXEMPLE : 1600 pas par tour, courroie de 40 mm de tour.
@@ -99,10 +133,11 @@ axes:
       seek_mm_per_min: 1200
       settle_ms: 250
     motor0:
-      # EXEMPLES de broches : fdc_plateau_bas (origine), fdc_plateau_haut (butée de sécurité).
+      # EXEMPLE de broche : fdc_plateau_bas (origine). Pas de fin de course haut ici : il est en
+      # série dans l'arrêt (31/10) ; il ne reste que la limite logicielle (575 mm). Le fin de
+      # course bas n'est que l'origine (plateau posé dessus en bas, pulloff 0) : pas de limite dure.
       limit_neg_pin: gpio.17:low
-      limit_pos_pin: gpio.39:low
-      hard_limits: true
+      hard_limits: false
       pulloff_mm: 0
       standard_stepper:
         step_pin: gpio.26
@@ -135,7 +170,7 @@ axes:
         disable_pin: NO_PIN
 
   b:
-    # Vis T8 au pas de 8 (fiche). EXEMPLE : 1600 pas par tour → 200 pas par mm.
+    # Barre côté mur. Vis T8 au pas de 8 (fiche). EXEMPLE : 1600 pas par tour → 200 pas par mm.
     steps_per_mm: 200
     # 185,5 mm en ≈ 2,3 s (fiche) ≈ 4 800 mm/min.
     max_rate_mm_per_min: 4800
@@ -150,7 +185,7 @@ axes:
       seek_mm_per_min: 2400
       settle_ms: 250
     motor0:
-      # EXEMPLE de broche : origine_barres (côté mur).
+      # EXEMPLE de broche : origine_barre_mur.
       limit_pos_pin: gpio.34:low
       hard_limits: false
       pulloff_mm: 2
@@ -185,12 +220,15 @@ axes:
 
 # Entrées lues par le Pi dans « Pn: » (pi/reglages/fluidnc.yaml → entrees). EXEMPLES de broches.
 #   macro0 (lettre 0) : barriere_remplissage.
-#   macro1 (lettre 1) : alarme_barres (ALM du pilote des barres).
+#   macro1 (lettre 1) : alarme_barre_mur (ALM du pilote de la barre côté mur).
+#   macro2 (lettre 2) : alarme_barre_allee (ALM du pilote de la barre côté allée).
 control:
   macro0_pin: gpio.32:low
   macro1_pin: gpio.2:low
+  macro2_pin: gpio.19:low
 
 # Aucune macro : ces broches servent seulement à être lues.
 macros:
   macro0: ""
   macro1: ""
+  macro2: ""

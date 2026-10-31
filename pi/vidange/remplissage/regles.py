@@ -9,7 +9,11 @@
     regles.au_dessus_du_chariot(x, y, pose)           # l'axe de la tête est-il au-dessus ?
 
 Une Pose dit où est le chariot : y (axe du plateau), z (dessus du plateau), a (rotation, °),
-barres (hw : axe d'une barre à l'axe du plateau), pousseur. Les règles :
+barres (hw : axe de la barre côté mur à l'axe du plateau), pousseur, barre_allee (hw de la barre
+côté allée). Les 2 barres ont chacune leur moteur (31/10) mais bougent toujours ensemble : une
+Pose écrite avec `barres` seulement a barre_allee = barres. Les règles 2, 3, 6 et 9 valent pour
+chaque barre ; deux barres écartées de plus de `barres → ecart_max_m` : tout mouvement est refusé
+(refaire la prise d'origine). Les règles :
 1. anneaux du fût : en y 0,14-0,41 et 0,59-0,86, plateau en bas ; libre au poste (et au dosage)
    et entre 0,41 et 0,59 : le plateau descend avant de quitter le poste, ne remonte qu'au poste ;
 2. barres entre les joues de l'élévateur (hw 0,235-0,255) : plateau ≤ 0,48 ;
@@ -33,6 +37,7 @@ Ces verrous ne protègent que la MACHINE : la sécurité des personnes reste câ
 """
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass, fields, replace
 
 from vidange.reglages import Machine
@@ -46,7 +51,16 @@ AXES = {
     "a": "plateau_a",
     "barres": "barres",
     "pousseur": "pousseur",
+    "barre_allee": "barre_allee",
 }
+
+
+def cles_du_pas(cibles: Iterable[str]) -> list[str]:
+    """Les clés d'une Pose qui bougent pour ces cibles : « barres » fait bouger les 2 barres."""
+    cles = list(cibles)
+    if "barres" in cles and "barre_allee" not in cles:
+        cles.append("barre_allee")
+    return cles
 
 
 @dataclass(frozen=True)
@@ -56,9 +70,22 @@ class Pose:
     a: float
     barres: float
     pousseur: float
+    # Barre côté allée ; None : la même que la barre côté mur (elles bougent ensemble).
+    barre_allee: float = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.barre_allee is None:
+            object.__setattr__(self, "barre_allee", self.barres)
 
     def avec(self, **valeurs: float) -> "Pose":
+        # Les 2 barres sont commandées ensemble.
+        if "barres" in valeurs and "barre_allee" not in valeurs:
+            valeurs["barre_allee"] = valeurs["barres"]
         return replace(self, **valeurs)
+
+    @property
+    def barres_les_plus_serrees(self) -> float:
+        return min(self.barres, self.barre_allee)
 
 
 @dataclass(frozen=True)
@@ -98,7 +125,8 @@ class ReglesRemplissage:
         return abs(pose.pousseur - reglages.pousseur_rentre_m) <= reglages.tolerance_m + _EGAL
 
     def barres_ouvertes(self, pose: Pose) -> bool:
-        return pose.barres >= self.verrous.barres_ouvertes_min - _EGAL
+        """Les 2 barres ouvertes."""
+        return pose.barres_les_plus_serrees >= self.verrous.barres_ouvertes_min - _EGAL
 
     def au_poste(self, y: float) -> bool:
         """Dans la zone du poste et du dosage, où le plateau peut être haut (règle 1)."""
@@ -116,6 +144,21 @@ class ReglesRemplissage:
         debut, fin = self.verrous.joues_barres
         return debut - _EGAL <= barres <= fin + _EGAL
 
+    def une_barre_dans_les_joues(self, pose: Pose) -> bool:
+        return self.dans_les_joues(pose.barres) or self.dans_les_joues(pose.barre_allee)
+
+    def refus_ecart_barres(self, pose: Pose) -> str | None:
+        """Les 2 barres bougent ensemble : plus d'écart que barres → ecart_max_m est refusé."""
+        ecart = abs(pose.barres - pose.barre_allee)
+        maximum = self.reglages.barres.ecart_max_m
+        if ecart > maximum + _EGAL:
+            return (
+                f"barres écartées de {ecart * 1000:.1f} mm l'une de l'autre (côté mur "
+                f"{_m(pose.barres)}, côté allée {_m(pose.barre_allee)} ; au plus "
+                f"{maximum * 1000:g} mm) : refaire la prise d'origine du chariot"
+            )
+        return None
+
     # ------------------------------------------------------------ une pose
 
     def refus_pose(self, pose: Pose, contexte: Contexte) -> str | None:
@@ -124,6 +167,9 @@ class ReglesRemplissage:
             valeur = getattr(pose, cle)
             if not debut - _EGAL <= valeur <= fin + _EGAL:
                 return f"{AXES[cle]} à {_m(valeur)}, hors de sa course ({_m(debut)} à {_m(fin)})"
+        refus = self.refus_ecart_barres(pose)
+        if refus is not None:
+            return refus
         if not self.au_poste(pose.y) and pose.z > v.anneaux_plateau_max_z + _EGAL:
             for debut, fin in v.anneaux_y:
                 if debut - _EGAL <= pose.y <= fin + _EGAL:
@@ -132,16 +178,18 @@ class ReglesRemplissage:
                         f"{_m(fin)}) : plateau en bas (≤ {_m(v.anneaux_plateau_max_z)}), il est "
                         f"à {_m(pose.z)}"
                     )
-        if self.dans_les_joues(pose.barres) and pose.z > v.joues_plateau_max_z + _EGAL:
-            return (
-                f"barres à {_m(pose.barres)}, entre les joues de l'élévateur : plateau ≤ "
-                f"{_m(v.joues_plateau_max_z)} (il est à {_m(pose.z)})"
-            )
+        if pose.z > v.joues_plateau_max_z + _EGAL:
+            for barre, hw in (("côté mur", pose.barres), ("côté allée", pose.barre_allee)):
+                if self.dans_les_joues(hw):
+                    return (
+                        f"barre {barre} à {_m(hw)}, entre les joues de l'élévateur : plateau ≤ "
+                        f"{_m(v.joues_plateau_max_z)} (il est à {_m(pose.z)})"
+                    )
         if pose.z > v.barres_ouvertes_au_dessus_z + _EGAL and not self.barres_ouvertes(pose):
             return (
                 f"plateau à {_m(pose.z)}, au-dessus de {_m(v.barres_ouvertes_au_dessus_z)} : "
                 f"barres ouvertes seulement (hw ≥ {_m(v.barres_ouvertes_min)}, elles sont à "
-                f"{_m(pose.barres)})"
+                f"{_m(pose.barres_les_plus_serrees)})"
             )
         if not self.pousseur_rentre(pose) and (
             not self.en_bas(pose) or pose.z > v.pousseur_plateau_max_z + _EGAL
@@ -188,13 +236,17 @@ class ReglesRemplissage:
         if monte and self.pres_du_poste(arrivee.y) and not dosage:
             if not contexte.agitateur_au_garage:
                 return "le plateau ne monte au poste qu'agitateur du mycélium au garage"
+        refus = self.refus_ecart_barres(depart)
+        if refus is not None:
+            # Une barre a glissé ou a été bougée seule : rien ne bouge avant la prise d'origine.
+            return refus
         if self.refus_pose(depart, contexte) is not None:
             # Départ déjà interdit (après une coupure, un essai à la main) : seule l'arrivée
             # compte, pour pouvoir en sortir.
             return None
         lineaires = [
             abs(getattr(arrivee, cle) - getattr(depart, cle))
-            for cle in ("y", "z", "barres", "pousseur")
+            for cle in ("y", "z", "barres", "barre_allee", "pousseur")
         ]
         etapes = max(1, math.ceil(max(lineaires) / self.reglages.pas_verification_m))
         for i in range(1, etapes):
@@ -224,9 +276,10 @@ class ReglesRemplissage:
         """Pendant le pivot du bras du spray et la pulvérisation (tâche 39, règle 6) : plateau
         ≤ min(0,50 ; 0,71 − h) ; le bras ne bouge que barres ouvertes à plus de 0,50 d'entraxe."""
         v = self.verrous
-        if 2 * pose.barres <= v.spray_entraxe_min_m + _EGAL:
+        entraxe = pose.barres + pose.barre_allee
+        if entraxe <= v.spray_entraxe_min_m + _EGAL:
             return (
-                f"bras du spray : barres à {_m(2 * pose.barres)} d'entraxe, il en faut plus de "
+                f"bras du spray : barres à {_m(entraxe)} d'entraxe, il en faut plus de "
                 f"{_m(v.spray_entraxe_min_m)}"
             )
         if hauteur_seau is None:
@@ -254,7 +307,7 @@ class ReglesRemplissage:
             return (
                 f"la préhension ne descend sous {_m(v.prehension_libre_z)} au-dessus du chariot "
                 f"que barres ouvertes (hw ≥ {_m(v.barres_ouvertes_min)} ; elles sont à "
-                f"{_m(pose.barres)})"
+                f"{_m(pose.barres_les_plus_serrees)})"
             )
         return self.refus_micropore(micropore_rentre)
 

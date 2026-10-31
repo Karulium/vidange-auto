@@ -50,6 +50,7 @@ axes:
   plateau_z: {vitesse: 0.05, acceleration: 0.3}
   plateau_a: {vitesse: 60, acceleration: 120}
   barres: {vitesse: 0.08, acceleration: 0.5}
+  barre_allee: {vitesse: 0.08, acceleration: 0.5}
   pousseur: {vitesse: 0.1, acceleration: 0.5}
 
 # Position (machine.yaml) des axes au départ. Sans « depart », chaque axe est au début de sa course.

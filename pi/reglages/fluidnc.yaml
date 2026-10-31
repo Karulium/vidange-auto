@@ -30,12 +30,13 @@ cartes:
   chariot:
     description: Axes du chariot de remplissage
     numero_serie_usb: "EXEMPLE-CHARIOT"
-    # Barrière lumineuse du chariot (broche macro0, lettre 0) et alarme ALM du pilote des barres
-    # (broche macro1, lettre 1), sans macro. À VÉRIFIER à l'essai de la carte
-    # (pi/systeme/essai-remplissage.md).
+    # Barrière lumineuse du chariot (broche macro0, lettre 0) et alarmes ALM des pilotes des 2
+    # barres : côté mur (broche macro1, lettre 1), côté allée (broche macro2, lettre 2), sans
+    # macro. À VÉRIFIER à l'essai de la carte (pi/systeme/essai-remplissage.md).
     entrees:
       barriere_remplissage: "0"
-      alarme_barres: "1"
+      alarme_barre_mur: "1"
+      alarme_barre_allee: "2"
   mycelium_lavage:
     description: Axes du mycélium et du lavage
     numero_serie_usb: "EXEMPLE-MYCELIUM-LAVAGE"

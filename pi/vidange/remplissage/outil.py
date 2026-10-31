@@ -79,6 +79,8 @@ def _faux_ouvrir(machine: Machine) -> Callable[[], object]:
         valeur = machine.positions["remplissage_poste"][nom]
         if cle == "barres":
             valeur -= machine.remplissage.barres.origine_hw_m
+        if cle == "barre_allee":
+            valeur -= machine.remplissage.barres.origine_allee_hw_m
         lettre = machine.axes[nom].lettre or "X"
         carte.positions[lettre] = valeur if cle == "a" else valeur * MM_PAR_M
     return carte.ouvrir
@@ -185,9 +187,13 @@ def _jouer(remplissage: Remplissage, geste: Callable[[], Geste]) -> None:
 def _etat(remplissage: Remplissage, chariot: ChariotFluidnc) -> None:
     pose = chariot.position()
     print(f"chariot : y {pose.y:.4f} m ; plateau : dessus à {pose.z:.4f} m, {pose.a:.1f}°")
-    print(f"barres : hw {pose.barres:.4f} m ; pousseur : {pose.pousseur:.4f} m")
+    print(
+        f"barres : hw {pose.barres:.4f} m côté mur, {pose.barre_allee:.4f} m côté allée ; "
+        f"pousseur : {pose.pousseur:.4f} m"
+    )
     print(f"barrière coupée : {chariot.barriere_coupee()}")
-    print(f"alarme du pilote des barres : {chariot.alarme_barres()}")
+    alarmes = chariot.alarmes_barres()
+    print(f"alarme des pilotes des barres : {', '.join(alarmes) if alarmes else 'aucune'}")
     try:
         print(f"balance : {chariot.peser():.3f} kg")
     except ErreurEtape as erreur:

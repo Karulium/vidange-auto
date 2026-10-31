@@ -21,7 +21,7 @@ seau plein sur sa file, et une balance. Les gestes :
   l'écart attaches/QR du seau) ; le plateau tourne pour les mettre à 45° (modulo 90°) des
   barres. Cet angle est gardé jusqu'à la poussée ;
 - centrer : barres en position au contact du corps sous le rebord (+ un petit jeu), puis
-  ouvertes ; l'alarme ALM du pilote des barres (elles forcent) arrête le geste et alerte ;
+  ouvertes ; l'alarme ALM du pilote d'une des 2 barres (elle force) arrête le geste et alerte ;
 - ramener au poste : plateau en bas, y 0,135, plateau remonté (bord du seau à 0,78) ;
 - tourner pendant le versement de la griffe (`tourner_seau`) ;
 - dosage du mycélium : le Mycélium mène le chariot (`ecarter`, `amener_au_dosage`) ;
@@ -89,7 +89,7 @@ QUOI_FAIRE_BARRIERE = (
     "acquitter et donner le Go."
 )
 QUOI_FAIRE_ALARME_BARRES = (
-    "Le pilote des barres est en alarme (ALM) : elles forcent (seau mal centré, coincé, barre "
+    "Le pilote d'une barre est en alarme (ALM) : elle force (seau mal centré, coincé, barre "
     "bloquée ?). Regarder la vidéo, dégager, vérifier le réglage du centrage du format, puis "
     "acquitter et donner le Go."
 )
@@ -273,12 +273,14 @@ class Remplissage:
         """Condition de fin des étapes : fait partir les pas l'un après l'autre."""
         while self._geste is not None:
             pas = self._pas
-            if pas is not None and "barres" in pas.cibles and self.chariot.alarme_barres():
+            alarmes = self.chariot.alarmes_barres() if pas is not None else []
+            if pas is not None and "barres" in pas.cibles and alarmes:
                 self.arreter()
-                self._photo("alarme du pilote des barres")
+                barres = " et ".join(f"de la barre {barre}" for barre in alarmes)
+                self._photo(f"alarme du pilote {barres}")
                 raise ErreurEtape(
-                    f"remplissage : alarme du pilote des barres pendant « {pas.texte} » (elles "
-                    "forcent)",
+                    f"remplissage : alarme du pilote {barres} pendant « {pas.texte} » "
+                    f"({'elles forcent' if len(alarmes) > 1 else 'elle force'})",
                     QUOI_FAIRE_ALARME_BARRES,
                 )
             if not self.chariot.fini():
@@ -337,13 +339,14 @@ class Remplissage:
         vitesse lente du centrage. `plateau_fixe` : le plateau ne bouge pas (prise double) ; un
         pas que les verrous refusent met le module en alarme."""
         pose = self._pose()
-        if abs(pose.barres - hw) <= _EGAL:
+        if abs(pose.barres - hw) <= _EGAL and abs(pose.barre_allee - hw) <= _EGAL:
             return
         if plateau_fixe:
             yield Pas(texte, {"barres": hw}, vitesse="centrage" if centrage else None)
             return
         v = self.reglages.verrous
-        bas, haut = sorted((pose.barres, hw))
+        bas = min(pose.barres, pose.barre_allee, hw)
+        haut = max(pose.barres, pose.barre_allee, hw)
         plafond = pose.z
         if bas <= v.joues_barres[1] + _EGAL and haut >= v.joues_barres[0] - _EGAL:
             plafond = min(plafond, v.joues_plateau_max_z)
@@ -375,7 +378,7 @@ class Remplissage:
             if z > self.reglages.plateau_en_bas_z:
                 yield from self._pousseur_rentre()
             ouvrir = z > v.barres_ouvertes_au_dessus_z + _EGAL or (
-                z > v.joues_plateau_max_z + _EGAL and self.regles.dans_les_joues(pose.barres)
+                z > v.joues_plateau_max_z + _EGAL and self.regles.une_barre_dans_les_joues(pose)
             )
             if ouvrir:
                 yield from self._barres_ouvertes()
@@ -422,7 +425,7 @@ class Remplissage:
         return EtatChariot(y=y, plateau_z=pose.z, immobile=immobile)
 
     def ecarter(self) -> None:
-        """Le recul pendant le passage de l'agitateur (y ≥ 0,375), plateau en bas."""
+        """Le recul pendant le passage de l'agitateur (y ≥ 0,40), plateau en bas."""
         self.lancer(self.geste_ecarter)
 
     def amener_au_dosage(self, plateau_z: float) -> None:
@@ -595,6 +598,7 @@ class Remplissage:
             self.regles.a(pose.y, reglages.pose_y)
             and abs(pose.z - self.plateau_approche(format)) <= reglages.tolerance_m
             and abs(pose.barres - approche) <= reglages.tolerance_m
+            and abs(pose.barre_allee - approche) <= reglages.tolerance_m
         )
         if not place:
             raise ErreurEtape(
@@ -771,7 +775,7 @@ class Remplissage:
         # Sans dépasser ce que permettent les barres (fermées : sous 0,515 ; joues : 0,48).
         if not self.regles.barres_ouvertes(pose):
             haut = min(haut, v.barres_ouvertes_au_dessus_z)
-        if self.regles.dans_les_joues(pose.barres):
+        if self.regles.une_barre_dans_les_joues(pose):
             haut = min(haut, v.joues_plateau_max_z)
         resultat = yield Pas(
             texte, {"z": haut}, vitesse="contact", contact_kg=self.reglages.pose_seau.contact_kg
@@ -813,7 +817,7 @@ class Remplissage:
 
     def geste_centrer(self) -> Geste:
         """Barres en position au contact du corps sous le rebord (+ le jeu du centrage), puis
-        ouvertes. Si elles forcent, l'alarme ALM du pilote arrête le geste (geste_fini)."""
+        ouvertes. Si une barre force, l'alarme ALM de son pilote arrête le geste (geste_fini)."""
         seau = self.seau
         if seau is None or seau.angle_anse is None:
             raise ErreurEtape("remplissage : l'anse est orientée avant de serrer les barres")
