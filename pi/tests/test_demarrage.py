@@ -47,7 +47,7 @@ def test_verifier_des_reglages_corrects(reglages, tmp_path, capsys):
     sortie = capsys.readouterr().err
     assert "Réglages corrects" in sortie
     assert "valeurs d'EXEMPLE" in sortie
-    assert "entrees-sorties.yaml : 83 lignes d'EXEMPLE" in sortie
+    assert "entrees-sorties.yaml : 85 lignes d'EXEMPLE" in sortie
     # La simple vérification n'écrit pas de journal sur le disque.
     assert not (tmp_path / "donnees").exists()
 
@@ -317,7 +317,6 @@ def test_pilotage_a_distance_puis_l_armoire_reprend_la_main(reglages, entrees_so
             "prehension_z",
             "remplissage_y",
             "plateau_z",
-            "barres",
             "pousseur",
         ]
         attendre(lambda: nextion.texte("b_bandeau") == "À DISTANCE : TOUCHER = STOP")

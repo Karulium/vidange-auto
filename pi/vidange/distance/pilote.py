@@ -101,7 +101,9 @@ class PiloteDistance:
         self._horloge = horloge
         # Les axes qu'on peut piloter : les axes droits (en mètres) qui ont une carte FluidNC
         # reliée. Les axes en degrés ne sont pas pilotés à distance : rotation des têtes, et
-        # brosses du lavage (verrou du noyau et de la couronne : jamais sans objet tenu).
+        # brosses du lavage (verrou du noyau et de la couronne : jamais sans objet tenu). Ni les
+        # axes « pilotage_distance: false » de machine.yaml (les 2 barres du remplissage, qui ne
+        # bougent qu'ensemble : une seule ferait un écart que le Pi refuse ensuite).
         self.axes = {
             nom: axe
             for nom, axe in machine.axes.items()
@@ -109,6 +111,7 @@ class PiloteDistance:
             and axe.lettre is not None
             and axe.carte in self.liaisons
             and axe.unite == "m"
+            and axe.pilotage_distance
         }
         self._vitesse_mm_min = reglages.vitesse_max_m_s * MM_PAR_M * 60
         self._pas_mm = reglages.vitesse_max_m_s * MM_PAR_M * reglages.avance_s

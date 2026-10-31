@@ -7,7 +7,7 @@ Les étapes se répètent (une couche, la suivante...) : `ensuite` dit laquelle 
     attendre_une_couche  une couche versée et tassée attend son mycélium (Mycelium.demander)
     changer_de_bocal     bocal neuf (1er seau, ou bocal fini) : mors ouverts, bocal posé
                          (Préhension, case vide), serré
-    ecarter_le_chariot   le chariot de remplissage s'écarte (y ≥ 0,375)
+    ecarter_le_chariot   le chariot de remplissage s'écarte (y ≥ 0,40)
     aller_doser          demi-tour du bocal tête en bas (manivelle en bas), glissière au dosage,
                          manivelle en bas
     amener_le_seau       le chariot revient avec le seau, plateau à la hauteur du dosage
@@ -38,7 +38,8 @@ QUOI_FAIRE_CHARIOT = (
 def module_mycelium(mycelium: Mycelium) -> Module:
     agitateur = mycelium.agitateur
     fin = Condition("geste du mycélium fini", mycelium.geste_fini)
-    ecarte = Condition("chariot de remplissage écarté (y ≥ 0,375)", mycelium.chariot_ecarte)
+    y_ecarte = f"{mycelium.reglages.chariot.y_ecarte_min:g}".replace(".", ",")
+    ecarte = Condition(f"chariot de remplissage écarté (y ≥ {y_ecarte})", mycelium.chariot_ecarte)
     garage = Condition("agitateur au garage, manivelle en haut, bocal debout", mycelium.au_garage)
 
     def geste(

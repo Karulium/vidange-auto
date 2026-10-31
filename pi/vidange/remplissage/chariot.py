@@ -1,6 +1,6 @@
-"""Le chariot de remplissage sur sa carte (n° 2, « chariot ») : avance, plateau, rotation, barres,
-pousseur ; sa balance (carte de pesée RS485), sa barrière lumineuse et l'alarme ALM du pilote des
-barres.
+"""Le chariot de remplissage sur sa carte (n° 2, « chariot ») : avance, plateau, rotation, 2 barres,
+pousseur ; sa balance (carte de pesée RS485), sa barrière lumineuse et les alarmes ALM des pilotes
+des 2 barres.
 
     chariot = ChariotFluidnc(reglages.machine, liaison_chariot, balance, signaux)
     chariot.demarrer(arret)        # lit la balance en fond
@@ -11,11 +11,14 @@ barres.
 Chaque pas est un déplacement manuel de FluidNC (« $J= ») vers une position absolue : il est
 rejouable, et on peut l'arrêter tout de suite sans perdre la position (0x85). Les axes cités
 bougent ensemble, en ligne droite.
-- Barres : la carte compte 0 à l'origine côté mur ; le Pi ajoute `barres → origine_hw_m`
-  (position de la carte en mm = (hw − origine) × 1000).
+- Barres : 2 axes (barre côté mur, barre côté allée), chacun son moteur et son origine (31/10).
+  Un pas « barres » les envoie toutes les deux dans le même « $J= », au même hw. La carte compte
+  0 à l'origine de chacune ; le Pi ajoute `barres → origine_hw_m` (côté mur) ou
+  `origine_allee_hw_m` (côté allée) : position de la carte en mm = (hw − origine) × 1000.
 - Centrage : en position (barres au contact du format + un petit jeu), à la vitesse lente
-  « centrage ». Le pilote boucle fermée n'a pas de courant réduit (PUL, DIR, ENA, ALM) : si les
-  barres forcent trop, il lève ALM (`alarme_barres`), lue dans l'état de la carte.
+  « centrage ». Le pilote boucle fermée n'a pas de courant réduit (PUL, DIR, ENA, ALM) : si une
+  barre force trop, son pilote lève ALM (`alarme_barre_mur`, `alarme_barre_allee`), lue dans
+  l'état de la carte.
 - Contact du plateau (`contact_kg`) : le plateau monte lentement ; dès que la balance a gagné
   tant de kg, le fil de la balance arrête le mouvement (0x85).
 La balance est lue `pesee → frequence_hz` fois par seconde : une pesée est la médiane des
@@ -39,15 +42,16 @@ from vidange.journal import donner_journal
 from vidange.porte_bocal.signaux import Signaux, SignauxFluidnc
 from vidange.quoi_faire import pour_carte
 from vidange.reglages import CarteFluidnc, Machine
-from vidange.remplissage.regles import AXES, Pose
+from vidange.remplissage.regles import AXES, Pose, cles_du_pas
 
 journal = donner_journal("remplissage.chariot")
 
 # Noms des signaux (docs/entrees-sorties.yaml, fluidnc.yaml).
 BARRIERE = "barriere_remplissage"
-ALARME_BARRES = "alarme_barres"
-# Vitesse nommée d'un pas → l'axe qu'elle ralentit.
-VITESSES_LENTES = {"centrage": "barres", "contact": "z"}
+# Alarme ALM du pilote de chaque barre.
+ALARMES_BARRES = {"côté mur": "alarme_barre_mur", "côté allée": "alarme_barre_allee"}
+# Vitesse nommée d'un pas → les axes qu'elle ralentit.
+VITESSES_LENTES = {"centrage": ("barres", "barre_allee"), "contact": ("z",)}
 
 QUOI_FAIRE_BALANCE = (
     "La balance du plateau du chariot de remplissage ne répond plus. Vérifier le câble du bus des "
@@ -97,8 +101,9 @@ class Chariot(Protocol):
         """Faisceau de la barrière lumineuse coupé ; None : pas lu."""
         ...
 
-    def alarme_barres(self) -> bool | None:
-        """Alarme ALM du pilote des barres (elles forcent) ; None : pas lue."""
+    def alarmes_barres(self) -> list[str]:
+        """Les barres dont le pilote est en alarme ALM (elles forcent) : « côté mur », « côté
+        allée »."""
         ...
 
     def pauser(self) -> None: ...
@@ -109,7 +114,7 @@ class Chariot(Protocol):
 
 
 def signaux_chariot(liaison: Liaison, carte: CarteFluidnc) -> SignauxFluidnc:
-    return SignauxFluidnc(liaison, carte, entrees=(BARRIERE, ALARME_BARRES))
+    return SignauxFluidnc(liaison, carte, entrees=(BARRIERE, *ALARMES_BARRES.values()))
 
 
 class ChariotFluidnc:
@@ -136,6 +141,7 @@ class ChariotFluidnc:
             "a": v.rotation,
             "barres": v.barres,
             "pousseur": v.pousseur,
+            "barre_allee": v.barres,
         }
         self._verrou = threading.Lock()
         # Lectures récentes de la balance : (heure, kg).
@@ -193,20 +199,19 @@ class ChariotFluidnc:
 
     # ------------------------------------------------------------ positions
 
+    def _origine(self, cle: str) -> float:
+        barres = self.reglages.barres
+        return {"barres": barres.origine_hw_m, "barre_allee": barres.origine_allee_hw_m}.get(cle, 0)
+
     def _vers_carte(self, cle: str, valeur: float) -> float:
         if cle == "a":
             return valeur
-        if cle == "barres":
-            valeur -= self.reglages.barres.origine_hw_m
-        return valeur * MM_PAR_M
+        return (valeur - self._origine(cle)) * MM_PAR_M
 
     def _depuis_carte(self, cle: str, valeur: float) -> float:
         if cle == "a":
             return valeur
-        valeur /= MM_PAR_M
-        if cle == "barres":
-            valeur += self.reglages.barres.origine_hw_m
-        return valeur
+        return valeur / MM_PAR_M + self._origine(cle)
 
     def position(self) -> Pose:
         positions = self.liaison.etat.positions
@@ -225,8 +230,8 @@ class ChariotFluidnc:
     def barriere_coupee(self) -> bool | None:
         return self.signaux.entree(BARRIERE)
 
-    def alarme_barres(self) -> bool | None:
-        return self.signaux.entree(ALARME_BARRES)
+    def alarmes_barres(self) -> list[str]:
+        return [barre for barre, nom in ALARMES_BARRES.items() if self.signaux.entree(nom)]
 
     # ------------------------------------------------------------ mouvements
 
@@ -235,12 +240,12 @@ class ChariotFluidnc:
         positions: dict[str, float] = {}
         duree = 0.0
         carres = 0.0
-        for cle in pas.cibles:
+        for cle in cles_du_pas(pas.cibles):
             ecart = getattr(cible, cle) - getattr(depart, cle)
             if abs(ecart) <= 1e-9:
                 continue
             vitesse = self._vitesses[cle]
-            if pas.vitesse is not None and VITESSES_LENTES[pas.vitesse] == cle:
+            if pas.vitesse is not None and cle in VITESSES_LENTES[pas.vitesse]:
                 vitesse = min(vitesse, getattr(self.reglages.vitesses, pas.vitesse))
             duree = max(duree, abs(ecart) / vitesse)
             carres += (

@@ -54,6 +54,9 @@ class Axe(Modele):
     lettre: Lettre | None = None
     # « m » : axe droit (rail et course en mètres) ; « deg » : axe tournant (en degrés).
     unite: Literal["m", "deg"] = "m"
+    # Faux : jamais piloté seul à distance (page web), par exemple un axe qui ne bouge qu'avec
+    # un autre (les 2 barres du remplissage).
+    pilotage_distance: bool = True
 
     @model_validator(mode="after")
     def _verifier_course(self) -> "Axe":
@@ -1334,8 +1337,9 @@ AXES_REMPLISSAGE = {
     "remplissage_y": "m",  # avance du chariot (repère du portique)
     "plateau_z": "m",  # dessus du plateau
     "plateau_a": "deg",  # rotation du plateau
-    "barres": "m",  # écartement hw : axe d'une barre à l'axe du plateau
+    "barres": "m",  # écartement hw : axe de la barre côté mur à l'axe du plateau
     "pousseur": "m",
+    "barre_allee": "m",  # écartement hw de la barre côté allée (son propre moteur, 31/10)
 }
 
 
@@ -1377,9 +1381,12 @@ class VerrousRemplissage(Modele):
 
 
 class BarresRemplissage(Modele):
-    # hw (m) où la plaque de barre actionne l'origine côté mur : FluidNC compte 0 là, le Pi
-    # ajoute ce décalage (réglé une fois sur la machine).
+    # hw (m) où la plaque de chaque barre actionne son origine (côté mur, côté allée) : FluidNC
+    # compte 0 là, le Pi ajoute ce décalage (réglé une fois sur la machine).
     origine_hw_m: float
+    origine_allee_hw_m: float
+    # Les 2 barres bougent ensemble : plus d'écart que tant (m) entre elles est refusé.
+    ecart_max_m: float = Field(gt=0)
     # « Ouvertes » pour les gestes (hw, m).
     ouvertes_m: float
     # Centrage en position : barres à formats → centrage_hw_m + tant (m).
@@ -2056,7 +2063,11 @@ class Machine(Modele):
         if erreurs:
             return erreurs
         if len({self.axes[nom].carte for nom in AXES_REMPLISSAGE}) > 1:
-            erreurs.append("remplissage : les 5 axes du chariot sont sur la même carte")
+            erreurs.append("remplissage : les 6 axes du chariot sont sur la même carte")
+        if self.axes["barre_allee"].course != self.axes["barres"].course:
+            erreurs.append(
+                "remplissage : barre_allee a la même course que barres (elles bougent ensemble)"
+            )
         for nom in DUREES_REMPLISSAGE:
             if nom not in self.durees:
                 erreurs.append(f"remplissage : délai « {nom} » absent de durees")
@@ -2092,6 +2103,10 @@ class Machine(Modele):
             dans(f"rangement → files → {nom} → pousseur_m", "pousseur", file.pousseur_m)
         if r.barres.origine_hw_m < self.axes["barres"].course[1]:
             erreurs.append("remplissage → barres → origine_hw_m : au-delà de la course des barres")
+        if r.barres.origine_allee_hw_m < self.axes["barre_allee"].course[1]:
+            erreurs.append(
+                "remplissage → barres → origine_allee_hw_m : au-delà de la course de barre_allee"
+            )
         if self.axes["plateau_z"].course[0] > r.plateau_en_bas_z:
             erreurs.append("remplissage → plateau_en_bas_z : sous la course du plateau")
         for nom, seau in self.griffe.formats.items():

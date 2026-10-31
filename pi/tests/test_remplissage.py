@@ -51,7 +51,8 @@ POSTE = Pose(y=0.135, z=0.175, a=0.0, barres=0.30, pousseur=0.0)
 
 def test_reglages_du_remplissage():
     r = REMPLISSAGE
-    assert (r.poste_y, r.dosage_y, r.ecarte_y, r.pose_y) == (0.135, 0.155, 0.375, 0.50)
+    # Tâche 34 quater : recul pour l'agitateur à y 0,40 (31/10 ; avant : 0,375).
+    assert (r.poste_y, r.dosage_y, r.ecarte_y, r.pose_y) == (0.135, 0.155, 0.40, 0.50)
     assert MACHINE.axes["plateau_z"].course == (0.175, 0.575)
     assert MACHINE.axes["barres"].course == (0.1195, 0.305)
     assert r.verrous.anneaux_y == [(0.14, 0.41), (0.59, 0.86)]
@@ -69,10 +70,13 @@ def test_reglages_du_remplissage():
     assert r.pousseur_rentre_m == 0 and MACHINE.axes["pousseur"].course == (0.0, 0.325)
     assert r.verrous.pousseur_plateau_max_z == 0.20 and r.verrous.bout_y_m == 0.40
     assert {file.pousseur_m for file in r.rangement.files.values()} == {0.325}
-    # Les 5 axes sur la carte n° 2, les axes d'exemple sur la n° 3.
-    assert {MACHINE.axes[nom].carte for nom in ("remplissage_y", "barres", "plateau_a")} == {
-        "chariot"
-    }
+    # Les 6 axes sur la carte n° 2 (dont les 2 barres, tâche 34 quater), les axes d'exemple sur
+    # la n° 3.
+    axes = ("remplissage_y", "barres", "barre_allee", "plateau_a")
+    assert {MACHINE.axes[nom].carte for nom in axes} == {"chariot"}
+    assert MACHINE.axes["barre_allee"].course == MACHINE.axes["barres"].course
+    assert (r.barres.origine_hw_m, r.barres.origine_allee_hw_m) == (0.309, 0.306)
+    assert r.barres.ecart_max_m == 0.001
     assert MACHINE.axes["exemple_x"].carte == "mycelium_lavage"
 
 
@@ -144,6 +148,20 @@ def test_regle_1_anneaux_du_fut():
     assert refus is not None and "en route" in refus and "anneaux" in refus
 
 
+def test_les_2_barres_ont_la_meme_course(reglages):
+    remplacer(
+        reglages / "machine.yaml",
+        "    longueur_rail: 0.306\n    course: [0.1195, 0.305]",
+        "    longueur_rail: 0.306\n    course: [0.12, 0.305]",
+    )
+    assert "barre_allee a la même course que barres" in erreur_de(reglages)
+
+
+def test_origine_de_la_barre_cote_allee_au_dela_de_sa_course(reglages):
+    remplacer(reglages / "machine.yaml", "origine_allee_hw_m: 0.306", "origine_allee_hw_m: 0.30")
+    assert "origine_allee_hw_m : au-delà de la course de barre_allee" in erreur_de(reglages)
+
+
 def test_regle_2_barres_entre_les_joues():
     pose = POSTE.avec(y=0.50, barres=0.245)
     assert REGLES.refus_pose(pose.avec(z=0.48), PERMIS) is None
@@ -151,6 +169,24 @@ def test_regle_2_barres_entre_les_joues():
     # Fermer les barres plateau à 0,5125 (seau B) traverse les joues : refusé.
     depart = POSTE.avec(y=0.50, z=0.5125)
     assert "joues" in REGLES.refus_mouvement(depart, depart.avec(barres=0.1195), PERMIS)
+    # Vérifiée pour chaque barre : la barre côté allée seule entre les joues (0,2355, la barre
+    # côté mur à 0,2345, écart permis de 1 mm).
+    seule = POSTE.avec(y=0.50, barres=0.2345, barre_allee=0.2355)
+    assert REGLES.refus_pose(seule.avec(z=0.48), PERMIS) is None
+    refus = REGLES.refus_pose(seule.avec(z=0.49), PERMIS)
+    assert refus is not None and "barre côté allée à 0,2355" in refus
+
+
+def test_ecart_entre_les_2_barres_refuse():
+    # Les 2 barres bougent ensemble : « barres » seul les met au même hw.
+    assert POSTE.avec(barres=0.20).barre_allee == 0.20
+    # 1 mm d'écart : permis ; plus : refusé, et plus rien ne bouge (prise d'origine).
+    assert REGLES.refus_pose(POSTE.avec(barre_allee=0.299), PERMIS) is None
+    ecartees = POSTE.avec(barre_allee=0.298)
+    refus = REGLES.refus_pose(ecartees, PERMIS)
+    assert refus is not None and "écartées de 2.0 mm" in refus and "prise d'origine" in refus
+    assert "écartées" in REGLES.refus_mouvement(ecartees, ecartees.avec(barres=0.30), PERMIS)
+    assert "écartées" in REGLES.refus_mouvement(ecartees, POSTE.avec(y=0.20), PERMIS)
 
 
 def test_regle_3_barres_ouvertes_au_dessus_de_0_515():
@@ -158,6 +194,9 @@ def test_regle_3_barres_ouvertes_au_dessus_de_0_515():
     assert REGLES.refus_pose(pose.avec(z=0.5125, barres=0.1195), PERMIS) is None
     assert "barres ouvertes" in REGLES.refus_pose(pose.avec(z=0.52, barres=0.20), PERMIS)
     assert REGLES.refus_pose(pose.avec(z=0.575, barres=0.29), PERMIS) is None
+    # Les 2 barres ouvertes : la barre côté allée à 0,2895 suffit pour refuser.
+    allee = pose.avec(z=0.575, barres=0.2905, barre_allee=0.2895)
+    assert "elles sont à 0,2895" in REGLES.refus_pose(allee, PERMIS)
 
 
 def test_regle_4_pousseur_rentre_des_que_le_plateau_monte():
@@ -199,6 +238,11 @@ def test_regle_6_bras_du_spray():
     assert REGLES.refus_bras_spray(pose, 0.25) is None
     assert "plateau ≤ 0,46" in REGLES.refus_bras_spray(pose.avec(z=0.47), 0.25)
     assert "entraxe" in REGLES.refus_bras_spray(pose.avec(barres=0.25), 0.25)
+    # Entraxe = somme des 2 barres.
+    assert REGLES.refus_bras_spray(pose.avec(barres=0.25, barre_allee=0.2505), 0.25) is None
+    assert "0,4995 d'entraxe" in REGLES.refus_bras_spray(
+        pose.avec(barres=0.25, barre_allee=0.2495), 0.25
+    )
     contexte = Contexte(True, None, True, True, bras_spray_sorti=True, hauteur_seau=0.25)
     assert "bras du spray" in REGLES.refus_pose(pose.avec(z=0.47), contexte)
 
@@ -217,7 +261,11 @@ def test_regle_7_chariot_du_fut_absent():
 def test_regle_8_ordre_avec_l_agitateur():
     refuse = Contexte(True, "agitateur du mycélium à x 0,7 m", False, True)
     # Rouler près du poste : refusé ; loin du poste (0,50 → 0,785) : permis.
-    assert "agitateur du mycélium" in REGLES.refus_mouvement(POSTE, POSTE.avec(y=0.375), refuse)
+    assert "agitateur du mycélium" in REGLES.refus_mouvement(POSTE, POSTE.avec(y=0.40), refuse)
+    # Recul à y 0,40 (tâche 34 quater) : à 0,39, le chariot gêne encore l'agitateur.
+    recule = POSTE.avec(y=0.40)
+    assert REGLES.refus_mouvement(recule, recule.avec(y=0.50), refuse) is None
+    assert "agitateur du mycélium" in REGLES.refus_mouvement(recule, POSTE.avec(y=0.39), refuse)
     loin = POSTE.avec(y=0.50)
     assert REGLES.refus_mouvement(loin, loin.avec(y=0.785), refuse) is None
     # Le plateau ne monte au poste qu'agitateur au garage, sauf pour le dosage.
@@ -232,6 +280,8 @@ def test_regle_8_ordre_avec_l_agitateur():
 def test_regle_9_descente_de_la_prehension():
     assert REGLES.refus_descente_prehension(POSTE, True) is None
     assert "barres ouvertes" in REGLES.refus_descente_prehension(POSTE.avec(barres=0.2), True)
+    allee = POSTE.avec(barres=0.2905, barre_allee=0.2895)
+    assert "barres ouvertes" in REGLES.refus_descente_prehension(allee, True)
     assert "micropore" in REGLES.refus_descente_prehension(POSTE, None)
     # Au-dessus du chariot : près de son axe en x, entre y − 0,40 et y + 0,40 (EXEMPLES).
     x = REMPLISSAGE.axe_x
@@ -376,12 +426,23 @@ def test_alarme_des_barres_pendant_le_centrage():
     remplissage.seau = SeauPlateau("seau_a", "S1", angle_anse=0.0)
     remplissage.lancer(remplissage.geste_centrer)
     banc.temps[0] += 0.5
-    banc.chariot.alarme_barres_active = True
-    with pytest.raises(ErreurEtape, match="alarme du pilote des barres") as erreur:
+    # ALM d'une seule barre (chacune a son pilote) : le geste s'arrête, elle est nommée.
+    banc.chariot.alarmes_barres_actives = ["côté allée"]
+    with pytest.raises(
+        ErreurEtape, match="alarme du pilote de la barre côté allée pendant .* \\(elle force\\)"
+    ) as erreur:
         banc.finir()
-    assert "forcent" in erreur.value.quoi_faire
-    assert banc.photos == ["alarme du pilote des barres"]
+    assert "force" in erreur.value.quoi_faire
+    assert banc.photos == ["alarme du pilote de la barre côté allée"]
     assert remplissage.libre()
+
+
+def test_ecart_des_barres_arrete_le_geste():
+    banc = Banc()
+    # Une barre a bougé seule (essai à la main, pas perdus) : le chariot ne bouge plus.
+    banc.etat.positions["barre_allee"] = 0.295
+    with pytest.raises(ErreurEtape, match="barres écartées de 5.0 mm"):
+        banc.jouer(lambda: banc.remplissage.geste_plateau(0.25))
 
 
 def test_le_chariot_attend_l_agitateur_pres_du_poste():
@@ -402,7 +463,7 @@ def test_le_mycelium_mene_le_chariot_au_dosage():
     etat = remplissage.etat()
     assert etat is not None and not etat.immobile and etat.y == 0.135
     banc.finir()
-    assert remplissage.etat() == remplissage.etat().__class__(0.375, 0.175, True)  # type: ignore[union-attr]
+    assert remplissage.etat() == remplissage.etat().__class__(0.40, 0.175, True)  # type: ignore[union-attr]
     remplissage.amener_au_dosage(0.53)
     banc.finir()
     assert (banc.pose.y, banc.pose.z, banc.pose.barres) == (0.155, 0.53, 0.30)
@@ -745,7 +806,11 @@ def reglages_carte() -> Fluidnc:
             "cartes": {
                 "chariot": {
                     "numero_serie_usb": "A2",
-                    "entrees": {"barriere_remplissage": "0", "alarme_barres": "1"},
+                    "entrees": {
+                        "barriere_remplissage": "0",
+                        "alarme_barre_mur": "1",
+                        "alarme_barre_allee": "2",
+                    },
                 },
             },
         }
@@ -761,8 +826,9 @@ def attendre(condition, delai: float = 5.0) -> None:
 
 def test_chariot_sur_un_faux_fluidnc():
     carte = FauxFluidnc(axes="XYZABC", vitesse_rapide_mm_min=60000)
-    # Au poste ; barres à hw 0,30 = 0,30 − 0,309 = −9 mm pour la carte.
-    carte.positions.update(Y=135.0, Z=175.0, A=0.0, B=-9.0, C=0.0)
+    # Au poste ; barres à hw 0,30 : côté mur 0,30 − 0,309 = −9 mm pour la carte (B), côté allée
+    # 0,30 − 0,306 = −6 mm (X).
+    carte.positions.update(X=-6.0, Y=135.0, Z=175.0, A=0.0, B=-9.0, C=0.0)
     reglages = reglages_carte()
     liaison = Liaison("chariot", reglages, ouvrir=carte.ouvrir)
     liaison.demarrer()
@@ -775,20 +841,29 @@ def test_chariot_sur_un_faux_fluidnc():
         )
         chariot.demarrer(arret)
         attendre(lambda: chariot.position().barres == pytest.approx(0.30))
-        assert chariot.position() == Pose(0.135, 0.175, 0.0, pytest.approx(0.30), 0.0)
+        assert chariot.position() == Pose(
+            0.135, 0.175, 0.0, pytest.approx(0.30), 0.0, pytest.approx(0.30)
+        )
         assert chariot.barriere_coupee() is False
-        assert chariot.alarme_barres() is False
+        assert chariot.alarmes_barres() == []
         carte.entrees.add("0")
         attendre(lambda: chariot.barriere_coupee() is True)
-        # Centrage en position : barres à 0,125 (−184 mm pour la carte), sans sortie.
+        # Centrage en position : les 2 barres à 0,125 dans le même mouvement (côté mur −184 mm,
+        # côté allée −181 mm pour la carte), sans sortie.
         cible = chariot.position().avec(barres=0.125)
         chariot.executer(Pas("centrer", {"barres": 0.125}), cible)
         attendre(chariot.fini)
         assert carte.positions["B"] == pytest.approx(-184.0)
+        assert carte.positions["X"] == pytest.approx(-181.0)
+        jog = [ligne for ligne in carte.lignes_recues if ligne.startswith("$J=")][-1]
+        assert "B-184" in jog and "X-181" in jog
+        assert chariot.position().barre_allee == pytest.approx(0.125)
         assert not carte.sorties
-        # Alarme ALM du pilote des barres, lue dans « Pn: ».
+        # Alarme ALM du pilote de chaque barre, lue dans « Pn: ».
+        carte.entrees.add("2")
+        attendre(lambda: chariot.alarmes_barres() == ["côté allée"])
         carte.entrees.add("1")
-        attendre(lambda: chariot.alarme_barres() is True)
+        attendre(lambda: chariot.alarmes_barres() == ["côté mur", "côté allée"])
         attendre(lambda: abs(chariot.peser() - 0.5) < 1e-6)
     finally:
         arret.set()

@@ -12,7 +12,8 @@ fermée). Le plateau qui monte au contact s'arrête au fond du seau tenu par la 
 ≈ 3 cm plus bas pour deux seaux emboîtés. La barrière est coupée tant que deux seaux emboîtés y
 sont (`double`) : ils sont séparés quand la tête tire le seau du dessus (prise double f), sauf
 `separation_ratee`. Le pousseur qui sort fait partir le seau.
-`alarme_barres_active` : le pilote des barres est en alarme (ALM).
+`alarmes_barres_actives` : les barres (« côté mur », « côté allée ») dont le pilote est en alarme
+(ALM).
 """
 
 from collections.abc import Callable
@@ -30,7 +31,7 @@ from vidange.prehension.tete import Pas as PasTete
 from vidange.reglages import Machine
 from vidange.remplissage.chariot import VITESSES_LENTES, Pas, Resultat
 from vidange.remplissage.module import Plan, SeauAFaire
-from vidange.remplissage.regles import AXES, Pose
+from vidange.remplissage.regles import AXES, Pose, cles_du_pas
 from vidange.remplissage.remplissage import Remplissage
 from vidange.simulateur.axes import EtatAxes
 from vidange.simulateur.simulateur import ErreurSimulation, Simulateur
@@ -53,6 +54,7 @@ class ChariotSimule:
             "a": v.rotation,
             "barres": v.barres,
             "pousseur": v.pousseur,
+            "barre_allee": v.barres,
         }
         self._arrivees: dict[str, float] = {}
         self._resultat: Resultat | None = None
@@ -71,7 +73,7 @@ class ChariotSimule:
         self.separation_ratee = False
         self.barriere_muette = False
         self.sans_contact = False
-        self.alarme_barres_active = False
+        self.alarmes_barres_actives: list[str] = []
         self.pretes = Condition("cartes simulées prêtes", lambda: True)
         self.surveillance = Condition("cartes simulées sans alarme", lambda: True)
 
@@ -92,8 +94,8 @@ class ChariotSimule:
     def barriere_coupee(self) -> bool | None:
         return None if self.barriere_muette else self.double
 
-    def alarme_barres(self) -> bool | None:
-        return self.alarme_barres_active
+    def alarmes_barres(self) -> list[str]:
+        return list(self.alarmes_barres_actives)
 
     def executer(self, pas: Pas, cible: Pose) -> None:
         depart = self.position()
@@ -109,9 +111,9 @@ class ChariotSimule:
             self.seau_pose, self.double, self.contenu_kg = False, False, 0.0
         vitesses = dict(self._vitesses)
         if pas.vitesse is not None:
-            cle = VITESSES_LENTES[pas.vitesse]
-            vitesses[cle] = min(vitesses[cle], getattr(self.reglages.vitesses, pas.vitesse))
-        axes = {AXES[cle]: getattr(cible, cle) for cle in pas.cibles}
+            for cle in VITESSES_LENTES[pas.vitesse]:
+                vitesses[cle] = min(vitesses[cle], getattr(self.reglages.vitesses, pas.vitesse))
+        axes = {AXES[cle]: getattr(cible, cle) for cle in cles_du_pas(pas.cibles)}
         self._arrivees = self._etat.aller_vers(
             pas.texte, axes, {AXES[cle]: vitesse for cle, vitesse in vitesses.items()}
         )

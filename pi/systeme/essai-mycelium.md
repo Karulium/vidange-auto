@@ -49,7 +49,7 @@ Dans les commandes ci-dessous, `vidange-fluidnc` veut dire
 Le chariot de remplissage n'étant pas encore écrit (module Remplissage), ces verrous se vérifient
 par les tests automatiques. Sur la machine, vérifier seulement à l'œil, en déplaçant à la main :
 
-1. Chariot de remplissage à y 0,375 (ou plus) : l'agitateur roule sans rien toucher.
+1. Chariot de remplissage à y 0,40 (ou plus) : l'agitateur roule sans rien toucher.
 2. Agitateur au dosage, manivelle en bas : le chariot passe sous le bocal sans le toucher, jusqu'à
    y 0,155, plateau à 0,53 m (seau A) puis à 0,575 m (seau de 5 L).
 3. Au garage, **bielle dans le trou de 7 cm**, bocal vide en place : faire tourner la manivelle à la

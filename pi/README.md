@@ -443,7 +443,7 @@ mycelium.demander(Demande("S1293", "seau_a", couche=1, variete="pleurote_grise",
   demi-tour (manivelle en bas, bocal debout, photo de contrôle, manivelle en haut), garage.
 - **Changement de bocal** : mors ouverts, bocal neuf posé (Préhension, case vide), serré (palpage : diamètre
   hors plage = bocal absent, cassé ou mal posé → alarme avec photo).
-- **Verrous** (`ReglesMycelium`) : l'agitateur ne roule que chariot écarté (y ≥ 0,375) et manivelle en haut ;
+- **Verrous** (`ReglesMycelium`) : l'agitateur ne roule que chariot écarté (y ≥ 0,40, depuis le 31/10) et manivelle en haut ;
   `mycelium.refus_chariot()` dit au chariot de remplissage s'il peut rouler (agitateur au garage manivelle en
   haut, ou au dosage manivelle en bas) ; au garage, pas de rotation avec la course de 10 cm ;
   `mycelium.camera_peut_pivoter()` pour la caméra du dosage ; `mycelium.dosage_en_cours()` pour la griffe.
@@ -550,12 +550,14 @@ prehension.lancer(lambda: lavage.geste_laver_seau("seau_a"))  # la tête tient l
   geste : alarme, la tête et le pont s'arrêtent.
 - Essai sur la machine : `vidange-lavage etat | sortie NOM S | remplir | vider | brosses | laver FORMAT x y z`.
 
-## Remplissage (tâches 34 et 34 bis)
+## Remplissage (tâches 34, 34 bis, 34 ter et 34 quater)
 
-Le chariot des seaux (module gelé le 27/10/2026, corrigé le 28/10), sur la carte n° 2 (« chariot ») : avance
-en y, plateau (montée, rotation), barres, pousseur, balance du plateau (`pesee_plateau_remplissage`),
-barrière lumineuse, alarme ALM du pilote des barres. Prises d'origine : montée vers le bas, avance contre le
-tampon côté mur, pousseur côté fût (zéro = rentré), rotation sur un capteur Hall.
+Le chariot des seaux (module gelé le 27/10/2026, corrigé le 28/10 et le 31/10), sur la carte n° 2 (« chariot ») :
+avance en y, plateau (montée, rotation), 2 barres (un moteur chacune, axes B et X, commandées ensemble),
+pousseur, balance du plateau (`pesee_plateau_remplissage`), barrière lumineuse, alarme ALM du pilote de chaque
+barre. Prises d'origine : montée vers le bas, avance contre le tampon côté mur, pousseur côté fût (zéro =
+rentré), rotation sur un capteur Hall, chaque barre sur son fin de course. Le fin de course haut du plateau
+est en série dans l'arrêt (le Pi ne le lit pas ; butée logicielle 0,575).
 
 ```
 vidange-simulateur remplissage           # 2 seaux : posés (prise double), remplis, dosés, rangés
@@ -563,7 +565,8 @@ vidange-remplissage --faux etat          # l'outil d'essai, sur un faux FluidNC
 ```
 
 - **Verrous** (`ReglesRemplissage`, règles du fichier des positions) : anneaux du fût (plateau en bas hors du
-  poste et du milieu), joues de l'élévateur, barres ouvertes au-dessus de 0,515, pousseur rentré dès que le
+  poste et du milieu), écart entre les 2 barres (au plus 1 mm, sinon plus rien ne bouge avant la prise
+  d'origine), joues de l'élévateur et barres ouvertes au-dessus de 0,515 (pour chaque barre), pousseur rentré dès que le
   plateau n'est pas en bas (il ne sort que plateau ≤ 0,20), bras du galet, spray, chariot du fût absent
   (axe du plateau ≤ 0,475), Mycélium (rouler près du poste, monter au poste), préhension (règle 9, branchée
   dans la préhension par `brancher_prehension`, sauf en mode couvercles et pendant la pose d'un seau vide). Un trajet est vérifié tous les
@@ -572,7 +575,7 @@ vidange-remplissage --faux etat          # l'outil d'essai, sur un faux FluidNC
   `geste_poser_seau` (joué par la préhension : la tête descend le seau, le plateau monte au contact lu par
   la balance, centrage ; barrière coupée → prise double séparée dans l'ordre a) à i), barres toujours sous
   0,235, la tête garde le seau du dessus), `geste_orienter_anse` (QR du flanc, oreilles à 45° des barres), `geste_centrer` (en
-  position ; l'alarme ALM des barres arrête le geste), `geste_ramener_au_poste`, `tourner_seau` (griffe),
+  position ; l'alarme ALM d'une barre arrête le geste), `geste_ramener_au_poste`, `tourner_seau` (griffe),
   `geste_ranger` (plateau en bas), `geste_mode_couvercles`, `geste_mode_inspection`.
 - **Pour les autres** : `etat`, `ecarter`, `amener_au_dosage` (Mycélium) ; `regler_barres`, `ecart_barres`,
   `chariot_en_place`, `barriere_coupee` (retourneur du Lavage) ; `seau_au_poste`, `tourner_seau` (Griffe) ;

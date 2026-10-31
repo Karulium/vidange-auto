@@ -10,7 +10,7 @@
 
 Un demi-tour fait d'abord la prise d'origine de la manivelle, vérifie que l'agitateur est au
 demi-tour, met la manivelle en bas, retourne le bocal, puis remet la manivelle en haut. Le chariot
-de remplissage n'est pas encore écrit : vérifier soi-même qu'il est écarté (y ≥ 0,375).
+de remplissage n'est pas encore écrit : vérifier soi-même qu'il est écarté (y ≥ 0,40).
 Procédure complète : pi/systeme/essai-porte-bocal.md. À ne lancer que programme principal arrêté
 (une seule liaison par carte).
 """
