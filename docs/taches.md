@@ -267,6 +267,9 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   la caméra du bocal (x 1,045-1,085, y 0,22-0,28, z 0,982-1,062) ; s'il y a contact, le dire dans les questions
   de la PR avec une proposition. Tests.
 - [ ] **18 ter. Griffe : nouvelle table « Y minimum du mât » et essuyage godet à moitié** — Modèle : Sonnet, effort moyen.
+  **EN ATTENTE (01/11/2026) : ne pas faire tout de suite.** L'agitateur devient fixe à x 0,925 (`docs/decisions.md`,
+  « Agitateur du mycélium FIXE ») : la table ci-dessous est périmée. Cette tâche sera réécrite avec la nouvelle table
+  et faite avec la tâche 19 ter.
   Source : `docs/decisions.md`, « Griffe : essuyage et Y minimum du mât » (01/11/2026). Dans
   `pi/reglages/machine.yaml`, remplacer les 5 lignes de `griffe → garage_glissiere` par les 9 de la décision et
   mettre à jour son commentaire (garage à 0,565, toute hauteur). Remplacer le drapeau `permise_en_butee_haute`
@@ -354,6 +357,11 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 
   Simulateur : un seau de format A dosé en 4 couches, puis 2 petits seaux B avec un seul bocal. Tests, dont les
   verrous avec le chariot et la casse du bocal.
+- [ ] **19 ter. Mycélium : agitateur fixe à x 0,925 (plus de glissière)** — à écrire quand la nouvelle fiche du
+  Mycélium sera prête (`docs/decisions.md`, « Agitateur du mycélium FIXE », 01/11/2026). Touchera aussi la griffe
+  (vidage à y 0,42), le Remplissage (seau vide qui attend à 0,42, manivelle en bas au poste), la préhension (bocal
+  en 0,925 ; 0,150) et les entrées-sorties (axe et fins de course de la glissière retirés). **Ne pas faire tant que
+  cette ligne ne donne pas les règles.**
 - [x] **19 bis. Ne jamais envoyer à une carte un fichier FluidNC d'exemple** — Modèle : Sonnet, effort bas.
   L'envoi de `fluidnc/<carte>.yaml` à une carte est refusé si le fichier est marqué EXEMPLE, avec un message clair
   qui dit quoi faire. Le simulateur et les tests peuvent toujours s'en servir. Tests.
