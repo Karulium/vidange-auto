@@ -851,7 +851,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   pour chaque k, ordre de vidage, capacité des files (C en quinconce), file 0,785 refusée sans chariot du fût, boucle
   ouverte ⇒ rien ne bouge, coin d'inspection plein, trajets refusés (boîtes, caméra du bocal, pile pleine).
   « Testé sur le vrai matériel : non » ; procédure d'essai (boucle des microrupteurs, cotes des piles, tiroir).
-- [ ] **35 bis. Bande du haut : seaux pleins poussés sur le plateau du Stockage** — Modèle : Sonnet, effort moyen.
+- [x] **35 bis. Bande du haut : seaux pleins poussés sur le plateau du Stockage** — Modèle : Sonnet, effort moyen.
   **Après la tâche 35.** D'après la section « Pousseur côté allée et bande du haut » de `docs/decisions.md` (31/10).
   1. Remplissage : retirer la règle des anneaux du fût (périmée) et « pousseur rentré au-dessus de 0,20 » ; nouvelle
      règle 12 : poussée à toute hauteur, barres ouvertes (hw ≥ 0,29) et bras de fermeture rangé, plusieurs seaux à la

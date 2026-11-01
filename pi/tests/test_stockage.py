@@ -1,5 +1,6 @@
-"""Stockage (tâche 35) : places calculées, inventaire, verrous des trajets, prise sur les piles,
-rangement dans le tiroir, scénario « stockage » du simulateur."""
+"""Stockage (tâches 35 et 35 bis) : places calculées, inventaire, verrous des trajets, prise sur
+les piles, rangement dans le tiroir et sur la bande du haut, scénario « stockage » du
+simulateur."""
 
 import pytest
 
@@ -34,9 +35,9 @@ def seau(format: str = "seau_a") -> Objet:
     return Objet.depuis("seau", PREHENSION.objets["seau"], rayon_m=f.rayon_haut, dessus_m=f.hauteur)
 
 
-def stockage(boucle: list[bool] | None = None, registre=None) -> Stockage:
+def stockage(boucle: list[bool] | None = None, registre=None, vision=None) -> Stockage:
     etat = [True] if boucle is None else boucle
-    return Stockage(MACHINE, boucle_fermee=lambda: etat[0], registre=registre)
+    return Stockage(MACHINE, boucle_fermee=lambda: etat[0], registre=registre, vision=vision)
 
 
 # ---------------------------------------------------------------- places calculées
@@ -75,43 +76,158 @@ def test_places_de_fin_de_lot():
 
 
 def test_ordre_de_vidage():
+    # Tâche 35 bis : la bande y 0,215 d'abord (libérée pour les seaux pleins), puis 0,84, 0,53.
     ordre = places.ordre_piles(MACHINE, places.places_piles(MACHINE, "seau_a"))
     assert ordre == [
+        "fin_1",
+        "fin_2",
+        "fin_3",
+        "fin_4",
         "pile_1",
         "pile_2",
         "pile_4",
         "pile_3",
         "pile_5",
-        "fin_1",
-        "fin_2",
-        "fin_3",
-        "fin_4",
     ]
     magasin = stockage()
     magasin.charger_pile("pile_5", "seau_a", 3)
     magasin.charger_pile("fin_1", "seau_a", 2)
     magasin.charger_pile("pile_2", "seau_a", 5)
     magasin.charger_pile("pile_1", "seau_b", 7)
+    assert magasin.pile_a_prendre("seau_a") == "fin_1"
+    magasin.charger_pile("fin_1", "seau_a", 0)
     assert magasin.pile_a_prendre("seau_a") == "pile_2"
     assert magasin.pile_a_prendre("seau_b") == "pile_1"
     assert magasin.pile_a_prendre("seau_c") is None
-    assert magasin.seaux_vides("seau_a") == 10
+    assert magasin.seaux_vides("seau_a") == 8
 
 
 def test_capacite_des_files():
-    for format, attendu in (("seau_a", 14), ("seau_b", 14), ("seau_c", 16), ("seau_d", 14)):
+    # Capacités du tiroir corrigées le 01/11 : A 14, B 15, C 12 (4 par file, plus de quinconce),
+    # D 14 ; butée à x 2,582.
+    for format, attendu in (("seau_a", 14), ("seau_b", 15), ("seau_c", 12), ("seau_d", 14)):
         assert places.capacite_tiroir(MACHINE, format) == attendu
     assert places.places_tiroir(MACHINE, "seau_a") == {"file_1": 4, "file_2": 5, "file_3": 5}
-    assert "seau_c" in MACHINE.stockage.tiroir.quinconce  # type: ignore[union-attr]
+    assert MACHINE.stockage.tiroir.butee_x == 2.582  # type: ignore[union-attr]
     magasin = stockage()
     files = []
     while (file := magasin.file_libre("seau_c")) is not None:
         files.append(file)
         magasin.seau_range(file)
-    assert files == ["file_1"] * 5 + ["file_2"] * 6 + ["file_3"] * 5
-    assert magasin.file_libre("seau_a") is None
-    # Bande du haut : case vide, désactivée.
-    assert magasin.places_bande_haut("seau_a") == 0
+    assert files == ["file_1"] * 4 + ["file_2"] * 4 + ["file_3"] * 4
+    # Seau B : 5 par file.
+    assert magasin.file_libre("seau_b") == "file_1"
+    # Seau C, file y 0,50 : cale de 15 cm, course du pousseur plus courte d'autant.
+    assert magasin.course_pousseur("file_2", "seau_c", 0.325) == pytest.approx(0.175)
+    assert magasin.course_pousseur("file_1", "seau_c", 0.325) == 0.325
+    assert magasin.course_pousseur("file_2", "seau_a", 0.325) == 0.325
+
+
+def test_places_et_capacite_de_la_bande_du_haut():
+    attendu = {"seau_a": 4, "seau_b": 5, "seau_c": 4, "seau_d": 4}
+    assert {f: len(places.places_bande(MACHINE, f)) for f in attendu} == attendu
+    # Capacité d'un lot (tiroir + bande) : A 18, B 20, C 16, D 18.
+    lot = {f: places.capacite_lot(MACHINE, f) for f in attendu}
+    assert lot == {"seau_a": 18, "seau_b": 20, "seau_c": 16, "seau_d": 18}
+    assert places.places_bande(MACHINE, "seau_b") == pytest.approx([2.32, 2.085, 1.85, 1.615, 1.38])
+    # Fin de course logicielle : le bord du seau du bout à x ≤ 2,44 pour chaque format.
+    for format in attendu:
+        rayon = MACHINE.griffe.formats[format].rayon_haut  # type: ignore[union-attr]
+        assert places.places_bande(MACHINE, format)[0] + rayon <= 2.44
+    # Le seau poussé arrive à la dernière place ; les autres avancent d'une place.
+    assert places.centres_bande(MACHINE, "seau_a", 1) == [(1.484, 0.215)]
+    assert [x for x, _ in places.centres_bande(MACHINE, "seau_a", 3)] == [2.028, 1.756, 1.484]
+
+
+def test_le_tiroir_d_abord_puis_la_bande():
+    magasin = stockage()
+    rangees = []
+    while (place := magasin.place_libre("seau_a")) is not None:
+        rangees.append(place)
+        magasin.seau_range(place, "seau_a")
+    assert rangees == ["file_1"] * 4 + ["file_2"] * 5 + ["file_3"] * 5 + ["bande_haut"] * 4
+    assert magasin.seaux_pleins() == 18 == magasin.capacite_lot("seau_a")
+    assert "bande du haut pleine" in magasin.refus_bande("seau_a")
+    # Pas de pile de fin de lot tant que la bande a des seaux pleins.
+    with pytest.raises(ErreurEtape, match="bande du haut"):
+        magasin.charger_pile("fin_1", "seau_a", 2)
+    # La pause « plus de place » reste pour un fût plus gros.
+    magasin.demander_vidage("plus de place au stockage", 12.0)
+    assert magasin.messages == [
+        "plus de place au stockage : vider le tiroir et la bande du stockage (18 seaux) ; "
+        "substrat restant ≈ 12.0 kg"
+    ]
+    magasin.tiroir_vide()
+    assert magasin.seaux_pleins() == 0 and magasin.inventaire.bande_haut.format is None
+    assert magasin.place_libre("seau_a") == "file_1"
+
+
+def test_la_bande_attend_que_ses_piles_de_fin_de_lot_soient_vides():
+    magasin = stockage()
+    magasin.charger_pile("fin_2", "seau_a", 1)
+    for file, nombre in magasin.places_tiroir("seau_a").items():
+        magasin.inventaire.changer_file(file, nombre)
+    assert "fin_2" in magasin.refus_bande("seau_a")
+    assert magasin.place_libre("seau_a") is None
+    magasin.charger_pile("fin_2", "seau_a", 0)
+    assert magasin.place_libre("seau_a") == "bande_haut"
+    # Un seul format sur la bande.
+    magasin.seau_range("bande_haut", "seau_a")
+    assert "seaux « seau_a »" in magasin.refus_bande("seau_b")
+
+
+class FausseVision:
+    def __init__(self, vus):
+        self.vus = vus
+
+    def seaux_de_la_bande(self):
+        return self.vus
+
+
+def test_photo_apres_chaque_poussee():
+    vision = FausseVision([(1.484, 0.215)])
+    magasin = stockage(vision=vision)
+    magasin.seau_range("bande_haut", "seau_a")
+    magasin.verifier_bande()
+    # À 7 mm de la ligne : permis ; à 8 mm : arrêt et alerte.
+    vision.vus = [(1.484, 0.222)]
+    magasin.verifier_bande()
+    vision.vus = [(1.484, 0.2231)]
+    with pytest.raises(ErreurEtape, match="à 8 mm de sa ligne"):
+        magasin.verifier_bande()
+    # Seau trop loin (bord au-delà de 2,44, vers le hublot), photo pas lue, seau manquant.
+    vision.vus = [(2.31, 0.215)]
+    with pytest.raises(ErreurEtape, match="dépasse 2.44"):
+        magasin.verifier_bande()
+    vision.vus = None
+    with pytest.raises(ErreurEtape, match="pas lue"):
+        magasin.verifier_bande()
+    vision.vus = []
+    with pytest.raises(ErreurEtape, match="voit 0 seaux"):
+        magasin.verifier_bande()
+    # Sans vision (pas encore écrite) : un faux répond les places attendues.
+    sans = stockage()
+    sans.seau_range("bande_haut", "seau_a")
+    sans.verifier_bande()
+
+
+def test_bande_du_haut_mal_reglee_refusee(reglages):
+    remplacer(
+        reglages / "machine.yaml",
+        "seau_a: [2.30, 2.028, 1.756, 1.484]",
+        "seau_a: [2.32, 2.028, 1.756, 1.484]",
+    )
+    assert "bande_haut → places → seau_a : le 1er seau (2.32) dépasse 2.44" in erreur_de(reglages)
+
+
+def test_centres_du_tiroir_verifies(reglages):
+    remplacer(
+        reglages / "machine.yaml",
+        "file_2: [2.282, 1.982, 1.682, 1.382]",
+        "file_2: [2.432, 2.132, 1.832, 1.532]",
+    )
+    # La cale de 15 cm de la file 2 : le 1er seau C ne peut plus être à 2,432.
+    assert "centres_x → seau_c → file_2 : le 1er seau (2.432) dépasse 2.432" in erreur_de(reglages)
 
 
 def test_bocaux_et_boites():
@@ -202,8 +318,8 @@ def test_file_du_tiroir_inconnue_refusee(reglages):
 
 
 def test_coin_d_inspection_mal_ecrit_refuse(reglages):
-    remplacer(reglages / "machine.yaml", "separation: [[8, 3]", "separation: [[8, 2]")
-    assert "place [8, 2] écrite deux fois" in erreur_de(reglages)
+    remplacer(reglages / "machine.yaml", "separation: [[5, 7]", "separation: [[8, 8]")
+    assert "place [8, 8] écrite deux fois" in erreur_de(reglages)
 
 
 def test_pas_de_pile_obligatoire(reglages):
@@ -215,8 +331,7 @@ def test_pas_de_pile_obligatoire(reglages):
 
 
 def refus(depart, arrivee, objet=None, piles=(), boucle=True):
-    toutes = list(MACHINE.stockage.piles.places.values())  # type: ignore[union-attr]
-    return REGLES.refus_prehension(depart, arrivee, objet, list(piles), toutes, boucle)
+    return REGLES.refus_prehension(depart, arrivee, objet, list(piles), boucle)
 
 
 def pile(nom, x, y, nombre=5, format="seau_a"):
@@ -252,13 +367,17 @@ def test_seau_jamais_au_dessus_d_une_pile_pleine():
 
 
 def test_rail_operateur():
-    tenu = seau()
-    # Axe à y 0,83 entre deux places de piles, bord à 1,155 : refusé ; à 1,10 : passe.
+    """Haut du seau au-dessus de 1,11 : axe y + rayon du bord ≤ 0,995 ; sinon haut ≤ 1,10."""
+    tenu = seau()  # seau A, rayon du bord 0,1335 ; haut à z + 0,25
     depart = Pose(1.45, 0.75, 0.905, 0)
-    assert "rail opérateur" in refus(depart, depart.avec(y=0.83), tenu)
-    assert refus(depart.avec(z=0.85), Pose(1.45, 0.83, 0.85, 0), tenu) is None
-    # À la verticale d'une place de pile (question n° 1 de la PR) : permis.
+    # Rangée y 0,84 : 0,84 + 0,1335 ≤ 0,995, haut à 1,155 permis (entre les piles ou dessus).
+    assert refus(depart, depart.avec(y=0.84), tenu) is None
     assert refus(Pose(1.30, 0.70, 0.905, 0), Pose(1.30, 0.84, 0.905, 0), tenu) is None
+    # Axe à y 0,87 (0,87 + 0,1335 > 0,995) : haut à 1,155 refusé, à 1,10 permis.
+    refuse = refus(depart, depart.avec(y=0.87), tenu)
+    assert refuse is not None and "rail opérateur" in refuse and "≤ 0,995" in refuse
+    assert refus(depart.avec(z=0.85), Pose(1.45, 0.87, 0.85, 0), tenu) is None
+    assert "rail opérateur" in refus(depart.avec(z=0.851), Pose(1.45, 0.87, 0.851, 0), tenu)
 
 
 def test_boites_a_capsules():
@@ -385,15 +504,21 @@ def test_scenario_stockage():
     assert planning.fini, planning.probleme
     magasin = scenario.stockage
     plan = scenario.remplissage.plan
-    assert len(plan.faits) == 15
-    # 3 piles de 5 seaux A vidées dans l'ordre (la prise double rend un seau à pile_1).
-    assert all(magasin.inventaire.piles[nom].nombre == 0 for nom in ("pile_1", "pile_2", "pile_4"))
+    assert len(plan.faits) == 19
+    # 4 piles de 5 seaux A vidées dans l'ordre (la prise double rend un seau à pile_1).
+    vides = ("pile_1", "pile_2", "pile_4", "pile_3")
+    assert all(magasin.inventaire.piles[nom].nombre == 0 for nom in vides)
     rangements = [ligne.etape for ligne in planning.lignes if ligne.module == "remplissage"]
+    # 18 seaux A par lot : 14 au tiroir (4 + 5 + 5), puis 4 sur la bande du haut, chacun vérifié
+    # par la photo du plafond ; pause, tiroir et bande vidés ; le 19e dans la file 1.
+    assert rangements.count("photo_de_la_bande") == 4
     assert rangements.count("vider_le_tiroir") == 1
     assert rangements.count("confirmer_tiroir_vide") == 1
-    # 14 seaux rangés (4 + 5 + 5), pause, tiroir vidé ; le 15e dans la file 1 remise à zéro.
-    assert magasin.messages == ["plus de place au tiroir : vider le tiroir du stockage (14 seaux)"]
+    assert magasin.messages == [
+        "plus de place au stockage : vider le tiroir et la bande du stockage (18 seaux)"
+    ]
     assert magasin.inventaire.files == {"file_1": 1, "file_2": 0, "file_3": 0}
+    assert magasin.inventaire.bande_haut.nombre == 0
     textes = [texte for _, texte in planning.evenements]
     assert any("boucle_stockage » relâché" in texte for texte in textes)
     assert any("boucle_stockage » actionné" in texte for texte in textes)
@@ -426,5 +551,6 @@ def test_outil_places_et_piles(capsys):
     assert "5 seaux au plus" in sortie and "5 seau(x) : bord à 0,866 m" in sortie
     assert outil(["places", "seau_c"]) == 0
     sortie = capsys.readouterr().out
-    assert "capacité : 16 seaux" in sortie and "désactivée" in sortie
+    assert "capacité du tiroir : 12 seaux" in sortie and "Capacité d'un lot : 16 seaux" in sortie
+    assert "Bande du haut y 0,215 : 4 places (centres x 2,28, 1,98, 1,68, 1,38)" in sortie
     assert outil(["places", "seau_z"]) == 2

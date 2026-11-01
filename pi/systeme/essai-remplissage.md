@@ -84,8 +84,9 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
    chaque format dans `griffe → formats → tare_kg`).
 3. Verrous (rien ne doit bouger quand c'est refusé ; l'outil dit pourquoi) :
    - sans `--galet-range` : `vidange-remplissage plateau 0.30` → **refusé** (bras du galet pas connu) ;
-   - `vidange-remplissage --galet-range aller 0.25` avec le plateau en haut : le plateau **descend d'abord**,
-     puis le chariot roule (anneaux du fût) ;
+   - `vidange-remplissage --galet-range aller 0.25` avec le plateau en haut : le chariot roule **plateau en
+     haut** (la règle des anneaux du fût est supprimée depuis le 31/10 : une tôle fixe à x 0,655 sépare le
+     fût du chariot). Regarder qu'il ne touche rien, fût présent puis absent, panneau levé puis rabattu ;
    - `vidange-remplissage --galet-range aller 0.5` sans `--agitateur-au-garage` → **refusé** (le chariot ne
      roule pas près du poste) ;
    - au poste, `vidange-remplissage --galet-range --agitateur-au-garage plateau 0.53` : les barres
@@ -93,9 +94,10 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
    - `vidange-remplissage --galet-range barres 0.20` avec le plateau à 0,53 : le plateau **descend** sous
      0,48 (joues de l'élévateur), les barres passent, et il reste à 0,48 (barres fermées : pas au-dessus
      de 0,515) ;
-   - plateau à 0,25 : `vidange-remplissage --galet-range pousseur 0.325` : le plateau **descend d'abord**
-     en bas, puis le pousseur sort (il ne sort que plateau ≤ 0,20). `vidange-remplissage pousseur 0` : il
-     rentre.
+   - plateau à 0,25 : `vidange-remplissage --galet-range pousseur 0.325` : le pousseur sort **sans que le
+     plateau bouge** (règle 12 : poussée à toute hauteur, barres ouvertes, bras de fermeture rangé). Sans
+     `--galet-range` : **refusé** (bras de fermeture pas connu). Barres à 0,20 : elles s'ouvrent d'abord.
+     `vidange-remplissage --galet-range pousseur 0` : il rentre, à toute hauteur.
 4. Passage de l'agitateur (31/10 : recul à y **0,40**, le moteur de la barre côté mur touche un support
    SK12 à 0,375) : `vidange-remplissage --galet-range aller 0.40` (agitateur vu au garage), puis faire
    rouler l'agitateur à la main, lentement, du garage au dosage : rien ne touche, il reste au moins
@@ -137,8 +139,13 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
    plus).
 2. Seau au poste (étape 3), `vidange-remplissage --galet-range --agitateur-au-garage ranger seau_a file_1` :
    le plateau descend **en bas**, le chariot va à la file, le seau est pesé, le pousseur le pousse vers le
-   stockage et rentre à son zéro. Le seau doit glisser droit, sans basculer. Il n'y a pas de poussée
-   « plateau en haut » (bande du haut) : c'est voulu.
+   stockage et rentre à son zéro. Le seau doit glisser droit, sans basculer.
+3. Bande du haut (tâche 35 bis) : `vidange-remplissage --galet-range --agitateur-au-garage ranger seau_a
+   bande_haut`. Attendu, dans l'ordre : barres ouvertes, chariot à y 0,215, pesée, plateau à **0,4985**,
+   poussée, pousseur rentré, plateau en bas. Mesurer le dessus du plateau au moment de la poussée : entre
+   **0,496 et 0,501** (jamais sous la tôle du stockage à 0,496). Le seau doit passer sur la tôle du
+   plateau sans accrocher le bord de P1 (x 1,155). Réglage de la course : `rangement → bande_haut →
+   pousseur_m` (EXEMPLE 0,325). La suite (places, photo) est dans `essai-stockage.md`, étape 5 bis.
 
 ## Étape 5 : pose et prise double (avec la préhension)
 
@@ -189,6 +196,12 @@ soir). À faire d'abord sur la maquette. **Main sur l'arrêt d'urgence.**
 3. Règle 9 (quand les modules seront assemblés dans le programme) : barres fermées (`barres 0.20`), mode
    des seaux, la tête de préhension au-dessus du plateau : sa descente sous 0,84 doit être **refusée**
    (même au mode manuel du téléphone). En mode couvercles, barres à 0,19, elle est permise (retourneur).
+4. Règle 14 (mode couvercles, quand la griffe et le chariot seront assemblés dans le programme) : chariot
+   à y 0,50, demander un demi-tour de la tête de la griffe (axe y 0,68, axes à 1,075) : **refusé** (« règle
+   14 »). Reculer le chariot à y 0,515 (`vidange-remplissage --galet-range aller 0.515`) : le demi-tour est
+   permis. **À la main, moteurs coupés**, vérifier qu'à y 0,515 la raclette passe loin du moteur de la barre
+   côté allée, et qu'à y 0,50 elle le toucherait. Le chariot ne revient à y 0,50 qu'une fois la tête
+   arrêtée.
 
 ## Ce qu'il faut renvoyer
 

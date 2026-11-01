@@ -16,7 +16,7 @@ exemple: true
 # elle n'avance jamais de plus que ce pas (s), pour voir les délais dépassés.
 pas_max_s: 1
 # Au-delà de ce temps simulé (s), on s'arrête : le cycle est bloqué (il attend quelque chose
-# qui n'arrive jamais). Le plus long scénario, « stockage », dure ≈ 2 h.
+# qui n'arrive jamais). Le plus long scénario, « stockage », dure ≈ 2 h 30.
 duree_max_s: 14400
 # Temps que met Karulium à donner le Go quand une étape le demande (s). 0 : tout de suite.
 delai_go_s: 20
@@ -138,15 +138,17 @@ remplissage:
     - {seau: S0101, format: seau_a, variete: pleurote_grise, file: file_1, prise_double: true, anse_deg: 10}
     - {seau: S0102, format: seau_b, variete: pleurote_grise, file: file_3, anse_deg: 70}
 
-# Le stockage imaginaire (scénario « stockage ») : 3 piles de 5 seaux A chargées (rangée y 0,84,
-# vidées dans l'ordre pile_1, pile_2, pile_4), et 15 seaux A à remplir : le 3e est posé avec un
-# 2e seau emboîté (prise double, le seau du dessus rendu à sa pile). Le Stockage choisit la file
-# de chaque seau (4 + 5 + 5 = 14 au tiroir) : le 15e attend que le tiroir soit vidé.
+# Le stockage imaginaire (scénario « stockage ») : 4 piles de seaux A chargées, 5 + 5 + 5 + 4
+# (rangée y 0,84 vidée dans l'ordre pile_1, pile_2, pile_4, puis pile_3 dans la rangée 0,53), et
+# 19 seaux A à remplir : le 3e est posé avec un 2e seau emboîté (prise double, le seau du dessus
+# rendu à sa pile). Le Stockage choisit la place de chaque seau : le tiroir (4 + 5 + 5 = 14), puis la bande
+# du haut (4), soit 18 seaux A par lot ; le 19e attend que le tiroir et la bande soient vidés.
 stockage:
   piles:
     pile_1: {format: seau_a, nombre: 5}
     pile_2: {format: seau_a, nombre: 5}
     pile_4: {format: seau_a, nombre: 5}
+    pile_3: {format: seau_a, nombre: 4}
   seaux:
     - {seau: S0201, format: seau_a, variete: pleurote_grise}
     - {seau: S0202, format: seau_a, variete: pleurote_grise}
@@ -163,6 +165,10 @@ stockage:
     - {seau: S0213, format: seau_a, variete: pleurote_grise}
     - {seau: S0214, format: seau_a, variete: pleurote_grise}
     - {seau: S0215, format: seau_a, variete: pleurote_grise}
+    - {seau: S0216, format: seau_a, variete: pleurote_grise}
+    - {seau: S0217, format: seau_a, variete: pleurote_grise}
+    - {seau: S0218, format: seau_a, variete: pleurote_grise}
+    - {seau: S0219, format: seau_a, variete: pleurote_grise}
 
 # Capteurs (entrées tout-ou-rien de docs/entrees-sorties.yaml) actionnés au départ.
 capteurs_actionnes: []

@@ -6,7 +6,9 @@
     stockage.brancher_prehension(prehension)           # verrous des trajets à chaque pas
     stockage.brancher_griffe(griffe)
     prehension.lancer(lambda: stockage.geste_prendre_seau(prehension, "seau_a"))
-    stockage.file_libre("seau_a")                      # « file_1 » ; None : tiroir plein
+    stockage.place_libre("seau_a")                     # « file_1 »... puis « bande_haut » ;
+                                                       # None : plus de place
+    stockage.verifier_bande()                          # photo du plafond après une poussée
 
 Le Stockage est passif (aucun moteur) et n'a aucun capteur de présence : le Pi tient
 l'inventaire de chaque place (vidange.stockage.inventaire, gardé dans le registre). Une seule
@@ -21,13 +23,21 @@ pile la plus proche du chariot d'abord), le seau du haut pris à la cote attendu
 d'une pile de la bande : il en sort en longeant vers −x jusqu'à x 1,29, puis vers +y jusqu'à
 0,44 (caméra du bocal).
 
-Tiroir : files remplies dans l'ordre, la place exacte (y) est celle du Remplissage. Plus de
-place libre : le module du Remplissage attend (vidange.remplissage.module), le Pi note le
-substrat restant, invite à vider le tiroir, attend que la boucle s'ouvre puis se referme, puis
-la confirmation à l'écran (Go) avant de remettre les files à zéro.
+Seaux pleins : le tiroir d'abord (files remplies dans l'ordre, la place exacte en y est celle du
+Remplissage ; cale du seau C contre la butée : course du pousseur plus courte), puis la bande du
+haut (tâche 35 bis) : seaux poussés sur le plateau par le chariot (Remplissage.geste_ranger_en_
+haut), seulement quand les piles de fin de lot de la bande sont vides (elles sont vidées en
+premier). Pas de butée : fin de course logicielle, bord du seau du bout à x ≤ 2,44 (le Pi compte
+les places). Photo du plafond après chaque poussée : chaque seau à y 0,215 ± 0,007, sinon arrêt
+et alerte. La lecture de la photo n'est pas encore écrite (vision) : un faux répond les places
+attendues, et le dit dans le journal.
+Plus de place libre (un fût plus gros qu'un lot) : le module du Remplissage attend
+(vidange.remplissage.module), le Pi note le substrat restant, invite à vider le tiroir et la
+bande, attend que la boucle s'ouvre puis se referme, puis la confirmation à l'écran (Go) avant
+de remettre les files et la bande à zéro.
 
-Bande du haut : case vide (désactivée par un réglage) ; bocaux, boîtes à capsules : places et
-inventaire, les gestes viendront avec l'Entonnoir et la vision.
+Bocaux, boîtes à capsules : places et inventaire, les gestes viendront avec l'Entonnoir et la
+vision.
 """
 
 from collections.abc import Callable, Generator
@@ -59,10 +69,24 @@ QUOI_FAIRE_BOUCLE = (
     "la boucle fermée pour bouger."
 )
 QUOI_FAIRE_TIROIR = (
-    "Tiroir du stockage plein : vider le plateau du haut s'il le faut (bocaux, tapis), relever "
-    "P1 et P2, déverrouiller et tirer le tiroir, sortir les seaux pleins, tout remettre (tiroir "
-    "rentré et verrouillé, panneaux fermés), puis confirmer à l'écran (Go)."
+    "Stockage plein : vider le plateau du haut (seaux pleins de la bande du haut, bocaux, "
+    "tapis), relever P1 et P2, déverrouiller et tirer le tiroir, sortir les seaux pleins, tout "
+    "remettre (tiroir rentré et verrouillé, panneaux fermés), puis confirmer à l'écran (Go)."
 )
+QUOI_FAIRE_BANDE = (
+    "Un seau plein de la bande du haut est mal placé (la photo du plafond le voit hors de sa "
+    "ligne, ou trop loin vers le hublot) : regarder la photo, remettre le seau à sa place à la "
+    "main, corriger l'inventaire à l'écran si besoin, puis acquitter et donner le Go."
+)
+BANDE = "bande_haut"
+
+
+class VisionBande(Protocol):
+    """Ce que le Stockage demande à la caméra du plafond (vision, plus tard)."""
+
+    def seaux_de_la_bande(self) -> list[tuple[float, float]] | None:
+        """Centres (x ; y) des seaux pleins vus sur la bande du haut ; None : photo pas lue."""
+        ...
 
 
 class Registre(Protocol):
@@ -77,12 +101,16 @@ class Stockage:
         machine: Machine,
         boucle_fermee: Callable[[], bool | None],
         registre: Registre | None = None,
+        vision: VisionBande | None = None,
     ) -> None:
+        """`vision` : photo du plafond après chaque poussée sur la bande du haut ; None : un
+        faux répond les places attendues (la vision ne sait pas encore lire la photo)."""
         assert machine.stockage is not None and machine.griffe is not None
         self.machine = machine
         self.reglages = machine.stockage
         self.regles = ReglesStockage(machine)
         self._boucle = boucle_fermee
+        self.vision = vision
         fin_de_lot = self.reglages.piles.fin_de_lot.places_max
         piles = [
             *self.reglages.piles.places,
@@ -146,6 +174,12 @@ class Stockage:
                 QUOI_FAIRE,
             )
         if nom.startswith("fin_") and nombre > 0:
+            if self.inventaire.bande_haut.nombre > 0:
+                raise ErreurEtape(
+                    "stockage : des seaux pleins sont sur la bande du haut, pas de pile de fin "
+                    "de lot avant de l'avoir vidée",
+                    QUOI_FAIRE,
+                )
             for autre, pile in self.inventaire.piles.items():
                 if autre.startswith("fin_") and autre != nom and pile.format not in (None, format):
                     raise ErreurEtape(
@@ -279,18 +313,45 @@ class Stockage:
                 return nom
         return None
 
-    def seau_range(self, file: str) -> None:
-        self.inventaire.changer_file(file, self.inventaire.files[file] + 1)
+    def place_libre(self, format: str) -> str | None:
+        """Où ranger le prochain seau plein : le tiroir d'abord, puis la bande du haut ; None :
+        plus de place."""
+        file = self.file_libre(format)
+        if file is not None:
+            return file
+        if self.refus_bande(format) is None:
+            return BANDE
+        return None
+
+    def course_pousseur(self, file: str, format: str, course_m: float) -> float:
+        """La course du pousseur pour cette file, moins la cale posée contre la butée."""
+        return course_m - places.cale_tiroir(self.machine, format, file)
+
+    def seau_range(self, place: str, format: str | None = None) -> None:
+        """Un seau plein est rangé dans cette file, ou sur la bande du haut (son format)."""
+        if place == BANDE:
+            bande = self.inventaire.bande_haut
+            self.inventaire.changer_bande(format or bande.format, bande.nombre + 1)
+            return
+        self.inventaire.changer_file(place, self.inventaire.files[place] + 1)
 
     def seaux_au_tiroir(self) -> int:
         return sum(self.inventaire.files.values())
 
+    def seaux_pleins(self) -> int:
+        """Au tiroir et sur la bande du haut."""
+        return self.seaux_au_tiroir() + self.inventaire.bande_haut.nombre
+
+    def capacite_lot(self, format: str) -> int:
+        return places.capacite_lot(self.machine, format)
+
     def demander_vidage(self, raison: str, substrat_restant_kg: float | None = None) -> None:
-        """Plus de place (ou fin de lot) : le cycle attend que le tiroir soit vidé."""
+        """Plus de place (ou fin de lot) : le cycle attend que le tiroir (et la bande) soit vidé."""
         reste = ""
         if substrat_restant_kg is not None:
             reste = f" ; substrat restant ≈ {substrat_restant_kg:.1f} kg"
-        message = f"{raison} : vider le tiroir du stockage ({self.seaux_au_tiroir()} seaux){reste}"
+        quoi = "le tiroir" if self.inventaire.bande_haut.nombre == 0 else "le tiroir et la bande"
+        message = f"{raison} : vider {quoi} du stockage ({self.seaux_pleins()} seaux){reste}"
         journal.warning("Stockage : %s", message)
         self.messages.append(message)
         self.vidage_demande = True
@@ -304,21 +365,92 @@ class Stockage:
         return self._boucle_vue_ouverte
 
     def tiroir_vide(self) -> None:
-        """Confirmé à l'écran (boucle fermée) : les files repartent vides."""
+        """Confirmé à l'écran (boucle fermée) : les files et la bande repartent vides."""
         if not self.boucle_fermee():
             raise ErreurEtape("stockage : boucle ouverte, tiroir pas confirmé", QUOI_FAIRE_BOUCLE)
         for nom in self.inventaire.files:
             self.inventaire.changer_file(nom, 0)
+        if self.inventaire.bande_haut.nombre:
+            self.inventaire.changer_bande(None, 0)
         self.vidage_demande = False
         self._boucle_vue_ouverte = False
-        journal.info("Stockage : tiroir vidé, files remises à zéro")
+        journal.info("Stockage : tiroir et bande du haut vidés, remis à zéro")
 
-    # ------------------------------------------------------------ bande du haut (case vide)
+    # ------------------------------------------------------------ bande du haut (seaux pleins)
 
     def places_bande_haut(self, format: str) -> int:
-        """Places de la bande du haut pour ce format : 0 tant qu'elle est désactivée."""
-        bande = self.reglages.bande_haut
-        return bande.places.get(format, 0) if bande.active else 0
+        """Places de la bande du haut pour ce format : 0 si elle est désactivée."""
+        return len(places.places_bande(self.machine, format))
+
+    def refus_bande(self, format: str) -> str | None:
+        """Peut-on pousser un seau de plus de ce format sur la bande du haut ? Fin de course
+        logicielle : le Pi compte les places (le seau du bout reste à x ≤ 2,44)."""
+        nombre = self.places_bande_haut(format)
+        if nombre == 0:
+            return "bande du haut désactivée"
+        bande = self.inventaire.bande_haut
+        if bande.format not in (None, format):
+            return f"la bande du haut a des seaux « {bande.format} »"
+        if bande.nombre >= nombre:
+            return f"bande du haut pleine ({bande.nombre} seaux « {format} »)"
+        for nom, pile in self.inventaire.piles.items():
+            if nom.startswith("fin_") and pile.nombre > 0:
+                return f"la pile de fin de lot « {nom} » est encore sur la bande du haut"
+        return None
+
+    def centres_bande(self) -> list[places.Point]:
+        """Où le Pi attend les seaux pleins de la bande (d'après l'inventaire)."""
+        bande = self.inventaire.bande_haut
+        if bande.format is None:
+            return []
+        return places.centres_bande(self.machine, bande.format, bande.nombre)
+
+    def _photo_bande(self) -> list[tuple[float, float]] | None:
+        if self.vision is None:
+            # Faux tant que la vision ne sait pas lire la photo : les places attendues.
+            journal.warning(
+                "Stockage : photo de la bande du haut pas lue (vision pas encore écrite) : "
+                "places attendues"
+            )
+            return self.centres_bande()
+        return self.vision.seaux_de_la_bande()
+
+    def verifier_bande(self) -> None:
+        """Photo du plafond après une poussée sur la bande du haut : autant de seaux que
+        l'inventaire, chacun à y 0,215 ± 0,007, le bord du seau du bout à x ≤ 2,44 ; sinon arrêt
+        et alerte."""
+        bande = self.inventaire.bande_haut
+        reglage = self.reglages.bande_haut
+        vus = self._photo_bande()
+        if vus is None:
+            raise ErreurEtape(
+                "stockage : photo de la bande du haut pas lue après la poussée", QUOI_FAIRE_BANDE
+            )
+        if len(vus) != bande.nombre:
+            raise ErreurEtape(
+                f"stockage : la photo voit {len(vus)} seaux sur la bande du haut, l'inventaire "
+                f"en a {bande.nombre}",
+                QUOI_FAIRE_BANDE,
+            )
+        assert self.machine.griffe is not None
+        rayon = (
+            0.0 if bande.format is None else self.machine.griffe.formats[bande.format].rayon_haut
+        )
+        for x, y in vus:
+            ecart = abs(y - reglage.y)
+            if ecart > reglage.tolerance_y_m + 1e-9:
+                raise ErreurEtape(
+                    f"stockage : seau de la bande du haut vu à y {y:.3f} m, à {ecart * 1000:.0f} "
+                    f"mm de sa ligne ({reglage.y:g} ± {reglage.tolerance_y_m * 1000:g} mm)",
+                    QUOI_FAIRE_BANDE,
+                )
+            if x + rayon > reglage.bord_x_max + 1e-9:
+                raise ErreurEtape(
+                    f"stockage : seau de la bande du haut vu à x {x:.3f} m, son bord dépasse "
+                    f"{reglage.bord_x_max:g} m (hublot)",
+                    QUOI_FAIRE_BANDE,
+                )
+        journal.info("Stockage : bande du haut vérifiée (%d seaux)", bande.nombre)
 
     # ------------------------------------------------------------ bocaux
 
@@ -384,12 +516,7 @@ class Stockage:
 
         def refus(depart: Pose, arrivee: Pose) -> str | None:
             return self.regles.refus_prehension(
-                depart,
-                arrivee,
-                prehension.objet,
-                self.piles_vues(),
-                list(self.places_piles().values()),
-                self.boucle_fermee(),
+                depart, arrivee, prehension.objet, self.piles_vues(), self.boucle_fermee()
             )
 
         return refus

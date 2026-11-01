@@ -11,19 +11,22 @@ le solveur (tâche 23). C'est le scénario « remplissage » du simulateur, et u
     rendre_le_seau_du_dessus   après une prise double : le seau du dessus rendu au stockage
     orienter_l_anse        QR du flanc lu, oreilles de l'anse à 45° des barres
     centrer                barres en position au contact du corps, puis ouvertes
-    ramener_au_poste       plateau en bas, y 0,135, plateau remonté (agitateur au garage)
+    ramener_au_poste       y 0,135, plateau à la hauteur du poste (agitateur au garage)
     verser                 versement de la griffe : le seau tourne
     doser                  le Mycélium dose la couche (il mène le chariot)
     revenir_au_poste       couche suivante : retour au poste (agitateur au garage)
-    ranger                 anse à son angle, chariot à sa file plateau en bas, le pousseur pousse
+    ranger                 anse à son angle, chariot à sa file plateau en bas, le pousseur pousse ;
+                           ou sur la bande du haut (plateau à 0,4985), quand le tiroir est plein
     fin                    plus de seau
 
 Avec le Stockage (`Plan.magasin`, tâche 35), les seaux vides viennent des piles (dans l'ordre de
-vidage), le seau du dessus d'une prise double retourne sur sa pile, la file est choisie par
-l'inventaire du tiroir, et chaque geste attend la boucle du stockage fermée (elle est aussi
-surveillée pendant les gestes). Trois étapes de plus :
+vidage), le seau du dessus d'une prise double retourne sur sa pile, la place est choisie par
+l'inventaire (le tiroir, puis la bande du haut), et chaque geste attend la boucle du stockage
+fermée (elle est aussi surveillée pendant les gestes). Quatre étapes de plus :
 
-    verifier_place         une place libre au tiroir pour ce seau ? sinon : vider le tiroir
+    verifier_place         une place libre pour ce seau ? sinon : vider le tiroir (et la bande)
+    photo_de_la_bande      après une poussée sur la bande du haut : photo du plafond, chaque
+                           seau à y 0,215 ± 0,007 (sinon arrêt et alerte)
     vider_le_tiroir        plus de place (ou fin de lot) : substrat restant noté, le Pi attend que
                            la boucle s'ouvre (tiroir tiré) puis se referme
     confirmer_tiroir_vide  Go de Karulium à l'écran : les files repartent vides
@@ -38,7 +41,7 @@ from vidange.prehension.prehension import QUOI_FAIRE as QUOI_FAIRE_PREHENSION
 from vidange.prehension.prehension import Prehension
 from vidange.reglages import PlaceSimulee
 from vidange.remplissage.remplissage import QUOI_FAIRE, Remplissage
-from vidange.stockage.stockage import QUOI_FAIRE_TIROIR, Stockage
+from vidange.stockage.stockage import BANDE, QUOI_FAIRE_BANDE, QUOI_FAIRE_TIROIR, Stockage
 
 GESTE = "remplissage_geste_max"
 GESTE_PREHENSION = "prehension_geste_max"
@@ -112,18 +115,26 @@ def module_remplissage(
     )
 
     def file_du_seau() -> str:
+        """La file du seau, ou BANDE (bande du haut du Stockage)."""
         if magasin is None:
             if plan.seau.file is None:
                 raise ErreurEtape(f"remplissage : pas de file pour le seau {plan.seau.seau}")
             return plan.seau.file
-        file = magasin.file_libre(plan.seau.format)
-        if file is None:
-            raise ErreurEtape("remplissage : plus de place au tiroir du stockage", QUOI_FAIRE)
-        return file
+        place = magasin.place_libre(plan.seau.format)
+        if place is None:
+            raise ErreurEtape("remplissage : plus de place au stockage", QUOI_FAIRE)
+        return place
+
+    def y_du_rangement(place: str) -> float:
+        rangement = remplissage.reglages.rangement
+        if place == BANDE:
+            assert rangement.bande_haut is not None
+            return rangement.bande_haut.y
+        return rangement.files[place].y
 
     file_permise = Condition(
         "chariot du fût en place (le chariot de remplissage va à la file du seau)",
-        lambda: remplissage.place_permise(remplissage.reglages.rangement.files[file_du_seau()].y),
+        lambda: remplissage.place_permise(y_du_rangement(file_du_seau())),
     )
 
     def geste(nom: str, fabrique, ensuite=None, entree=()) -> Etape:
@@ -196,28 +207,40 @@ def module_remplissage(
         return "ranger"
 
     def ranger():
-        plan.file_en_cours = file_du_seau()
-        return remplissage.geste_ranger(plan.file_en_cours)
+        place = plan.file_en_cours = file_du_seau()
+        if place == BANDE:
+            return remplissage.geste_ranger_en_haut()
+        if magasin is None:
+            return remplissage.geste_ranger(place)
+        course = remplissage.reglages.rangement.files[place].pousseur_m
+        return remplissage.geste_ranger(
+            place, magasin.course_pousseur(place, plan.seau.format, course)
+        )
 
     def apres_rangement() -> str:
         if magasin is not None and plan.file_en_cours is not None:
-            magasin.seau_range(plan.file_en_cours)
+            magasin.seau_range(plan.file_en_cours, plan.seau.format)
+            if plan.file_en_cours == BANDE:
+                return "photo_de_la_bande"
+        return suite()
+
+    def suite() -> str:
         plan.faits.append(plan.seau.seau)
         plan.numero += 1
         plan.couche = 1
         if plan.numero < len(plan.seaux):
             return "aller_a_la_pose" if magasin is None else "verifier_place"
         mycelium.terminer()
-        if magasin is not None and plan.fin_de_lot and magasin.seaux_au_tiroir() > 0:
+        if magasin is not None and plan.fin_de_lot and magasin.seaux_pleins() > 0:
             magasin.demander_vidage("fin de lot", plan.substrat_restant())
             return "vider_le_tiroir"
         return "fin"
 
     def verifier_place() -> str:
         assert magasin is not None
-        if magasin.file_libre(plan.seau.format) is not None:
+        if magasin.place_libre(plan.seau.format) is not None:
             return "aller_a_la_pose"
-        magasin.demander_vidage("plus de place au tiroir", plan.substrat_restant())
+        magasin.demander_vidage("plus de place au stockage", plan.substrat_restant())
         return "vider_le_tiroir"
 
     def apres_vidage() -> str:
@@ -226,6 +249,12 @@ def module_remplissage(
     etapes_stockage: tuple[Etape, ...] = ()
     if magasin is not None:
         etapes_stockage = (
+            Etape(
+                "photo_de_la_bande",
+                QUOI_FAIRE_BANDE,
+                action=magasin.verifier_bande,
+                ensuite=suite,
+            ),
             Etape(
                 "vider_le_tiroir",
                 QUOI_FAIRE_TIROIR,

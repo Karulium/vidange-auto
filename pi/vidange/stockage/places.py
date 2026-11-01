@@ -10,6 +10,8 @@ Le code ne contient aucun chiffre de la machine : seulement les formules de la f
     ordre_piles(machine, places)           # rangée 0,84, puis 0,53, puis 0,215 ; la plus proche
                                            # du chariot d'abord
     places_bocaux(machine)                 # quinconce de 95 bocaux : « bocal_j_i » → (x ; y)
+    places_bande(machine, "seau_a")        # centres x de la bande du haut (vide : désactivée)
+    capacite_lot(machine, "seau_a")        # tiroir + bande du haut : A 18, B 20, C 16, D 18
 
 Ces calculs servent aussi à la vérification des réglages au démarrage (vidange.reglages).
 """
@@ -131,6 +133,36 @@ def places_tiroir(machine: "Machine", format: str) -> dict[str, int]:
 
 def capacite_tiroir(machine: "Machine", format: str) -> int:
     return sum(places_tiroir(machine, format).values())
+
+
+def cale_tiroir(machine: "Machine", format: str, file: str) -> float:
+    """La cale posée contre la butée de cette file pour ce format (0 : pas de cale)."""
+    return _stockage(machine).tiroir.cales.get(format, {}).get(file, 0.0)
+
+
+# ------------------------------------------------------------ bande du haut (seaux pleins)
+
+
+def places_bande(machine: "Machine", format: str) -> list[float]:
+    """Centres en x des places de la bande du haut pour ce format, du plus loin (1er seau
+    poussé) au plus près (où arrive le seau poussé) ; vide : bande désactivée."""
+    bande = _stockage(machine).bande_haut
+    return list(bande.places.get(format, [])) if bande.active else []
+
+
+def centres_bande(machine: "Machine", format: str, nombre: int) -> list[Point]:
+    """Où sont les seaux d'une bande qui en a `nombre` : chaque poussée amène le nouveau seau à
+    la dernière place et fait avancer les autres d'une place (contact des rebords)."""
+    bande = _stockage(machine).bande_haut
+    centres = places_bande(machine, format)
+    if nombre > len(centres):
+        raise ValueError(f"bande du haut : {nombre} seaux « {format} », {len(centres)} places")
+    return [(x, bande.y) for x in centres[len(centres) - nombre :]]
+
+
+def capacite_lot(machine: "Machine", format: str) -> int:
+    """Seaux pleins d'un lot : le tiroir, puis la bande du haut."""
+    return capacite_tiroir(machine, format) + len(places_bande(machine, format))
 
 
 # ------------------------------------------------------------ bocaux

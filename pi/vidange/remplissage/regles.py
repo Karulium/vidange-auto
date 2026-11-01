@@ -1,4 +1,5 @@
-"""Verrous du chariot de remplissage (fichier des positions interdites du chariot, v3.44 à 3.46).
+"""Verrous du chariot de remplissage (fichier des positions interdites du chariot, v3.44 à 3.46,
+règles 12 et 14 du 31/10/2026).
 
     regles = ReglesRemplissage(reglages.machine)
     regles.refus_pose(pose, contexte)                 # raison du refus, ou None
@@ -14,12 +15,14 @@ côté allée). Les 2 barres ont chacune leur moteur (31/10) mais bougent toujou
 Pose écrite avec `barres` seulement a barre_allee = barres. Les règles 2, 3, 6 et 9 valent pour
 chaque barre ; deux barres écartées de plus de `barres → ecart_max_m` : tout mouvement est refusé
 (refaire la prise d'origine). Les règles :
-1. anneaux du fût : en y 0,14-0,41 et 0,59-0,86, plateau en bas ; libre au poste (et au dosage)
-   et entre 0,41 et 0,59 : le plateau descend avant de quitter le poste, ne remonte qu'au poste ;
+1. (anneaux du fût : périmée et supprimée le 31/10/2026 ; une tôle fixe sépare le fût du chariot,
+   le plateau peut être haut partout en y) ;
 2. barres entre les joues de l'élévateur (hw 0,235-0,255) : plateau ≤ 0,48 ;
 3. plateau au-dessus de 0,515 : barres ouvertes (hw ≥ 0,29) ;
-4. pousseur rentré dès que le plateau n'est pas en bas, et sorti seulement plateau ≤ 0,20
-   (partout : la tête du micropore est sur le chariot) ;
+4. (règle 12 du fichier des positions, 31/10/2026) pousseur sorti à toute hauteur du plateau
+   (≤ 0,575, sa course), seulement barres ouvertes (hw ≥ 0,29) et bras de fermeture (galet)
+   rangé ; plusieurs seaux peuvent être poussés à la suite (le pousseur est côté allée, il ne
+   passe plus sous la tête du micropore) ;
 5. plateau au-dessus de 0,26 seulement bras du galet rangé ;
 6. bras du spray sorti : plateau ≤ min(0,50 ; 0,71 − h), entraxe des barres > 0,50 ;
 7. chariot du fût pas en place : bout du chariot côté allée (axe + 0,40) à y ≤ 0,875, donc axe
@@ -128,11 +131,6 @@ class ReglesRemplissage:
         """Les 2 barres ouvertes."""
         return pose.barres_les_plus_serrees >= self.verrous.barres_ouvertes_min - _EGAL
 
-    def au_poste(self, y: float) -> bool:
-        """Dans la zone du poste et du dosage, où le plateau peut être haut (règle 1)."""
-        debut, fin = self.verrous.libre_poste_y
-        return debut - _EGAL <= y <= fin + _EGAL
-
     def pres_du_poste(self, y: float) -> bool:
         """Là où le chariot gêne l'agitateur du mycélium (en deçà du recul)."""
         return y < self.reglages.ecarte_y - self.reglages.tolerance_y_m
@@ -170,14 +168,6 @@ class ReglesRemplissage:
         refus = self.refus_ecart_barres(pose)
         if refus is not None:
             return refus
-        if not self.au_poste(pose.y) and pose.z > v.anneaux_plateau_max_z + _EGAL:
-            for debut, fin in v.anneaux_y:
-                if debut - _EGAL <= pose.y <= fin + _EGAL:
-                    return (
-                        f"chariot à y {_m(pose.y)}, sous les anneaux du fût ({_m(debut)} à "
-                        f"{_m(fin)}) : plateau en bas (≤ {_m(v.anneaux_plateau_max_z)}), il est "
-                        f"à {_m(pose.z)}"
-                    )
         if pose.z > v.joues_plateau_max_z + _EGAL:
             for barre, hw in (("côté mur", pose.barres), ("côté allée", pose.barre_allee)):
                 if self.dans_les_joues(hw):
@@ -191,13 +181,16 @@ class ReglesRemplissage:
                 f"barres ouvertes seulement (hw ≥ {_m(v.barres_ouvertes_min)}, elles sont à "
                 f"{_m(pose.barres_les_plus_serrees)})"
             )
-        if not self.pousseur_rentre(pose) and (
-            not self.en_bas(pose) or pose.z > v.pousseur_plateau_max_z + _EGAL
-        ):
-            return (
-                f"pousseur sorti avec le plateau à {_m(pose.z)} : il ne sort que plateau en bas "
-                f"(≤ {_m(min(self.reglages.plateau_en_bas_z, v.pousseur_plateau_max_z))})"
-            )
+        if not self.pousseur_rentre(pose):
+            if not self.barres_ouvertes(pose):
+                return (
+                    f"pousseur sorti : seulement barres ouvertes (hw ≥ "
+                    f"{_m(v.barres_ouvertes_min)}, elles sont à "
+                    f"{_m(pose.barres_les_plus_serrees)})"
+                )
+            if contexte.bras_galet_range is not True:
+                etat = "pas connu" if contexte.bras_galet_range is None else "pas rangé"
+                return f"pousseur sorti : bras de fermeture (galet) {etat}, il doit être rangé"
         if pose.z > v.galet_plateau_max_z + _EGAL and contexte.bras_galet_range is not True:
             etat = "pas connu" if contexte.bras_galet_range is None else "pas rangé"
             return (
