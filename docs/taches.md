@@ -984,7 +984,8 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   (l'un muet, l'autre lu). Procédure d'essai sur le vrai capteur ; « testé sur le vrai matériel : non ».
 - [ ] 39. Spray (et le programme de sa carte ESP32)
 - [ ] 40. Micropore
-- [ ] 41. Fermeture des seaux
+- [ ] 41. Fermeture des seaux (à prévoir : diamètre du couvercle dans la table des formats, A 0,28, B 0,23, C 0,315,
+  D 0,28, et le contrôle au démarrage de la bande du haut avec lui : `docs/decisions.md`, PR n° 54).
 - [ ] 42. Air comprimé
 - [ ] 43. Entonnoir
 - [ ] 44. App « machine » dans le logiciel de culture (avec l'accord de Karulium)
