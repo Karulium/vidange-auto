@@ -99,7 +99,7 @@ def test_depart_a_une_position(reglages):
 
 def test_cycle_bloque(reglages):
     # Personne ne ferme le panneau : l'étape 1 attend jusqu'à « duree_max_s ».
-    remplacer(reglages / "simulateur.yaml", "duree_max_s: 7200", "duree_max_s: 60")
+    remplacer(reglages / "simulateur.yaml", "duree_max_s: 14400", "duree_max_s: 60")
     texte = (reglages / "simulateur.yaml").read_text(encoding="utf-8")
     (reglages / "simulateur.yaml").write_text(
         texte.split("evenements:")[0] + "evenements: []\n", encoding="utf-8"

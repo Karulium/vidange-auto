@@ -63,6 +63,7 @@ Pas encore de vrai module de la machine.
 | `vidange/prehension/` | Préhension (cartes n° 1 et n° 4) : règles de mouvement (`regles.py`), tête sur ses deux cartes avec le vide et la force (`tete.py`), gestes : prendre, poser, porte-bocal, visser (`prehension.py`), scénario du simulateur (`module.py`, `simulation.py`) ; commande `vidange-prehension` |
 | `vidange/lavage/` | Lavage des seaux (cartes n° 1, 3 et 4) : eau du fût de lavage, chauffage, jet d'air (`eau.py`), signaux répartis sur les cartes (`signaux.py`), verrou du noyau et gestes du lavage d'un seau (`lavage.py`), scénario du simulateur (`module.py`, `simulation.py`) ; commande `vidange-lavage` |
 | `vidange/remplissage/` | Remplissage (carte n° 2) : positions interdites du chariot (`regles.py`), chariot sur sa carte avec la balance et la barrière (`chariot.py`), gestes : pose et prise double, anse, centrage, poste, dosage, rangement, modes couvercles et inspection (`remplissage.py`), scénario du simulateur avec le Mycélium (`module.py`, `simulation.py`) ; commande `vidange-remplissage` |
+| `vidange/stockage/` | Stockage (passif, sans capteur de présence) : places calculées depuis les réglages (`places.py`), inventaire gardé dans le registre (`inventaire.py`), verrous des trajets au-dessus des piles, des boîtes et de la caméra du bocal (`regles.py`), prise sur les piles, rendu du seau du dessus, files du tiroir, attente « tiroir plein » (`stockage.py`), scénario du simulateur (`simulation.py`) ; commande `vidange-stockage` |
 | `vidange/vision/` | Vision : photos de mesure (`photo.py`), calibration et passage au repère du portique (`calibration.py`), QR (`qr.py`), repères ArUco (`aruco.py`), caméra du plafond : lave-bocal et « deviner le travail » (`plafond.py`), caméra du dosage sur son servo (`dosage.py`), images fabriquées (`fabrique.py`) ; commande `vidange-vision` |
 | `vidange/poste_fut/` | Poste du fût : état (absent, en place, prêt), bouton « Prêt » et voyant, pesée (HX711), mode permis par le panneau, verrous pour les autres modules, module « poste_fut » ; commande `vidange-pesee` (étalonnage) |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) ; poste du fût (chiffres **vrais**, pesée à étalonner) |
@@ -585,6 +586,35 @@ vidange-remplissage --faux etat          # l'outil d'essai, sur un faux FluidNC
 - Cases vides : bras du galet, bras du spray, tête du micropore (prudents : refusés tant qu'ils ne sont pas
   connus), caméra du QR du flanc (`VisionSeau`), places des files (Stockage, tâche 35).
 - Les faux `FauxChariot` (Mycélium) et `FauxRetourneur` (Lavage) restent pour leurs tests.
+
+## Stockage (tâche 35)
+
+Le Stockage (gelé le 27/10/2026) est **passif** : aucun moteur, aucun capteur de présence. Le Pi **calcule**
+les places à partir de `reglages/machine.yaml` (partie `stockage`, vérifiée au démarrage) et tient
+l'**inventaire** de chaque place (table `inventaire_stockage` du registre). Une seule entrée :
+`boucle_stockage` (3 microrupteurs NF en série : tiroir rentré et verrouillé, P1 et P2 fermés).
+
+```
+vidange-simulateur stockage              # 15 seaux pris sur 3 piles, 14 rangés, tiroir vidé, reprise
+vidange-stockage places seau_a           # places des piles, files du tiroir, bocaux, boîtes
+vidange-stockage piles seau_a            # seaux par pile, bord du seau du haut pour chaque k
+```
+
+- **Piles de seaux vides** : n = min(⌊(0,39 − h)/pas⌋ + 1 ; ⌊(0,645 − 2h)/pas⌋ + 1) (A 5, B 7, C 5, D 3),
+  bord du seau du haut = 0,496 + h + (k − 1) × pas ; vidées rangée y 0,84, puis 0,53, puis la bande 0,215
+  (places de fin de lot calculées), la plus proche du chariot d'abord. Le seau d'une pile de la bande sort
+  vers −x jusqu'à x 1,29, puis vers +y jusqu'à 0,44.
+- **Tiroir** : files du Remplissage (y 0,215 / 0,500 / 0,785), 4 + 5 + 5 seaux (A, B, D), 16 pour C en
+  quinconce. Plus de place : le module du Remplissage attend (`verifier_place` → `vider_le_tiroir` : boucle
+  vue ouverte puis refermée → `confirmer_tiroir_vide`, Go), les files repartent vides.
+- **Verrous** (`ReglesStockage`, branchés dans la préhension et la griffe) : boucle ouverte ⇒ aucun mouvement
+  du portique ; griffe x ≤ 2,325 ; seau tenu jamais au-dessus d'une pile qui a des seaux (sauf celle qu'il
+  quitte ou rejoint, fond 3 cm au-dessus de son bord), fond ≥ 0,79 au-dessus du plateau, rail opérateur ;
+  boîtes à capsules ; caméra du bocal.
+- **Cases vides** : bande du haut (désactivée, tâche 35 bis) ; gestes des bocaux et des boîtes (Entonnoir,
+  vision).
+
+Procédure d'essai : `systeme/essai-stockage.md`.
 
 ## Cartes de pesée du bus RS485 (tâche 22 bis)
 

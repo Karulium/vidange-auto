@@ -16,8 +16,8 @@ exemple: true
 # elle n'avance jamais de plus que ce pas (s), pour voir les délais dépassés.
 pas_max_s: 1
 # Au-delà de ce temps simulé (s), on s'arrête : le cycle est bloqué (il attend quelque chose
-# qui n'arrive jamais).
-duree_max_s: 7200
+# qui n'arrive jamais). Le plus long scénario, « stockage », dure ≈ 2 h.
+duree_max_s: 14400
 # Temps que met Karulium à donner le Go quand une étape le demande (s). 0 : tout de suite.
 delai_go_s: 20
 
@@ -136,7 +136,33 @@ remplissage:
   double_plus_bas_m: 0.03
   seaux:
     - {seau: S0101, format: seau_a, variete: pleurote_grise, file: file_1, prise_double: true, anse_deg: 10}
-    - {seau: S0102, format: seau_b, variete: pleurote_grise, file: file_2, anse_deg: 70}
+    - {seau: S0102, format: seau_b, variete: pleurote_grise, file: file_3, anse_deg: 70}
+
+# Le stockage imaginaire (scénario « stockage ») : 3 piles de 5 seaux A chargées (rangée y 0,84,
+# vidées dans l'ordre pile_1, pile_2, pile_4), et 15 seaux A à remplir : le 3e est posé avec un
+# 2e seau emboîté (prise double, le seau du dessus rendu à sa pile). Le Stockage choisit la file
+# de chaque seau (4 + 5 + 5 = 14 au tiroir) : le 15e attend que le tiroir soit vidé.
+stockage:
+  piles:
+    pile_1: {format: seau_a, nombre: 5}
+    pile_2: {format: seau_a, nombre: 5}
+    pile_4: {format: seau_a, nombre: 5}
+  seaux:
+    - {seau: S0201, format: seau_a, variete: pleurote_grise}
+    - {seau: S0202, format: seau_a, variete: pleurote_grise}
+    - {seau: S0203, format: seau_a, variete: pleurote_grise, prise_double: true}
+    - {seau: S0204, format: seau_a, variete: pleurote_grise}
+    - {seau: S0205, format: seau_a, variete: pleurote_grise}
+    - {seau: S0206, format: seau_a, variete: pleurote_grise}
+    - {seau: S0207, format: seau_a, variete: pleurote_grise}
+    - {seau: S0208, format: seau_a, variete: pleurote_grise}
+    - {seau: S0209, format: seau_a, variete: pleurote_grise}
+    - {seau: S0210, format: seau_a, variete: pleurote_grise}
+    - {seau: S0211, format: seau_a, variete: pleurote_grise}
+    - {seau: S0212, format: seau_a, variete: pleurote_grise}
+    - {seau: S0213, format: seau_a, variete: pleurote_grise}
+    - {seau: S0214, format: seau_a, variete: pleurote_grise}
+    - {seau: S0215, format: seau_a, variete: pleurote_grise}
 
 # Capteurs (entrées tout-ou-rien de docs/entrees-sorties.yaml) actionnés au départ.
 capteurs_actionnes: []
@@ -229,3 +255,18 @@ scenarios:
   # anse orientée, centré, 4 couches versées et dosées (Mycélium), rangé ; puis un seau B.
   remplissage:
     capteurs_actionnes: [chariot_fut_en_place]
+  # Stockage (partie « stockage » plus haut) : chariot du fût au fond, boucle du stockage fermée.
+  # 14 seaux remplis et rangés (4 + 5 + 5), puis « plus de place » : 1 min plus tard, Karulium
+  # tire le tiroir (boucle ouverte), le vide et le remet 5 min après ; Go (tiroir vide), et le
+  # 15e seau est rangé dans la file 1 vidée.
+  stockage:
+    capteurs_actionnes: [chariot_fut_en_place, boucle_stockage]
+    evenements:
+      - apres: remplissage.vider_le_tiroir
+        attente_s: 60
+        capteur: boucle_stockage
+        actionne: false
+      - apres: remplissage.vider_le_tiroir
+        attente_s: 360
+        capteur: boucle_stockage
+        actionne: true

@@ -30,6 +30,7 @@ def test_au_depart_rien_n_est_actionne_et_tout_est_au_repos(faux_et_materiel):
         "reed_panneau_poste_fut": False,
         "porte_spray": False,
         "fdc_stockage_haut": False,
+        "boucle_stockage": False,
         "onduleur_sur_batterie": False,
         "chariot_fut_en_place": False,
         "bouton_pret_fut": False,
@@ -135,7 +136,7 @@ def entrees_par_un_pcf8574(entrees_sorties):
         r"    # Exemple de liaison par GPIO direct\.\n.*?tirage: haut\n",
         "    liaison:\n      type: i2c\n      signal: entrees_bus\n"
         "      broches:\n        E1: P0\n        E2: P1\n        E3: P2\n        E4: P3\n"
-        "        E5: P4\n      niveau_actif: bas\n",
+        "        E5: P4\n        E6: P5\n      niveau_actif: bas\n",
         texte,
         flags=re.DOTALL,
     )

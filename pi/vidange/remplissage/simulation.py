@@ -28,7 +28,7 @@ from vidange.prehension.prehension import Prehension
 from vidange.prehension.regles import Pose as PoseTete
 from vidange.prehension.simulation import prehension_du_simulateur
 from vidange.prehension.tete import Pas as PasTete
-from vidange.reglages import Machine
+from vidange.reglages import Machine, SeauRemplissageSimule
 from vidange.remplissage.chariot import VITESSES_LENTES, Pas, Resultat
 from vidange.remplissage.module import Plan, SeauAFaire
 from vidange.remplissage.regles import AXES, Pose, cles_du_pas
@@ -205,12 +205,15 @@ class ScenarioRemplissage:
 
 
 def remplissage_du_simulateur(
-    simulateur: Simulateur, cycle: int | None = None, **options: Any
+    simulateur: Simulateur,
+    cycle: int | None = None,
+    seaux_simules: list[SeauRemplissageSimule] | None = None,
+    **options: Any,
 ) -> ScenarioRemplissage:
     """Le remplissage sur la machine imaginaire, avec les seaux de simulateur.yaml
-    (`remplissage`) : chariot au poste (position remplissage_poste), tête en haut, agitateur au
-    garage manivelle en haut. Bras du galet rangé, tête du micropore rentrée (modules pas encore
-    écrits). `options` : cases vides de Remplissage (registre, photo...)."""
+    (`remplissage`, ou `seaux_simules`) : chariot au poste (position remplissage_poste), tête en
+    haut, agitateur au garage manivelle en haut. Bras du galet rangé, tête du micropore rentrée
+    (modules pas encore écrits). `options` : cases vides de Remplissage (registre, photo...)."""
     reglages = simulateur.reglages
     machine = reglages.machine
     simule = reglages.simulateur.remplissage
@@ -268,7 +271,8 @@ def remplissage_du_simulateur(
     mycelium = Mycelium(
         machine, agitateur, porte_bocal, remplissage, nouveau_bocal, horloge=horloge
     )
-    seaux = {seau.seau: seau for seau in simule.seaux}
+    liste = simule.seaux if seaux_simules is None else seaux_simules
+    seaux = {seau.seau: seau for seau in liste}
 
     def debut_seau(seau: SeauAFaire) -> None:
         reglage = seaux[seau.seau]
@@ -313,8 +317,7 @@ def remplissage_du_simulateur(
     chariot.fond_z = fond_z
     plan = Plan(
         seaux=[
-            SeauAFaire(seau.seau, seau.format, seau.variete, seau.file, cycle)
-            for seau in simule.seaux
+            SeauAFaire(seau.seau, seau.format, seau.variete, seau.file, cycle) for seau in liste
         ],
         stockage=simule.stockage,
         rendu=simule.rendu,

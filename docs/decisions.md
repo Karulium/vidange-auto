@@ -382,13 +382,31 @@ si l'une pose problème, elle le dit dans sa PR.
      de 2,32 à 1,38), C 4 (pas 0,30, de 2,28 à 1,38), D 4 (pas 0,28, de 2,30 à 1,46) ; pas réel = contact des rebords,
      recalé à la caméra. Pas de guidage en y : photo du plafond après chaque poussée, y 0,215 ± 0,007, sinon arrêt et
      alerte. Fin de lot : le tiroir d'abord ; les piles de fin de lot de la bande sont vidées en premier pour la
-     libérer. **Capacité d'un lot : A 18, B 19, C 20, D 18** (D : une pile de fin de lot de 3 sur la bande).
+     libérer. **Capacité d'un lot : A 18, B 20, C 16, D 18** (corrigée le 01/11, voir « Stockage, réponses à la PR
+     n° 52 » ; D : une pile de fin de lot de 3 sur la bande).
 - **Mode couvercles, règle 14 du chariot** (fil Remplissage, contrôle de la maquette v45.98, 31/10/2026) :
   14. Pendant les deux demi-tours de la tête de la griffe (axe y 0,68, axes à 1,075), le chariot est à **y ≥ 0,515** ;
       il ne revient à y 0,50 qu'après (sinon la raclette touche le moteur de la barre côté allée). Contrôlé sur la
       maquette v45.99.
   15. **Retirée** (31/10, 17:12) : la maquette avait dessiné le bac du retourneur en double ; le vrai bac est posé sur le
       plateau et le suit, donc aucune condition.
+- **Stockage, réponses à la PR n° 52** (tâche 35, fil Stockage, 01/11/2026 ; détail dans
+  `stockage/logiciel/stockage-pour-logiciel.md`) :
+  1. **Rail opérateur** : c'est le rail X du portique côté allée (axe y 1,10, sur toute la longueur du stockage). Son
+     chariot suit le pont (même x que la préhension) et occupe y 1,005 à 1,135 au-dessus de z 1,11. Règle exacte : si
+     le haut du seau tenu dépasse 1,11, il faut **axe y + rayon du bord ≤ 0,995** ; sinon haut ≤ 1,10. Rangée y 0,84 :
+     0,84 + 0,15 = 0,99, donc limite 1,155 au-dessus de ces piles pour tous les formats. La règle « y > 0,82 » est
+     remplacée. (La tête de préhension, rayon 0,045, ne dépasse jamais le bord d'un seau vers +y.)
+  2. **Butée du tiroir : face d'appui à x 2,582** (et non 2,612 ; barre 2,582-2,612), longueur utile 1,482. Seau C :
+     **4 par file**, 12 en bas (pas de quinconce) : files y 0,215 et 0,785 centres 2,432 / 2,132 / 1,832 / 1,532 ; file
+     y 0,50 centres 2,282 / 1,982 / 1,682 / 1,382, avec la cale de 15 cm posée par l'opérateur contre la butée (course
+     du pousseur de cette file plus courte de 0,15). Les x de A, B et D sont dans le fichier source.
+     **Capacités d'un lot corrigées : A 18 (14 + 4), B 20 (15 + 5), C 16 (12 + 4), D 18 (14 + 4).**
+  3. **Coin d'inspection** (places [rangée j, rang i] du quinconce) : suspects [8,8] [8,9] [8,10] [7,7] [7,8] [7,9]
+     [6,8] [6,9] [6,10] ; séparation [5,7] [5,8] [5,9] [6,7] [7,6] [8,7] (côté x grand, et non x petit).
+  4. Places de fin de lot : bord de la 1re pile à x 1,165 (1 cm du bord de P1) : **gardé**.
+  5. Les 18 bocaux de semence (3 × 6) font partie du **mode seaux** (un bocal par seau) : ils partagent le plateau
+     avec les piles de vides, la bande des pleins et les boîtes, jamais avec le quinconce de 95 (mode bocaux).
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr

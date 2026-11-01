@@ -55,6 +55,7 @@ TOUTES_LES_TABLES = (
     "envois",
     "actions_distance",
     "prises_griffe",
+    "inventaire_stockage",
 )
 
 
@@ -603,6 +604,24 @@ class Registre:
             ).rowcount
 
     # ------------------------------------------------------------ lecture et copie
+
+    def noter_place_stockage(self, place: str, contenu: str | None, nombre: int) -> None:
+        """Inventaire du Stockage : ce qu'il y a maintenant à cette place (remplace l'ancien)."""
+        with self._ecriture() as cnx:
+            cnx.execute(
+                "INSERT INTO inventaire_stockage (place, contenu, nombre, modifie_le) "
+                "VALUES (?, ?, ?, ?) ON CONFLICT (place) DO UPDATE SET contenu = excluded.contenu, "
+                "nombre = excluded.nombre, modifie_le = excluded.modifie_le",
+                (place, contenu, nombre, self._quand()),
+            )
+
+    def inventaire_stockage(self) -> dict[str, tuple[str | None, int]]:
+        """L'inventaire du Stockage gardé : place → (contenu, nombre)."""
+        with self._verrou:
+            lignes = self._cnx.execute(
+                "SELECT place, contenu, nombre FROM inventaire_stockage"
+            ).fetchall()
+        return {ligne[0]: (ligne[1], ligne[2]) for ligne in lignes}
 
     def lire(self, requete: str, valeurs: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         """Lignes d'une requête SELECT, chacune en dictionnaire (pour les écrans, l'API...)."""

@@ -769,7 +769,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
      logicielle 0,575 reste. Câbles capteurs : noter la répartition dans `docs/entrees-sorties.yaml`.
   Tests : 2 barres qui bougent ensemble, écart refusé, ALM d'une seule barre, agitateur refusé à y 0,39, permis à
   0,40. Procédure d'essai mise à jour ; « testé sur le vrai matériel : non ».
-- [ ] **35. Stockage : places, inventaire, prise sur les piles, rangement dans le tiroir** — Modèle : Opus, effort
+- [x] **35. Stockage : places, inventaire, prise sur les piles, rangement dans le tiroir** — Modèle : Opus, effort
   moyen. **Avant le solveur (tâche 23).**
   Sources (recopiées ici le 31/10/2026) : fiche du module « Stockage », **gelé le 27/10/2026**, et le fichier écrit
   pour le logiciel par le fil Stockage (`stockage/logiciel/stockage-pour-logiciel.md`, 31/10, repère du portique).
@@ -860,7 +860,11 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
      logicielle (bord du couvercle à x ≤ 2,44) ; geste « ranger en haut » dans l'ordre a) à f) ; photo du plafond
      après chaque poussée (y 0,215 ± 0,007, sinon arrêt et alerte ; point d'appel avec un faux tant que la vision ne
      sait pas lire la photo) ; fin de lot tiroir d'abord, piles de fin de lot de la bande vidées en premier ;
-     capacité A 18, B 19, C 20, D 18 ; la pause « plus de place » reste pour un fût plus gros.
+     capacité A 18, B 20, C 16, D 18 ; la pause « plus de place » reste pour un fût plus gros.
+  4. Corrections après la tâche 35 (section « Stockage, réponses à la PR n° 52 » de `docs/decisions.md`) : butée du
+     tiroir à x 2,582 ; seau C à 4 par file (x donnés, cale de 15 cm sur la file y 0,50, course du pousseur −0,15),
+     plus de quinconce dans le tiroir ; vraie liste du coin d'inspection ; règle du rail opérateur (haut > 1,11 ⇒ axe
+     y + rayon du bord ≤ 0,995, sinon haut ≤ 1,10) à la place de « y > 0,82 » et de l'exception codée pour les piles.
   3. Mode couvercles (règle 14 de `docs/decisions.md`, 31/10) : chariot à y ≥ 0,515 pendant les deux demi-tours de la
      tête de la griffe, retour à y 0,50 seulement après. Test : demi-tour refusé chariot à 0,50.
   Tests : poussée à 0,4985 permise barres ouvertes et bras rangé, refusée sinon ; plateau hors de 0,496-0,501 refusé

@@ -255,6 +255,20 @@ _VERSION_7 = (
     "ALTER TABLE bocaux ADD COLUMN a_verifier TEXT",
 )
 
+# Version 8 (tâche 35) : l'inventaire du Stockage, qui n'a aucun capteur de présence. Une ligne
+# par place (pile_1, file_2, bocal_3_4, boite_capsules_enlevees...) : ce qu'il y a (format du
+# seau, sorte de bocal ; vide : rien de plus à dire) et combien.
+_VERSION_8 = (
+    """
+    CREATE TABLE inventaire_stockage (
+        place TEXT PRIMARY KEY,
+        contenu TEXT,
+        nombre INTEGER NOT NULL CHECK (nombre >= 0),
+        modifie_le TEXT NOT NULL
+    )
+    """,
+)
+
 # Montée n° i (en partant de 1) : ce qui fait passer la base de la version i - 1 à la version i.
 MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_1,
@@ -264,6 +278,7 @@ MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_5,
     _VERSION_6,
     _VERSION_7,
+    _VERSION_8,
 )
 
 VERSION = len(MONTEES)
