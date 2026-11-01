@@ -170,6 +170,34 @@ si l'une pose problème, elle le dit dans sa PR.
      jusqu'à 3 cm sous eux) : 0,117 au plus le long du bras ; quand seule elle arrive à la hauteur du boîtier de
      la caméra du bocal (bas à z 0,982), c'est elle seule qui compte. Avec la cote de 0,086, le mât reste à
      x ≤ 0,959 devant le boîtier (la fiche disait 0,96). L'essuyage côté allée passe pour les 4 formats.
+- **Griffe : essuyage et « Y minimum du mât »** (contrôle de la maquette v45.104 du projet mécanique, 01/11/2026 ;
+  tranché par le fil logiciel, niveau 1) :
+  1. Essuyage du bord du seau **côté allée confirmé** (`essuyage → direction_deg: 90`), mais **godet fermé ou à
+     moitié ouvert, jamais grand ouvert** : grand ouvert, les coquilles touchent le moteur des barres du
+     Remplissage (4 formats). On l'essuie **godet à moitié ouvert** (`essuyage → ouverture_godet: 0.5`), le plus
+     proche du « godet ouvert dehors » de la fiche. Côté +x est impossible (caméra du dosage, même godet fermé).
+  2. La table `garage_glissiere` est **remplacée** (agitateur garé à x 0,565 ; l'ancienne était faite avec le garage
+     à 0,615). y minimum du mât, godet fermé / à moitié ouvert / grand ouvert, tête bras le long du pont :
+     - x 0,15-0,395 : 0,00 / 0,05 / 0,07 (glissière du Mycélium) ;
+     - x 0,395-0,44 : 0,20 / 0,215 / 0,25 ;
+     - x 0,44-0,695 : 0,31 / 0,33 / 0,365 (bocal et porte-bocal de l'agitateur garé) ;
+     - x 0,695-0,755 : 0,20 / 0,215 / 0,25 ;
+     - x 0,755-0,78 : 0,11 / 0,11 / 0,11 ;
+     - x 0,78-0,99 : 0,10 / 0,10 / 0,13 ;
+     - x 0,99-1,145 : 0,395 / 0,42 / 0,455, **seulement sous la butée haute** (caméra du dosage : boîtier,
+       profilé, câble HDMI ; en butée haute la tête passe au-dessus) ;
+     - x 1,145-1,205 : 0,30 / 0,30 / 0,30 ;
+     - x 1,205-1,22 : 0,00 / 0,015 / 0,055.
+     La table a été calculée en butée haute (1,29) pour x < 0,78 et de 1,11 à 1,29 pour x ≥ 0,78. Choix : elle
+     compte **à toute hauteur**, sauf la ligne x 0,99-1,145. La griffe ne descend sous la butée haute pour
+     x < 0,78 qu'au lave-bocal (0,35 ; 0,65), loin de toutes ces valeurs. Tête tournée : la règle d'avant reste
+     (godet fermé, « fermé » + rayon balayé − demi-longueur fermé ; godet ouvert, « grand ouvert »).
+  3. **Fin de « permise en butée haute »** (réponse 3 de la PR n° 37 du 29/10) : la nouvelle table compte aussi en
+     butée haute. La préhension au porte-bocal (mât de la griffe en 0,249 ; 0,150) reste permise (0,150 ≥ 0,07).
+  4. Pas de verrou agitateur ↔ rince-verre (la tête au lave-bocal est loin de l'agitateur garé). Le logiciel n'en
+     avait pas : rien à retirer.
+  5. Limite connue : la table ne tient pas compte des pièces qui bougent (chariot de remplissage au poste, plateau
+     au vidage) ; leurs règles restent celles de leurs modules.
 - **Réponses aux questions de la PR n° 26** (tâche 19, Mycélium ; tranchées par le fil logiciel, niveau 1) :
   1. Origine de la manivelle : **capteur inductif M8 « manivelle en haut »** (`origine_manivelle`, carte 3), même
      famille que les fins de course de la glissière (quelques euros). Sans lui, après une coupure, la carte ne sait
