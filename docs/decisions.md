@@ -170,6 +170,21 @@ si l'une pose problème, elle le dit dans sa PR.
      jusqu'à 3 cm sous eux) : 0,117 au plus le long du bras ; quand seule elle arrive à la hauteur du boîtier de
      la caméra du bocal (bas à z 0,982), c'est elle seule qui compte. Avec la cote de 0,086, le mât reste à
      x ≤ 0,959 devant le boîtier (la fiche disait 0,96). L'essuyage côté allée passe pour les 4 formats.
+- **Agitateur du mycélium FIXE à x 0,925** (choix de Karulium, 01/11/2026 ; vérifié sur la maquette v45.110,
+  `maquette/agitateur-fixe-01-11/resultat.md`). La glissière de l'agitateur disparaît (rails, NEMA 17 et son
+  driver, courroie, 2 fins de course, 2 câbles) : l'agitateur, son bocal et le porte-bocal restent toujours au-dessus
+  du poste (x 0,925 ; y 0,150). Le module Mycélium est **rouvert** (support) : le logiciel attend sa nouvelle fiche
+  avant de changer ses gestes. Règles déjà connues :
+  1. La griffe **vide le seau à y 0,42** (chariot de remplissage à cy 0,285), plus au poste ; le seau vide attend à
+     y 0,42.
+  2. Au poste (y 0,135) : **manivelle en bas**, bord du seau sous 0,70 (le spray et le micropore le respectent déjà).
+  3. **Demi-tour du bocal seulement manivelle en haut et chariot à y ≥ 0,40.**
+  4. La règle « l'agitateur roule » (verrou du chariot pendant que l'agitateur roule) est **supprimée** ; le garage
+     à x 0,565 et le demi-tour à 0,865 aussi. La préhension pose et reprend le bocal en (0,925 ; 0,150), axes à 1,05
+     et 1,10, chariot reculé ou au poste : aucun contact.
+  5. Conséquence : la table « Y minimum du mât » du 01/11 ci-dessous (faite avec l'agitateur garé à 0,565) est
+     **périmée** ; une nouvelle table, agitateur fixe à 0,925, est demandée au projet mécanique. Les points 1 (essuyage),
+     6 (boîtier de la caméra du dosage) et 7 (caméra du plafond) de cette section restent bons.
 - **Griffe : essuyage et « Y minimum du mât »** (contrôle de la maquette v45.104 du projet mécanique, 01/11/2026 ;
   tranché par le fil logiciel, niveau 1) :
   1. Essuyage du bord du seau **côté allée confirmé** (`essuyage → direction_deg: 90`), mais **godet fermé ou à
