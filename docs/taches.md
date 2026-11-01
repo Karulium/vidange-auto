@@ -277,8 +277,10 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   commentaire « EN ATTENDANT » de `essuyage` (côté allée confirmé). Vérifier au démarrage que les bandes de x
   ne se chevauchent pas. Tests : reprendre `test_bande_du_garage_permise_en_butee_haute_seulement` (porte-bocal
   0,249 ; 0,150 permis en butée haute et dessous ; x 0,6 y 0,30 refusé), une pose x 1,05 y 0,30 permise en
-  butée haute et refusée dessous, l'essuyage des 4 formats sans refus. `vidange --verifier` et le simulateur
-  passent.
+  butée haute et refusée dessous, l'essuyage des 4 formats sans refus. Recopier aussi les points 6 et 7 de la
+  décision : boîte `griffe → camera_bocal` en x 0,997-1,091, z 0,975-1,068 (reprendre les tests qui en
+  dépendent) et caméra du plafond en y 0,545 dans `pi/reglages/vision.yaml`. `vidange --verifier` et le
+  simulateur passent.
 - [x] **19. Mycélium (dosage)** — Modèle : Opus, effort moyen.
   Sources (recopiées ici le 28/10/2026) : fiche du module « Mycélium », **validé définitivement le 24/10/2026**
   (option B : tout le module relevé de 12 mm, garage à x 0,565), fiche des pièces v8 et plan de commande v221.

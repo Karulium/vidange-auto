@@ -198,6 +198,12 @@ si l'une pose problème, elle le dit dans sa PR.
      avait pas : rien à retirer.
   5. Limite connue : la table ne tient pas compte des pièces qui bougent (chariot de remplissage au poste, plateau
      au vidage) ; leurs règles restent celles de leurs modules.
+  6. Plan de commande v230 (01/11/2026) : le boîtier de la caméra du dosage (« caméra du bocal » dans
+     `griffe → camera_bocal`) est en PETG ; avec le balayage de son pivot, il occupe **x 0,997-1,091** et
+     **z 0,975-1,068** (y 0,22-0,28 inchangé). Ces cotes remplacent x 1,045-1,085 et z 0,982-1,062 (`z_bas`,
+     `z_haut`).
+  7. Caméra du plafond : objectif en **(1,45 ; 0,545)** (`vision.yaml → cameras → plafond → position`, au lieu de
+     0,50), toujours à ≈ 2,35 de haut.
 - **Réponses aux questions de la PR n° 26** (tâche 19, Mycélium ; tranchées par le fil logiciel, niveau 1) :
   1. Origine de la manivelle : **capteur inductif M8 « manivelle en haut »** (`origine_manivelle`, carte 3), même
      famille que les fins de course de la glissière (quelques euros). Sans lui, après une coupure, la carte ne sait
