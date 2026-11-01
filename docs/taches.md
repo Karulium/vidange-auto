@@ -391,9 +391,11 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      (`zone_garage_m`, `course_manivelle_m`, `capsule_manivelle_haut_z` et la condition « griffe en butée haute ») :
      x 0,925 est hors de l'isolation du fût (x < 0,71). La tête ne passe jamais au-dessus du bocal sauf pour le poser
      ou le reprendre.
-  7. **Caméra du dosage** : remplacer `mycelium → camera_x_max` (« agitateur garé ») par la condition du point 6 de la
-     décision : vers le seau seulement manivelle en haut et ni griffe ni préhension dans la boîte x < 1,10, y < 0,34,
-     z 0,95-1,08 (boîte dans `machine.yaml`) ; sinon à 0°, vers le bocal. Test de chaque cas.
+  7. **Caméra du dosage** : remplacer `mycelium → camera_x_max` (« agitateur garé ») par les conditions b) à e) du
+     point 6 de la décision : pas de pivot pendant le demi-tour, demi-tour seulement boîtier à 0°, pas de pivot tête
+     de griffe ou de préhension dans la boîte x < 1,10, y < 0,34, z 0,95-1,08 (boîte dans `machine.yaml`), boîtier à
+     0° avant la pose et la reprise du bocal. Aucune condition sur la manivelle, le bocal ni le chariot. Test de
+     chaque cas.
   Tests : chaque condition refusée (demi-tour manivelle en bas, demi-tour chariot à 0,39, chariot au poste manivelle
   en haut, bord 0,69 au poste, spray avec 0,68 − h dépassé, préhension sur le bocal manivelle en bas) ; un cycle
   complet d'un seau dans le simulateur, dans l'ordre du point 5. `vidange --verifier` passe.

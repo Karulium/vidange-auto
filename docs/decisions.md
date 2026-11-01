@@ -183,10 +183,17 @@ si l'une pose problème, elle le dit dans sa PR.
   4. La règle « l'agitateur roule » (verrou du chariot pendant que l'agitateur roule) est **supprimée** ; le garage
      à x 0,565 et le demi-tour à 0,865 aussi. La préhension pose et reprend le bocal en (0,925 ; 0,150), axes à 1,05
      et 1,10, chariot reculé ou au poste : aucun contact.
-  6. Caméra du dosage (Guidage caméra, plan de commande v232) : le servo ne tourne la caméra vers le seau (63°) que
-     si la **manivelle est en haut** (signal `origine_manivelle`) et que **ni la griffe ni la préhension** ne sont
-     dans la boîte **x < 1,10, y < 0,34, z 0,95-1,08**. Sinon la caméra reste à 0°, tournée vers le bocal. La
-     condition « agitateur garé » (`mycelium → camera_x_max`) disparaît.
+  6. Caméra du dosage (fil Guidage caméra, `guidage-camera/logiciel/pivot-camera-dosage.md`, 01/11 23:39 ; remplace
+     sa première version « manivelle en haut seulement ») : le servo pivote le boîtier de 0° (bocal) à 63° (seau),
+     volume balayé x 0,992-1,091, y 0,202-0,277, z 0,975-1,068.
+     a) manivelle (haut, bas, à-coups), bocal (debout, tête en bas) et chariot de remplissage : **aucune condition** ;
+     b) pivot **interdit pendant le demi-tour** du porte-bocal (du déverrouillage au contact « verrou engagé ») ;
+     c) le demi-tour **ne démarre que boîtier à 0°** ;
+     d) pivot interdit si une partie de la tête de la griffe ou de la préhension (ou de l'objet tenu) est dans
+        **x < 1,10, y < 0,34, z 0,95-1,08** ;
+     e) boîtier **remis à 0° avant toute pose ou reprise du bocal** par la préhension.
+     La condition « agitateur garé » (`mycelium → camera_x_max`) disparaît. a) est déduit des fiches, à confirmer
+     par un balayage de la Maquette : si elle trouve un contact, cette ligne sera corrigée.
   7. Fiche du Mycélium v10 (01/11) : bocal toujours en (0,925 ; 0,150), axe de la manivelle z 0,762, centre du bocal
      z 1,059 manivelle en haut. Manivelle EN HAUT pour la pose et la reprise du bocal et pour le demi-tour ; EN BAS
      dès que le chariot est au poste (attente). Préhension : face au contact de la capsule à 1,05, approche à 1,10,
