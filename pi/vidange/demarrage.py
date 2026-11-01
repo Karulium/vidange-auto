@@ -419,8 +419,8 @@ def principal(
     stockage = reglages.machine.stockage
     if stockage is not None and stockage.exemple:
         journal.warning(
-            "machine.yaml, stockage : répartition du seau C au tiroir, coin d'inspection, bord de "
-            "la 1re pile de fin de lot d'EXEMPLE : les vérifier aux essais "
+            "machine.yaml, stockage : seaux B par file du tiroir, places de la bande du haut, "
+            "bord de la 1re pile de fin de lot d'EXEMPLE : les vérifier aux essais "
             "(pi/systeme/essai-stockage.md), puis passer « exemple » à false."
         )
     camera_dosage = reglages.machine.camera_dosage

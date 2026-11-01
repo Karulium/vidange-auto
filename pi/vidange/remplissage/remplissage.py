@@ -22,13 +22,21 @@ seau plein sur sa file, et une balance. Les gestes :
   barres. Cet angle est gardé jusqu'à la poussée ;
 - centrer : barres en position au contact du corps sous le rebord (+ un petit jeu), puis
   ouvertes ; l'alarme ALM du pilote d'une des 2 barres (elle force) arrête le geste et alerte ;
-- ramener au poste : plateau en bas, y 0,135, plateau remonté (bord du seau à 0,78) ;
+- ramener au poste : y 0,135, plateau à la hauteur du poste (bord du seau à 0,78) ; plus de
+  descente du plateau pour rouler (la règle des anneaux du fût est supprimée, 31/10) ;
 - tourner pendant le versement de la griffe (`tourner_seau`) ;
 - dosage du mycélium : le Mycélium mène le chariot (`ecarter`, `amener_au_dosage`) ;
 - ranger : le plateau revient à l'angle de l'anse, va à la file plateau en bas, le pousseur pousse
   le seau vers le stockage ; le registre reçoit son poids (les doses et la variété viennent du
   Mycélium) et une photo ;
-- mode couvercles (retourneur du lavage) et mode inspection des bocaux.
+- ranger en haut (bande du haut du Stockage, tâche 35 bis), dans l'ordre a) à f) : a) bras de
+  fermeture rangé ; b) barres ouvertes (elles traversent les joues plateau ≤ 0,48) ; c) chariot à
+  y 0,215 ; d) plateau à 0,4985 (jamais hors de 0,496-0,501 pendant la poussée) ; e) poussée ;
+  f) pousseur rentré, plateau redescendu. Le Stockage vérifie ensuite la photo du plafond ;
+- mode couvercles (retourneur du lavage) et mode inspection des bocaux. Règle 14 : pendant les
+  deux demi-tours de la tête de la griffe, le chariot est à y ≥ 0,515 (`geste_degager_griffe`,
+  verrou branché dans la griffe par `brancher_griffe`) ; il ne revient à y 0,50 qu'après
+  (`geste_revenir_au_retourneur`).
 
 La règle 9 est branchée dans la préhension (`refus_prehension`, par module_remplissage) : sa tête
 ne descend sous ≈ 0,84 au-dessus du chariot que barres ouvertes et tête du micropore rentrée, sauf
@@ -36,8 +44,8 @@ en mode couvercles (retourneur) et pendant la pose d'un seau vide (barres à l'a
 par le geste du chariot lui-même ; le micropore est toujours vérifié).
 
 Chaque pas est vérifié avant de partir (vidange.remplissage.regles) : un pas refusé met le module
-en alarme, il ne bouge pas. Les gestes passent d'eux-mêmes par les bons détours (plateau baissé
-avant de rouler sous les anneaux, barres ouvertes avant de monter au-dessus de 0,515...).
+en alarme, il ne bouge pas. Les gestes passent d'eux-mêmes par les bons détours (barres ouvertes
+avant de monter au-dessus de 0,515 ou de pousser, plateau sous 0,48 pour traverser les joues...).
 
 Les modules pas encore écrits sont des cases vides, derrière des fonctions simples (valeurs
 prudentes par défaut) : bras du galet (tâche 41), bras du spray (39), tête du micropore (40),
@@ -49,7 +57,7 @@ Ces verrous ne protègent que la MACHINE : la sécurité des personnes reste câ
 import time
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from vidange.chef import ErreurEtape
 from vidange.journal import donner_journal
@@ -62,6 +70,10 @@ from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import FormatSeau, Machine
 from vidange.remplissage.chariot import Chariot, Pas, Resultat
 from vidange.remplissage.regles import Contexte, Pose, ReglesRemplissage
+
+if TYPE_CHECKING:
+    from vidange.griffe.griffe import Griffe
+    from vidange.griffe.regles import Pose as PoseGriffe
 
 journal = donner_journal("remplissage")
 
@@ -184,6 +196,9 @@ class Remplissage:
         self._rotation = False
         # Pose d'un seau vide en cours : la tête descend barres à l'approche (règle 9).
         self._pose_en_cours = False
+        # La tête de la griffe tourne-t-elle (règle 14, mode couvercles) ? Branché par
+        # brancher_griffe ; sans griffe : non.
+        self._griffe_tourne: Callable[[], bool] = lambda: False
 
     # ------------------------------------------------------------ état
 
@@ -263,6 +278,8 @@ class Remplissage:
         cible = self.pose.avec(**pas.cibles)
         if pas.cibles:
             refus = self.regles.refus_mouvement(self.pose, cible, self.contexte(), pas.dosage)
+            if refus is None:
+                refus = self._refus_regle_14(cible)
             if refus is not None:
                 self._geste = self._pas = None
                 raise ErreurEtape(f"remplissage, « {pas.texte} » refusé : {refus}", QUOI_FAIRE)
@@ -327,8 +344,8 @@ class Remplissage:
             yield Pas("plateau en bas", {"z": self.course_z[0]})
 
     def _pousseur_rentre(self) -> Geste:
+        # Règle 12 : le pousseur rentre à toute hauteur du plateau.
         if not self.regles.pousseur_rentre(self._pose()):
-            yield from self._plateau_en_bas()
             yield Pas("pousseur rentré", {"pousseur": self.reglages.pousseur_rentre_m})
 
     def _barres(
@@ -394,7 +411,7 @@ class Remplissage:
         yield Pas(texte, {"y": y})
 
     def _a_la_place(self, y: float, texte: str) -> Geste:
-        """Plateau en bas s'il faut rouler, pousseur rentré, puis rouler."""
+        """Pousseur rentré, plateau en bas si le trajet le demande, puis rouler."""
         yield from self._pousseur_rentre()
         yield from self._rouler(y, texte)
 
@@ -425,7 +442,7 @@ class Remplissage:
         return EtatChariot(y=y, plateau_z=pose.z, immobile=immobile)
 
     def ecarter(self) -> None:
-        """Le recul pendant le passage de l'agitateur (y ≥ 0,40), plateau en bas."""
+        """Le recul pendant le passage de l'agitateur (y ≥ 0,40), plateau où il est."""
         self.lancer(self.geste_ecarter)
 
     def amener_au_dosage(self, plateau_z: float) -> None:
@@ -506,6 +523,62 @@ class Remplissage:
 
     def barriere_coupee(self) -> bool | None:
         return self.chariot.barriere_coupee()
+
+    # ------------------------------------------------------------ règle 14 (mode couvercles)
+
+    def _refus_regle_14(self, cible: Pose) -> str | None:
+        """Le chariot ne revient sous y 0,515 qu'après les demi-tours de la tête de la griffe."""
+        y_min = self.reglages.couvercles.y_demi_tour_griffe_min
+        if self.mode != "couvercles" or cible.y >= y_min - self.reglages.tolerance_y_m:
+            return None
+        if self._griffe_tourne():
+            return (
+                f"règle 14 : la tête de la griffe tourne, le chariot reste à y ≥ {_m(y_min)} "
+                "jusqu'à la fin de ses demi-tours"
+            )
+        return None
+
+    def refus_demi_tour_griffe(self) -> str | None:
+        """Règle 14 : en mode couvercles, la tête de la griffe ne tourne que chariot arrêté à
+        y ≥ 0,515 (sinon la raclette touche le moteur de la barre côté allée)."""
+        if self.mode != "couvercles":
+            return None
+        y_min = self.reglages.couvercles.y_demi_tour_griffe_min
+        if not self.libre():
+            return f"règle 14 : le chariot de remplissage bouge (il doit être à y ≥ {_m(y_min)})"
+        y = self.chariot.position().y
+        if y < y_min - self.reglages.tolerance_y_m:
+            return (
+                f"règle 14 : chariot de remplissage à y {_m(y)}, il doit être à y ≥ {_m(y_min)} "
+                "pendant les demi-tours de la tête de la griffe"
+            )
+        return None
+
+    def geste_degager_griffe(self) -> Geste:
+        """Mode couvercles : le chariot recule à y 0,515 (plateau fixe) avant les deux demi-tours
+        de la tête de la griffe."""
+        if self.mode != "couvercles":
+            raise ErreurEtape("remplissage : pas en mode couvercles")
+        y = self.reglages.couvercles.y_demi_tour_griffe_min
+        yield from self._a_la_place(y, "chariot écarté pour les demi-tours de la griffe")
+
+    def geste_revenir_au_retourneur(self) -> Geste:
+        """Mode couvercles : retour à y 0,50, seulement après les demi-tours de la griffe."""
+        if self.mode != "couvercles":
+            raise ErreurEtape("remplissage : pas en mode couvercles")
+        yield from self._a_la_place(self.reglages.couvercles.y, "chariot au retourneur")
+
+    def brancher_griffe(self, griffe: "Griffe") -> None:
+        """La griffe applique la règle 14 à chacun de ses pas qui tourne la tête ; le chariot ne
+        revient au retourneur qu'une fois la tête arrêtée."""
+        self._griffe_tourne = griffe.tete_tourne
+
+        def refus(depart: "PoseGriffe", arrivee: "PoseGriffe") -> str | None:
+            if abs(arrivee.a - depart.a) <= _EGAL:
+                return None
+            return self.refus_demi_tour_griffe()
+
+        griffe.verrou_chariot = refus
 
     # ------------------------------------------------------------ pour les autres modules
 
@@ -826,7 +899,7 @@ class Remplissage:
         yield from self._barres_ouvertes()
 
     def geste_ramener_au_poste(self) -> Geste:
-        """Plateau en bas, retour en y 0,135, plateau remonté (bord du seau à 0,78)."""
+        """Retour en y 0,135, plateau à la hauteur du poste (bord du seau à 0,78)."""
         seau = self.seau
         if seau is None:
             raise ErreurEtape("remplissage : pas de seau sur le plateau")
@@ -836,27 +909,84 @@ class Remplissage:
             self.plateau_au_poste(seau.format), "plateau à la hauteur du poste"
         )
 
-    def geste_ranger(self, file: str) -> Geste:
-        """Le plateau revient à l'angle de l'anse, va à la file, plateau en bas (le pousseur ne
-        sort que plateau ≤ 0,20, partout), le pousseur pousse le seau vers le stockage."""
+    def _seau_a_ranger(self) -> SeauPlateau:
         seau = self.seau
-        place = self.reglages.rangement.files.get(file)
-        if place is None:
-            raise ErreurEtape(f"remplissage : file inconnue « {file} »")
         if seau is None or seau.angle_anse is None:
             raise ErreurEtape("remplissage : pas de seau orienté sur le plateau")
+        return seau
+
+    def _anse_a_son_angle(self, seau: SeauPlateau) -> Geste:
+        assert seau.angle_anse is not None
         pose = self._pose()
         yield from self._orienter(
             self.regles.angle_proche(pose.a, seau.angle_anse, 90), "anse à son angle"
         )
+
+    def geste_ranger(self, file: str, pousseur_m: float | None = None) -> Geste:
+        """Le plateau revient à l'angle de l'anse, va à la file, plateau en bas (tôle du tiroir),
+        barres ouvertes (règle 12), le pousseur pousse le seau vers le stockage. `pousseur_m` :
+        course plus courte (cale du Stockage) ; None : celle de la file."""
+        place = self.reglages.rangement.files.get(file)
+        if place is None:
+            raise ErreurEtape(f"remplissage : file inconnue « {file} »")
+        seau = self._seau_a_ranger()
+        course = place.pousseur_m if pousseur_m is None else pousseur_m
+        yield from self._anse_a_son_angle(seau)
         yield from self._barres_ouvertes()
         yield from self._a_la_place(place.y, f"chariot à la {file}")
         yield from self._plateau_en_bas()
         yield from self._peser("pesée du seau plein")
         self._noter(seau, file)
-        yield Pas("le pousseur pousse le seau", {"pousseur": place.pousseur_m})
+        yield Pas("le pousseur pousse le seau", {"pousseur": course})
         self.seau = None
         yield Pas("pousseur rentré", {"pousseur": self.reglages.pousseur_rentre_m})
+
+    def refus_poussee_bande(self, pose: Pose) -> str | None:
+        """Pousser sur la bande du haut : chariot à son y, plateau dans 0,496-0,501 (jamais plus
+        bas que la tôle du Stockage, au plus 5 mm plus haut)."""
+        bande = self.reglages.rangement.bande_haut
+        if bande is None:
+            return "pas de bande du haut dans les réglages (remplissage → rangement)"
+        if not self.regles.a(pose.y, bande.y):
+            return f"chariot à y {_m(pose.y)}, la bande du haut est à y {_m(bande.y)}"
+        debut, fin = bande.plateau_plage_z
+        if not debut - _EGAL <= pose.z <= fin + _EGAL:
+            return (
+                f"plateau à {_m(pose.z)} : pour la bande du haut, entre {_m(debut)} et "
+                f"{_m(fin)} (tôle du stockage)"
+            )
+        return None
+
+    def geste_ranger_en_haut(self) -> Geste:
+        """Bande du haut, dans l'ordre a) à f) : a) bras de fermeture rangé ; b) barres ouvertes ;
+        c) chariot à y 0,215 ; d) plateau à 0,4985 ; e) poussée ; f) pousseur rentré, plateau
+        redescendu."""
+        bande = self.reglages.rangement.bande_haut
+        if bande is None:
+            raise ErreurEtape("remplissage : pas de bande du haut dans les réglages", QUOI_FAIRE)
+        seau = self._seau_a_ranger()
+        bras = self._bras_galet()
+        if bras is not True:
+            etat = "pas connu" if bras is None else "pas rangé"
+            raise ErreurEtape(
+                f"remplissage : bande du haut : bras de fermeture {etat} (a : il doit être rangé)",
+                QUOI_FAIRE,
+            )
+        yield from self._anse_a_son_angle(seau)
+        yield from self._barres_ouvertes()  # b)
+        yield from self._a_la_place(bande.y, "c) chariot à la bande du haut")
+        yield from self._peser("pesée du seau plein")
+        yield from self._plateau(bande.plateau_z, "d) plateau à la hauteur de la bande du haut")
+        refus = self.refus_poussee_bande(self._pose())
+        if refus is not None:
+            raise ErreurEtape(f"remplissage : poussée sur la bande du haut refusée : {refus}")
+        self._noter(seau, "bande_haut")
+        yield Pas(
+            "e) le pousseur pousse le seau sur la bande du haut", {"pousseur": bande.pousseur_m}
+        )
+        self.seau = None
+        yield Pas("f) pousseur rentré", {"pousseur": self.reglages.pousseur_rentre_m})
+        yield from self._plateau_en_bas()
 
     def _noter(self, seau: SeauPlateau, file: str) -> None:
         poids = self.derniere_pesee_kg
@@ -896,8 +1026,9 @@ class Remplissage:
         yield from self._barres(hw, f"barres à {_m(hw)}")
 
     def geste_pousseur(self, position: float) -> Geste:
+        # Règle 12 : le pousseur sort à toute hauteur, barres ouvertes.
         if abs(position - self.reglages.pousseur_rentre_m) > self.reglages.tolerance_m:
-            yield from self._plateau_en_bas()
+            yield from self._barres_ouvertes()
         yield Pas(f"pousseur à {_m(position)}", {"pousseur": position})
 
     def geste_tourner_de(self, degres: float) -> Geste:

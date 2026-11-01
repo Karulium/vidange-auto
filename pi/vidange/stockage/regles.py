@@ -14,8 +14,8 @@ stricte gagne. Un mouvement est vérifié point par point (pas de la préhension
    a) au-dessus du plateau (x des panneaux), fond à seau_fond_min_z au moins ;
    b) jamais au-dessus d'une pile qui a des seaux, sauf celle d'où il part ou celle où il arrive,
       et alors son fond à sortie_pile_marge_m au moins au-dessus du bord de cette pile ;
-   c) rail opérateur : axe à y > y_min ⇒ bord du seau ≤ bord_max_z, sauf à la verticale d'une
-      place de pile (question n° 1 de la PR de la tâche 35).
+   c) rail opérateur (réponses à la PR n° 52) : haut du seau au-dessus de haut_max_z seulement
+      axe y + rayon du bord ≤ bord_y_max.
 4. Boîtes à capsules, pendant un déplacement du pont : au-dessus de leur emprise (cercle agrandi
    du rayon de l'objet), point le plus bas à boites_bas_min_z au moins.
 5. Caméra du bocal (boîtier de la griffe), à tout moment :
@@ -63,9 +63,6 @@ class ReglesStockage:
         self.boitier_x_min = machine.griffe.camera_bocal.x[0]
         panneaux = machine.stockage.panneaux.values()
         self.plateau_x = (min(p[0] for p in panneaux), max(p[1] for p in panneaux))
-        # Les places de piles (toutes, vides ou pas) pour le rail opérateur : rayon du plus
-        # grand seau.
-        self.rayon_pile = max(seau.rayon_haut for seau in machine.griffe.formats.values())
 
     # ------------------------------------------------------------ outils
 
@@ -101,11 +98,10 @@ class ReglesStockage:
         arrivee: Pose,
         objet: Objet | None,
         piles: list[PileVue],
-        places_piles: list[tuple[float, float]],
         boucle_fermee: bool,
     ) -> str | None:
         """Raison du refus d'un pas de la préhension de `depart` à `arrivee`, ou None.
-        `piles` : celles qui ont des seaux ; `places_piles` : toutes les places de piles."""
+        `piles` : celles qui ont des seaux."""
         bouge = any(abs(getattr(arrivee, cle) - getattr(depart, cle)) > _EGAL for cle in "xyza")
         if not bouge:
             return None
@@ -134,7 +130,7 @@ class ReglesStockage:
                 return refus
             if seau:
                 assert objet is not None
-                refus = self._refus_seau(pose, objet, rayon, piles, bouts, places_piles)
+                refus = self._refus_seau(pose, objet, rayon, piles, bouts)
                 if refus is not None:
                     return refus
         return None
@@ -200,7 +196,6 @@ class ReglesStockage:
         rayon: float,
         piles: list[PileVue],
         bouts: list[PileVue],
-        places_piles: list[tuple[float, float]],
     ) -> str | None:
         t = self.trajets
         fond = self.bas(pose, objet)
@@ -226,12 +221,13 @@ class ReglesStockage:
                     f"{_m(t.sortie_pile_marge_m * 100)} cm)"
                 )
         rail = t.rail_operateur
-        if pose.y > rail.y_min + _EGAL and bord > rail.bord_max_z + _EGAL:
-            if not any(self._sur(pose, x, y, self.rayon_pile) for x, y in places_piles):
-                return (
-                    f"rail opérateur : seau tenu à y {_m(pose.y)} m (au-delà de "
-                    f"{_m(rail.y_min)}), bord à {_m(bord)} m, au plus {_m(rail.bord_max_z)} m"
-                )
+        cote_allee = pose.y + objet.rayon_m
+        if bord > rail.haut_max_z + _EGAL and cote_allee > rail.bord_y_max + _EGAL:
+            return (
+                f"rail opérateur : seau tenu en haut à {_m(bord)} m (plus de "
+                f"{_m(rail.haut_max_z)} m) : il faut axe y + rayon du bord ≤ "
+                f"{_m(rail.bord_y_max)} m (il est à {_m(cote_allee)} m)"
+            )
         return None
 
     # ------------------------------------------------------------ la griffe

@@ -407,6 +407,15 @@ si l'une pose problème, elle le dit dans sa PR.
   4. Places de fin de lot : bord de la 1re pile à x 1,165 (1 cm du bord de P1) : **gardé**.
   5. Les 18 bocaux de semence (3 × 6) font partie du **mode seaux** (un bocal par seau) : ils partagent le plateau
      avec les piles de vides, la bande des pleins et les boîtes, jamais avec le quinconce de 95 (mode bocaux).
+- **Bande du haut, réponses à la PR n° 54** (tâche 35 bis, 01/11/2026) :
+  1. Seau B au tiroir : **5 + 5 + 5** (centres 2,467 / 2,232 / 1,997 / 1,762 / 1,527, sans exclusion) : juste, d'après
+     le fichier du fil Stockage.
+  2. Diamètres des couvercles (fichier du fil Stockage) : **A 0,28, B 0,23, C 0,315, D 0,28**. Avec eux, toutes les
+     places de la bande du haut gardent le bord à x ≤ 2,44 (D : 2,30 + 0,14 = 2,44 ; C : 2,28 + 0,1575 = 2,4375). Le
+     contrôle au démarrage utilisera le diamètre du couvercle (à ajouter à la table des formats avec la tâche 41,
+     Fermeture des seaux, qui s'occupe des couvercles).
+  3. Photo de contrôle de la bande du haut : le faux « bien placé » reste tant que les réglages sont en
+     `exemple: true` (on regarde à l'œil pendant les essais) ; la vraie lecture vient avec la tâche 22 ter.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr

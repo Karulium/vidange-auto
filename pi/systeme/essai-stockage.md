@@ -34,8 +34,9 @@ entrée 24 V optocouplée. Sa vraie broche est à écrire dans `docs/entrees-sor
 ## Étape 2 : boucle ouverte, rien ne bouge
 
 Le cycle de production complet ne se lance pas encore depuis l'écran (il viendra avec le solveur, tâche 23).
-En attendant, regarder le comportement voulu sur le simulateur : `vidange-simulateur stockage` (14 seaux
-rangés, « plus de place », le tiroir tiré puis remis, Go, le 15e seau rangé dans la file 1 vidée).
+En attendant, regarder le comportement voulu sur le simulateur : `vidange-simulateur stockage` (18 seaux
+A rangés : 14 au tiroir puis 4 sur la bande du haut, chacun suivi de sa photo ; « plus de place », le
+tiroir tiré puis remis, Go, le 19e seau rangé dans la file 1 vidée).
 
 Quand le cycle se lancera depuis l'écran :
 
@@ -61,13 +62,14 @@ Quand le cycle se lancera depuis l'écran :
    `vidange-prehension prendre-poser seau 1.30 0.84 0.621  1.30 0.84 0.621 --format seau_a`.
    Attendu : contact à moins de 5 mm de la cote annoncée, le seau du haut **se sépare seul** de la pile,
    il remonte sans toucher la pile, puis il est reposé. Recommencer avec une pile pleine de chaque format.
-5. Noter la hauteur du haut du seau tenu quand la tête est en haut au-dessus de `pile_1` (y 0,84) : la
-   règle du rail opérateur (question n° 1 de la PR de la tâche 35) en dépend.
+5. Rail opérateur (réponses à la PR n° 52) : tête en haut au-dessus de `pile_1` (y 0,84), seau A tenu :
+   le haut du seau passe sous le chariot du rail opérateur (y 1,005 à 1,135, au-dessus de 1,11) sans le
+   toucher. Le Pi refuse un seau tenu dont le haut dépasse 1,10 si son axe y + son rayon dépasse 0,995.
 
 ## Étape 4 : places des piles et ordre de vidage
 
-1. `vidange-stockage places seau_a` : la liste des places dans l'ordre de vidage (rangée y 0,84, puis 0,53,
-   puis la bande 0,215, la pile la plus proche du chariot d'abord), les places de fin de lot calculées
+1. `vidange-stockage places seau_a` : la liste des places dans l'ordre de vidage (la bande 0,215 d'abord,
+   pour la libérer, puis la rangée y 0,84, puis 0,53, la pile la plus proche du chariot d'abord), les places de fin de lot calculées
    (pour A : x 1,2985 / 1,5755 / 1,8525 / 2,1295), la pile des couvercles.
 2. Poser une pile à chaque place : elles ne doivent pas se toucher, et la dernière pile de fin de lot doit
    être à 10 cm au moins de la caméra du fond (hublot en x 2,50).
@@ -83,20 +85,46 @@ Quand le cycle se lancera depuis l'écran :
    Attendu : le chariot va à y 0,215, plateau en bas, le pousseur pousse le seau dans la file ; la tôle du
    tiroir (0,176) est au plus 5 mm sous le plateau : le seau passe sans accrocher.
 3. Recommencer jusqu'à remplir la file 1 (4 seaux A) : à chaque poussée la file avance d'environ 0,272 ; le
-   premier seau ne touche jamais la butée de fond (x 2,612) en force. Noter l'effort ressenti (150 à 240 N
-   pour une file de 6, à l'essai).
+   premier seau ne touche jamais la butée de fond (face d'appui à x **2,582**) en force. Noter l'effort
+   ressenti (150 à 240 N pour une file de 6, à l'essai).
 4. Même chose pour les files 2 et 3 (5 seaux chacune).
-5. Seau C : poser la cale de 15 cm, ranger 16 seaux. **Noter combien de seaux tiennent dans chaque file** et
-   corriger `stockage → tiroir → places → seau_c` (aujourd'hui 5 / 6 / 5, un EXEMPLE).
-6. Vider le tiroir comme l'écran le demande (plateau vidé, P1 et P2 relevés, tiroir déverrouillé et tiré,
+5. Seau B : 5 seaux dans **chaque** file (15 au tiroir, répartition déduite de la capacité : la vérifier
+   dans le fichier du fil Stockage et à l'essai ; sinon corriger `stockage → tiroir → places → seau_b`).
+6. Seau C : **4 par file**, sans quinconce. Poser la cale de 15 cm contre la butée de la file y 0,50 : sa
+   course de pousseur est plus courte de 0,15 (`vidange-remplissage ... pousseur 0.175` pour voir). Centres
+   attendus : files 0,215 et 0,785 à x 2,432 / 2,132 / 1,832 / 1,532 ; file 0,50 à 2,282 / 1,982 / 1,682 /
+   1,382. Les mesurer au mètre.
+7. Vider le tiroir comme l'écran le demande (plateau vidé, P1 et P2 relevés, tiroir déverrouillé et tiré,
    seaux sortis, tout remis), puis confirmer à l'écran : l'inventaire des files repart à zéro.
+
+## Étape 5 bis : la bande du haut (seaux pleins sur le plateau, tâche 35 bis)
+
+1. `vidange-stockage places seau_a` : « Bande du haut y 0,215 : 4 places (centres x 2,3, 2,028, 1,756,
+   1,484) » et « Capacité d'un lot : 18 seaux ». Mêmes lignes pour B (5 places, lot de 20), C (4, lot de
+   16), D (4, lot de 18).
+2. Bande vide (pas de pile de fin de lot dessus), tapis enlevé. Seau A plein sur le plateau du chariot :
+   `vidange-remplissage --galet-range --agitateur-au-garage ranger seau_a bande_haut` (voir
+   `essai-remplissage.md`, étape 4). Attendu : le seau entre par le bord de P1 (x 1,155) et s'arrête vers
+   x 1,484.
+3. Recommencer jusqu'à 4 seaux : à chaque poussée, les seaux avancent d'une place (contact des rebords).
+   Avec 4 seaux, **mesurer** le bord du seau du bout : il doit rester à x ≤ **2,44** (jamais sur le hublot,
+   x 2,50). Mesurer aussi l'axe de chaque seau en y : 0,215 à **7 mm** près. Noter les vrais centres et
+   corriger `stockage → bande_haut → places` si besoin (`vidange --verifier` refuse un seau qui dépasse
+   2,44). Régler `remplissage → rangement → bande_haut → pousseur_m` pour que le seau poussé arrive à sa
+   place.
+4. La photo du plafond après chaque poussée n'est pas encore lue par la vision (un faux répond les places
+   attendues, le journal le dit) : quand la vision saura la lire, décaler un seau de 1 cm en y à la main ;
+   le Pi doit s'arrêter avec l'alerte « seau de la bande du haut ... de sa ligne ».
+5. Vider : les seaux de la bande partent avec ceux du tiroir (étape 5, point 7).
 
 ## Étape 6 : bocaux et boîtes à capsules
 
 1. Mode bocaux, tapis posé : poser un bocal aux places `bocal_0_0`, `bocal_1_0`, `bocal_8_10` (voir
    `vidange-stockage places`) ; les places doivent tomber dans le quinconce de 95 sans se toucher.
-2. Écrire dans `stockage → bocaux → inspection` la vraie liste des places « suspects » et « séparation »
-   (fichier du fil Stockage), puis vérifier qu'elles forment bien le coin du haut.
+2. Coin d'inspection (liste du fil Stockage, côté x grand) : poser un bocal aux places suspects
+   `bocal_8_8` à `bocal_8_10`, `bocal_7_7` à `bocal_7_9`, `bocal_6_8` à `bocal_6_10` ; les places de
+   séparation (`bocal_5_7` à `bocal_5_9`, `bocal_6_7`, `bocal_7_6`, `bocal_8_7`) restent vides. Vérifier
+   qu'elles forment bien le coin du haut.
 3. Boîtes à capsules en (2,52 ; 0,53) et (2,52 ; 0,80) : mesurer leur fond et leur dessus (0,498 et 0,739) et
    l'épaisseur d'une capsule (13 mm) ; corriger `stockage → boites` si besoin.
 

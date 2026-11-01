@@ -1347,23 +1347,18 @@ AXES_REMPLISSAGE = {
 
 
 class VerrousRemplissage(Modele):
-    """Les positions interdites du chariot (fichier des positions, règles 1 à 11). Ces verrous
-    ne protègent que la machine : la sécurité des personnes reste câblée."""
+    """Les positions interdites du chariot (fichier des positions, règles 2 à 14). Ces verrous
+    ne protègent que la machine : la sécurité des personnes reste câblée. (La règle 1, anneaux
+    du fût, est périmée et supprimée depuis le 31/10/2026.)"""
 
-    # Règle 1 : anneaux du fût (bandes de y) : plateau en bas (dessus ≤ anneaux_plateau_max_z),
-    # sauf dans la zone du poste et du dosage (libre_poste_y).
-    anneaux_y: list[Intervalle] = Field(min_length=1)
-    anneaux_plateau_max_z: float
-    libre_poste_y: Intervalle
     # Règle 2 : barres entre les joues de l'élévateur (bande de hw) : plateau ≤ tant.
     joues_barres: Intervalle
     joues_plateau_max_z: float
     # Règle 3 : plateau au-dessus de tant : barres ouvertes (hw ≥ barres_ouvertes_min).
     barres_ouvertes_au_dessus_z: float
     barres_ouvertes_min: float
-    # Règle 4 : pousseur sorti seulement plateau en bas (plateau_en_bas_z) et au plus à tant
-    # (dessus du plateau) : la plus stricte des deux s'applique.
-    pousseur_plateau_max_z: float
+    # Règle 4 (règle 12 du fichier des positions, 31/10) : pousseur sorti à toute hauteur,
+    # seulement barres ouvertes (barres_ouvertes_min) et bras du galet rangé : pas de chiffre.
     # Règle 5 : plateau au-dessus de tant seulement bras du galet rangé.
     galet_plateau_max_z: float
     # Règle 6 (spray, tâche 39) : plateau ≤ min(spray_plateau_max_z ; spray_bord_max_z − h),
@@ -1471,8 +1466,20 @@ class FileRemplissage(Modele):
     pousseur_m: float
 
 
+class BandeHautRemplissage(Modele):
+    """Rangement sur la bande du haut (plateau du Stockage) : chariot à y, plateau à plateau_z,
+    jamais hors de plateau_plage_z pendant la poussée ; le pousseur va jusqu'à pousseur_m."""
+
+    y: float
+    plateau_z: float
+    plateau_plage_z: Intervalle
+    pousseur_m: float
+
+
 class RangementRemplissage(Modele):
     files: dict[Nom, FileRemplissage] = Field(default_factory=dict)
+    # Bande du haut (None : pas de bande du haut).
+    bande_haut: BandeHautRemplissage | None = None
 
 
 class FormatRemplissage(Modele):
@@ -1485,10 +1492,13 @@ class FormatRemplissage(Modele):
 
 
 class CouverclesRemplissage(Modele):
-    """Mode couvercles (retourneur, tâche 21 bis) : chariot à y, plateau fixe, sans rotation."""
+    """Mode couvercles (retourneur, tâche 21 bis) : chariot à y, plateau fixe, sans rotation.
+    Règle 14 : pendant les demi-tours de la tête de la griffe, chariot à y ≥
+    y_demi_tour_griffe_min ; il ne revient à y qu'après."""
 
     y: float
     plateau_z: float
+    y_demi_tour_griffe_min: float
 
 
 class InspectionRemplissage(Modele):
@@ -1543,15 +1553,21 @@ class Remplissage(Modele):
     def _verifier(self) -> "Remplissage":
         erreurs = []
         v = self.verrous
-        for nom, (debut, fin) in [
-            ("verrous → libre_poste_y", v.libre_poste_y),
-            ("verrous → joues_barres", v.joues_barres),
-            *((f"verrous → anneaux_y n° {i}", a) for i, a in enumerate(v.anneaux_y, start=1)),
-        ]:
+        intervalles = [("verrous → joues_barres", v.joues_barres)]
+        bande = self.rangement.bande_haut
+        if bande is not None:
+            intervalles.append(("rangement → bande_haut → plateau_plage_z", bande.plateau_plage_z))
+            debut, fin = bande.plateau_plage_z
+            if not debut <= bande.plateau_z <= fin:
+                erreurs.append(
+                    f"rangement → bande_haut → plateau_z : {bande.plateau_z:g} hors de "
+                    f"plateau_plage_z ({debut:g} à {fin:g})"
+                )
+        for nom, (debut, fin) in intervalles:
             if debut >= fin:
                 erreurs.append(f"{nom} : du plus petit au plus grand")
-        if not v.libre_poste_y[0] <= self.poste_y <= v.libre_poste_y[1]:
-            erreurs.append("poste_y doit être dans verrous → libre_poste_y")
+        if self.couvercles.y_demi_tour_griffe_min < self.couvercles.y:
+            erreurs.append("couvercles → y_demi_tour_griffe_min : au moins couvercles → y")
         if not self.poste_y < self.ecarte_y:
             erreurs.append("ecarte_y doit être au-delà de poste_y")
         if v.barres_ouvertes_min > self.barres.ouvertes_m:
@@ -1592,10 +1608,6 @@ class PilesStockage(Modele):
     couvercles: Point
 
 
-class QuinconceStockage(Modele):
-    cale_m: float = Field(gt=0)
-
-
 class TiroirStockage(Modele):
     """Tiroir du bas : les files du Remplissage, poussées vers +x jusqu'à la butée."""
 
@@ -1609,15 +1621,25 @@ class TiroirStockage(Modele):
     files: list[Nom] = Field(min_length=1)
     # Seaux par file, par format.
     places: dict[Nom, dict[Nom, Annotated[int, Field(ge=0)]]] = Field(min_length=1)
-    quinconce: dict[Nom, QuinconceStockage] = Field(default_factory=dict)
+    # Centres des places en x, par format et par file (facultatif : vérifiés au démarrage).
+    centres_x: dict[Nom, dict[Nom, list[float]]] = Field(default_factory=dict)
+    # Cales posées contre la butée, par format et par file (m) : la course du pousseur de cette
+    # file est plus courte d'autant.
+    cales: dict[Nom, dict[Nom, Annotated[float, Field(gt=0)]]] = Field(default_factory=dict)
 
 
 class BandeHautStockage(Modele):
-    """Bande du haut (seaux pleins sur le plateau) : case vide, désactivée (tâche 35 bis)."""
+    """Bande du haut (seaux pleins poussés sur le plateau, tâche 35 bis) : entrée au bord de P1,
+    fin de course logicielle (bord du seau à x ≤ bord_x_max), photo après chaque poussée."""
 
     active: bool = False
     y: float
-    places: dict[Nom, Annotated[int, Field(ge=0)]] = Field(default_factory=dict)
+    entree_x: float
+    bord_x_max: float
+    tolerance_y_m: float = Field(gt=0)
+    # Centres des places en x, par format : du plus loin (1er seau poussé) au plus près (où
+    # arrive le seau poussé).
+    places: dict[Nom, list[float]] = Field(default_factory=dict)
 
 
 class RangeeBocaux(Modele):
@@ -1667,8 +1689,10 @@ class HublotStockage(Modele):
 
 
 class RailOperateurStockage(Modele):
-    y_min: float
-    bord_max_z: float
+    """Haut du seau tenu au-dessus de haut_max_z seulement axe y + rayon du bord ≤ bord_y_max."""
+
+    bord_y_max: float
+    haut_max_z: float
 
 
 class CameraBocalStockage(Modele):
@@ -1724,6 +1748,29 @@ class Stockage(Modele):
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self
+
+
+def _places_en_ligne(
+    quoi: str, centres: list[float], rayon: float, debut: float, fin: float
+) -> list[str]:
+    """Des seaux en ligne (centres en x, du plus loin au plus près) : du plus grand au plus
+    petit, sans se chevaucher, tous entre debut et fin (bords des seaux)."""
+    erreurs = []
+    if not centres:
+        return [f"{quoi} : aucune place"]
+    for loin, pres in zip(centres, centres[1:], strict=False):
+        if loin - pres < 2 * rayon - 1e-9:
+            erreurs.append(
+                f"{quoi} : les places {loin:g} et {pres:g} se chevauchent (seaux de rayon "
+                f"{rayon:g})"
+            )
+    if centres[0] + rayon > fin + 1e-9:
+        erreurs.append(
+            f"{quoi} : le 1er seau ({centres[0]:g}) dépasse {fin:g} (bord à {centres[0] + rayon:g})"
+        )
+    if centres[-1] - rayon < debut - 1e-9:
+        erreurs.append(f"{quoi} : la dernière place ({centres[-1]:g}) sort avant {debut:g}")
+    return erreurs
 
 
 class Machine(Modele):
@@ -2257,7 +2304,11 @@ class Machine(Modele):
             dans(nom, "remplissage_y", getattr(r, nom))
         dans("couvercles → y", "remplissage_y", r.couvercles.y)
         dans("plateau_en_bas_z", "plateau_z", r.plateau_en_bas_z)
-        dans("verrous → pousseur_plateau_max_z", "plateau_z", r.verrous.pousseur_plateau_max_z)
+        dans(
+            "couvercles → y_demi_tour_griffe_min",
+            "remplissage_y",
+            r.couvercles.y_demi_tour_griffe_min,
+        )
         dans("couvercles → plateau_z", "plateau_z", r.couvercles.plateau_z)
         dans("inspection → plateau_z", "plateau_z", r.inspection.plateau_z)
         dans("pousseur_rentre_m", "pousseur", r.pousseur_rentre_m)
@@ -2273,6 +2324,11 @@ class Machine(Modele):
         for nom, file in r.rangement.files.items():
             dans(f"rangement → files → {nom} → y", "remplissage_y", file.y)
             dans(f"rangement → files → {nom} → pousseur_m", "pousseur", file.pousseur_m)
+        if r.rangement.bande_haut is not None:
+            bande = r.rangement.bande_haut
+            dans("rangement → bande_haut → y", "remplissage_y", bande.y)
+            dans("rangement → bande_haut → plateau_z", "plateau_z", bande.plateau_z)
+            dans("rangement → bande_haut → pousseur_m", "pousseur", bande.pousseur_m)
         if r.barres.origine_hw_m < self.axes["barres"].course[1]:
             erreurs.append("remplissage → barres → origine_hw_m : au-delà de la course des barres")
         if r.barres.origine_allee_hw_m < self.axes["barre_allee"].course[1]:
@@ -2423,16 +2479,57 @@ class Machine(Modele):
                     f"stockage → tiroir → places → {format} : il faut une valeur pour chaque "
                     "file de tiroir → files, et seulement elles"
                 )
-            if format in tiroir.quinconce:
-                continue
+            rayon = formats[format].rayon_haut
             for nom, nombre in par_file.items():
-                if nombre * tiroir.avance_par_seau_m > longueur + 1e-9:
+                cale = tiroir.cales.get(format, {}).get(nom, 0.0)
+                centres = tiroir.centres_x.get(format, {}).get(nom)
+                if centres is None:
+                    if nombre * tiroir.avance_par_seau_m > longueur - cale + 1e-9:
+                        erreurs.append(
+                            f"stockage → tiroir → places → {format} → {nom} : {nombre} seaux × "
+                            f"{tiroir.avance_par_seau_m:g} m dépassent la butée (file de "
+                            f"{longueur - cale:g} m)"
+                        )
+                    continue
+                quoi = f"stockage → tiroir → centres_x → {format} → {nom}"
+                if len(centres) != nombre:
+                    erreurs.append(f"{quoi} : {len(centres)} centres pour {nombre} places")
+                erreurs.extend(
+                    _places_en_ligne(quoi, centres, rayon, tiroir.entree_x, tiroir.butee_x - cale)
+                )
+        for nom, par_file in [*tiroir.cales.items(), *tiroir.centres_x.items()]:
+            for file in par_file:
+                if file not in tiroir.files:
+                    erreurs.append(f"stockage → tiroir ({nom}) : file inconnue « {file} »")
+        bande = stockage.bande_haut
+        for format, centres in bande.places.items():
+            if format not in formats:
+                continue
+            erreurs.extend(
+                _places_en_ligne(
+                    f"stockage → bande_haut → places → {format}",
+                    centres,
+                    formats[format].rayon_haut,
+                    bande.entree_x,
+                    bande.bord_x_max,
+                )
+            )
+        if bande.active:
+            rangement = self.remplissage.rangement.bande_haut
+            if rangement is None:
+                erreurs.append(
+                    "stockage → bande_haut active : il faut remplissage → rangement → bande_haut"
+                )
+            elif abs(rangement.y - bande.y) > 1e-9:
+                erreurs.append(
+                    "stockage → bande_haut → y : le même que remplissage → rangement → bande_haut"
+                )
+            for format in formats:
+                if format not in bande.places:
                     erreurs.append(
-                        f"stockage → tiroir → places → {format} → {nom} : {nombre} seaux × "
-                        f"{tiroir.avance_par_seau_m:g} m dépassent la butée (file de "
-                        f"{longueur:g} m)"
+                        f"stockage → bande_haut → places : il faut le format « {format} »"
                     )
-        for nom in [*tiroir.places, *tiroir.quinconce, *stockage.bande_haut.places]:
+        for nom in [*tiroir.places, *tiroir.centres_x, *tiroir.cales, *bande.places]:
             if nom not in formats:
                 erreurs.append(f"stockage : format « {nom} » absent de griffe → formats")
         # Coin d'inspection : des places du quinconce, chacune une seule fois.

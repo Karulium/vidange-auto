@@ -851,7 +851,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   pour chaque k, ordre de vidage, capacité des files (C en quinconce), file 0,785 refusée sans chariot du fût, boucle
   ouverte ⇒ rien ne bouge, coin d'inspection plein, trajets refusés (boîtes, caméra du bocal, pile pleine).
   « Testé sur le vrai matériel : non » ; procédure d'essai (boucle des microrupteurs, cotes des piles, tiroir).
-- [ ] **35 bis. Bande du haut : seaux pleins poussés sur le plateau du Stockage** — Modèle : Sonnet, effort moyen.
+- [x] **35 bis. Bande du haut : seaux pleins poussés sur le plateau du Stockage** — Modèle : Sonnet, effort moyen.
   **Après la tâche 35.** D'après la section « Pousseur côté allée et bande du haut » de `docs/decisions.md` (31/10).
   1. Remplissage : retirer la règle des anneaux du fût (périmée) et « pousseur rentré au-dessus de 0,20 » ; nouvelle
      règle 12 : poussée à toute hauteur, barres ouvertes (hw ≥ 0,29) et bras de fermeture rangé, plusieurs seaux à la
@@ -984,7 +984,8 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   (l'un muet, l'autre lu). Procédure d'essai sur le vrai capteur ; « testé sur le vrai matériel : non ».
 - [ ] 39. Spray (et le programme de sa carte ESP32)
 - [ ] 40. Micropore
-- [ ] 41. Fermeture des seaux
+- [ ] 41. Fermeture des seaux (à prévoir : diamètre du couvercle dans la table des formats, A 0,28, B 0,23, C 0,315,
+  D 0,28, et le contrôle au démarrage de la bande du haut avec lui : `docs/decisions.md`, PR n° 54).
 - [ ] 42. Air comprimé
 - [ ] 43. Entonnoir
 - [ ] 44. App « machine » dans le logiciel de culture (avec l'accord de Karulium)

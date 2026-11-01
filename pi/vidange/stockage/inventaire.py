@@ -5,7 +5,8 @@ Chaque changement est noté par `noter(place, contenu, nombre)` (dans le registr
 Les caméras vérifient (vision, plus tard) ; l'opérateur corrige depuis l'écran.
 
 Noms des places : pile_1..., fin_1... (piles de seaux vides), couvercles, file_1... (tiroir),
-bande_haut, bocal_j_i et semence_r_i (bocaux), boite_<nom> (boîtes à capsules).
+bande_haut (seaux pleins sur le plateau, un seul format), bocal_j_i et semence_r_i (bocaux),
+boite_<nom> (boîtes à capsules).
 """
 
 from collections.abc import Callable
@@ -14,7 +15,8 @@ from dataclasses import dataclass
 
 @dataclass
 class Pile:
-    """Une pile de seaux vides : son format (None : vide) et son nombre de seaux."""
+    """Une pile de seaux (vides, ou pleins sur la bande du haut) : son format (None : vide) et
+    son nombre de seaux."""
 
     format: str | None = None
     nombre: int = 0
@@ -31,7 +33,7 @@ class InventaireStockage:
         self.piles = {nom: Pile() for nom in piles}
         self.couvercles = 0
         self.files = {nom: 0 for nom in files}
-        self.bande_haut = 0
+        self.bande_haut = Pile()
         # Bocaux posés : place → ce qu'il y a (« bocal », « suspect », « semence »...).
         self.bocaux: dict[str, str] = {}
         self.boites = {nom: 0 for nom in boites}
@@ -51,6 +53,10 @@ class InventaireStockage:
     def changer_file(self, nom: str, nombre: int) -> None:
         self.files[nom] = nombre
         self._noter(nom, None, nombre)
+
+    def changer_bande(self, format: str | None, nombre: int) -> None:
+        self.bande_haut = Pile(format, nombre) if nombre > 0 else Pile()
+        self._noter("bande_haut", self.bande_haut.format, self.bande_haut.nombre)
 
     def changer_bocal(self, place: str, contenu: str | None) -> None:
         if contenu is None:
@@ -76,7 +82,7 @@ class InventaireStockage:
             elif place == "couvercles":
                 self.couvercles = nombre
             elif place == "bande_haut":
-                self.bande_haut = nombre
+                self.bande_haut = Pile(contenu, nombre) if nombre > 0 else Pile()
             elif place.startswith("boite_") and place[6:] in self.boites:
                 self.boites[place[6:]] = nombre
             elif place.startswith(("bocal_", "semence_")) and contenu is not None and nombre:

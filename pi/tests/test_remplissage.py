@@ -1,6 +1,6 @@
-"""Remplissage (tâches 34, 34 bis et 34 ter) : réglages, positions interdites du chariot, gestes
-sur le chariot imaginaire, scénario « remplissage » du simulateur avec le Mycélium, chariot sur un
-faux FluidNC, outil d'essai."""
+"""Remplissage (tâches 34, 34 bis, 34 ter et 35 bis) : réglages, positions interdites du
+chariot, gestes sur le chariot imaginaire, scénario « remplissage » du simulateur avec le
+Mycélium, chariot sur un faux FluidNC, outil d'essai."""
 
 import threading
 import time
@@ -10,6 +10,7 @@ import pytest
 from vidange.chef import ErreurEtape
 from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.fluidnc import FauxFluidnc, Liaison
+from vidange.griffe.regles import Pose as PoseGriffe
 from vidange.griffe.simulation import FausseForce
 from vidange.lavage.module import module_lavage_couvercles
 from vidange.lavage.simulation import couvercles_du_simulateur
@@ -55,7 +56,8 @@ def test_reglages_du_remplissage():
     assert (r.poste_y, r.dosage_y, r.ecarte_y, r.pose_y) == (0.135, 0.155, 0.40, 0.50)
     assert MACHINE.axes["plateau_z"].course == (0.175, 0.575)
     assert MACHINE.axes["barres"].course == (0.1195, 0.305)
-    assert r.verrous.anneaux_y == [(0.14, 0.41), (0.59, 0.86)]
+    # Tâche 35 bis : plus de règle des anneaux du fût (31/10).
+    assert not hasattr(r.verrous, "anneaux_y")
     assert r.verrous.joues_barres == (0.235, 0.255) and r.verrous.joues_plateau_max_z == 0.48
     assert (r.verrous.barres_ouvertes_au_dessus_z, r.verrous.barres_ouvertes_min) == (0.515, 0.29)
     assert r.formats["seau_b"].pose_plateau_z == 0.5125
@@ -66,10 +68,14 @@ def test_reglages_du_remplissage():
     assert (r.prise_double.descente_plateau_m, r.prise_double.descente_tete_m) == (0.05, 0.028)
     assert r.prise_double.remontee_plateau_m == 0.028
     # Tâche 34 bis : pousseur rentré à son zéro (côté fût), course 0,325 ; bout du chariot à
-    # 0,40 de l'axe ; plus de bande du haut.
+    # 0,40 de l'axe. Tâche 35 bis : bande du haut, plateau à 0,4985 (0,496 à 0,501) ; règle 14.
     assert r.pousseur_rentre_m == 0 and MACHINE.axes["pousseur"].course == (0.0, 0.325)
-    assert r.verrous.pousseur_plateau_max_z == 0.20 and r.verrous.bout_y_m == 0.40
+    assert r.verrous.bout_y_m == 0.40
     assert {file.pousseur_m for file in r.rangement.files.values()} == {0.325}
+    bande = r.rangement.bande_haut
+    assert bande is not None and (bande.y, bande.plateau_z) == (0.215, 0.4985)
+    assert bande.plateau_plage_z == (0.496, 0.501)
+    assert r.couvercles.y_demi_tour_griffe_min == 0.515
     # Les 6 axes sur la carte n° 2 (dont les 2 barres, tâche 34 quater), les axes d'exemple sur
     # la n° 3.
     axes = ("remplissage_y", "barres", "barre_allee", "plateau_a")
@@ -135,17 +141,14 @@ def test_le_plateau_ne_depasse_jamais_0_575(reglages):
 # ---------------------------------------------------------------- règles de position
 
 
-def test_regle_1_anneaux_du_fut():
-    haut = POSTE.avec(z=0.45)
-    assert REGLES.refus_pose(haut, PERMIS) is None  # au poste
-    assert REGLES.refus_pose(haut.avec(y=0.155), PERMIS) is None  # au dosage
-    assert REGLES.refus_pose(haut.avec(y=0.50), PERMIS) is None  # entre 0,41 et 0,59
-    for y in (0.25, 0.70):
-        assert "anneaux du fût" in REGLES.refus_pose(haut.avec(y=y), PERMIS)
-        assert REGLES.refus_pose(POSTE.avec(y=y), PERMIS) is None
-    # Quitter le poste plateau haut : refusé en route.
-    refus = REGLES.refus_mouvement(haut, haut.avec(y=0.50), PERMIS)
-    assert refus is not None and "en route" in refus and "anneaux" in refus
+def test_plus_de_regle_des_anneaux_du_fut():
+    """Tâche 35 bis : la règle des anneaux est périmée (tôle fixe à x 0,655) ; chariot à
+    y 0,215 plateau haut : permis, et il roule plateau haut."""
+    haut = POSTE.avec(z=0.575)
+    for y in (0.135, 0.215, 0.25, 0.50, 0.70):
+        assert REGLES.refus_pose(haut.avec(y=y), PERMIS) is None
+    assert REGLES.refus_mouvement(haut, haut.avec(y=0.70), PERMIS) is None
+    assert REGLES.refus_mouvement(haut.avec(y=0.70), haut.avec(y=0.215), PERMIS) is None
 
 
 def test_les_2_barres_ont_la_meme_course(reglages):
@@ -199,28 +202,42 @@ def test_regle_3_barres_ouvertes_au_dessus_de_0_515():
     assert "elles sont à 0,2895" in REGLES.refus_pose(allee, PERMIS)
 
 
-def test_regle_4_pousseur_rentre_des_que_le_plateau_monte():
-    sorti = POSTE.avec(y=0.215, pousseur=0.325)
+def test_regle_12_poussee_a_toute_hauteur():
+    """Poussée à 0,4985 (bande du haut) permise barres ouvertes et bras de fermeture rangé,
+    refusée sinon ; plateau au plus 0,575 (sa course)."""
+    sorti = POSTE.avec(y=0.215, z=0.4985, pousseur=0.325)
     assert REGLES.refus_pose(sorti, PERMIS) is None
-    assert "pousseur sorti" in REGLES.refus_pose(POSTE.avec(y=0.50, z=0.30, pousseur=0.32), PERMIS)
-    # Poussée refusée plateau au-dessus de 0,20, partout (même entre les anneaux).
-    for z in (0.21, 0.4985):
-        assert "pousseur sorti" in REGLES.refus_pose(sorti.avec(y=0.50, z=z), PERMIS)
-    # Le plateau ne monte pas pousseur sorti.
-    refus = REGLES.refus_mouvement(sorti.avec(y=0.50), sorti.avec(y=0.50, z=0.25), PERMIS)
-    assert refus is not None and "pousseur sorti" in refus
+    assert REGLES.refus_pose(sorti.avec(z=0.175), PERMIS) is None
+    assert REGLES.refus_pose(sorti.avec(z=0.575), PERMIS) is None
+    assert "hors de sa course" in REGLES.refus_pose(sorti.avec(z=0.58), PERMIS)
+    # Barres pas ouvertes (une seule suffit) : refusé.
+    refus = REGLES.refus_pose(sorti.avec(barres=0.2905, barre_allee=0.2895), PERMIS)
+    assert refus is not None and "pousseur sorti : seulement barres ouvertes" in refus
+    assert "pousseur sorti" in REGLES.refus_pose(sorti.avec(z=0.175, barres=0.25), PERMIS)
+    # Bras de fermeture (galet) pas rangé, ou pas connu : refusé, même plateau en bas.
+    for bras, etat in ((False, "pas rangé"), (None, "pas connu")):
+        contexte = Contexte(True, None, True, bras)
+        assert etat in REGLES.refus_pose(sorti.avec(z=0.175), contexte)
+    # Le plateau monte et descend pousseur sorti (plusieurs seaux à la suite).
+    assert REGLES.refus_mouvement(sorti, sorti.avec(z=0.30), PERMIS) is None
 
 
 def test_le_pousseur_rentre_a_son_zero_et_pousse_vers_le_stockage():
     banc = Banc()
     banc.jouer(lambda: banc.remplissage.geste_plateau(0.25))
-    # Sortir le pousseur plateau à 0,25 : le plateau descend d'abord.
+    # Sortir le pousseur plateau à 0,25 : permis (règle 12), le plateau reste où il est.
     banc.jouer(lambda: banc.remplissage.geste_pousseur(0.325))
-    assert (banc.pose.z, banc.pose.pousseur) == (0.175, 0.325)
+    assert (banc.pose.z, banc.pose.pousseur) == (0.25, 0.325)
+    # Barres fermées : elles s'ouvrent avant que le pousseur sorte.
+    banc.jouer(lambda: banc.remplissage.geste_pousseur(0.0))
+    banc.jouer(lambda: banc.remplissage.geste_barres(0.20))
+    banc.jouer(lambda: banc.remplissage.geste_pousseur(0.325))
+    assert banc.pas()[-2:] == ["barres ouvertes", "pousseur à 0,325"]
+    assert (banc.pose.z, banc.pose.pousseur) == (0.25, 0.325)
     # Monter le plateau : le pousseur rentre d'abord à son zéro.
-    banc.jouer(lambda: banc.remplissage.geste_plateau(0.25))
-    assert banc.pas()[-2:] == ["pousseur rentré", "plateau à 0,25"]
-    assert (banc.pose.z, banc.pose.pousseur) == (0.25, 0.0)
+    banc.jouer(lambda: banc.remplissage.geste_plateau(0.30))
+    assert banc.pas()[-2:] == ["pousseur rentré", "plateau à 0,3"]
+    assert (banc.pose.z, banc.pose.pousseur) == (0.30, 0.0)
 
 
 def test_regle_5_bras_du_galet():
@@ -292,10 +309,11 @@ def test_regle_9_descente_de_la_prehension():
 
 
 def test_une_pose_deja_interdite_peut_en_sortir():
-    # Après une coupure : plateau haut sous les anneaux. Le descendre est permis.
-    perdu = POSTE.avec(y=0.30, z=0.45)
+    # Après une coupure : plateau haut, une barre entre les joues. Le descendre est permis.
+    perdu = POSTE.avec(y=0.30, z=0.50, barres=0.245)
+    assert REGLES.refus_pose(perdu, PERMIS) is not None
     assert REGLES.refus_mouvement(perdu, perdu.avec(z=0.175), PERMIS) is None
-    assert REGLES.refus_mouvement(perdu, perdu.avec(z=0.50), PERMIS) is not None
+    assert REGLES.refus_mouvement(perdu, perdu.avec(z=0.52), PERMIS) is not None
 
 
 # ---------------------------------------------------------------- gestes (chariot imaginaire)
@@ -383,7 +401,8 @@ def test_ramener_au_poste_puis_ranger():
     remplissage.seau = SeauPlateau("seau_a", "S1", angle_anse=12.0)
     banc.jouer(remplissage.geste_ramener_au_poste)
     assert (banc.pose.y, banc.pose.z) == (0.135, pytest.approx(0.53))
-    assert "plateau en bas" in banc.pas()
+    # Plus de règle des anneaux : le chariot roule plateau haut.
+    assert "plateau en bas" not in banc.pas()
     assert remplissage.seau_au_poste()
     # Le seau tourne pendant les versements, puis revient à l'angle de l'anse (modulo 90°).
     remplissage.tourner_seau(True)
@@ -421,6 +440,103 @@ def test_ranger_loin_refuse_sans_chariot_du_fut():
     banc.chariot.seau_pose = True
     banc.jouer(lambda: remplissage.geste_ranger("file_1"))
     assert banc.pose.y == 0.215 and remplissage.seau is None
+
+
+def test_ranger_en_haut_dans_l_ordre():
+    """Bande du haut : a) bras rangé ; b) barres ouvertes ; c) y 0,215 ; d) plateau 0,4985 ;
+    e) poussée ; f) pousseur rentré, plateau redescendu."""
+    banc = Banc()
+    remplissage = banc.remplissage
+    banc.jouer(lambda: remplissage.geste_aller_a_la_pose("seau_a"))
+    remplissage.seau = SeauPlateau("seau_a", "S1", angle_anse=0.0)
+    banc.jouer(lambda: remplissage.geste_barres(0.125))
+    banc.chariot.seau_pose, banc.chariot.contenu_kg = True, 6.0
+    banc.jouer(remplissage.geste_ranger_en_haut)
+    assert banc.pas()[-7:] == [
+        "barres ouvertes",
+        "c) chariot à la bande du haut",
+        "pesée du seau plein",
+        "d) plateau à la hauteur de la bande du haut",
+        "e) le pousseur pousse le seau sur la bande du haut",
+        "f) pousseur rentré",
+        "plateau en bas",
+    ]
+    # La poussée part plateau à 0,4985 (le pas d'avant), chariot à y 0,215.
+    plateau, poussee = banc.etat.mouvements[-4], banc.etat.mouvements[-3]
+    assert plateau.axes["plateau_z"][1] == pytest.approx(0.4985)
+    assert set(poussee.axes) == {"pousseur"} and poussee.axes["pousseur"][1] == 0.325
+    assert banc.pose.y == 0.215
+    assert remplissage.seau is None and banc.photos == ["seau S1 rangé en bande_haut"]
+    assert (banc.pose.z, banc.pose.pousseur) == (0.175, 0.0)
+
+
+def test_ranger_en_haut_refuse():
+    # a) Bras de fermeture pas rangé : rien ne bouge.
+    banc = Banc(bras_galet_range=lambda: None)
+    banc.remplissage.seau = SeauPlateau("seau_a", "S1", angle_anse=0.0)
+    with pytest.raises(ErreurEtape, match="bras de fermeture pas connu"):
+        banc.jouer(banc.remplissage.geste_ranger_en_haut)
+    assert banc.etat.mouvements == []
+    # Plateau hors de 0,496-0,501 pour la bande du haut : refusé.
+    remplissage = Banc().remplissage
+    bande = POSTE.avec(y=0.215)
+    assert remplissage.refus_poussee_bande(bande.avec(z=0.4985)) is None
+    assert remplissage.refus_poussee_bande(bande.avec(z=0.496)) is None
+    for z in (0.4955, 0.5015, 0.175):
+        assert "entre 0,496 et 0,501" in remplissage.refus_poussee_bande(bande.avec(z=z))
+    assert "la bande du haut est à y 0,215" in remplissage.refus_poussee_bande(
+        bande.avec(y=0.50, z=0.4985)
+    )
+
+
+def test_plateau_de_la_bande_hors_de_sa_plage_refuse(reglages):
+    remplacer(reglages / "machine.yaml", "plateau_z: 0.4985,", "plateau_z: 0.4950,")
+    assert "bande_haut → plateau_z : 0.495 hors de plateau_plage_z" in erreur_de(reglages)
+
+
+def test_ranger_dans_la_file_avec_une_cale():
+    banc = Banc()
+    remplissage = banc.remplissage
+    remplissage.seau = SeauPlateau("seau_c", "S1", angle_anse=0.0)
+    banc.jouer(lambda: remplissage.geste_ranger("file_2", 0.175))
+    assert banc.etat.mouvements[-2].axes["pousseur"][1] == 0.175
+
+
+def test_regle_14_demi_tours_de_la_griffe():
+    """Mode couvercles : la tête de la griffe ne tourne que chariot à y ≥ 0,515 ; il ne revient
+    à y 0,50 qu'après."""
+    banc = Banc()
+    remplissage = banc.remplissage
+    # Hors du mode couvercles : pas de condition.
+    assert remplissage.refus_demi_tour_griffe() is None
+    banc.jouer(remplissage.geste_mode_couvercles)
+    assert banc.pose.y == 0.50
+    refus = remplissage.refus_demi_tour_griffe()
+    assert refus is not None and "y ≥ 0,515" in refus
+
+    class Griffe:
+        verrou_chariot = None
+        tourne = False
+
+        def tete_tourne(self) -> bool:
+            return self.tourne
+
+    griffe = Griffe()
+    remplissage.brancher_griffe(griffe)  # type: ignore[arg-type]
+    depart = PoseGriffe(0.5, 0.68, 1.075, 0.0, 0.0)
+    assert "y ≥ 0,515" in griffe.verrou_chariot(depart, depart.avec(a=180.0))
+    # Sans rotation de la tête : pas concerné.
+    assert griffe.verrou_chariot(depart, depart.avec(z=1.10)) is None
+    banc.jouer(remplissage.geste_degager_griffe)
+    assert banc.pose.y == pytest.approx(0.515)
+    assert griffe.verrou_chariot(depart, depart.avec(a=180.0)) is None
+    # Retour à y 0,50 refusé tant que la tête tourne, permis après.
+    griffe.tourne = True
+    with pytest.raises(ErreurEtape, match="règle 14"):
+        banc.jouer(remplissage.geste_revenir_au_retourneur)
+    griffe.tourne = False
+    banc.jouer(remplissage.geste_revenir_au_retourneur)
+    assert remplissage.chariot_en_place()
 
 
 def test_alarme_des_barres_pendant_le_centrage():
@@ -467,7 +583,8 @@ def test_le_mycelium_mene_le_chariot_au_dosage():
     etat = remplissage.etat()
     assert etat is not None and not etat.immobile and etat.y == 0.135
     banc.finir()
-    assert remplissage.etat() == remplissage.etat().__class__(0.40, 0.175, True)  # type: ignore[union-attr]
+    # Le plateau reste où il est (plus de règle des anneaux).
+    assert remplissage.etat() == remplissage.etat().__class__(0.40, 0.53, True)  # type: ignore[union-attr]
     remplissage.amener_au_dosage(0.53)
     banc.finir()
     assert (banc.pose.y, banc.pose.z, banc.pose.barres) == (0.155, 0.53, 0.30)

@@ -166,6 +166,9 @@ class Griffe:
         # Verrou du Stockage (Stockage.brancher_griffe, tâche 35) pour chaque pas : boucle du
         # tiroir fermée, mât à x ≤ 2,325. Raison du refus, ou None. Sans stockage : rien.
         self.verrou_stockage: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
+        # Verrou du chariot de remplissage (Remplissage.brancher_griffe, règle 14 : en mode
+        # couvercles, la tête ne tourne que chariot à y ≥ 0,515). Sans remplissage : rien.
+        self.verrou_chariot: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
 
     # ------------------------------------------------------------ état
 
@@ -178,6 +181,11 @@ class Griffe:
             dosage_en_cours=self._dosage(),
             camera_dosage_pivote=self._camera_dosage_pivote(),
         )
+
+    def tete_tourne(self) -> bool:
+        """Un pas en cours fait tourner la tête (règle 14 du chariot de remplissage)."""
+        pas = self._pas
+        return self._geste is not None and pas is not None and "a" in pas.cibles
 
     def hors_du_fut(self) -> bool:
         """Pour la pesée du fût : elle n'est lue que si la griffe n'est pas dans le fût."""
@@ -234,6 +242,8 @@ class Griffe:
         refus = self.regles.refus_mouvement(self.pose, cible, self.contexte())
         if refus is None:
             refus = self.verrou_stockage(self.pose, cible)
+        if refus is None:
+            refus = self.verrou_chariot(self.pose, cible)
         if refus is not None:
             raise ErreurEtape(f"griffe, « {pas.texte} » refusé : {refus}", QUOI_FAIRE)
         journal.debug("Griffe : %s", pas.texte)

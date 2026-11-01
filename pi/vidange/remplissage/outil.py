@@ -3,7 +3,7 @@
   vidange-remplissage etat                    position des 5 axes, barrière, alarme des barres,
                                               balance
   vidange-remplissage barriere                barrière et balance lues 20 fois (10 s)
-  vidange-remplissage aller 0.5               rouler jusqu'à y (plateau baissé d'abord s'il faut)
+  vidange-remplissage aller 0.5               rouler jusqu'à y
   vidange-remplissage plateau 0.45            plateau à cette hauteur (dessus, m)
   vidange-remplissage barres 0.2              barres à cet écartement hw (m)
   vidange-remplissage pousseur 0.325          pousseur à cette position (m ; 0 = rentré)
@@ -12,6 +12,7 @@
   vidange-remplissage centrer seau_a          barres au contact (en position), puis ouvertes
   vidange-remplissage poste seau_a            ramener au poste (plateau à la hauteur du format)
   vidange-remplissage ranger seau_a file_1    pousser le seau du plateau sur cette file
+  vidange-remplissage ranger seau_a bande_haut   ... ou sur la bande du haut (plateau à 0,4985)
   vidange-remplissage couvercles              mode couvercles (retourneur)
   vidange-remplissage inspection              mode inspection des bocaux, un arrêt de 45°
   ... --faux                                  avec un faux FluidNC (essai de l'outil)
@@ -245,7 +246,11 @@ def _faire(options: argparse.Namespace, remplissage: Remplissage, chariot: Chari
             pose=lambda: r.geste_aller_a_la_pose(format),
             centrer=r.geste_centrer,
             poste=r.geste_ramener_au_poste,
-            ranger=lambda: r.geste_ranger(valeurs[1]),
+            ranger=lambda: (
+                r.geste_ranger_en_haut()
+                if valeurs[1] == "bande_haut"
+                else r.geste_ranger(valeurs[1])
+            ),
         )
     _jouer(remplissage, gestes[commande])
     if commande == "inspection":

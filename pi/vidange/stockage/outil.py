@@ -34,10 +34,17 @@ def _places(machine: Machine, format: str) -> list[str]:
         assert machine.remplissage is not None
         y_file = machine.remplissage.rangement.files[nom].y
         lignes.append(f"  {nom} y {_cm(y_file)} : {nombre} seaux")
-    lignes.append(f"  capacité : {places.capacite_tiroir(machine, format)} seaux")
-    bande = machine.stockage.bande_haut
-    etat = "active" if bande.active else "désactivée (case vide)"
-    lignes.append(f"Bande du haut : {etat}")
+    lignes.append(f"  capacité du tiroir : {places.capacite_tiroir(machine, format)} seaux")
+    centres = places.places_bande(machine, format)
+    if centres:
+        x = ", ".join(_cm(c) for c in centres)
+        lignes.append(
+            f"Bande du haut y {_cm(machine.stockage.bande_haut.y)} : {len(centres)} places "
+            f"(centres x {x})"
+        )
+    else:
+        lignes.append("Bande du haut : désactivée")
+    lignes.append(f"Capacité d'un lot : {places.capacite_lot(machine, format)} seaux")
     lignes.append(
         f"Bocaux : {len(places.places_bocaux(machine))} places en quinconce "
         f"({len(places.places_saines(machine))} saines en mode inspection), "
