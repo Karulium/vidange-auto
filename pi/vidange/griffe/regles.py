@@ -74,6 +74,8 @@ class ReglesGriffe:
         self.courses.update(z=machine.axes["griffe_z"].course, a=machine.axes["griffe_a"].course)
         # Boîte de la caméra du dosage (la même que pour la préhension, docs/decisions.md, règle 2).
         self.boite_camera = machine.prehension.camera_dosage if machine.prehension else None
+        # Bandes du pont où la tête ne tourne pas et reste à un angle permis (Portique).
+        self.bouts_bloques = machine.portique.bouts_bloques_griffe if machine.portique else []
 
     # ------------------------------------------------------------ outils
 
@@ -183,6 +185,21 @@ class ReglesGriffe:
         if pose.b > 1 + _EGAL:
             return "godet au-delà de « grand ouvert »"
         classe = self._classe_ouverture(pose.b)
+        if not classe and g.mat_y_min_ferme is not None and pose.y < g.mat_y_min_ferme - _EGAL:
+            return (
+                f"godet fermé avec le mât à y {_m(pose.y)} m : il faut y ≥ "
+                f"{_m(g.mat_y_min_ferme)} m"
+            )
+        for bout in self.bouts_bloques:
+            debut, fin = bout.pont_x
+            if debut + _EGAL < pont <= fin + _EGAL and not any(
+                ecart_angle(pose.a, angle) <= g.rotation.tolerance_deg for angle in bout.angles_deg
+            ):
+                angles = " ou ".join(f"{_m(angle)}°" for angle in bout.angles_deg)
+                return (
+                    f"pont à x {_m(pont)} m (au-delà de {_m(debut)}) : tête à {angles} "
+                    f"seulement (elle est à {_m(pose.a)}°)"
+                )
         if classe:
             debut, fin = g.mat_y_grand_ouvert
             if not debut - _EGAL <= pose.y <= fin + _EGAL:

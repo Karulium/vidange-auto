@@ -45,6 +45,16 @@ def format_seau(machine: "Machine", format: str) -> "FormatSeau":
 # ------------------------------------------------------------ piles de seaux vides
 
 
+def prise_y(machine: "Machine", y: float) -> float:
+    """Le y de la tête pour prendre (ou poser) le seau d'une pile d'axe y : y lui-même, ou le
+    bout de la course du chariot s'il en est à moins de `piles → prise_hors_axe_max_m`."""
+    debut, fin = machine.axes["chariot_y"].course
+    tete = min(max(y, debut), fin)
+    if abs(tete - y) <= _stockage(machine).piles.prise_hors_axe_max_m + _EGAL:
+        return tete
+    return y
+
+
 def seaux_par_pile(machine: "Machine", format: str) -> int:
     """Le plus de seaux d'une pile de ce format."""
     piles = _stockage(machine).piles

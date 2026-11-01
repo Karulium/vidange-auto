@@ -224,9 +224,11 @@ def test_reglages_du_chef_manquants(reglages):
 def test_lieu_sur_du_depot():
     reglages = charger_reglages(DOSSIER_PI / "reglages")
     gestes = reglages.machine.lieu_sur
-    assert [(g.prise_origine, g.aller) for g in gestes] == [
-        ("mycelium_lavage", None),
-        (None, "exemple_repos"),
+    # D'abord la prise d'origine du portique, dans son ordre (tâche 36).
+    assert [(g.portique, g.prise_origine, g.aller) for g in gestes] == [
+        ("origine", None, None),
+        (None, "mycelium_lavage", None),
+        (None, None, "exemple_repos"),
     ]
     assert reglages.programme.fiabilite.onduleur.commande_arret[0] == "sudo"
 
@@ -237,14 +239,14 @@ def test_lieu_sur_verifie(reglages):
     remplacer(machine, "  - aller: exemple_repos\n", "  - aller: nulle_part\n")
     ajouter(machine, "  - prise_origine: portique\n    delai: absent\n")
     message = erreur_de(reglages)
-    assert "lieu_sur n° 2 : position inconnue « nulle_part »" in message
-    assert "lieu_sur n° 3 : délai « absent » absent de durees" in message
+    assert "lieu_sur n° 3 : position inconnue « nulle_part »" in message
+    assert "lieu_sur n° 4 : délai « absent » absent de durees" in message
 
 
 def test_un_seul_geste_par_ligne_de_lieu_sur(reglages):
     ajouter(reglages / "machine.yaml", "  - delai: exemple_deplacement_max\n")
     message = erreur_de(reglages)
-    assert "machine.yaml, lieu_sur → n° 3 : écrire « prise_origine: carte » ou « aller" in message
+    assert "machine.yaml, lieu_sur → n° 4 : écrire « prise_origine: carte », « aller" in message
 
 
 def test_lieu_sur_carte_inconnue(reglages):
@@ -253,7 +255,7 @@ def test_lieu_sur_carte_inconnue(reglages):
         "  - prise_origine: mycelium_lavage\n",
         "  - prise_origine: zut\n",
     )
-    assert "lieu_sur n° 1 : carte « zut » absente de fluidnc.yaml" in erreur_de(reglages)
+    assert "lieu_sur n° 2 : carte « zut » absente de fluidnc.yaml" in erreur_de(reglages)
 
 
 def test_seuils_de_sante_verifies(reglages):

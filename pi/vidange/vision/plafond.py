@@ -1,13 +1,15 @@
 """La caméra du plafond : contrôle du lave-bocal, et « deviner le travail ».
 
-    plafond = CameraPlafond(reglages.vision, photographe, reconnaissance, pont_x)
+    plafond = CameraPlafond(reglages.vision, photographe, reconnaissance, pont_x,
+                            places_photo(reglages.machine), tolerance)
     controle = ControleLaveBocal(plafond, alerter)
     controle.refus(ecran_pose=False)       # avant de lever un seau dans le fût de lavage...
     deviner = DevinerTravail(plafond)
     proposition = deviner.regarder()       # la règle qui gagne, son travail, la photo
 
-Une photo du plafond ne se prend que pont garé au bout opposé (sinon il cache la vue), et une
-photo plus vieille que `photo_age_max_s` est refusée.
+Une photo du plafond ne se prend que pont garé au bout opposé à la zone photographiée (sinon il
+cache la vue : places du Portique, `vidange.portique.places_photo`), et une photo plus vieille que
+`photo_age_max_s` est refusée.
 
 1. Lave-bocal, juste avant chaque geste dangereux pour lui (lever un seau dans le fût de lavage,
    tourner noyau ou couronne) : repère ArUco vu ⇒ lave-bocal posé (seau, noyau, couronne
@@ -23,7 +25,7 @@ que l'interface et un faux (`FausseReconnaissance`). Sans reconnaissance sûre :
 """
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol
@@ -150,30 +152,37 @@ class CameraPlafond:
         photographe: Photographe,
         reconnaissance: Reconnaissance,
         pont_x: Callable[[], float | None],
+        places_pont: Mapping[str, float],
+        tolerance_m: float,
         horloge: Callable[[], float] = time.monotonic,
     ) -> None:
-        """`pont_x` : position du pont (None : inconnue)."""
+        """`pont_x` : position du pont (None : inconnue). `places_pont` : x du pont pour
+        photographier chaque zone (« fut_poste », « stockage »), à `tolerance_m` près."""
         self.reglages = reglages
         self.plafond = reglages.plafond
         self.photographe = photographe
         self.reconnaissance = reconnaissance
         self._pont_x = pont_x
+        self.places_pont = dict(places_pont)
+        self.tolerance_m = tolerance_m
         self.horloge = horloge
 
-    def refus_photo(self) -> str | None:
-        """Pourquoi on ne peut pas prendre la photo maintenant (pont pas garé), ou None."""
+    def refus_photo(self, zone: str = "fut_poste") -> str | None:
+        """Pourquoi on ne peut pas photographier cette zone maintenant (pont pas garé au bout
+        opposé), ou None."""
         x = self._pont_x()
         if x is None:
             return "position du pont inconnue : pas de photo du plafond"
-        if x < self.plafond.pont_gare_x_min:
+        place = self.places_pont[zone]
+        if abs(x - place) > self.tolerance_m + 1e-9:
             return (
-                f"pont pas garé (x {x:.3f} m, il faut x ≥ {self.plafond.pont_gare_x_min:.3f} m) : "
-                "il cache la vue du plafond"
+                f"pont pas garé (x {x:.3f} m, il faut x {place:.3f} m pour photographier "
+                f"« {zone} ») : il cache la vue du plafond"
             )
         return None
 
-    def photo(self) -> Photo:
-        refus = self.refus_photo()
+    def photo(self, zone: str = "fut_poste") -> Photo:
+        refus = self.refus_photo(zone)
         if refus is not None:
             raise ErreurVision(refus)
         return self.photographe.mesure("plafond")

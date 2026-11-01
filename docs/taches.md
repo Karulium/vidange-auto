@@ -872,7 +872,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   pour la bande du haut ; chariot à y 0,215 plateau haut permis (plus de règle des anneaux) ; places et capacité par
   format ; seau mal aligné à la photo ⇒ arrêt ; scénario du simulateur avec 18 seaux A. « Testé sur le vrai
   matériel : non ».
-- [ ] **36. Portique : axes du pont et des deux Z, prise d'origine, vitesses, garage, carte n° 1** — Modèle : Opus,
+- [x] **36. Portique : axes du pont et des deux Z, prise d'origine, vitesses, garage, carte n° 1** — Modèle : Opus,
   effort moyen. **Avant le solveur (tâche 23).**
   Sources (recopiées ici le 01/11/2026) : fiche du module « Portique », **gelé le 28/10/2026**, et le fichier écrit
   pour le logiciel par le fil Portique (`portique/logiciel/portique-pour-logiciel.md`, 01/11, repère du portique).

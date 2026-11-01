@@ -483,6 +483,6 @@ Les chiffres ci-dessous vont dans `pi/reglages/machine.yaml`, jamais dans le cod
 
 ## État des modules (26/10/2026)
 
-- **Figés** (on peut coder leurs gestes) : Poste du fût, Lavage, Griffe (Transfert), Porte-bocal, Mycélium, Guidage caméra, Préhension, écran Nextion.
-- **Pas encore figés** (case vide seulement) : Remplissage, Stockage, Portique, Nettoyage, Spray, Micropore, Fermeture des seaux, Air comprimé, Entonnoir.
+- **Figés** (on peut coder leurs gestes) : Poste du fût, Lavage, Griffe (Transfert), Porte-bocal, Mycélium, Guidage caméra, Préhension, écran Nextion, Portique (gelé le 28/10/2026, tâche 36).
+- **Pas encore figés** (case vide seulement) : Remplissage, Stockage, Nettoyage, Spray, Micropore, Fermeture des seaux, Air comprimé, Entonnoir.
 - Références encore à choisir : fins de course du Remplissage, microrupteurs du Stockage.

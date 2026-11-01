@@ -83,13 +83,18 @@ class GesteLieuSur(Modele):
     prise_origine: Nom | None = None
     # Position nommée (plus haut dans « positions ») où envoyer les axes.
     aller: Nom | None = None
+    # Geste du portique (partie « portique ») : sa prise d'origine dans l'ordre, ou son garage.
+    portique: Literal["origine", "garage"] | None = None
     # Délai maximal du geste (nom dans « durees »).
     delai: Nom
 
     @model_validator(mode="after")
     def _un_seul_geste(self) -> "GesteLieuSur":
-        if (self.prise_origine is None) == (self.aller is None):
-            raise ValueError("écrire « prise_origine: carte » ou « aller: position » (un seul)")
+        if [self.prise_origine, self.aller, self.portique].count(None) != 2:
+            raise ValueError(
+                "écrire « prise_origine: carte », « aller: position » ou « portique: origine » "
+                "(un seul)"
+            )
         return self
 
 
@@ -550,8 +555,10 @@ class Griffe(Modele):
     tete: TeteGriffe
     pont_x_min: float
     rotation: RotationGriffe
-    # Mât en y godet grand ouvert (godet fermé : course de chariot_y).
+    # Mât en y godet grand ouvert ; godet fermé : course de chariot_y, et au moins
+    # mat_y_min_ferme (None : le début de la course).
     mat_y_grand_ouvert: Intervalle
+    mat_y_min_ferme: float | None = None
     trajet: TrajetGriffe
     garage_glissiere: list[BandeGriffe]
     # Écart sous lequel les axes sont « en butée haute » (fin de la course de griffe_z), en m.
@@ -1606,6 +1613,9 @@ class PilesStockage(Modele):
     places: dict[Nom, Point] = Field(min_length=1)
     fin_de_lot: FinDeLotStockage
     couvercles: Point
+    # Une pile un peu hors de la course du chariot (rangée y 0,84, mâts jusqu'à 0,83) est prise
+    # tête au bout de la course, à tant au plus de son axe (m) ; le seau tenu garde son axe.
+    prise_hors_axe_max_m: float = Field(default=0.0, ge=0)
 
 
 class TiroirStockage(Modele):
@@ -1773,6 +1783,105 @@ def _places_en_ligne(
     return erreurs
 
 
+# Les 4 axes du portique sur lesquels portent ses règles (le pont, le chariot, les deux Z).
+AXES_PORTIQUE = ("pont_x", "chariot_y", "griffe_z", "prehension_z")
+# Les places de photo du plafond, par zone photographiée (pont au bout opposé).
+ZONES_PHOTO = ("fut_poste", "stockage")
+
+
+class ChariotPortique(Modele):
+    """Chariot Y du pont : son centre, et les deux mâts (griffe, préhension) décalés en y.
+    L'axe chariot_y de machine.yaml est le y des mâts : centre = mâts − mats_moins_centre_y."""
+
+    centre_y: Intervalle
+    mats_moins_centre_y: float
+
+
+class PlaqueZPortique(Modele):
+    """Course du centre de la plaque Z d'un outil (haut = fin de course = origine), et l'axe
+    de machine.yaml qui en donne la hauteur d'outil (axes de la griffe, face de la préhension)."""
+
+    axe: Nom
+    course: Intervalle
+
+
+class VitessesPortique(Modele):
+    """Vitesses (m/s) et accélérations (m/s²) du portique (décidées le 28/10/2026)."""
+
+    xy_rapide_m_s: float = Field(gt=0)
+    xy_approche_m_s: float = Field(gt=0)
+    xy_acceleration_vide_m_s2: float = Field(gt=0)
+    xy_acceleration_seau_m_s2: float = Field(gt=0)
+    z_rapide_m_s: float = Field(gt=0)
+    z_approche_m_s: float = Field(gt=0)
+    z_acceleration_m_s2: float = Field(gt=0)
+    # Photo prise à l'arrêt, après ce temps (s).
+    photo_apres_arret_s: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "VitessesPortique":
+        erreurs = []
+        if self.xy_approche_m_s > self.xy_rapide_m_s:
+            erreurs.append("xy_approche_m_s doit être au plus xy_rapide_m_s")
+        if self.z_approche_m_s > self.z_rapide_m_s:
+            erreurs.append("z_approche_m_s doit être au plus z_rapide_m_s")
+        if self.xy_acceleration_seau_m_s2 > self.xy_acceleration_vide_m_s2:
+            erreurs.append("xy_acceleration_seau_m_s2 doit être au plus xy_acceleration_vide_m_s2")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class PlenumPortique(Modele):
+    """Plénum du Nettoyage : préhension au-dessus de plaque_z_min (centre de sa plaque Z) ⇒
+    chariot (son centre) à y ≤ chariot_centre_y_max. Vérifié sur toute la course au démarrage."""
+
+    plaque_z_min: float
+    chariot_centre_y_max: float
+
+
+class BoutBloqueGriffe(Modele):
+    """Pont dans cette bande de x : tête de la griffe à l'un de ces angles seulement."""
+
+    pont_x: Intervalle
+    angles_deg: list[float] = Field(min_length=1)
+
+
+class Portique(Modele):
+    """Le portique : pont (2 moteurs X1 et X2), chariot Y, Z de la griffe et de la préhension.
+
+    Fiche du module « Portique », gelé le 28/10/2026, et fichier du fil Portique (01/11).
+    Repère du portique, en mètres. Les positions nommées citées ici sont dans « positions »."""
+
+    exemple: bool = False
+    chariot: ChariotPortique
+    plaques_z: dict[Nom, PlaqueZPortique] = Field(min_length=1)
+    # Prise d'origine, dans l'ordre : les axes d'un groupe ensemble (« $H » et leurs lettres, sur
+    # chacune de leurs cartes), le groupe suivant quand il est fini. Vérifié : les Z avant Y,
+    # Y avant X.
+    origine: list[Annotated[list[Nom], Field(min_length=1)]] = Field(min_length=1)
+    vitesses: VitessesPortique
+    # Les deux outils en haut (position nommée : griffe_z et prehension_z en haut de course).
+    outils_en_haut: Nom
+    # Garage de repos (arrêt, nuit, ozone) : position nommée du pont et du chariot ; les Z sont
+    # d'abord montés (outils_en_haut), les freins serrés à la fin.
+    garage: Nom
+    # Photo du plafond, par zone photographiée : position nommée du pont (au bout opposé).
+    photo: dict[Nom, Nom]
+    # Écart permis entre le pont et sa place de photo (m).
+    photo_tolerance_m: float = Field(gt=0)
+    plenum: PlenumPortique
+    # Griffe : bandes du pont où la tête reste à un angle permis (pas de rotation).
+    bouts_bloques_griffe: list[BoutBloqueGriffe] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Portique":
+        manquent = [zone for zone in ZONES_PHOTO if zone not in self.photo]
+        if manquent:
+            raise ValueError(f"photo : il manque {', '.join(manquent)}")
+        return self
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -1812,6 +1921,8 @@ class Machine(Modele):
     # Stockage : piles, tiroir, bocaux (None : pas de stockage). Demande la griffe (table des
     # formats), la préhension et le remplissage (files du tiroir).
     stockage: Stockage | None = None
+    # Portique : pont, chariot, les deux Z (None : pas de portique, pour des réglages d'essai).
+    portique: Portique | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -1819,6 +1930,8 @@ class Machine(Modele):
         for numero, geste in enumerate(self.lieu_sur, start=1):
             if geste.delai not in self.durees:
                 erreurs.append(f"lieu_sur n° {numero} : délai « {geste.delai} » absent de durees")
+            if geste.portique is not None and self.portique is None:
+                erreurs.append(f"lieu_sur n° {numero} : il faut aussi la partie « portique »")
             if geste.aller is None:
                 continue
             if geste.aller not in self.positions:
@@ -1881,6 +1994,7 @@ class Machine(Modele):
         erreurs += self._verifier_lavage()
         erreurs += self._verifier_remplissage()
         erreurs += self._verifier_stockage()
+        erreurs += self._verifier_portique()
         if self.camera_dosage is not None and (self.prehension is None or self.mycelium is None):
             erreurs.append(
                 "camera_dosage : il faut aussi les parties « prehension » et « mycelium »"
@@ -1892,6 +2006,164 @@ class Machine(Modele):
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self
+
+    def _verifier_portique(self) -> list[str]:
+        """Axes du portique, chariot et mâts, plaques Z, vitesses, places, plénum."""
+        portique = self.portique
+        if portique is None:
+            return []
+        erreurs = []
+        for nom in AXES_PORTIQUE:
+            axe = self.axes.get(nom)
+            if axe is None:
+                erreurs.append(f"portique : axe « {nom} » absent de axes")
+            elif axe.unite != "m" or axe.carte is None:
+                erreurs.append(f"portique : l'axe « {nom} » doit être en « m », avec sa carte")
+        if erreurs:
+            return erreurs
+        egal = 1e-6
+        # Chariot : les mâts sont à centre + décalage.
+        chariot = portique.chariot
+        mats = tuple(c + chariot.mats_moins_centre_y for c in chariot.centre_y)
+        course_y = self.axes["chariot_y"].course
+        if any(abs(a - b) > egal for a, b in zip(mats, course_y, strict=True)):
+            erreurs.append(
+                f"portique → chariot : centre de {chariot.centre_y[0]:g} à "
+                f"{chariot.centre_y[1]:g} m et mâts à centre {chariot.mats_moins_centre_y:+g} m "
+                f"donnent les mâts de {mats[0]:g} à {mats[1]:g} m ; la course de chariot_y "
+                f"(le y des mâts) doit être la même (elle va de {course_y[0]:g} à "
+                f"{course_y[1]:g} m)"
+            )
+        # Plaques Z : même course que la hauteur d'outil qu'elles portent.
+        for nom, plaque in portique.plaques_z.items():
+            axe = self.axes.get(plaque.axe)
+            if axe is None or axe.unite != "m":
+                erreurs.append(f"portique → plaques_z → {nom} : axe « {plaque.axe} » inconnu")
+                continue
+            bas, haut = plaque.course
+            if bas >= haut:
+                erreurs.append(f"portique → plaques_z → {nom} : aller du bas vers le haut")
+                continue
+            longueur = axe.course[1] - axe.course[0]
+            if abs((haut - bas) - longueur) > 0.001:
+                erreurs.append(
+                    f"portique → plaques_z → {nom} : la plaque Z fait {haut - bas:.3f} m de "
+                    f"course, l'axe « {plaque.axe} » {longueur:.3f} m : les hauteurs ne "
+                    "concordent pas"
+                )
+        # Prise d'origine : chaque axe une fois, avec sa carte ; les Z, puis Y, puis X.
+        groupe_de: dict[str, int] = {}
+        for numero, groupe in enumerate(portique.origine, start=1):
+            for nom in groupe:
+                axe = self.axes.get(nom)
+                if axe is None or axe.carte is None or axe.lettre is None:
+                    erreurs.append(
+                        f"portique → origine n° {numero} : « {nom} » n'est pas un axe avec sa "
+                        "carte et sa lettre"
+                    )
+                elif nom in groupe_de:
+                    erreurs.append(f"portique → origine : « {nom} » écrit deux fois")
+                groupe_de.setdefault(nom, numero)
+        verticaux = [plaque.axe for plaque in portique.plaques_z.values()]
+        ordre = [*verticaux, "chariot_y", "pont_x"]
+        manquent = [nom for nom in ordre if nom not in groupe_de]
+        if manquent:
+            erreurs.append(f"portique → origine : il manque {', '.join(manquent)}")
+        else:
+            for avant, apres in [(z, "chariot_y") for z in verticaux] + [("chariot_y", "pont_x")]:
+                if groupe_de[avant] >= groupe_de[apres]:
+                    erreurs.append(
+                        f"portique → origine : « {avant} » doit avoir fini sa prise d'origine "
+                        f"avant « {apres} » (les Z en haut, puis Y, puis X)"
+                    )
+        # Vitesses : celles des outils au plus celles du portique ; accélération de la
+        # préhension = celle du portique (à vide, seau tenu).
+        v = portique.vitesses
+        plafonds = []
+        if self.griffe is not None:
+            g = self.griffe.vitesses
+            plafonds += [
+                ("griffe → vitesses → pont_x", g.pont_x, v.xy_rapide_m_s),
+                ("griffe → vitesses → chariot_y", g.chariot_y, v.xy_rapide_m_s),
+                ("griffe → vitesses → griffe_z", g.griffe_z, v.z_rapide_m_s),
+            ]
+        if self.prehension is not None:
+            p = self.prehension
+            plafonds += [
+                ("prehension → vitesses → pont_x", p.vitesses.pont_x, v.xy_rapide_m_s),
+                ("prehension → vitesses → chariot_y", p.vitesses.chariot_y, v.xy_rapide_m_s),
+                ("prehension → vitesses → z", p.vitesses.z, v.z_rapide_m_s),
+            ]
+            for quoi, valeur, voulue in (
+                ("normale_mm_s2", p.acceleration.normale_mm_s2, v.xy_acceleration_vide_m_s2),
+                ("seau_mm_s2", p.acceleration.seau_mm_s2, v.xy_acceleration_seau_m_s2),
+            ):
+                if abs(valeur - voulue * 1000) > egal:
+                    erreurs.append(
+                        f"prehension → acceleration → {quoi} ({valeur:g}) doit être celle du "
+                        f"portique ({voulue * 1000:g} mm/s²)"
+                    )
+        for quoi, valeur, plafond in plafonds:
+            if valeur > plafond + egal:
+                erreurs.append(f"{quoi} ({valeur:g} m/s) dépasse celle du portique ({plafond:g})")
+
+        # Places nommées.
+        def position(quoi: str, nom: str, axes: tuple[str, ...]) -> dict[str, float] | None:
+            valeurs = self.positions.get(nom)
+            if valeurs is None:
+                erreurs.append(f"portique → {quoi} : position « {nom} » absente de positions")
+                return None
+            manquent = [axe for axe in axes if axe not in valeurs]
+            if manquent:
+                erreurs.append(
+                    f"portique → {quoi} : la position « {nom} » doit donner {', '.join(manquent)}"
+                )
+                return None
+            return valeurs
+
+        en_haut = position("outils_en_haut", portique.outils_en_haut, ("griffe_z", "prehension_z"))
+        if en_haut is not None:
+            for axe in ("griffe_z", "prehension_z"):
+                haut = self.axes[axe].course[1]
+                if abs(en_haut[axe] - haut) > egal:
+                    erreurs.append(
+                        f"portique → outils_en_haut : {axe} doit être en haut de sa course "
+                        f"({haut:g} m)"
+                    )
+        position("garage", portique.garage, ("pont_x", "chariot_y"))
+        for zone, nom in portique.photo.items():
+            if zone not in ZONES_PHOTO:
+                erreurs.append(
+                    f"portique → photo : zone inconnue « {zone} » (connues : "
+                    f"{', '.join(ZONES_PHOTO)})"
+                )
+            position(f"photo → {zone}", nom, ("pont_x",))
+        # Plénum du Nettoyage : vrai sur toute la course, ou le dire.
+        plenum = portique.plenum
+        plaque = portique.plaques_z.get("prehension")
+        if plaque is None:
+            erreurs.append("portique → plaques_z : il manque « prehension » (règle du plénum)")
+        elif (
+            plaque.course[1] > plenum.plaque_z_min + egal
+            and chariot.centre_y[1] > plenum.chariot_centre_y_max + egal
+        ):
+            erreurs.append(
+                f"portique → plenum : la préhension monte à {plaque.course[1]:g} m (plus de "
+                f"{plenum.plaque_z_min:g}) et le chariot va à y {chariot.centre_y[1]:g} m (plus "
+                f"de {plenum.chariot_centre_y_max:g}) : la tête toucherait le plénum du Nettoyage"
+            )
+        # Bouts du pont où la tête de la griffe ne tourne pas.
+        if portique.bouts_bloques_griffe and self.griffe is None:
+            erreurs.append("portique → bouts_bloques_griffe : il faut aussi la partie « griffe »")
+        pont = self.axes["pont_x"].course
+        for numero, bout in enumerate(portique.bouts_bloques_griffe, start=1):
+            if not pont[0] - egal <= bout.pont_x[0] < bout.pont_x[1] <= pont[1] + egal:
+                erreurs.append(
+                    f"portique → bouts_bloques_griffe n° {numero} : {bout.pont_x[0]:g} à "
+                    f"{bout.pont_x[1]:g} m doit aller du plus petit au plus grand, dans la "
+                    f"course du pont ({pont[0]:g} à {pont[1]:g} m)"
+                )
+        return erreurs
 
     def _verifier_griffe(self) -> list[str]:
         """Les axes de la griffe existent, et ses hauteurs ne sortent pas de leur course."""
@@ -2446,6 +2718,7 @@ class Machine(Modele):
             points = places.places_piles(self, format)
             for nom, (x, y) in points.items():
                 x_pont = x - self.prehension.decalage_mat_x
+                y = places.prise_y(self, y)
                 if not (pont[0] <= x_pont <= pont[1] and chariot[0] <= y <= chariot[1]):
                     erreurs.append(
                         f"stockage → {nom} ({format}) : ({x:g} ; {y:g}) hors de portée de la "
@@ -3694,8 +3967,6 @@ class RegleVision(Modele):
 class PlafondVision(Modele):
     # Une photo plus vieille que ça (s) est refusée.
     photo_age_max_s: float = Field(gt=0)
-    # Photo seulement pont garé au bout opposé : pont à x ≥ ... (m).
-    pont_gare_x_min: float
     # Règle « rien à faire » : nouvelle photo après ce temps (s).
     attente_s: float = Field(gt=0)
     # Contrôle du lave-bocal par la caméra avant chaque geste dangereux pour lui.

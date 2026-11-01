@@ -14,6 +14,7 @@ from vidange.lavage.module import module_lavage
 from vidange.lavage.simulation import lavage_du_simulateur
 from vidange.mycelium import module_mycelium
 from vidange.mycelium.simulation import mycelium_du_simulateur
+from vidange.portique import places_photo
 from vidange.registre import Registre
 from vidange.reglages import charger_reglages
 from vidange.simulateur import Simulateur
@@ -355,17 +356,36 @@ def test_sans_reconnaissance_ou_en_desaccord_c_est_le_doute():
 # ---------------------------------------------------------------- plafond : photos
 
 
-def camera_plafond(image, inventaire=None, pont=2.40, controle=True, tmp_path=None):
+def camera_plafond(image, inventaire=None, pont=2.495, controle=True, tmp_path=None):
     p, source, horloge = photographe(tmp_path, image)
     vision = VISION
     if controle != VISION.plafond.controle_lave_bocal:
         plafond = VISION.plafond.model_copy(update={"controle_lave_bocal": controle})
         vision = VISION.model_copy(update={"plafond": plafond})
     position = [pont]
+    portique = REGLAGES.machine.portique
     camera = CameraPlafond(
-        vision, p, FausseReconnaissance(inventaire), lambda: position[0], horloge
+        vision,
+        p,
+        FausseReconnaissance(inventaire),
+        lambda: position[0],
+        places_photo(REGLAGES.machine),
+        portique.photo_tolerance_m,
+        horloge,
     )
     return camera, position, horloge
+
+
+def test_photo_du_plafond_pont_au_bout_oppose():
+    # Fût et poste : pont à x 2,495 ; stockage : pont à x 0,233 (Portique, 01/11), à 5 mm près.
+    camera, position, _ = camera_plafond(scene(), Inventaire())
+    assert camera.refus_photo("fut_poste") is None
+    assert "il faut x 0.233 m pour photographier « stockage »" in camera.refus_photo("stockage")
+    position[0] = 0.236
+    assert camera.refus_photo("stockage") is None
+    assert "pont pas garé" in camera.refus_photo()
+    position[0] = 2.489
+    assert "pont pas garé" in camera.refus_photo("fut_poste")
 
 
 LAVE_BOCAL_VU = scene((fabrique.image_aruco(DICO, LAVE_BOCAL, 120), (400, 300), 10))

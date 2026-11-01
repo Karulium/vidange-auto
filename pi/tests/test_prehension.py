@@ -281,7 +281,13 @@ def test_seau_tenu_bord_limite():
     assert refus(Pose(x=1.6, y=0.6, z=0.90, a=0), tenu) is None
     assert "bord à 1,15" not in (refus(Pose(x=1.6, y=0.6, z=0.90, a=0), tenu) or "")
     assert "seau tenu (piles" in refus(Pose(x=1.6, y=0.6, z=0.91, a=0), tenu)
-    assert "seau tenu (côté opérateur" in refus(Pose(x=1.6, y=0.87, z=0.86, a=0), tenu)
+    # Côté opérateur (axe à y > 0,86) : hors de la course du chariot depuis le Portique du 01/11
+    # (mâts jusqu'à 0,83) ; la règle reste, vue avec une course plus longue.
+    assert "hors de la course (0,04 à 0,83)" in refus(Pose(x=1.6, y=0.87, z=0.86, a=0), tenu)
+    regles = ReglesPrehension(MACHINE)
+    regles.courses["y"] = (0.04, 0.95)
+    texte = regles.refus_pose(Pose(x=1.6, y=0.87, z=0.86, a=0), tenu)
+    assert "seau tenu (côté opérateur" in texte
     assert REGLES.hauteur_trajet(SEAU, 0.6) == pytest.approx(0.905)
     assert REGLES.hauteur_trajet(SEAU, 0.6, 0.87) == pytest.approx(0.85)
     assert REGLES.hauteur_trajet(None, 0.6) == 1.10
@@ -714,10 +720,10 @@ def test_tete_acceleration_reduite_avec_un_seau():
 
         attendre(lambda: len(lignes()) == 4)
         assert lignes() == [
-            "$/axes/x/acceleration_mm_per_sec2=150",
-            "$/axes/y/acceleration_mm_per_sec2=150",
             "$/axes/x/acceleration_mm_per_sec2=500",
             "$/axes/y/acceleration_mm_per_sec2=500",
+            "$/axes/x/acceleration_mm_per_sec2=1000",
+            "$/axes/y/acceleration_mm_per_sec2=1000",
         ]
 
 

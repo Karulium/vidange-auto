@@ -8,14 +8,20 @@ de Karulium avant son premier geste.
 Après une mise sous tension, une carte FluidNC ne sait pas où sont ses axes (alarme 14) :
 sa prise d'origine ($H) le lui rapprend. Une position sûre n'est demandée qu'une fois toutes
 les cartes prêtes (connectées, sans alarme).
+
+Le geste « portique: origine » fait la prise d'origine du portique dans son ordre (freins des Z
+desserrés, les deux Z en haut, Y, puis X1 et X2 ensemble) ; « portique: garage » le gare
+(vidange.portique). Une alarme d'un pilote du portique arrête alors le module.
 """
 
 from collections.abc import Mapping
+from dataclasses import replace
 
 from vidange.chef import Axes, Condition, ErreurEtape, Etape, Module
 from vidange.fluidnc import Commande, Liaison
+from vidange.portique import Portique
 from vidange.quoi_faire import ALARMES_FLUIDNC, CARTE_COUPEE
-from vidange.reglages import Machine
+from vidange.reglages import CarteFluidnc, Machine
 
 NOM = "lieu_sur"
 
@@ -52,16 +58,40 @@ class _PriseOrigine:
         return self.commande.finie
 
 
-def module_lieu_sur(machine: Machine, liaisons: Mapping[str, Liaison]) -> Module | None:
-    """Le module de retour en lieu sûr, ou None si machine.yaml n'a pas de « lieu_sur »."""
+def module_lieu_sur(
+    machine: Machine,
+    liaisons: Mapping[str, Liaison],
+    cartes: Mapping[str, CarteFluidnc] | None = None,
+) -> Module | None:
+    """Le module de retour en lieu sûr, ou None si machine.yaml n'a pas de « lieu_sur ».
+    `cartes` (fluidnc.yaml → cartes) : demandées par un geste du portique."""
     if not machine.lieu_sur:
         return None
     axes = Axes(machine, liaisons)
+    portique = None
+    if any(geste.portique is not None for geste in machine.lieu_sur):
+        if cartes is None:
+            raise ValueError("lieu_sur : un geste du portique demande les cartes de fluidnc.yaml")
+        portique = Portique(machine, cartes, liaisons)
     # Pendant un déplacement, toutes les cartes doivent rester connectées et sans alarme.
     arrives = Condition(axes.arrives.texte, lambda: axes.surveillance.test() and axes.arrive())
     etapes = []
     noms: set[str] = set()
     for numero, geste in enumerate(machine.lieu_sur, start=1):
+        if geste.portique is not None:
+            assert portique is not None
+            gestes = (
+                portique.etapes_origine()
+                if geste.portique == "origine"
+                else portique.etapes_garage()
+            )
+            for etape in gestes:
+                nom = etape.nom if etape.nom not in noms else f"{etape.nom}_{numero}"
+                noms.add(nom)
+                # Le délai du geste vaut pour chacune de ses étapes qui en a un.
+                delai = geste.delai if etape.delai_max is not None else None
+                etapes.append(replace(etape, nom=nom, delai_max=delai, demande_go=not etapes))
+            continue
         if geste.prise_origine is not None:
             nom = f"prise_origine_{geste.prise_origine}"
             prise = _PriseOrigine(geste.prise_origine, liaisons[geste.prise_origine])
@@ -88,6 +118,7 @@ def module_lieu_sur(machine: Machine, liaisons: Mapping[str, Liaison]) -> Module
     return Module(
         nom=NOM,
         etapes=tuple(etapes),
+        surveillances=() if portique is None else (portique.pas_d_alarme,),
         pauser=axes.pauser,
         reprendre=axes.reprendre,
         arreter=axes.pauser,

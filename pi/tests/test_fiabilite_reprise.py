@@ -44,7 +44,11 @@ class Machine:
         )
         liaisons = {"mycelium_lavage": liaison}
         exemple = module_exemple(Axes(REGLAGES.machine, liaisons), materiel)
-        lieu_sur = module_lieu_sur(REGLAGES.machine, liaisons)
+        # Sans le geste du portique (ses cartes ne sont pas là) : seulement la carte n° 3.
+        machine = REGLAGES.machine.model_copy(
+            update={"lieu_sur": [g for g in REGLAGES.machine.lieu_sur if g.portique is None]}
+        )
+        lieu_sur = module_lieu_sur(machine, liaisons)
         return Pi(liaison, materiel, chef, exemple, lieu_sur)
 
 

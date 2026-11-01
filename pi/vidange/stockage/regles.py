@@ -221,7 +221,7 @@ class ReglesStockage:
                     f"{_m(t.sortie_pile_marge_m * 100)} cm)"
                 )
         rail = t.rail_operateur
-        cote_allee = pose.y + objet.rayon_m
+        cote_allee = pose.y + objet.decalage_y_m + objet.rayon_m
         if bord > rail.haut_max_z + _EGAL and cote_allee > rail.bord_y_max + _EGAL:
             return (
                 f"rail opérateur : seau tenu en haut à {_m(bord)} m (plus de "
