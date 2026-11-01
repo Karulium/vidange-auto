@@ -618,7 +618,8 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   ordre), photo trop vieille refusée. Outil d'essai pour la calibration et la lecture des QR, procédure pas à pas
   sur le vrai matériel ; « testé sur le vrai matériel : non ».
 - [ ] 22 ter. Vision : analyses qui demandent des photos réelles (bocal « bon / douteux » au retour debout, anse
-  levée, repère et bac des couvercles). Règles à recopier quand les premières photos existeront.
+  levée, repère et bac des couvercles, alignement des seaux de la bande du haut y 0,215 ± 0,007). Règles à recopier
+  quand les premières photos existeront.
 - [x] **22 bis. Cartes de pesée RS485 (RP2040 + HX711) : griffe, préhension, plateau du remplissage** — Modèle : Opus.
   Programme C (Pico SDK, comme l'accéléromètre) : lecture du HX711 en 3,3 V, jusqu'à 80 mesures/s, réponse sur le
   bus RS485 `rs485_pesee` quand le Pi l'interroge (une adresse par carte, contrôle CRC), mise à jour depuis le Pi
@@ -871,7 +872,73 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   pour la bande du haut ; chariot à y 0,215 plateau haut permis (plus de règle des anneaux) ; places et capacité par
   format ; seau mal aligné à la photo ⇒ arrêt ; scénario du simulateur avec 18 seaux A. « Testé sur le vrai
   matériel : non ».
-- [ ] 36. Portique
+- [ ] **36. Portique : axes du pont et des deux Z, prise d'origine, vitesses, garage, carte n° 1** — Modèle : Opus,
+  effort moyen. **Avant le solveur (tâche 23).**
+  Sources (recopiées ici le 01/11/2026) : fiche du module « Portique », **gelé le 28/10/2026**, et le fichier écrit
+  pour le logiciel par le fil Portique (`portique/logiciel/portique-pour-logiciel.md`, 01/11, repère du portique).
+  Déjà dans `docs/decisions.md` (ne pas refaire) : rails HGR15, mât de la griffe à pont − 0,187 et de la préhension
+  à pont + 0,129 en x, butée logicielle du pont à 2,495. Les chiffres vont dans `pi/reglages/machine.yaml`,
+  `docs/entrees-sorties.yaml` et `fluidnc/` (`exemple: true` tant que le câblage n'est pas arrivé), jamais dans le code.
+  Les autres modules appellent déjà le portique : vérifier ce qui existe (tâches 3, 13, 37…) et ne compléter que ce
+  qui manque ; ne pas réécrire ce qui marche.
+
+  *Axes* (pilotes boucle fermée, même modèle partout, sortie d'alarme) :
+  - **Pont X : deux moteurs X1 et X2** (un par rail, NEMA 17 boucle fermée, même consigne), courroie GT2 10 mm,
+    poulie 20 dents : 40 mm par tour. Chacun a son fin de course côté fût : à la prise d'origine, chaque moteur
+    s'arrête sur le sien (le pont se remet d'équerre). Carte n° 1, 2 sorties.
+  - **Chariot Y** : NEMA 17 boucle fermée, GT2 : 40 mm par tour ; fin de course côté paroi (y bas). Carte n° 1.
+  - **Z griffe** (carte 1) et **Z préhension** (carte 4) : NEMA 23 boucle fermée à frein 24 V, pignon module 1 de
+    16 dents sur crémaillère : 50,27 mm par tour ; fin de course en haut de colonne. Freins à manque de courant
+    (24 V coupé par l'arrêt d'urgence) : desserrer avant de bouger, serrer à l'arrêt long.
+  - Pas par mm = impulsions par tour du pilote / mm par tour (exemple à 1 600 : X et Y 40, Z 31,83).
+  - **Carte n° 1** : 6 axes (X1, X2, Y, Z griffe, A et B de la griffe) : écrire `fluidnc/portique.yaml` (EXEMPLE,
+    comme `fluidnc/chariot.yaml`) avec la mise d'équerre (2 moteurs et 2 fins de course sur X).
+
+  *Courses* (butées logicielles) :
+  - Pont x **0,233 → 2,495** (0,233 au lieu de 0,223 : 1 cm de marge, plan de commande). Jamais sous 0,233.
+  - **Chariot Y : centre de 0,08 à 0,87. Les deux mâts sont à y = centre − 0,040**, donc de 0,04 à **0,83**. Griffe en
+    plus : mât ≥ 0,056 godet fermé, ≥ 0,11 godet ouvert (le « 0,884 » de la fiche Griffe ne limite plus rien : la
+    course s'arrête à 0,83). Corriger `chariot_y` dans `machine.yaml` (aujourd'hui 0,056-0,884) et tout ce qui
+    supposait le mât au centre du chariot.
+  - Z griffe : centre de la plaque Z de 2,203 (haut, sur le fin de course) à 1,288 (course 0,915). Z préhension : de
+    1,958 à 1,308 (course 0,650). Les hauteurs d'outil (axes de la griffe, face de la préhension) se déduisent avec
+    les cotes déjà dans `machine.yaml` : vérifier que tout concorde.
+  - Jamais au-dessus de l'origine Z (hauteur sous le pont roulant).
+
+  *Prise d'origine* (ordre) : 1) Z griffe et Z préhension vers le haut (freins desserrés) jusqu'à leur fin de course,
+  recul de quelques mm ; 2) Y vers la paroi ; 3) X1 et X2 ensemble vers le fût, chacun sur son fin de course, recul.
+  En vitesse d'approche. Les cartes 2 à 4 gardent leurs propres origines.
+
+  *Vitesses* (décidées le 28/10, réglages) : X et Y rapide 250 mm/s, approche 50 mm/s, accélération 1 m/s² à vide,
+  **0,5 m/s² seau tenu** ; Z (les deux) 80 mm/s, approche 20 mm/s, 0,5 m/s². Photos à l'arrêt après 0,3 s.
+
+  *Garage et places du pont* :
+  - Photo du plafond : le pont au bout **opposé** à la zone photographiée : x 2,495 pour le fût et le poste, x 0,233
+    pour le stockage ; les deux outils en haut. (La vision appelle déjà « pont garé » : brancher ces places.)
+  - Garage de repos (arrêt, nuit, ozone) : les deux Z en haut, freins serrés, pont à x 2,495, chariot Y au centre
+    0,50 (proposition du fil Portique, réglage).
+
+  *Règles propres au portique* (verrous ; elles s'ajoutent à celles des autres modules) :
+  - Griffe : pas de rotation de la tête pont au-delà de x 2,0 (le rail de la colonne gêne) ; au bout côté fût, tête
+    en orientation bloquée (réglage : angle permis).
+  - Préhension au-dessus de z 2,08 (centre de la plaque Z) : chariot à y ≤ 0,93 (plénum du Nettoyage) — vrai sur
+    toute la course, à vérifier au démarrage.
+  - Stockage, rangée de piles y 0,84 : la préhension prend avec son axe à y 0,83 (1 cm hors d'axe, accepté par le
+    fil Stockage) ; le seau tenu garde son axe à 0,84 pour la règle du rail opérateur.
+
+  *Capteurs* (à ajouter, `exemple: true`) : 5 fins de course NF (fil coupé = déclenché) : X1, X2, Y, Z griffe,
+  Z préhension ; 5 alarmes de pilote ⇒ arrêt et alerte (laquelle) ; détecteur de chocs sur la colonne de la griffe
+  (déjà écrit, tâches 14 et 15 : vérifier son entrée « OK » 24 V vers la carte n° 1 et l'orientation de ses axes : X vertical
+  vers le haut, Y le long du pont, Z le long des rails). Les pesées restent à la Griffe et à la Préhension.
+
+  *Ce qui reste ouvert* (réglages `exemple`) : impulsions par tour du pilote acheté ; places exactes des fins de
+  course X et Y et butées mécaniques de Y (mesurées à la mise en service) ; seuil du détecteur de chocs.
+
+  Simulateur et tests : prise d'origine dans l'ordre (X1 et X2 qui s'arrêtent chacun sur leur fin de course, pont de
+  travers remis d'équerre sur le faux FluidNC), courses (pont sous 0,233 refusé, mât à 0,83 permis, 0,84 refusé),
+  accélération réduite seau tenu, places de photo, garage de repos, rotation de la tête refusée au-delà de x 2,0,
+  alarme d'un pilote. Outil d'essai et procédure sur le vrai matériel (sens des axes, équerre, fins de course) ;
+  « testé sur le vrai matériel : non ».
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
   (le Lavage a besoin de la Préhension, qui tient le seau pendant tout le lavage).
   Sources (recopiées ici le 29/10/2026) : fiche du module « Préhension », **validé définitivement le 27/10/2026**,
