@@ -177,11 +177,21 @@ si l'une pose problème, elle le dit dans sa PR.
   avant de changer ses gestes. Règles déjà connues :
   1. La griffe **vide le seau à y 0,42** (chariot de remplissage à cy 0,285), plus au poste ; le seau vide attend à
      y 0,42.
-  2. Au poste (y 0,135) : **manivelle en bas**, bord du seau sous 0,70 (le spray et le micropore le respectent déjà).
+  2. Au poste (y 0,135) : **manivelle en bas**, bord du seau **≤ 0,68 toujours** (Remplissage, règle C2 : à 0,70 ça
+     touche, à 0,68 il reste plus de 2 cm). Spray : plateau ≤ min(0,50 ; 0,68 − h) au lieu de 0,71 − h.
   3. **Demi-tour du bocal seulement manivelle en haut et chariot à y ≥ 0,40.**
   4. La règle « l'agitateur roule » (verrou du chariot pendant que l'agitateur roule) est **supprimée** ; le garage
      à x 0,565 et le demi-tour à 0,865 aussi. La préhension pose et reprend le bocal en (0,925 ; 0,150), axes à 1,05
      et 1,10, chariot reculé ou au poste : aucun contact.
+  6. Caméra du dosage (Guidage caméra, plan de commande v232) : le servo ne tourne la caméra vers le seau (63°) que
+     si la **manivelle est en haut** (signal `origine_manivelle`) et que **ni la griffe ni la préhension** ne sont
+     dans la boîte **x < 1,10, y < 0,34, z 0,95-1,08**. Sinon la caméra reste à 0°, tournée vers le bocal. La
+     condition « agitateur garé » (`mycelium → camera_x_max`) disparaît.
+  7. Fiche du Mycélium v10 (01/11) : bocal toujours en (0,925 ; 0,150), axe de la manivelle z 0,762, centre du bocal
+     z 1,059 manivelle en haut. Manivelle EN HAUT pour la pose et la reprise du bocal et pour le demi-tour ; EN BAS
+     dès que le chariot est au poste (attente). Préhension : face au contact de la capsule à 1,05, approche à 1,10,
+     manivelle en haut, chariot reculé ou au poste. Retirés de la carte n° 3 : NEMA 17 de la glissière, son pilote,
+     ses 2 fins de course. La griffe vide avec le mât en (0,925 ; 0,42).
   5. Conséquence : la table « Y minimum du mât » du 01/11 ci-dessous (faite avec l'agitateur garé à 0,565) est
      **périmée** ; une nouvelle table, agitateur fixe à 0,925, est demandée au projet mécanique. Les points 1 (essuyage),
      6 (boîtier de la caméra du dosage) et 7 (caméra du plafond) de cette section restent bons.
