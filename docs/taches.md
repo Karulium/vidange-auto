@@ -266,24 +266,24 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   l'agitateur. Vérifier l'essuyage du bord du seau (mât à +x du seau, axes à haut + 0,196) contre le boîtier de
   la caméra du bocal (x 1,045-1,085, y 0,22-0,28, z 0,982-1,062) ; s'il y a contact, le dire dans les questions
   de la PR avec une proposition. Tests.
-- [ ] **18 ter. Griffe : nouvelle table « Y minimum du mât » et essuyage godet à moitié** — Modèle : Sonnet, effort moyen.
-  **EN ATTENTE (01/11/2026) : ne pas faire tout de suite.** L'agitateur devient fixe à x 0,925 (`docs/decisions.md`,
-  « Agitateur du mycélium FIXE ») : la table ci-dessous est périmée. Cette tâche sera réécrite avec la nouvelle table
-  et faite après la tâche 19 ter.
-  Source : `docs/decisions.md`, « Griffe : essuyage et Y minimum du mât » (01/11/2026). Dans
-  `pi/reglages/machine.yaml`, remplacer les 5 lignes de `griffe → garage_glissiere` par les 9 de la décision et
-  mettre à jour son commentaire (garage à 0,565, toute hauteur). Remplacer le drapeau `permise_en_butee_haute`
-  (`pi/vidange/reglages.py`, `BandeGriffe`) par `seulement_sous_butee_haute` (vrai pour la ligne x 0,99-1,145 :
-  elle ne compte pas en butée haute) et l'utiliser dans `pi/vidange/griffe/regles.py`. Ajouter
-  `essuyage → ouverture_godet: 0.5` (vérifié au démarrage : de 0 à moins de 1, car 1 = grand ouvert est refusé) et l'employer
-  dans `geste_essuyer` (`pi/vidange/griffe/griffe.py`) à la place de « godet grand ouvert » ; corriger le
-  commentaire « EN ATTENDANT » de `essuyage` (côté allée confirmé). Vérifier au démarrage que les bandes de x
-  ne se chevauchent pas. Tests : reprendre `test_bande_du_garage_permise_en_butee_haute_seulement` (porte-bocal
-  0,249 ; 0,150 permis en butée haute et dessous ; x 0,6 y 0,30 refusé), une pose x 1,05 y 0,30 permise en
-  butée haute et refusée dessous, l'essuyage des 4 formats sans refus. Recopier aussi les points 6 et 7 de la
-  décision : boîte `griffe → camera_bocal` en x 0,997-1,091, z 0,975-1,068 (reprendre les tests qui en
-  dépendent) et caméra du plafond en y 0,545 dans `pi/reglages/vision.yaml`. `vidange --verifier` et le
-  simulateur passent.
+- [ ] **18 ter. Griffe : nouvelle table « Y minimum du mât » (agitateur fixe) et essuyage godet à moitié** — Modèle :
+  Sonnet, effort moyen. **À faire après la tâche 19 ter.**
+  Source : `docs/decisions.md`, « Griffe : table Y minimum du mât avec l'agitateur fixe » (02/11/2026), points 1 à
+  6, et « Griffe : essuyage et Y minimum du mât » (01/11), points 1, 6 et 7. Dans `pi/reglages/machine.yaml`,
+  remplacer `griffe → garage_glissiere` par deux tables, `y_min_mat → butee_haute` (6 bandes) et
+  `y_min_mat → sous_butee` (4 bandes), plus `ouverture_fut → rayon_mat_max: [0.16, 0.135, 0.105]` et
+  `ouverture_fut → z_min: 1.11` (point 3). Les bandes se chevauchent exprès : une pose est refusée par toute bande
+  qui la contient. Retirer `permise_en_butee_haute` (`pi/vidange/reglages.py`, `BandeGriffe`) et adapter
+  `pi/vidange/griffe/regles.py` : en butée haute la première table ; dessous la seconde ; mât à x < 0,78 et axes
+  de 1,11 à la butée : seulement dans le cercle autour de `poste_fut → centre_fut` (tête tournée : point 4).
+  Ajouter `essuyage → ouverture_godet: 0.5` (vérifié au démarrage : de 0 à moins de 1, car 1 = grand ouvert est
+  refusé) et l'employer dans `geste_essuyer` (`pi/vidange/griffe/griffe.py`) à la place de « godet grand
+  ouvert » ; corriger le commentaire « EN ATTENDANT » de `essuyage` (côté allée confirmé). Recopier aussi : boîte
+  `griffe → camera_bocal` en x 0,997-1,091, z 0,975-1,068 et caméra du plafond en y 0,545 dans
+  `pi/reglages/vision.yaml`. Tests : remplacer `test_bande_du_garage_permise_en_butee_haute_seulement` ; godet fermé,
+  x 0,90 y 0,28 refusé en butée haute, x 0,60 y 0,28 permis ; x 0,90 y 0,31 permis en butée haute, refusé dessous ;
+  x 1,05 y 0,39 refusé sous la butée, permis en butée haute ; x 0,50 y 0,60 à 1,15 refusé ; x 0,29 y 0,57 à 1,15 permis ;
+  vidage en (0,925 ; 0,42) et essuyage des 4 formats sans refus. `vidange --verifier` et le simulateur passent.
 - [x] **19. Mycélium (dosage)** — Modèle : Opus, effort moyen.
   Sources (recopiées ici le 28/10/2026) : fiche du module « Mycélium », **validé définitivement le 24/10/2026**
   (option B : tout le module relevé de 12 mm, garage à x 0,565), fiche des pièces v8 et plan de commande v221.
