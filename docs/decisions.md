@@ -192,8 +192,8 @@ si l'une pose problème, elle le dit dans sa PR.
      d) pivot interdit si une partie de la tête de la griffe ou de la préhension (ou de l'objet tenu) est dans
         **x < 1,10, y < 0,34, z 0,95-1,08** ;
      e) boîtier **remis à 0° avant toute pose ou reprise du bocal** par la préhension.
-     La condition « agitateur garé » (`mycelium → camera_x_max`) disparaît. a) est déduit des fiches, à confirmer
-     par un balayage de la Maquette : si elle trouve un contact, cette ligne sera corrigée.
+     La condition « agitateur garé » (`mycelium → camera_x_max`) disparaît. a) est confirmé par un balayage
+     de la Maquette (02/11). Prendre la photo du seau **bras du spray rangé** (plan de commande v234).
   7. Fiche du Mycélium v10 (01/11) : bocal toujours en (0,925 ; 0,150), axe de la manivelle z 0,762, centre du bocal
      z 1,059 manivelle en haut. Manivelle EN HAUT pour la pose et la reprise du bocal et pour le demi-tour ; EN BAS
      dès que le chariot est au poste (attente). Préhension : face au contact de la capsule à 1,05, approche à 1,10,
@@ -202,6 +202,33 @@ si l'une pose problème, elle le dit dans sa PR.
   5. Conséquence : la table « Y minimum du mât » du 01/11 ci-dessous (faite avec l'agitateur garé à 0,565) est
      **périmée** ; une nouvelle table, agitateur fixe à 0,925, est demandée au projet mécanique. Les points 1 (essuyage),
      6 (boîtier de la caméra du dosage) et 7 (caméra du plafond) de cette section restent bons.
+- **Griffe : table « Y minimum du mât » avec l'agitateur fixe** (Maquette v45.111, 02/11/2026,
+  `maquette/table-y-min-mat-griffe-v45.111.md` ; remplace les points 2 et 3 de la section du 01/11 ci-dessous).
+  y du mât = repère du portique. Godet fermé / à moitié ouvert / grand ouvert, tête bras le long du pont. Bandes de x
+  élargies d'1 cm de chaque côté par le fil logiciel (grille de 1 cm : à la limite, la plus stricte compte) :
+  1. **Axes en butée haute** :
+     - x 0,15-0,69 : 0 / 0,015 / 0,055 (rail du portique, coffret du spray) ;
+     - x 0,68-0,78 : 0,015 / 0,075 / 0,10 (tube haut du support fixe de l'agitateur) ;
+     - x 0,77-1,06 : 0,295 / 0,33 / 0,365 (porte-bocal et bocal) ;
+     - x 1,05-1,12 : 0,215 / 0,225 / 0,26 ;
+     - x 1,11-1,17 : 0,11 / 0,11 / 0,11 ;
+     - x 1,16-1,22 : 0 / 0,015 / 0,055.
+  2. **Axes sous la butée haute** (table calculée à 1,11 et 1,20, appliquée à toute hauteur sous la butée) :
+     - x 0,77-0,99 : 0,325 / 0,335 / 0,37 ;
+     - x 0,98-1,15 : 0,395 / 0,42 / 0,455 (caméra du dosage) ;
+     - x 1,14-1,21 : 0,30 / 0,30 / 0,30 ;
+     - x 1,20-1,22 : 0 / 0,015 / 0,055.
+  3. **Mât à x < 0,78, axes entre 1,11 et la butée haute** (la tête passe dans l'ouverture du poste du fût) : permis
+     seulement le mât à au plus **0,16 / 0,135 / 0,105** de l'axe du fût (cercle inscrit dans les zones libres de la
+     Maquette, `w_free.json`). Ailleurs, interdit (la zone libre « y ≥ 0,955 » est hors de la course du mât, 0,83).
+     Sous 1,11, ce sont les règles du fût (mât à 0,197 au plus, 0,17 côté −x). Exemple : x 0,50, y 0,60 à 1,15 :
+     interdit.
+  4. Tête tournée : comme avant (godet fermé, « fermé » + rayon balayé − demi-longueur fermé, ou rayon du cercle
+     « fermé » moins la même différence ; godet ouvert, « grand ouvert »).
+  5. Vidage : mât en (0,925 ; 0,42), hors de toutes ces limites. Essuyage du seau à y 0,42 (bord 0,78, axes au
+     bord + 0,196) : côté allée godet fermé ou à moitié, bon pour les 4 formats (grand ouvert touche le moteur des
+     barres). Côté +x serait possible maintenant ; on garde le côté allée (`direction_deg: 90`).
+  6. Plus de bande « permise en butée haute » : le porte-bocal n'est plus à 0,565.
 - **Griffe : essuyage et « Y minimum du mât »** (contrôle de la maquette v45.104 du projet mécanique, 01/11/2026 ;
   tranché par le fil logiciel, niveau 1) :
   1. Essuyage du bord du seau **côté allée confirmé** (`essuyage → direction_deg: 90`), mais **godet fermé ou à
