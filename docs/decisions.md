@@ -526,7 +526,7 @@ si l'une pose problème, elle le dit dans sa PR.
      tête sous 1,05 : tête à A = 180° seulement** (réponse du fil Portique : à 0° la raclette, à ± 90° les bras,
      en biais jusqu'à 0,143, touchent la traverse ; à 180° il reste 15 mm). Hors de là, rotation libre (règle des axes ≤ 1,075 godet ouvert, ≤ 1,11 fermé). Au-delà
      de x 2,0 : pas de rotation, **sans** limite d'angle (le « 0° ou 180° seulement » de la PR est retiré).
-  4. Origines A et B de la griffe (fil Griffe, niveau 1) : 2 micro-interrupteurs NF à levier. **B** : origine
+  4. Origines A et B de la griffe (fil Griffe, niveau 1) : 2 capteurs (voir point 7). **B** : origine
      « fermé nominal », recherche 2 mm vers l'ouvert puis **vers fermé**, lente, à courant réduit (jamais ouvrir :
      le godet peut être plein) ; butées logicielles 0 à +36 mm ; blocage avant l'interrupteur : arrêt, alarme
      « godet bloqué, vider au-dessus d'un seau ». **A** : fanion de 180° (actionné de −180° à 0°, libre de 0° à
@@ -538,6 +538,17 @@ si l'une pose problème, elle le dit dans sa PR.
      demi-tours de la griffe hors du fût) ; le point (0,708 ; 0,74) est abandonné (interdit par la table v45.111).
      Repère des angles : celui du logiciel (A = 0 bras le long du pont, raclette vers −x) ; origine de A = 0. Entrées : à confirmer après la validation du matériel (`exemple: true`).
   5. Garage du chariot : **centre du chariot à 0,50** (mâts à 0,46), comme dans la PR.
+  6. **Décision de Karulium (03/11, 22:50)** : le pont va jusqu'à **x ≥ 0,223** (butée logicielle, limite accordée le
+     08/10), au lieu de 0,233. La tête de préhension atteint ainsi **x 0,352**, dans l'axe des brosses du Lavage :
+     le point 1 est réglé, places du lavage à nouveau à 0,352 (et relatives au centre du fût de lavage). Le poste
+     du fût ne bouge pas, aucune pièce ne change. Fins de course X placés au montage pour déclencher vers 0,20,
+     avant la butée mécanique (≈ 0,12). La Maquette a vérifié la griffe à cette limite : aucun contact.
+     Bout côté fût (fil Portique, 03/11) : **pont sous 0,233 → axes de la griffe ≥ 1,05 obligatoires** (à 180° il ne
+     resterait que 5 mm devant la traverse basse) ; de 0,233 à 0,30, axes sous 1,05 : A = 180° seulement (point 3).
+  7. Correction du fil Griffe (03/11) : les origines A et B sont **2 capteurs inductifs M12, portée 4 mm, PNP, NO**,
+     10-30 V sur le +24 V du câble, signal à +24 V quand ils voient le métal (2 entrées 24 V actives hautes) :
+     B actif quand la fourchette arrive à « fermé » ; A actif quand il voit le fanion (A de −180° à 0°). Le principe
+     et les sens ne changent pas. La Maquette confirme le point (0,86 ; 0,57) sur la v45.112 (un tour complet libre).
   Ces corrections vont dans la tâche 36 bis.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
