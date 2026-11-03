@@ -67,6 +67,9 @@ class Objet:
     poids_n: float | None = None
     tolerance_n: float = 0.0
     aimants: bool = False
+    # Objet pris hors d'axe : son axe est à y de la tête + decalage_y_m (seau d'une pile de la
+    # rangée y 0,84 pris tête à 0,83, au bout de la course du chariot).
+    decalage_y_m: float = 0.0
 
     @classmethod
     def depuis(cls, sorte: str, reglages: ObjetPrehension, **valeurs: float) -> "Objet":

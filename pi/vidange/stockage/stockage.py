@@ -41,6 +41,7 @@ vision.
 """
 
 from collections.abc import Callable, Generator
+from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol
 
 from vidange.chef import Condition, ErreurEtape
@@ -261,7 +262,11 @@ class Stockage:
             places.bord_pile(self.machine, format, pile.nombre),
         )
         self.pile_en_cours, self.format_en_cours = nom, format
-        yield from prehension.geste_prendre("seau", x, y, contact, format)
+        tete_y = places.prise_y(self.machine, y)
+        yield from prehension.geste_prendre("seau", x, tete_y, contact, format)
+        if prehension.objet is not None and tete_y != y:
+            # Pris hors d'axe : le seau tenu garde son axe (règle du rail opérateur).
+            prehension.objet = replace(prehension.objet, decalage_y_m=y - tete_y)
         self.inventaire.changer_pile(nom, format, pile.nombre - 1)
         if self._sortie_de_la_bande(nom):
             # Le long de la bande vers −x (les piles plus proches du chariot sont déjà vides),
@@ -298,7 +303,7 @@ class Stockage:
             camera = self.reglages.trajets.camera_bocal
             yield from prehension.geste_aller(camera.seau_x_min, camera.seau_y_libre)
             yield from prehension.geste_aller(camera.seau_x_min, y)
-        yield from prehension.geste_poser(x, y, contact)
+        yield from prehension.geste_poser(x, places.prise_y(self.machine, y), contact)
         self.inventaire.changer_pile(nom, format, pile.nombre + 1)
 
     # ------------------------------------------------------------ tiroir des seaux pleins

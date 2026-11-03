@@ -6,10 +6,15 @@
 #
 # Repère : la position machine de chaque axe est celle de pi/reglages/machine.yaml
 # (mm = mètres × 1000 ; degrés pour la rotation).
-#   Z : pignon-crémaillère, NEMA 23 boucle fermée à frein (maintien réduit à l'arrêt). Position
-#       machine = hauteur de la FACE de la tête. Prise d'origine en haut, sur le fin de course
-#       fdc_prehension_haut : face à 1100 mm (fiche). Course ≈ 670 mm (EXEMPLE, à confirmer au
-#       montage).
+#   Z : pignon-crémaillère (module 1, 16 dents : 50,27 mm par tour), NEMA 23 boucle fermée à
+#       frein (maintien réduit à l'arrêt). Position machine = hauteur de la FACE de la tête. Prise
+#       d'origine en haut, sur le fin de course fdc_prehension_haut (NF) : face à 1100 mm (fiche).
+#       Course 650 mm (Portique, 01/11 : plaque Z de 1 308 à 1 958). Vitesses du Portique (28/10) :
+#       80 mm/s, approche 20 mm/s, 0,5 m/s². Le Pi fait sa prise d'origine (« $HZ ») avec celle du
+#       Z de la griffe, avant Y et X de la carte n° 1 (vidange.portique).
+#       Frein à manque de courant : le Pi le desserre avant de bouger (sortie digital4,
+#       frein_prehension_z), le serre à l'arrêt long. Alarme du pilote de Z sur macro0 (lettre 0
+#       de « Pn: », sans macro) : arrêt et alerte.
 #   A : rotation de la tête, maintien plein (≈ 3 N·m pendant le brossage du lavage et le
 #       vissage, fiche). Visser = sens horaire vu d'en haut = A positif ; aucun axe inversé
 #       (fiche). Origine sur origine_rotation_tete (référence à confirmer au câblage).
@@ -46,18 +51,18 @@ axes:
   shared_stepper_disable_pin: NO_PIN
 
   z:
-    # EXEMPLE : 1600 pas par tour sur le pilote, pignon de 60 mm de tour (module 1, 19 dents).
-    steps_per_mm: 26.667
-    max_rate_mm_per_min: 9000
+    # EXEMPLE : 1600 pas par tour sur le pilote, pignon de 50,27 mm de tour (module 1, 16 dents).
+    steps_per_mm: 31.83
+    max_rate_mm_per_min: 4800
     acceleration_mm_per_sec2: 500
-    max_travel_mm: 670
+    max_travel_mm: 650
     soft_limits: true
     homing:
       cycle: 1
       positive_direction: true
       mpos_mm: 1100
-      feed_mm_per_min: 300
-      seek_mm_per_min: 2000
+      feed_mm_per_min: 120
+      seek_mm_per_min: 1200
       settle_ms: 250
     motor0:
       # EXEMPLE de broche : fdc_prehension_haut.
@@ -130,11 +135,16 @@ probe:
   pin: gpio.32:low
   check_mode_start: true
 
+# Alarme du pilote de Z (alarme_prehension_z), lue par le Pi (lettre 0). EXEMPLE de broche.
+control:
+  macro0_pin: gpio.34:low
+
 # Sorties (pi/reglages/fluidnc.yaml → sorties). EXEMPLES de broches.
 #   digital0 : vanne_vide ; digital1 : electroaimants_capsule ; digital2 : air_col_lavage ;
-#   digital3 : chauffage_lavage.
+#   digital3 : chauffage_lavage ; digital4 : frein_prehension_z (commandée = desserré).
 user_outputs:
   digital0_pin: gpio.2
   digital1_pin: gpio.5
   digital2_pin: gpio.17
   digital3_pin: gpio.18
+  digital4_pin: gpio.19

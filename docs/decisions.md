@@ -509,6 +509,35 @@ si l'une pose problème, elle le dit dans sa PR.
      Fermeture des seaux, qui s'occupe des couvercles).
   3. Photo de contrôle de la bande du haut : le faux « bien placé » reste tant que les réglages sont en
      `exemple: true` (on regarde à l'œil pendant les essais) ; la vraie lecture vient avec la tâche 22 ter.
+- **Portique, réponses à la PR n° 56** (tâche 36, 03/11/2026 ; fils Lavage, Remplissage, Portique, Griffe) :
+  1. Lavage : **12 mm ne conviennent pas** (fil Lavage) : la tête doit être au centre du fût de lavage à ± 2 mm
+     (brosses coaxiales au seau ; à 12 mm, le seau B n'est plus brossé d'un côté et le seau C bloque). C'est un
+     choix mécanique (déplacer le poste de +12 mm, ou regagner 10 mm au Portique et à la Préhension), remonté par le
+     fil Lavage. En attendant : places du lavage **relatives au centre du fût de lavage** (seau posé centré ; jet
+     d'air A (+2 ; −15,2), B (+2 ; −23), C (+2 ; 0), D (+2 ; −11,5) en mm). Le 0,362 de la PR reste provisoire : le
+     lavage n'est pas utilisable tant que ce point n'est pas réglé.
+  2. Prise double (fil Remplissage, avec la Préhension, 03/11) : hauteurs de pose **vraies** (dessus du plateau),
+     H = 0,6875 − (h − col) : **A 0,4675, B 0,5125, C 0,4925, D 0,4625** ; face de la ventouse à la pose = H + 0,003.
+     L'étape c) met la face à H − 0,025, jamais sous 0,45 : B et C passent, **A et D non**. Règle : prise double
+     d'un seau **A ou D** → la préhension repose les 2 seaux emboîtés sur une place libre et refait le dégerbage,
+     **sans séparation sur le chariot** ; B et C gardent l'ordre a) à i). Pas de course en plus (la Préhension :
+     changer rail, crémaillère et chaîne Z).
+  3. « Au bout côté fût » (fil Portique) : règle à part de celle de x 2,0. **Pont entre 0,233 et 0,30 et axes de la
+     tête sous 1,05 : tête à un seul angle** (sinon elle touche la traverse) ; angle dans le repère du logiciel
+     demandé au fil Griffe. Hors de là, rotation libre (règle des axes ≤ 1,075 godet ouvert, ≤ 1,11 fermé). Au-delà
+     de x 2,0 : pas de rotation, **sans** limite d'angle (le « 0° ou 180° seulement » de la PR est retiré).
+  4. Origines A et B de la griffe (fil Griffe, niveau 1) : 2 micro-interrupteurs NF à levier. **B** : origine
+     « fermé nominal », recherche 2 mm vers l'ouvert puis **vers fermé**, lente, à courant réduit (jamais ouvrir :
+     le godet peut être plein) ; butées logicielles 0 à +36 mm ; blocage avant l'interrupteur : arrêt, alarme
+     « godet bloqué, vider au-dessus d'un seau ». **A** : fanion de 180° (actionné de −180° à 0°, libre de 0° à
+     +180°), approche finale toujours en +, recherche limitée à 190°, jamais au-delà de ± 180° ; godet fermé ;
+     axes ≤ 1,11. Ordre : portique (Z, Y, X), puis B (Z en haut), puis aller au point de recherche de A, tête à un
+     angle de bras « le long d'un axe », descendre, puis A. Si la dernière position connue de A n'était pas un de
+     ces angles (coupure pendant une rotation en bas) : ne pas monter Z, alarme, tête remise à la main. Point de
+     recherche (0,708 ; 0,74 proposé, interdit par la table v45.111) et correspondance des angles : demandés au fil
+     Griffe. Entrées : à confirmer après la validation du matériel (`exemple: true`).
+  5. Garage du chariot : **centre du chariot à 0,50** (mâts à 0,46), comme dans la PR.
+  Ces corrections vont dans la tâche 36 bis.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
@@ -576,6 +605,6 @@ Les chiffres ci-dessous vont dans `pi/reglages/machine.yaml`, jamais dans le cod
 
 ## État des modules (26/10/2026)
 
-- **Figés** (on peut coder leurs gestes) : Poste du fût, Lavage, Griffe (Transfert), Porte-bocal, Mycélium, Guidage caméra, Préhension, écran Nextion.
-- **Pas encore figés** (case vide seulement) : Remplissage, Stockage, Portique, Nettoyage, Spray, Micropore, Fermeture des seaux, Air comprimé, Entonnoir.
+- **Figés** (on peut coder leurs gestes) : Poste du fût, Lavage, Griffe (Transfert), Porte-bocal, Mycélium, Guidage caméra, Préhension, écran Nextion, Portique (gelé le 28/10/2026, tâche 36).
+- **Pas encore figés** (case vide seulement) : Remplissage, Stockage, Nettoyage, Spray, Micropore, Fermeture des seaux, Air comprimé, Entonnoir.
 - Références encore à choisir : fins de course du Remplissage, microrupteurs du Stockage.

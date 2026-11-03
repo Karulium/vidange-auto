@@ -182,11 +182,18 @@ def test_boitier_de_la_camera_du_bocal():
 
 
 def test_poignee_du_volet():
-    # Mât à y 0,884 (bout de sa course) : bras le long du pont, la tête reste à y ≤ 0,995, sous
-    # la poignée (y ≥ 1,005) ; tournée, elle balaie jusqu'à y ≈ 1,02.
-    pres = Pose(x=0.55, y=0.884, z=1.0, a=0, b=0)
+    # Mât au bout de sa course (y 0,83, Portique du 01/11) : même tournée, la tête (rayon balayé
+    # 0,139) reste à y ≤ 0,97, sous la poignée (y ≥ 1,005).
+    pres = Pose(x=0.55, y=0.83, z=1.0, a=0, b=0)
     assert refus(pres) is None
-    assert "poignée du volet" in refus(pres.avec(a=45))
+    assert refus(pres.avec(a=45)) is None
+    assert "hors de la course (0,04 à 0,83)" in refus(pres.avec(y=0.884))
+    # La poignée reste vérifiée (un mât plus loin, réglages d'essai).
+    regles = ReglesGriffe(MACHINE)
+    regles.courses["chariot_y"] = (0.04, 0.884)
+    loin = Pose(x=0.55, y=0.884, z=1.0, a=0, b=0)
+    assert regles.refus_pose(loin, Contexte()) is None
+    assert "poignée du volet" in regles.refus_pose(loin.avec(a=45), Contexte())
 
 
 def essuyage(nom_format: str, direction_deg: float) -> Pose:

@@ -570,7 +570,9 @@ def principal(
     try:
         for liaison in liaisons.values():
             liaison.demarrer()
-        _, erreur_reprise = preparer_chef(chef, module_lieu_sur(reglages.machine, liaisons))
+        _, erreur_reprise = preparer_chef(
+            chef, module_lieu_sur(reglages.machine, liaisons, reglages.fluidnc.cartes)
+        )
         chef.demarrer()
         cameras.demarrer()
         fils += [

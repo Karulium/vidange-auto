@@ -183,6 +183,18 @@ cartes:
     sorties: 18
     tension_max: 24
     isolee: true
+  # Carte FluidNC n° 1 (portique : pont X1 et X2, chariot Y, Z, A et B de la griffe) : comme la
+  # n° 3, le Pi ne la lit pas lui-même. Les vrais numéros de broches vont dans
+  # fluidnc/portique.yaml (plan de câblage attendu).
+  fluidnc_portique:
+    exemple: true
+    description: Carte FluidNC n° 1 (portique), 6 axes, pilotes externes
+    # 12 entrées : 6 fins de course et origines, 4 alarmes de pilote, OK des chocs, 1 libre
+    # (EXEMPLE : à confirmer avec le choix de la carte).
+    entrees: 12
+    sorties: 18
+    tension_max: 24
+    isolee: true
 
 # Les signaux. Le nom est celui que le code utilise.
 #   carte : un nom de la liste « cartes » ci-dessus.
@@ -825,6 +837,143 @@ signaux:
     type: logique
     tension: 5
     module: remplissage
+  # Portique (fiche du module, gelé le 28/10/2026, fichier du fil Portique du 01/11 ; carte n° 1,
+  # sauf le Z de la préhension sur la carte n° 4). Repères : EXEMPLES (plan de câblage). Fins de
+  # course NF (fil coupé = déclenché) ; alarmes des pilotes lues par le Pi (macro0 à 3) : arrêt et
+  # alerte. Les freins des deux Z serrent sans courant (24 V coupé par l'arrêt d'urgence).
+  fdc_pont_x1:
+    exemple: true
+    description: Fin de course NF du moteur X1 du pont, côté fût (origine de X1)
+    carte: fluidnc_portique
+    broche: E1
+    type: contact
+    tension: 24
+    repos: ferme
+    module: portique
+  fdc_pont_x2:
+    exemple: true
+    description: Fin de course NF du moteur X2 du pont, côté fût (origine de X2)
+    carte: fluidnc_portique
+    broche: E2
+    type: contact
+    tension: 24
+    repos: ferme
+    module: portique
+  fdc_chariot_y:
+    exemple: true
+    description: Fin de course NF du chariot Y, côté paroi (origine de Y)
+    carte: fluidnc_portique
+    broche: E3
+    type: contact
+    tension: 24
+    repos: ferme
+    module: portique
+  fdc_griffe_haut:
+    exemple: true
+    description: Fin de course NF du Z de la griffe, en haut de colonne (origine)
+    carte: fluidnc_portique
+    broche: E4
+    type: contact
+    tension: 24
+    repos: ferme
+    module: portique
+  alarme_pont_x1:
+    exemple: true
+    description: Alarme du pilote boucle fermée du moteur X1 du pont
+    carte: fluidnc_portique
+    broche: E5
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: portique
+  alarme_pont_x2:
+    exemple: true
+    description: Alarme du pilote boucle fermée du moteur X2 du pont
+    carte: fluidnc_portique
+    broche: E6
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: portique
+  alarme_chariot_y:
+    exemple: true
+    description: Alarme du pilote boucle fermée du chariot Y
+    carte: fluidnc_portique
+    broche: E7
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: portique
+  alarme_griffe_z:
+    exemple: true
+    description: Alarme du pilote boucle fermée du Z de la griffe (NEMA 23 à frein)
+    carte: fluidnc_portique
+    broche: E8
+    type: npn
+    tension: 24
+    repos: ouvert
+    module: portique
+  ok_chocs:
+    exemple: true
+    # Optocoupleur PC817 dans le boîtier, 4,7 kΩ vers 0 V à l'entrée de l'armoire
+    # (docs/decisions.md, PR n° 16). Broche « fault » de FluidNC : sans 24 V, alarme de la carte.
+    description: >-
+      Signal « OK » du détecteur de chocs de la colonne de la griffe (24 V = OK ; carte éteinte,
+      fil coupé ou choc = pas OK). Il protège la machine, jamais les personnes
+    carte: fluidnc_portique
+    broche: E9
+    type: pnp
+    tension: 24
+    repos: ferme
+    module: portique
+  moteur_pont_x1:
+    exemple: true
+    description: Pas et sens du pilote du moteur X1 du pont (axe X, motor0)
+    carte: fluidnc_portique
+    broche: [S1, S2]
+    type: logique
+    tension: 5
+    module: portique
+  moteur_pont_x2:
+    exemple: true
+    description: Pas et sens du pilote du moteur X2 du pont (axe X, motor1)
+    carte: fluidnc_portique
+    broche: [S3, S4]
+    type: logique
+    tension: 5
+    module: portique
+  moteur_chariot_y:
+    exemple: true
+    description: Pas et sens du pilote du chariot Y (axe Y)
+    carte: fluidnc_portique
+    broche: [S5, S6]
+    type: logique
+    tension: 5
+    module: portique
+  moteur_griffe_z:
+    exemple: true
+    description: Pas et sens du pilote du Z de la griffe (axe Z)
+    carte: fluidnc_portique
+    broche: [S7, S8]
+    type: logique
+    tension: 5
+    module: portique
+  frein_griffe_z:
+    exemple: true
+    description: Frein 24 V du Z de la griffe, par un relais de l'armoire (commandé = desserré)
+    carte: fluidnc_portique
+    broche: S13
+    type: logique
+    tension: 5
+    module: portique
+  frein_prehension_z:
+    exemple: true
+    description: Frein 24 V du Z de la préhension, par un relais de l'armoire (commandé = desserré)
+    carte: fluidnc_prehension
+    broche: S13
+    type: logique
+    tension: 5
+    module: portique
   # Préhension (fiche du module, validé définitivement le 27/10/2026 ; carte n° 4). Repères et
   # types : EXEMPLES (plan de câblage).
   # Plateau flottant de la tête (course 3 mm, ≈ 10 N) vu par un inductif M8 24 V du moyeu. C'est
@@ -841,13 +990,14 @@ signaux:
     module: prehension
   fdc_prehension_haut:
     exemple: true
-    description: Fin de course de la tête en butée haute (origine de Z, face à 1,10)
+    # NF (Portique, 01/11) : fil coupé = déclenché.
+    description: Fin de course NF de la tête en butée haute (origine de Z, face à 1,10)
     carte: fluidnc_prehension
     broche: E2
-    type: pnp
+    type: contact
     tension: 24
-    repos: ouvert
-    module: prehension
+    repos: ferme
+    module: portique
   origine_rotation_tete:
     exemple: true
     description: Origine de la rotation de la tête (référence à confirmer au câblage)
@@ -865,7 +1015,7 @@ signaux:
     type: npn
     tension: 24
     repos: ouvert
-    module: prehension
+    module: portique
   alarme_rotation_tete:
     exemple: true
     description: Alarme du pilote boucle fermée de la rotation de la tête

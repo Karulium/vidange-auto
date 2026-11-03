@@ -16,7 +16,10 @@ Comme une vraie carte, il a :
 - une file de mouvements limitée : quand elle est pleine, la ligne suivante attend
   (et son « ok » aussi).
 
-On peut simuler : une alarme, un câble coupé puis rebranché, une carte muette, un redémarrage.
+On peut simuler : une alarme, un câble coupé puis rebranché, une carte muette, un redémarrage,
+un axe à deux moteurs de travers (`travers` : écart du 2e moteur sur le 1er, en mm, comme le pont
+X1 et X2 du portique) : la prise d'origine de cet axe le remet d'équerre (chaque moteur s'arrête
+sur son fin de course), les autres mouvements ne le changent pas.
 
 Les valeurs par défaut sont celles d'une carte imaginaire, pas de la vraie machine.
 """
@@ -79,6 +82,10 @@ class FauxFluidnc:
         self.positions = {axe: 0.0 for axe in axes}
         # Position de chaque axe après sa prise d'origine (0 si l'axe n'est pas cité).
         self.origines = dict(origines or {})
+        # Axe à deux moteurs : écart du 2e sur le 1er (mm), remis à 0 par sa prise d'origine.
+        self.travers: dict[str, float] = {}
+        # Prises d'origine faites, dans l'ordre (les lettres de chaque « $H »), pour les tests.
+        self.prises_origine: list[str] = []
         # Entrées actives (lettres de « Pn: ») et sorties tout-ou-rien (numéro → allumée).
         self.entrees: set[str] = set()
         self.sorties: dict[int, bool] = {}
@@ -243,6 +250,12 @@ class FauxFluidnc:
                     self.positions[axe] += ecart * utilise / besoin
         if not fini:
             return utilise if utilise > 0 else None
+        if bloc.prise_origine and bloc.cible is not None:
+            # Chaque moteur d'un axe double s'est arrêté sur son fin de course : d'équerre.
+            for axe in bloc.cible:
+                if axe in self.travers:
+                    self.travers[axe] = 0.0
+            self.prises_origine.append("".join(bloc.cible))
         self._file.popleft()
         if bloc is self._attente_ok:
             self._attente_ok = None

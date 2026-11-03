@@ -30,6 +30,7 @@ from vidange.cameras import Camera, Image
 from vidange.cameras.camera import FluxCommande
 from vidange.demarrage import DOSSIER_PI, _chemin
 from vidange.journal import configurer_journal
+from vidange.portique import places_photo
 from vidange.registre import DOSSIER_PHOTOS
 from vidange.reglages import ErreurReglages, Reglages, charger_reglages
 from vidange.vision import fabrique
@@ -176,9 +177,12 @@ def _plafond(options, reglages: Reglages, photographe) -> int:
         photo = photo_depuis_image("plafond", _image(options, None, "plafond"), time.monotonic())
     else:
         photo = photographe.mesure("plafond")
-    # L'outil ne lit pas la position du pont : le garer soi-même au bout opposé.
-    pont_gare = vision.plafond.pont_gare_x_min
-    plafond = CameraPlafond(vision, photographe, FausseReconnaissance(), lambda: pont_gare)
+    # L'outil ne lit pas la position du pont : le garer soi-même au bout opposé (x 2,495).
+    places = places_photo(reglages.machine)
+    tolerance = reglages.machine.portique.photo_tolerance_m if reglages.machine.portique else 0
+    plafond = CameraPlafond(
+        vision, photographe, FausseReconnaissance(), lambda: places["fut_poste"], places, tolerance
+    )
     vu = plafond.lave_bocal_vu(photo.image())
     print(f"Repère du lave-bocal (n° {vision.aruco.lave_bocal}) : {'VU' if vu else 'pas vu'}")
     verdict, raison = ControleLaveBocal(plafond).verdict(photo)

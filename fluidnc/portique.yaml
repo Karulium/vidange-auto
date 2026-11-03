@@ -1,0 +1,223 @@
+# Réglages FluidNC de la carte n° 1 : portique (pont X1 et X2, chariot Y, Z de la griffe) et les
+# axes A et B de la griffe.
+#
+# ATTENTION : EXEMPLE. Ne PAS envoyer ce fichier à la vraie carte avant d'avoir mis les vraies
+# broches (plan de câblage), les vrais pas par mm (impulsions par tour du pilote acheté) et les
+# places mesurées des fins de course. Chiffres du module « Portique » (gelé le 28/10/2026, fichier
+# du fil Portique du 01/11) marqués « (fiche) ».
+#
+# Moteurs : pilotes boucle fermée, même modèle partout, avec une sortie d'alarme ALM.
+#   Pas par mm = impulsions par tour du pilote / mm par tour. EXEMPLE à 1 600 impulsions par tour :
+#   X et Y : courroie GT2 10 mm, poulie 20 dents = 40 mm par tour (fiche) → 40 pas par mm ;
+#   Z : pignon module 1 de 16 dents sur crémaillère = 50,27 mm par tour (fiche) → 31,83 pas par mm.
+#
+# Repère : la position machine de chaque axe est celle de pi/reglages/machine.yaml (mm = mètres
+# × 1000 ; degrés pour la rotation A).
+#   X : le pont, DEUX moteurs (motor0 = X1, motor1 = X2, un par rail, même consigne), NEMA 17
+#       boucle fermée. Chacun a son fin de course côté fût (fdc_pont_x1, fdc_pont_x2) : à la prise
+#       d'origine, chaque moteur s'arrête sur le sien, ce qui remet le pont d'équerre (FluidNC le
+#       fait seul quand les 2 moteurs d'un axe ont chacun leur fin de course). Course 233 → 2 495
+#       mm (fiche) ; jamais sous 233. La position du pont sur les fins de course (mpos_mm) est un
+#       EXEMPLE, mesurée à la mise en service.
+#   Y : le chariot, NEMA 17 boucle fermée. Position machine = y des DEUX MÂTS (centre du chariot
+#       − 40 mm) : 40 → 830 mm (fiche). Fin de course côté paroi (y bas, fdc_chariot_y). Place du
+#       fin de course et butées mécaniques : EXEMPLES, mesurées à la mise en service.
+#   Z : Z de la griffe, NEMA 23 boucle fermée à frein. Position machine = hauteur des axes de la
+#       tête : 375 → 1 290 mm (plaque Z de 1 288 à 2 203, fiche). Fin de course en haut de colonne
+#       (fdc_griffe_haut) = origine ; jamais au-dessus (hauteur sous le pont roulant).
+#   A et B : rotation de la tête et vis du godet de la griffe. Leur prise d'origine n'est pas dans
+#       les fiches : EXEMPLE (question de la PR de la tâche 36), faite APRÈS X.
+#   Frein du Z de la griffe : à manque de courant (le 24 V est coupé par l'arrêt d'urgence). Le Pi
+#       le desserre avant de bouger (M64 P0) et le serre à l'arrêt long (M65 P0) : sortie digital0.
+#   Alarmes des pilotes X1, X2, Y et Z : broches macro0 à macro3 SANS macro, lues par le Pi dans
+#       « Pn: » (lettres 0 à 3, pi/reglages/fluidnc.yaml) : arrêt et alerte (laquelle).
+#   Signal « OK » du détecteur de chocs (accéléromètre de la colonne de la griffe, 24 V = OK) :
+#       broche « fault » de la carte : sans 24 V, FluidNC passe en alarme et arrête tout. Il
+#       protège la MACHINE (les chocs), jamais les personnes.
+#
+# Prise d'origine : le Pi l'envoie axe par axe, dans l'ordre (vidange.portique) : « $HZ » ici et
+# sur la carte n° 4 (les deux Z, freins desserrés), puis « $HY », puis « $HX » (X1 et X2 ensemble),
+# puis « $HA » et « $HB ». Les cycles ci-dessous donnent le même ordre pour un « $H » complet.
+# En vitesse d'approche (50 mm/s en X et Y, 20 mm/s en Z, fiche), recul de quelques mm.
+# Vitesses (fiche, 28/10) : X et Y 250 mm/s, Z 80 mm/s ; accélération 1 m/s² en X et Y à vide
+# (0,5 m/s² seau tenu : le Pi la change par « $/axes/x/acceleration_mm_per_sec2 »), 0,5 m/s² en Z.
+#
+# À VÉRIFIER à l'essai de la carte (pi/systeme/essai-portique.md) : sens de chaque axe, mise
+# d'équerre, les fins de course (NF : fil coupé = déclenché), les lettres de « Pn: », le frein.
+
+name: "Vidange carte 1 - portique (EXEMPLE)"
+board: "ESP32 6 axes, pilotes externes (EXEMPLE)"
+
+stepping:
+  engine: RMT
+  idle_ms: 255
+  pulse_us: 4
+  dir_delay_us: 2
+  disable_delay_us: 0
+
+# Prise d'origine obligatoire à la mise sous tension (docs/decisions.md).
+start:
+  must_home: true
+
+axes:
+  shared_stepper_disable_pin: NO_PIN
+
+  x:
+    # EXEMPLE : 1 600 impulsions par tour, 40 mm par tour (fiche).
+    steps_per_mm: 40
+    # 250 mm/s (fiche).
+    max_rate_mm_per_min: 15000
+    # 1 m/s² à vide (fiche).
+    acceleration_mm_per_sec2: 1000
+    # 2 495 − 233 (fiche).
+    max_travel_mm: 2262
+    soft_limits: true
+    homing:
+      cycle: 3
+      # Vers le fût (vers les x petits).
+      positive_direction: false
+      # EXEMPLE : la place du pont sur les fins de course, mesurée à la mise en service.
+      mpos_mm: 233
+      # Approche 50 mm/s (fiche), puis plus lent pour le contact (EXEMPLE).
+      seek_mm_per_min: 3000
+      feed_mm_per_min: 300
+      settle_ms: 250
+    # X1 : moteur du rail côté paroi (EXEMPLE de côté), fin de course fdc_pont_x1.
+    motor0:
+      # EXEMPLE de broche (NF : « :low » à vérifier avec le câblage, fil coupé = déclenché).
+      limit_neg_pin: gpio.36:low
+      hard_limits: false
+      pulloff_mm: 3
+      standard_stepper:
+        step_pin: gpio.12
+        direction_pin: gpio.14
+        disable_pin: NO_PIN
+    # X2 : moteur de l'autre rail, même consigne, fin de course fdc_pont_x2.
+    motor1:
+      limit_neg_pin: gpio.39:low
+      hard_limits: false
+      pulloff_mm: 3
+      standard_stepper:
+        step_pin: gpio.27
+        direction_pin: gpio.26
+        disable_pin: NO_PIN
+
+  y:
+    # EXEMPLE : 1 600 impulsions par tour, 40 mm par tour (fiche).
+    steps_per_mm: 40
+    max_rate_mm_per_min: 15000
+    acceleration_mm_per_sec2: 1000
+    # Mâts de 40 à 830 mm (fiche).
+    max_travel_mm: 790
+    soft_limits: true
+    homing:
+      cycle: 2
+      # Vers la paroi (y bas).
+      positive_direction: false
+      # EXEMPLE : mesurée à la mise en service.
+      mpos_mm: 40
+      seek_mm_per_min: 3000
+      feed_mm_per_min: 300
+      settle_ms: 250
+    motor0:
+      # EXEMPLE de broche : fdc_chariot_y.
+      limit_neg_pin: gpio.34:low
+      hard_limits: false
+      pulloff_mm: 3
+      standard_stepper:
+        step_pin: gpio.13
+        direction_pin: gpio.15
+        disable_pin: NO_PIN
+
+  z:
+    # EXEMPLE : 1 600 impulsions par tour, 50,27 mm par tour (fiche) → 31,83 pas par mm.
+    steps_per_mm: 31.83
+    # 80 mm/s (fiche).
+    max_rate_mm_per_min: 4800
+    # 0,5 m/s² (fiche).
+    acceleration_mm_per_sec2: 500
+    # Course 915 (fiche).
+    max_travel_mm: 915
+    soft_limits: true
+    homing:
+      cycle: 1
+      # Vers le haut, sur le fin de course de la colonne.
+      positive_direction: true
+      mpos_mm: 1290
+      # Approche 20 mm/s (fiche), puis plus lent (EXEMPLE).
+      seek_mm_per_min: 1200
+      feed_mm_per_min: 120
+      settle_ms: 250
+    motor0:
+      # EXEMPLE de broche : fdc_griffe_haut.
+      limit_pos_pin: gpio.35:low
+      hard_limits: false
+      pulloff_mm: 3
+      standard_stepper:
+        step_pin: gpio.25
+        direction_pin: gpio.33
+        disable_pin: NO_PIN
+
+  a:
+    # Rotation de la tête de la griffe : EXEMPLE (origine pas dans les fiches).
+    steps_per_mm: 22.222
+    max_rate_mm_per_min: 5400
+    acceleration_mm_per_sec2: 360
+    # ± 370° (machine.yaml → griffe_a).
+    max_travel_mm: 740
+    soft_limits: true
+    homing:
+      cycle: 4
+      positive_direction: false
+      mpos_mm: -370
+      seek_mm_per_min: 1800
+      feed_mm_per_min: 300
+      settle_ms: 250
+    motor0:
+      # EXEMPLE de broche : origine_rotation_griffe.
+      limit_neg_pin: gpio.32:low
+      hard_limits: false
+      pulloff_mm: 2
+      standard_stepper:
+        step_pin: gpio.4
+        direction_pin: gpio.16
+        disable_pin: NO_PIN
+
+  b:
+    # Vis du godet de la griffe : EXEMPLE (origine pas dans les fiches). Jamais au-delà de
+    # « fermé » (0) : le capot du boîtier de tête n'a que 4 mm de garde.
+    steps_per_mm: 400
+    max_rate_mm_per_min: 3000
+    acceleration_mm_per_sec2: 200
+    max_travel_mm: 30
+    soft_limits: true
+    homing:
+      cycle: 4
+      # Vers « grand ouvert » (fin de la course), jamais vers le capot.
+      positive_direction: true
+      mpos_mm: 30
+      seek_mm_per_min: 600
+      feed_mm_per_min: 120
+      settle_ms: 250
+    motor0:
+      # EXEMPLE de broche : origine_godet_griffe.
+      limit_pos_pin: gpio.17:low
+      hard_limits: false
+      pulloff_mm: 1
+      standard_stepper:
+        step_pin: gpio.5
+        direction_pin: gpio.18
+        disable_pin: NO_PIN
+
+# Entrées sans macro : alarmes des pilotes (lettres 0 à 3 de « Pn: ») ; « fault » : signal OK du
+# détecteur de chocs (sans 24 V : alarme de la carte). EXEMPLES de broches.
+control:
+  macro0_pin: gpio.19:low
+  macro1_pin: gpio.21:low
+  macro2_pin: gpio.22:low
+  macro3_pin: gpio.23:low
+  fault_pin: gpio.2:low
+
+# Sortie digital0 : frein_griffe_z (commandée = frein desserré). EXEMPLE de broche.
+user_outputs:
+  digital0_pin: gpio.0

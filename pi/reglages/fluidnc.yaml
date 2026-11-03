@@ -27,6 +27,16 @@ cartes:
   portique:
     description: Axes du portique
     numero_serie_usb: "EXEMPLE-PORTIQUE"
+    # Alarmes des pilotes du pont (X1, X2), du chariot (Y) et du Z de la griffe : broches macro0 à
+    # macro3, sans macro (lettres 0 à 3). Frein du Z de la griffe : sortie digital0 (commandée =
+    # desserré). À VÉRIFIER à l'essai de la carte (pi/systeme/essai-portique.md).
+    entrees:
+      alarme_pont_x1: "0"
+      alarme_pont_x2: "1"
+      alarme_chariot_y: "2"
+      alarme_griffe_z: "3"
+    sorties:
+      frein_griffe_z: 0
   chariot:
     description: Axes du chariot de remplissage
     numero_serie_usb: "EXEMPLE-CHARIOT"
@@ -71,6 +81,8 @@ cartes:
     # À VÉRIFIER à l'essai de la carte (pi/systeme/essai-prehension.md).
     entrees:
       contact_tete: P
+      # Alarme du pilote de Z (macro0, sans macro) : à vérifier à l'essai du portique.
+      alarme_prehension_z: "0"
     # Sorties « user_outputs » digital0 à 3 de fluidnc/prehension.yaml : ventouse, capsules,
     # puis jet d'air du col et chauffage du lavage (place libre sur cette carte, EXEMPLE).
     sorties:
@@ -78,3 +90,5 @@ cartes:
       electroaimants_capsule: 1
       air_col_lavage: 2
       chauffage_lavage: 3
+      # Frein du Z de la préhension (commandée = desserré), EXEMPLE.
+      frein_prehension_z: 4

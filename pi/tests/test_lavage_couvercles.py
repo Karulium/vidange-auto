@@ -58,7 +58,7 @@ def mouvements(lavage) -> list:
 
 
 def test_reglages_des_couvercles_et_du_lave_bocal():
-    assert COUVERCLES.centre == (0.352, 0.65) and COUVERCLES.appui_n == 15
+    assert COUVERCLES.centre == (0.362, 0.65) and COUVERCLES.appui_n == 15
     assert COUVERCLES.contact_trop_haut_z == 0.735
     assert COUVERCLES.formats["seau_a"].bas_dessous_z == 0.638
     assert COUVERCLES.formats["seau_d"].decalage_m == 0.023
@@ -160,7 +160,7 @@ def test_couvercle_pose_decale_et_repere_a_son_angle():
     trajets = [m.axes for m in mouvements(couvercles) if m.position == "trajet"]
     axes = [(t["pont_x"][1] + decalage, t["chariot_y"][1]) for t in trajets if "pont_x" in t]
     # Couvercle A : centre décalé de 21 mm dans la direction (+0,26 ; −0,97).
-    attendu = (0.352 + 0.021 * 0.26 / 1.00424, 0.65 - 0.021 * 0.97 / 1.00424)
+    attendu = (0.362 + 0.021 * 0.26 / 1.00424, 0.65 - 0.021 * 0.97 / 1.00424)
     assert axes[1] == pytest.approx(attendu, abs=1e-4)
     # Repère : 200° tête à 0 → mis à 60° (la tête tourne de −140°).
     rotation = next(m for m in mouvements(couvercles) if m.position.startswith("repère du"))
