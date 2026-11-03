@@ -1016,11 +1016,12 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
      0° ou 180° » : au-delà de x 2,0, la règle reste seulement « pas de rotation » (`griffe → rotation →
      pont_x_max`). Tests : A = 0 refusé à pont 0,25 axes 1,0, permis à axes 1,06 ; A = 180 permis ; A = 90 permis
      à pont 2,2 (sans rotation).
-  4. **Origines A et B de la griffe** (remplacer l'exemple de la PR n° 56) : 2 fins de course NF à levier,
-     `fdc_origine_godet_griffe` et `fdc_origine_rotation_griffe` dans `docs/entrees-sorties.yaml` (`exemple: true`,
-     sur le multiconducteur de la griffe). **B** : 2 mm vers l'ouvert, puis vers FERMÉ, lent, à courant réduit,
-     jusqu'au fin de course = « fermé nominal » (0) ; butées logicielles 0 à +36 mm ; blocage vu par le codeur
-     avant le fin de course : arrêt, alarme « godet bloqué, vider au-dessus d'un seau ». **A** : fanion de 180°,
+  4. **Origines A et B de la griffe** (remplacer l'exemple de la PR n° 56) : 2 capteurs inductifs M12 PNP NO
+     (actifs à +24 V quand ils voient le métal), `origine_godet_griffe` (actif godet « fermé ») et
+     `origine_rotation_griffe` (actif pour A de −180° à 0°) dans `docs/entrees-sorties.yaml` (`exemple: true`,
+     2 entrées 24 V actives hautes, sur le multiconducteur de la griffe). **B** : 2 mm vers l'ouvert, puis vers FERMÉ, lent, à courant réduit,
+     jusqu'au capteur actif = « fermé nominal » (0) ; butées logicielles 0 à +36 mm ; blocage vu par le codeur
+     avant le capteur : arrêt, alarme « godet bloqué, vider au-dessus d'un seau ». **A** : fanion de 180°,
      actionné pour A de −180° à 0, libre de 0 à +180° ; son état dit de quel côté de 0 est la tête ; tourner vers
      le bord, approche finale toujours en +, lente ; recherche limitée à 190° (sinon alarme), jamais au-delà de
      ± 180° ; origine = A 0. Ordre (`portique → origine`) : portique (Z, Y, X) ; B, Z en haut ; aller au point de
@@ -1028,7 +1029,12 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
      dernière position connue de A n'était ni 0° ni 180° (coupure pendant une rotation en bas) : ne pas monter Z,
      alarme, tête remise à la main. Ce point (0,86 ; 0,57), axes 1,075, godet fermé, sert aussi à tous les
      demi-tours de la griffe hors du fût (`griffe → point_demi_tour`), à la place de tout autre point.
-  5. Le lavage (point 1 de la décision) **n'est pas dans cette tâche** : il attend la décision mécanique.
+  5. **Pont jusqu'à x 0,223** (décision de Karulium du 03/11, point 6) : course de `pont_x`, `griffe → pont_x_min`,
+     place de photo du stockage (`vision`), et tout ce qui disait 0,233 comme limite du pont.
+     Bout côté fût : en plus de la bande du point 3, **pont de 0,223 à 0,233 : axes de la griffe ≥ 1,05
+     obligatoires** (à 180° il ne resterait que 5 mm devant la traverse basse ; au-dessus, rotation libre), par
+     exemple `{pont_x: [0.223, 0.233], axes_z_max: 1.05, angles_deg: []}` (aucun angle permis sous 1,05). Test. Places du lavage remises à x 0,352 (centre du fût de lavage) et décalage du brossage à
+     0,002 ; jet d'air en relatif au centre : A (+2 ; −15,2), B (+2 ; −23), C (+2 ; 0), D (+2 ; −11,5) mm.
   Tests de chaque point ; `vidange --verifier` et le simulateur passent.
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
   (le Lavage a besoin de la Préhension, qui tient le seau pendant tout le lavage).
