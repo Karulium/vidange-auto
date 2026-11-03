@@ -170,6 +170,99 @@ si l'une pose problème, elle le dit dans sa PR.
      jusqu'à 3 cm sous eux) : 0,117 au plus le long du bras ; quand seule elle arrive à la hauteur du boîtier de
      la caméra du bocal (bas à z 0,982), c'est elle seule qui compte. Avec la cote de 0,086, le mât reste à
      x ≤ 0,959 devant le boîtier (la fiche disait 0,96). L'essuyage côté allée passe pour les 4 formats.
+- **Agitateur du mycélium FIXE à x 0,925** (choix de Karulium, 01/11/2026 ; vérifié sur la maquette v45.110,
+  `maquette/agitateur-fixe-01-11/resultat.md`). La glissière de l'agitateur disparaît (rails, NEMA 17 et son
+  driver, courroie, 2 fins de course, 2 câbles) : l'agitateur, son bocal et le porte-bocal restent toujours au-dessus
+  du poste (x 0,925 ; y 0,150). Le module Mycélium est **rouvert** (support) : le logiciel attend sa nouvelle fiche
+  avant de changer ses gestes. Règles déjà connues :
+  1. La griffe **vide le seau à y 0,42** (chariot de remplissage à cy 0,285), plus au poste ; le seau vide attend à
+     y 0,42.
+  2. Au poste (y 0,135) : **manivelle en bas**, bord du seau **≤ 0,68 toujours** (Remplissage, règle C2 : à 0,70 ça
+     touche, à 0,68 il reste plus de 2 cm). Spray : plateau ≤ min(0,50 ; 0,68 − h) au lieu de 0,71 − h.
+  3. **Demi-tour du bocal seulement manivelle en haut et chariot à y ≥ 0,40.**
+  4. La règle « l'agitateur roule » (verrou du chariot pendant que l'agitateur roule) est **supprimée** ; le garage
+     à x 0,565 et le demi-tour à 0,865 aussi. La préhension pose et reprend le bocal en (0,925 ; 0,150), axes à 1,05
+     et 1,10, chariot reculé ou au poste : aucun contact.
+  6. Caméra du dosage (fil Guidage caméra, `guidage-camera/logiciel/pivot-camera-dosage.md`, 01/11 23:39 ; remplace
+     sa première version « manivelle en haut seulement ») : le servo pivote le boîtier de 0° (bocal) à 63° (seau),
+     volume balayé x 0,992-1,091, y 0,202-0,277, z 0,975-1,068.
+     a) manivelle (haut, bas, à-coups), bocal (debout, tête en bas) et chariot de remplissage : **aucune condition** ;
+     b) pivot **interdit pendant le demi-tour** du porte-bocal (du déverrouillage au contact « verrou engagé ») ;
+     c) le demi-tour **ne démarre que boîtier à 0°** ;
+     d) pivot interdit si une partie de la tête de la griffe ou de la préhension (ou de l'objet tenu) est dans
+        **x < 1,10, y < 0,34, z 0,95-1,08** ;
+     e) boîtier **remis à 0° avant toute pose ou reprise du bocal** par la préhension.
+     La condition « agitateur garé » (`mycelium → camera_x_max`) disparaît. a) est confirmé par un balayage
+     de la Maquette (02/11). Prendre la photo du seau **bras du spray rangé** (plan de commande v234).
+  7. Fiche du Mycélium v10 (01/11) : bocal toujours en (0,925 ; 0,150), axe de la manivelle z 0,762, centre du bocal
+     z 1,059 manivelle en haut. Manivelle EN HAUT pour la pose et la reprise du bocal et pour le demi-tour ; EN BAS
+     dès que le chariot est au poste (attente). Préhension : face au contact de la capsule à 1,05, approche à 1,10,
+     manivelle en haut, chariot reculé ou au poste. Retirés de la carte n° 3 : NEMA 17 de la glissière, son pilote,
+     ses 2 fins de course. La griffe vide avec le mât en (0,925 ; 0,42).
+  5. Conséquence : la table « Y minimum du mât » du 01/11 ci-dessous (faite avec l'agitateur garé à 0,565) est
+     **périmée** ; une nouvelle table, agitateur fixe à 0,925, est demandée au projet mécanique. Les points 1 (essuyage),
+     6 (boîtier de la caméra du dosage) et 7 (caméra du plafond) de cette section restent bons.
+- **Griffe : table « Y minimum du mât » avec l'agitateur fixe** (Maquette v45.111, 02/11/2026,
+  `maquette/table-y-min-mat-griffe-v45.111.md` ; remplace les points 2 et 3 de la section du 01/11 ci-dessous).
+  y du mât = repère du portique. Godet fermé / à moitié ouvert / grand ouvert, tête bras le long du pont. Bandes de x
+  élargies d'1 cm de chaque côté par le fil logiciel (grille de 1 cm : à la limite, la plus stricte compte) :
+  1. **Axes en butée haute** :
+     - x 0,15-0,69 : 0 / 0,015 / 0,055 (rail du portique, coffret du spray) ;
+     - x 0,68-0,78 : 0,015 / 0,075 / 0,10 (tube haut du support fixe de l'agitateur) ;
+     - x 0,77-1,06 : 0,295 / 0,33 / 0,365 (porte-bocal et bocal) ;
+     - x 1,05-1,12 : 0,215 / 0,225 / 0,26 ;
+     - x 1,11-1,17 : 0,11 / 0,11 / 0,11 ;
+     - x 1,16-1,22 : 0 / 0,015 / 0,055.
+  2. **Axes sous la butée haute** (table calculée à 1,11 et 1,20, appliquée à toute hauteur sous la butée) :
+     - x 0,77-0,99 : 0,325 / 0,335 / 0,37 ;
+     - x 0,98-1,15 : 0,395 / 0,42 / 0,455 (caméra du dosage) ;
+     - x 1,14-1,21 : 0,30 / 0,30 / 0,30 ;
+     - x 1,20-1,22 : 0 / 0,015 / 0,055.
+  3. **Mât à x < 0,78, axes entre 1,11 et la butée haute** (la tête passe dans l'ouverture du poste du fût) : permis
+     seulement le mât à au plus **0,16 / 0,135 / 0,105** de l'axe du fût (cercle inscrit dans les zones libres de la
+     Maquette, `w_free.json`). Ailleurs, interdit (la zone libre « y ≥ 0,955 » est hors de la course du mât, 0,83).
+     Sous 1,11, ce sont les règles du fût (mât à 0,197 au plus, 0,17 côté −x). Exemple : x 0,50, y 0,60 à 1,15 :
+     interdit.
+  4. Tête tournée : comme avant (godet fermé, « fermé » + rayon balayé − demi-longueur fermé, ou rayon du cercle
+     « fermé » moins la même différence ; godet ouvert, « grand ouvert »).
+  5. Vidage : mât en (0,925 ; 0,42), hors de toutes ces limites. Essuyage du seau à y 0,42 (bord 0,78, axes au
+     bord + 0,196) : côté allée godet fermé ou à moitié, bon pour les 4 formats (grand ouvert touche le moteur des
+     barres). Côté +x serait possible maintenant ; on garde le côté allée (`direction_deg: 90`).
+  6. Plus de bande « permise en butée haute » : le porte-bocal n'est plus à 0,565.
+- **Griffe : essuyage et « Y minimum du mât »** (contrôle de la maquette v45.104 du projet mécanique, 01/11/2026 ;
+  tranché par le fil logiciel, niveau 1) :
+  1. Essuyage du bord du seau **côté allée confirmé** (`essuyage → direction_deg: 90`), mais **godet fermé ou à
+     moitié ouvert, jamais grand ouvert** : grand ouvert, les coquilles touchent le moteur des barres du
+     Remplissage (4 formats). On l'essuie **godet à moitié ouvert** (`essuyage → ouverture_godet: 0.5`), le plus
+     proche du « godet ouvert dehors » de la fiche. Côté +x est impossible (caméra du dosage, même godet fermé).
+  2. La table `garage_glissiere` est **remplacée** (agitateur garé à x 0,565 ; l'ancienne était faite avec le garage
+     à 0,615). y minimum du mât, godet fermé / à moitié ouvert / grand ouvert, tête bras le long du pont :
+     - x 0,15-0,395 : 0,00 / 0,05 / 0,07 (glissière du Mycélium) ;
+     - x 0,395-0,44 : 0,20 / 0,215 / 0,25 ;
+     - x 0,44-0,695 : 0,31 / 0,33 / 0,365 (bocal et porte-bocal de l'agitateur garé) ;
+     - x 0,695-0,755 : 0,20 / 0,215 / 0,25 ;
+     - x 0,755-0,78 : 0,11 / 0,11 / 0,11 ;
+     - x 0,78-0,99 : 0,10 / 0,10 / 0,13 ;
+     - x 0,99-1,145 : 0,395 / 0,42 / 0,455, **seulement sous la butée haute** (caméra du dosage : boîtier,
+       profilé, câble HDMI ; en butée haute la tête passe au-dessus) ;
+     - x 1,145-1,205 : 0,30 / 0,30 / 0,30 ;
+     - x 1,205-1,22 : 0,00 / 0,015 / 0,055.
+     La table a été calculée en butée haute (1,29) pour x < 0,78 et de 1,11 à 1,29 pour x ≥ 0,78. Choix : elle
+     compte **à toute hauteur**, sauf la ligne x 0,99-1,145. La griffe ne descend sous la butée haute pour
+     x < 0,78 qu'au lave-bocal (0,35 ; 0,65), loin de toutes ces valeurs. Tête tournée : la règle d'avant reste
+     (godet fermé, « fermé » + rayon balayé − demi-longueur fermé ; godet ouvert, « grand ouvert »).
+  3. **Fin de « permise en butée haute »** (réponse 3 de la PR n° 37 du 29/10) : la nouvelle table compte aussi en
+     butée haute. La préhension au porte-bocal (mât de la griffe en 0,249 ; 0,150) reste permise (0,150 ≥ 0,07).
+  4. Pas de verrou agitateur ↔ rince-verre (la tête au lave-bocal est loin de l'agitateur garé). Le logiciel n'en
+     avait pas : rien à retirer.
+  5. Limite connue : la table ne tient pas compte des pièces qui bougent (chariot de remplissage au poste, plateau
+     au vidage) ; leurs règles restent celles de leurs modules.
+  6. Plan de commande v230 (01/11/2026) : le boîtier de la caméra du dosage (« caméra du bocal » dans
+     `griffe → camera_bocal`) est en PETG ; avec le balayage de son pivot, il occupe **x 0,997-1,091** et
+     **z 0,975-1,068** (y 0,22-0,28 inchangé). Ces cotes remplacent x 1,045-1,085 et z 0,982-1,062 (`z_bas`,
+     `z_haut`).
+  7. Caméra du plafond : objectif en **(1,45 ; 0,545)** (`vision.yaml → cameras → plafond → position`, au lieu de
+     0,50), toujours à ≈ 2,35 de haut.
 - **Réponses aux questions de la PR n° 26** (tâche 19, Mycélium ; tranchées par le fil logiciel, niveau 1) :
   1. Origine de la manivelle : **capteur inductif M8 « manivelle en haut »** (`origine_manivelle`, carte 3), même
      famille que les fins de course de la glissière (quelques euros). Sans lui, après une coupure, la carte ne sait

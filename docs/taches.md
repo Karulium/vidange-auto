@@ -266,6 +266,24 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   l'agitateur. Vérifier l'essuyage du bord du seau (mât à +x du seau, axes à haut + 0,196) contre le boîtier de
   la caméra du bocal (x 1,045-1,085, y 0,22-0,28, z 0,982-1,062) ; s'il y a contact, le dire dans les questions
   de la PR avec une proposition. Tests.
+- [ ] **18 ter. Griffe : nouvelle table « Y minimum du mât » (agitateur fixe) et essuyage godet à moitié** — Modèle :
+  Sonnet, effort moyen. **À faire après la tâche 19 ter.**
+  Source : `docs/decisions.md`, « Griffe : table Y minimum du mât avec l'agitateur fixe » (02/11/2026), points 1 à
+  6, et « Griffe : essuyage et Y minimum du mât » (01/11), points 1, 6 et 7. Dans `pi/reglages/machine.yaml`,
+  remplacer `griffe → garage_glissiere` par deux tables, `y_min_mat → butee_haute` (6 bandes) et
+  `y_min_mat → sous_butee` (4 bandes), plus `ouverture_fut → rayon_mat_max: [0.16, 0.135, 0.105]` et
+  `ouverture_fut → z_min: 1.11` (point 3). Les bandes se chevauchent exprès : une pose est refusée par toute bande
+  qui la contient. Retirer `permise_en_butee_haute` (`pi/vidange/reglages.py`, `BandeGriffe`) et adapter
+  `pi/vidange/griffe/regles.py` : en butée haute la première table ; dessous la seconde ; mât à x < 0,78 et axes
+  de 1,11 à la butée : seulement dans le cercle autour de `poste_fut → centre_fut` (tête tournée : point 4).
+  Ajouter `essuyage → ouverture_godet: 0.5` (vérifié au démarrage : de 0 à moins de 1, car 1 = grand ouvert est
+  refusé) et l'employer dans `geste_essuyer` (`pi/vidange/griffe/griffe.py`) à la place de « godet grand
+  ouvert » ; corriger le commentaire « EN ATTENDANT » de `essuyage` (côté allée confirmé). Recopier aussi : boîte
+  `griffe → camera_bocal` en x 0,997-1,091, z 0,975-1,068 et caméra du plafond en y 0,545 dans
+  `pi/reglages/vision.yaml`. Tests : remplacer `test_bande_du_garage_permise_en_butee_haute_seulement` ; godet fermé,
+  x 0,90 y 0,28 refusé en butée haute, x 0,60 y 0,28 permis ; x 0,90 y 0,31 permis en butée haute, refusé dessous ;
+  x 1,05 y 0,39 refusé sous la butée, permis en butée haute ; x 0,50 y 0,60 à 1,15 refusé ; x 0,29 y 0,57 à 1,15 permis ;
+  vidage en (0,925 ; 0,42) et essuyage des 4 formats sans refus. `vidange --verifier` et le simulateur passent.
 - [x] **19. Mycélium (dosage)** — Modèle : Opus, effort moyen.
   Sources (recopiées ici le 28/10/2026) : fiche du module « Mycélium », **validé définitivement le 24/10/2026**
   (option B : tout le module relevé de 12 mm, garage à x 0,565), fiche des pièces v8 et plan de commande v221.
@@ -339,6 +357,48 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 
   Simulateur : un seau de format A dosé en 4 couches, puis 2 petits seaux B avec un seul bocal. Tests, dont les
   verrous avec le chariot et la casse du bocal.
+- [ ] **19 ter. Mycélium : agitateur fixe à x 0,925 (plus de glissière)** — Modèle : Opus, effort moyen.
+  Sources : `docs/decisions.md`, « Agitateur du mycélium FIXE » (01/11/2026), recopiée de la fiche Mycélium v10
+  (`mycelium/logiciel/mycelium-pour-logiciel.md` du projet mécanique) et des règles C1 à C4 du Remplissage. Les
+  chiffres vont dans `pi/reglages/machine.yaml`, `docs/entrees-sorties.yaml` et `fluidnc/`, jamais dans le code.
+  Ne pas toucher à la table `griffe → garage_glissiere` (tâche 18 ter, en attente de la nouvelle table).
+
+  *Ce qui change.* L'agitateur ne bouge plus : bocal toujours en (0,925 ; 0,150), axe de la manivelle à z 0,762,
+  centre du bocal à z 1,059 manivelle en haut. Plus de garage, de roulage, ni de positions « garage / demi-tour /
+  dosage » séparées.
+  1. **Retirer la glissière** : axe X de la carte n° 3 dans `fluidnc/mycelium_lavage.yaml`, `moteur_glissiere_agitateur`,
+     `alarme_glissiere_agitateur`, `fdc_agitateur_garage`, `fdc_agitateur_dosage` dans `docs/entrees-sorties.yaml`,
+     `mycelium → garage_x, demi_tour_x, dosage_x, tolerance_x_m, vitesses → glissiere_m_s` et leurs vérifications au
+     démarrage. Remplacer par `mycelium → bocal: [0.925, 0.150]` (et garder `manivelle_z`). Les gestes « rouler » de
+     l'agitateur et la prise d'origine de la glissière disparaissent ; celle de la manivelle reste (inchangée).
+  2. **Manivelle** : EN HAUT pour la pose et la reprise du bocal par la préhension, et pour le demi-tour ; EN BAS
+     (course du trou du maneton) dès que le chariot de remplissage est au poste, et comme position d'attente.
+     Supprimer `course_max_garage_m` (plus de garage au-dessus de la marche).
+  3. **Demi-tour du porte-bocal** : seulement manivelle en haut ET chariot de remplissage à y ≥ 0,40
+     (`mycelium → chariot → y_ecarte_min`, gardé). Manivelle en bas : refusé.
+  4. **Chariot de remplissage** (`pi/vidange/remplissage`, `pi/vidange/mycelium/regles.py`) : supprimer « l'agitateur
+     ne roule que chariot à y ≥ 0,40 » et « le chariot ne roule que si l'agitateur est au garage ou au dosage ».
+     Nouvelles règles : au poste (y 0,135) manivelle en bas et bord du seau ≤ 0,68 TOUJOURS ; le chariot roule entre
+     0,135 et 0,42 plateau monté, manivelle en bas ; dosage inchangé (y 0,155, plateau min(0,78 − h ; 0,575)).
+     Spray (verrou 6 de `remplissage → verrous`) : plateau ≤ min(0,50 ; 0,68 − h) (`spray_bord_max_z: 0.68` au lieu
+     de 0,71).
+  5. **Vidage par la griffe à y 0,42** : nouveau `remplissage → vidage_y: 0.42` (le chariot y amène le seau vide et
+     il y attend, jamais au poste plateau haut) ; `griffe → seau_remplissage: [0.925, 0.42]` (mât). Ordre d'un seau :
+     vidage par la griffe à y 0,42 → poste (y 0,135) : spray, micropore → dosage à y 0,155 (manivelle en bas, bocal
+     tête en bas) → retour. Le demi-tour se fait chariot à y ≥ 0,40.
+  6. **Préhension au porte-bocal** (`prehension → porte_bocal`) : en (0,925 ; 0,150), face au contact de la capsule à
+     1,05 (approche à 1,10), manivelle en haut, chariot reculé ou au poste. Supprimer l'exception « zone du garage »
+     (`zone_garage_m`, `course_manivelle_m`, `capsule_manivelle_haut_z` et la condition « griffe en butée haute ») :
+     x 0,925 est hors de l'isolation du fût (x < 0,71). La tête ne passe jamais au-dessus du bocal sauf pour le poser
+     ou le reprendre.
+  7. **Caméra du dosage** : remplacer `mycelium → camera_x_max` (« agitateur garé ») par les conditions b) à e) du
+     point 6 de la décision : pas de pivot pendant le demi-tour, demi-tour seulement boîtier à 0°, pas de pivot tête
+     de griffe ou de préhension dans la boîte x < 1,10, y < 0,34, z 0,95-1,08 (boîte dans `machine.yaml`), boîtier à
+     0° avant la pose et la reprise du bocal. Aucune condition sur la manivelle, le bocal ni le chariot. Test de
+     chaque cas.
+  Tests : chaque condition refusée (demi-tour manivelle en bas, demi-tour chariot à 0,39, chariot au poste manivelle
+  en haut, bord 0,69 au poste, spray avec 0,68 − h dépassé, préhension sur le bocal manivelle en bas) ; un cycle
+  complet d'un seau dans le simulateur, dans l'ordre du point 5. `vidange --verifier` passe.
 - [x] **19 bis. Ne jamais envoyer à une carte un fichier FluidNC d'exemple** — Modèle : Sonnet, effort bas.
   L'envoi de `fluidnc/<carte>.yaml` à une carte est refusé si le fichier est marqué EXEMPLE, avec un message clair
   qui dit quoi faire. Le simulateur et les tests peuvent toujours s'en servir. Tests.
