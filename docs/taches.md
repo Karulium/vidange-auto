@@ -999,6 +999,12 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   accélération réduite seau tenu, places de photo, garage de repos, rotation de la tête refusée au-delà de x 2,0,
   alarme d'un pilote. Outil d'essai et procédure sur le vrai matériel (sens des axes, équerre, fins de course) ;
   « testé sur le vrai matériel : non ».
+- [ ] **36 bis. Portique : corrections après la PR n° 56** — à écrire en entier quand le fil Griffe aura donné le point
+  de recherche de A et les angles dans le repère du logiciel (`docs/decisions.md`, « Portique, réponses à la PR
+  n° 56 », points 3 et 4). Contiendra : hauteurs de pose vraies et prise double A et D sans séparation (point 2) ;
+  règle « bout côté fût » avec condition de hauteur, et retrait du « 0° ou 180° » au-delà de x 2,0 (point 3) ;
+  origines A et B de la griffe (point 4). Le lavage (point 1) attend la décision mécanique. **Ne pas faire tant que
+  cette ligne ne donne pas les règles.**
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
   (le Lavage a besoin de la Préhension, qui tient le seau pendant tout le lavage).
   Sources (recopiées ici le 29/10/2026) : fiche du module « Préhension », **validé définitivement le 27/10/2026**,
