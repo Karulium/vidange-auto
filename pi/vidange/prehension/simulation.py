@@ -22,7 +22,6 @@ from collections.abc import Callable
 from typing import Any
 
 from vidange.chef import Condition, ErreurEtape
-from vidange.griffe.regles import ReglesGriffe
 from vidange.mycelium.regles import PoseAgitateur, ReglesMycelium
 from vidange.prehension.prehension import Prehension
 from vidange.prehension.regles import Objet, Pose
@@ -241,8 +240,8 @@ class TeteSimulee:
 
 def prehension_du_simulateur(simulateur: Simulateur, **options: Any) -> Prehension:
     """La préhension sur la machine imaginaire : tête en haut (position prehension_haut), faux
-    porte-bocal, poste du fût du simulateur (panneau, chariot), agitateur au garage manivelle en
-    bas (prêt pour le porte-bocal), griffe et agitateur lus sur les axes imaginaires. `options` :
+    porte-bocal, poste du fût du simulateur (panneau, chariot), manivelle du mycélium en haut
+    (prête pour le porte-bocal), lue sur les axes imaginaires. `options` :
     cases vides de Prehension (camera_dosage_pivote, anse_levee, photo...)."""
     reglages = simulateur.reglages
     machine = reglages.machine
@@ -258,21 +257,17 @@ def prehension_du_simulateur(simulateur: Simulateur, **options: Any) -> Prehensi
     poste = simulateur.poste_fut()
     options.setdefault("panneau_rabattu", poste.panneau_vu_rabattu)
     options.setdefault("echange_fut", lambda: poste.echange_en_cours)
-    if machine.griffe is not None and "griffe_z" in machine.axes:
-        griffe = ReglesGriffe(machine)
-        options.setdefault(
-            "griffe_en_butee_haute", lambda: griffe.en_butee_haute(etat.positions["griffe_z"])
-        )
-    if machine.mycelium is not None and "agitateur_x" in machine.axes:
+    if machine.mycelium is not None and "manivelle" in machine.axes:
         mycelium = ReglesMycelium(machine)
-        etat.positions["agitateur_x"] = machine.mycelium.garage_x
-        etat.positions["manivelle"] = mycelium.angle_proche(0.0, bas=True)
+        etat.positions["manivelle"] = mycelium.angle_proche(0.0, bas=False)
 
-        def agitateur() -> PoseAgitateur:
-            return PoseAgitateur(etat.positions["agitateur_x"], etat.positions["manivelle"])
+        def manivelle() -> str | None:
+            pose = PoseAgitateur(etat.positions["manivelle"])
+            if mycelium.en_haut(pose):
+                return "haut"
+            return "bas" if mycelium.en_bas(pose) else None
 
-        options.setdefault("agitateur_x", lambda: etat.positions["agitateur_x"])
-        options.setdefault("manivelle_en_bas", lambda: mycelium.en_bas(agitateur()))
+        options.setdefault("manivelle", manivelle)
     prehension = Prehension(machine, tete, porte_bocal, horloge=horloge, **options)
     tete.objet_tenu = lambda: prehension.objet
     return prehension

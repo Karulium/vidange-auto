@@ -129,17 +129,14 @@ class Prehension:
         camera_dosage_pivote: Callable[[], bool] = lambda: False,
         anse_levee: Callable[[], bool] = lambda: False,
         photo: Callable[[str], object] = lambda raison: None,
-        agitateur_x: Callable[[], float | None] = lambda: None,
-        manivelle_en_bas: Callable[[], bool] = lambda: False,
-        griffe_en_butee_haute: Callable[[], bool] = lambda: False,
+        manivelle: Callable[[], str | None] = lambda: None,
     ) -> None:
         """`panneau_rabattu`, `echange_fut` : PosteFut.panneau_vu_rabattu, echange_en_cours.
         `camera_dosage_pivote` : la caméra du dosage pivote (Vision, tâche 22). `anse_levee` :
         la caméra voit une anse levée dans le seau à prendre (tâche 22). `photo(raison)` :
-        photo notée avec une alerte (choc). `agitateur_x`, `manivelle_en_bas` : ce que dit le
-        Mycélium (Mycelium.x_agitateur, en_bas : où est son bocal sur la glissière) ;
-        `griffe_en_butee_haute` : ce que dit la griffe. Sans eux, la tête ne descend jamais au
-        porte-bocal et ne passe jamais au-dessus de la glissière de l'agitateur."""
+        photo notée avec une alerte (choc). `manivelle` : ce que dit le Mycélium
+        (Mycelium.etat_manivelle : « haut », « bas » ou None). Sans lui, la tête ne descend jamais
+        au porte-bocal et ne passe jamais au-dessus du bocal de l'agitateur."""
         assert machine.prehension is not None and machine.griffe is not None
         self.reglages = machine.prehension
         self.formats = machine.griffe.formats
@@ -153,9 +150,7 @@ class Prehension:
         self._camera_dosage_pivote = camera_dosage_pivote
         self._anse_levee = anse_levee
         self._photo = photo
-        self._agitateur_x = agitateur_x
-        self._manivelle_en_bas = manivelle_en_bas
-        self._griffe_en_butee_haute = griffe_en_butee_haute
+        self._manivelle = manivelle
         # Verrou du noyau et de la couronne du lavage (vidange.lavage) : raison du refus, ou
         # None. Sans lavage, les brosses ne tournent jamais.
         self.verrou_brosses: Callable[[Pose], str | None] = lambda pose: "pas de lavage"
@@ -183,10 +178,8 @@ class Prehension:
             camera_dosage_pivote=self._camera_dosage_pivote(),
             echange_fut=self._echange_fut(),
             objet=self.objet,
-            agitateur_x=self._agitateur_x(),
-            manivelle_en_bas=self._manivelle_en_bas(),
+            manivelle=self._manivelle(),
             mors=self._mors_etat(),
-            griffe_en_butee_haute=self._griffe_en_butee_haute(),
         )
 
     def _mors_etat(self) -> str | None:

@@ -108,15 +108,8 @@ axes:
     course: [0.0, 0.03]
     carte: portique
     lettre: B
-  # Les 2 axes de l'agitateur du Mycélium, sur la carte n° 3 (mycelium_lavage). Régler FluidNC
-  # pour que sa position machine soit celle du repère du portique, en mm (prise d'origine sur le
-  # fin de course du garage). Glissière : du garage (0,565) au dosage (0,925), 0,36 de course
-  # (fiche). La longueur du rail est un EXEMPLE.
-  agitateur_x:
-    longueur_rail: 0.95
-    course: [0.565, 0.925]
-    carte: mycelium_lavage
-    lettre: X
+  # L'axe de l'agitateur du Mycélium, sur la carte n° 3 (mycelium_lavage). L'agitateur est FIXE
+  # depuis le 01/11/2026 (fiche Mycélium v10) : plus de glissière, seule la manivelle bouge.
   # Manivelle (°) : elle tourne sans fin, dans un sens ou dans l'autre (le Pi choisit le sens qui
   # la ramène vers 0, pour que le nombre ne grandisse pas). La course doit tenir une agitation
   # entière dans chaque sens (vérifié au démarrage). EXEMPLE : 200 tours de chaque côté.
@@ -264,10 +257,9 @@ positions:
     pont_x: 2.495
   portique_photo_stockage:
     pont_x: 0.233
-  # L'agitateur du mycélium au garage, manivelle en haut.
-  agitateur_garage:
-    agitateur_x: 0.565
-    manivelle: 0
+  # L'agitateur du mycélium en attente : manivelle en bas (simulateur).
+  agitateur_attente:
+    manivelle: 180
   # Le chariot de remplissage au poste, plateau en bas, barres ouvertes, pousseur rentré.
   remplissage_poste:
     remplissage_y: 0.135
@@ -638,36 +630,30 @@ griffe:
       mycelium_kg: 0.15
       pas_pile_m: 0.045
   format_par_defaut: seau_a
-  # Poste de vidage de la griffe (Transfert, 7/10, plan de commande) : mât en (0,925 ; 0,14),
-  # godet à 1 cm du centre du seau (seau au poste y 0,135). À revoir au gel du Remplissage.
-  seau_remplissage: [0.925, 0.14]
+  # Vidage de la griffe dans le seau du chariot de remplissage (agitateur fixe, 01/11/2026) :
+  # mât en (0,925 ; 0,42), seau au vidage (remplissage → vidage_y), jamais au poste.
+  seau_remplissage: [0.925, 0.42]
   # Fût vide : le mât attend ici, pont hors de la zone du chariot du fût (choix du logiciel).
   attente: [0.86, 0.57]
 
-# Mycélium (dosage), module validé le 24/10/2026 (option B : tout le module relevé de 12 mm).
-# Chiffres VRAIS de la fiche du module et du plan de commande v221, sauf ceux marqués EXEMPLE
-# (vitesses, tolérances, dose, pesée : à régler aux essais).
-# Repère du portique, en mètres ; x = position de l'agitateur sur sa glissière.
+# Mycélium (dosage), module validé le 24/10/2026 (option B : tout le module relevé de 12 mm),
+# agitateur FIXE depuis le 01/11/2026 (fiche Mycélium v10, docs/decisions.md « Agitateur du
+# mycélium FIXE »). Chiffres VRAIS de la fiche du module et du plan de commande, sauf ceux marqués
+# EXEMPLE (vitesses, tolérances, dose, pesée : à régler aux essais). Repère du portique, en mètres.
 mycelium:
   exemple: true
-  # Garage (bocal en attente, manivelle en haut), demi-tour du bocal (Porte-bocal), dosage (axe
-  # du seau). EXEMPLE : écart permis autour de ces positions.
-  garage_x: 0.565
-  demi_tour_x: 0.865
-  dosage_x: 0.925
-  tolerance_x_m: 0.002
-  # La caméra du dosage ne pivote vers le seau que si l'agitateur est garé (x ≤ 0,62,
-  # docs/decisions.md, règle 2).
-  camera_x_max: 0.62
-  # Axe de la manivelle (module relevé de 12 mm le 24/10) : pour mémoire.
+  # Axe du bocal, toujours au-dessus du poste (plus de glissière, ni de garage). Centre du bocal
+  # à z 1,059 manivelle en haut (pour mémoire).
+  bocal: [0.925, 0.150]
+  # Axe de la manivelle : pour mémoire.
   manivelle_z: 0.762
   # Course de l'agitation, choisie À LA MAIN (bielle dans un des 3 trous de la manivelle).
   # Le Pi ne la change pas : la tenir à jour quand on change de trou. EXEMPLE : 7 cm.
   course_agitation_m: 0.07
-  # Le chariot de remplissage (verrous du 24/10, recul changé le 31/10) : l'agitateur ne roule
-  # que si le chariot est à y ≥ 0,40 (le moteur de la barre côté mur touche un support à 0,375) ; au dosage, le seau est à y 0,155, plateau à min(0,78 − h ; 0,575) (h : hauteur
-  # du seau dans la table des formats ; bord du seau à 0,78, 0,775 pour le 5 L).
-  # Tolérances : EXEMPLES.
+  # Le chariot de remplissage (règles du 01/11) : demi-tour du bocal seulement manivelle en haut et
+  # chariot à y ≥ 0,40 ; la manivelle ne quitte « en bas » que chariot à y ≥ 0,40 (sauf l'agitation
+  # au dosage) ; au dosage, le seau est à y 0,155, plateau à min(0,78 − h ; 0,575) (h : hauteur du
+  # seau dans la table des formats). Tolérances : EXEMPLES.
   chariot:
     y_ecarte_min: 0.40
     y_dosage: 0.155
@@ -675,14 +661,14 @@ mycelium:
     bord_seau_z: 0.78
     plateau_max_z: 0.575
     tolerance_plateau_m: 0.003
-  # Manivelle en haut à 0° (prise d'origine), en bas à 180°. Courses possibles (fiche) :
-  # 4, 7 ou 10 cm ; au garage, 7 cm au plus (à 10 cm, le fond du bocal toucherait la marche du
-  # poste du fût à z 0,88). Jusqu'à 300 tr/min (fiche). Tolérance : EXEMPLE.
+  # Manivelle en haut à 0° (prise d'origine), en bas à 180°. EN HAUT pour la pose et la reprise du
+  # bocal par la préhension et pour le demi-tour ; EN BAS dès que le chariot de remplissage est
+  # au poste, et pour attendre. Courses possibles (fiche) : 4, 7 ou 10 cm. Jusqu'à 300 tr/min
+  # (fiche). Tolérance : EXEMPLE.
   manivelle:
     angle_haut_deg: 0
     tolerance_deg: 1
     courses_possibles_m: [0.04, 0.07, 0.10]
-    course_max_garage_m: 0.07
     max_tr_min: 300
     # Prise d'origine par le Pi (décision du 29/10) : le capteur voit du métal quand la manivelle
     # n'est PAS en haut, rien sur ≈ ± 95° autour du haut. Un tour lent ; « en haut » = milieu de
@@ -698,7 +684,6 @@ mycelium:
       marge_deg: 20
   # Vitesses : EXEMPLES, à trouver aux essais.
   vitesses:
-    glissiere_m_s: 0.1
     placement_tr_min: 20
     agitation_tr_min: 120
     casse_tr_min: 200
@@ -765,7 +750,7 @@ prehension:
   rayon_tete_m: 0.045
   # Règle 2, isolation du fût : axe de la tête sous x 0,71 et panneau du poste du fût pas vu
   # « rabattu » (contact ouvert et stable) ⇒ face en haut. Le signal est le panneau, pas le fût.
-  # Seule exception : la petite zone du garage (porte_bocal → zone_garage_m, plus bas).
+  # (Le porte-bocal est à x 0,925, hors de cette isolation, depuis le 01/11 : plus d'exception.)
   isolation_fut_x_max: 0.71
   # Règle 3 : seau tenu avec son axe à y > 0,86 (côté opérateur) : bord ≤ 1,10 ; au-dessus des
   # piles (y ≤ 0,86) : bord ≤ 1,155.
@@ -852,31 +837,25 @@ prehension:
     course_appui_m: 0.01
     angle_deg: 90
     descente_m: 0.002
-  # Porte-bocal, au garage de l'agitateur (x 0,565, y 0,150 : réponse du 29/10) : tête orientée
-  # à ± 3° (méplats), bocal à sa hauteur exacte (± 0,5 mm), remontée d'au moins 5 mm avant le
-  # serrage (fiche). Capsule à ≈ 1,0625 manivelle en bas (course 7 cm) : face_z ≈ 1,0625, à
-  # mesurer. Orientation, zone des mors et délai des mors : EXEMPLES (à mesurer au montage).
+  # Porte-bocal, sur l'agitateur FIXE (= mycelium → bocal, fiche Mycélium v10 du 01/11) : face de
+  # la tête au contact de la capsule à 1,05 MANIVELLE EN HAUT, approche à 1,10 (la butée haute) ;
+  # chariot de remplissage reculé ou au poste : aucun contact. Tête orientée à ± 3° (méplats),
+  # bocal à sa hauteur exacte (± 0,5 mm), remontée d'au moins 5 mm avant le serrage (fiche).
+  # Orientation, zone des mors et délai des mors : EXEMPLES (à mesurer au montage).
   porte_bocal:
-    x: 0.565
+    x: 0.925
     y: 0.150
-    face_z: 1.0625
+    face_z: 1.05
     orientation_deg: 0
     tolerance_orientation_deg: 3
     tolerance_hauteur_m: 0.0005
     remontee_min_m: 0.005
     rayon_zone_m: 0.06
     mors_max_s: 20
-    # Isolation du fût (réponse du 29/10) : elle ne s'applique pas dans la petite zone du garage,
-    # axe de la tête à ± 5 mm de (x, y) (pas plus loin : entre y 0,16 et 0,215, la tête toucherait
-    # la paroi haute). La tête y arrive à 1,10 et descend à la verticale, seulement si :
-    # (a) agitateur au garage manivelle en bas, course déclarée 7 cm (mycelium →
-    # course_agitation_m) ; (b) mors ouverts pour poser, serrés pour prendre ; (c) griffe en butée
-    # haute.
-    zone_garage_m: 0.005
-    course_manivelle_m: 0.07
-    # Manivelle en haut, la capsule est à 1,1325, au-dessus de la butée haute de la tête (1,10) :
-    # la tête ne passe jamais au-dessus du bocal au garage (1 cm de marge, EXEMPLE).
-    capsule_manivelle_haut_z: 1.1325
+    # x 0,925 est hors de l'isolation du fût (x < 0,71) : plus d'exception « zone du garage ». La
+    # tête ne passe au-dessus du bocal (sous face_z + marge, sur son rayon + celui de la tête +
+    # marge) que pour le poser ou le reprendre : à la verticale, manivelle en haut, caméra du
+    # dosage à 0°, mors ouverts pour poser, serrés pour prendre. Marge : EXEMPLE.
     marge_bocal_m: 0.01
 
 # Lavage des seaux (fût de lavage, noyau, couronne, eau), module validé définitivement le
@@ -1022,9 +1001,11 @@ lavage:
     egouttage_s: 5
 
 # Caméra du dosage sur son servo DS3225 (docs/decisions.md, règle 2) : 0° = bocal, 63° = seau.
-# Photo du seau après chaque dose, enregistrée avec sa dose au registre. Elle pivote SEULEMENT si
-# l'agitateur est garé (mycelium → camera_x_max) et si griffe et préhension sont hors de la boîte
-# « prehension → camera_dosage » ; elle remonte avant le retour de l'agitateur ou du godet.
+# Photo du seau après chaque dose, enregistrée avec sa dose au registre. Agitateur fixe (01/11,
+# point 6) : aucune condition sur la manivelle, le bocal ni le chariot ; elle ne pivote pas
+# pendant le demi-tour du bocal (et le demi-tour ne démarre que caméra à 0°), ni si griffe ou
+# préhension sont dans la boîte « prehension → camera_dosage » ; elle est remise à 0° avant toute
+# pose ou reprise du bocal par la préhension.
 # Signal : docs/entrees-sorties.yaml. Temps de pivot, impulsions et sortie PWM : EXEMPLES (à
 # mesurer, pi/systeme/essai-vision.md).
 camera_dosage:
@@ -1046,14 +1027,18 @@ camera_dosage:
 # Les verrous ne protègent que la MACHINE : la sécurité des personnes reste câblée.
 remplissage:
   exemple: true
-  # Axe du plateau en x : celui du seau au poste de la griffe (griffe → seau_remplissage). EXEMPLE.
+  # Axe du plateau en x : sous le bocal du mycélium et le mât de la griffe au vidage (griffe →
+  # seau_remplissage).
   axe_x: 0.925
-  # Poste (la griffe verse), dosage du mycélium (= mycelium → chariot → y_dosage), recul pendant
-  # le passage de l'agitateur (= mycelium → chariot → y_ecarte_min ; 0,40 depuis le 31/10), pose
-  # du seau vide et du couvercle (fiche).
+  # Agitateur fixe (01/11/2026) : poste (spray, micropore ; sous le bocal), dosage du mycélium
+  # (= mycelium → chariot → y_dosage), recul pour le demi-tour du bocal (= mycelium → chariot →
+  # y_ecarte_min), vidage par la griffe (le seau vide y attend, jamais au poste plateau haut),
+  # pose du seau vide et du couvercle (fiche). Ordre d'un seau : vidage (0,42) → poste (0,135) →
+  # dosage (0,155) → retour au vidage.
   poste_y: 0.135
   dosage_y: 0.155
   ecarte_y: 0.40
+  vidage_y: 0.42
   pose_y: 0.50
   # EXEMPLES : écarts permis, pas de la vérification des trajets.
   tolerance_y_m: 0.002
@@ -1088,14 +1073,20 @@ remplissage:
     # 5. Bras du galet (tâche 41) : plateau au-dessus de 0,26 seulement bras rangé.
     galet_plateau_max_z: 0.26
     # 6. Spray (tâche 39) : pendant le pivot du bras et la pulvérisation, plateau
-    #    ≤ min(0,50 ; 0,71 − h) ; le bras ne bouge que barres ouvertes à plus de 0,50 d'entraxe.
+    #    ≤ min(0,50 ; 0,68 − h) (0,71 avant l'agitateur fixe) ; le bras ne bouge que barres
+    #    ouvertes à plus de 0,50 d'entraxe.
     spray_plateau_max_z: 0.50
-    spray_bord_max_z: 0.71
+    spray_bord_max_z: 0.68
     spray_entraxe_min_m: 0.50
     # 7. Chariot du fût pas « en place » : bout du chariot côté allée à y ≤ 0,875 (poste_fut →
     #    remplissage_y_bout_max). Bout à 0,40 de l'axe du plateau (fil Remplissage : point le plus
     #    loin 0,396, renvoi d'angle et moteur de montée) : axe du plateau à y ≤ 0,475.
     bout_y_m: 0.40
+    # 8. Agitateur fixe (01/11, Remplissage règle C2) : en deçà du dosage (y < 0,155, le poste),
+    #    bord du seau ≤ 0,68 TOUJOURS (manivelle en bas : à 0,70 ça touche, à 0,68 il reste plus
+    #    de 2 cm). Près du poste (y < ecarte_y), le chariot ne roule et son plateau ne monte que
+    #    manivelle en bas (Mycélium).
+    poste_bord_max_z: 0.68
     # 9. Préhension : pas de descente de sa face sous ≈ 0,84 au-dessus du chariot, sauf barres
     #    ouvertes et tête du micropore rentrée (sauf en mode couvercles : le retourneur, vérifié
     #    par le fil Lavage le 25/10). « Au-dessus du chariot » : axe de la tête à moins de

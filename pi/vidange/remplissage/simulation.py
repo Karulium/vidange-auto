@@ -212,8 +212,9 @@ def remplissage_du_simulateur(
 ) -> ScenarioRemplissage:
     """Le remplissage sur la machine imaginaire, avec les seaux de simulateur.yaml
     (`remplissage`, ou `seaux_simules`) : chariot au poste (position remplissage_poste), tête en
-    haut, agitateur au garage manivelle en haut. Bras du galet rangé, tête du micropore rentrée
-    (modules pas encore écrits). `options` : cases vides de Remplissage (registre, photo...)."""
+    haut, manivelle du mycélium en bas (position agitateur_attente). Bras du galet rangé, tête du
+    micropore rentrée (modules pas encore écrits). `options` : cases vides de Remplissage
+    (registre, photo...)."""
     reglages = simulateur.reglages
     machine = reglages.machine
     simule = reglages.simulateur.remplissage
@@ -225,7 +226,7 @@ def remplissage_du_simulateur(
     horloge = lambda: simulateur.temps  # noqa: E731
     etat = simulateur.etat_axes
     prehension = prehension_du_simulateur(simulateur)
-    for position in ("remplissage_poste", "agitateur_garage"):
+    for position in ("remplissage_poste", "agitateur_attente"):
         if position in machine.positions:
             etat.positions.update(machine.positions[position])
     chariot = ChariotSimule(etat, machine, horloge)
@@ -237,10 +238,6 @@ def remplissage_du_simulateur(
         assert mycelium is not None
         return mycelium.refus_chariot()
 
-    def agitateur_au_garage() -> bool:
-        assert mycelium is not None
-        return not mycelium.dosage_en_cours()
-
     options.setdefault("chariot_fut_en_place", lambda: not poste.echange_en_cours)
     options.setdefault("bras_galet_range", lambda: True)
     options.setdefault("micropore_rentre", lambda: True)
@@ -249,7 +246,6 @@ def remplissage_du_simulateur(
         chariot,
         horloge=horloge,
         refus_mycelium=refus_mycelium,
-        agitateur_au_garage=agitateur_au_garage,
         vision=vision,
         **options,
     )

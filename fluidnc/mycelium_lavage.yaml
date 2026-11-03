@@ -6,10 +6,8 @@
 #
 # Repère : la position machine de chaque axe est celle de pi/reglages/machine.yaml
 # (mm = mètres × 1000 ; degrés pour la manivelle).
-#   X : glissière de l'agitateur. NEMA 17 boucle fermée (codeur 1000 lignes), courroie GT2.
-#       Prise d'origine sur le fin de course du garage : x = 565 mm (fiche). Course 360 mm
-#       jusqu'au dosage à 925 mm (fiche). Le fin de course du dosage est une butée de la machine
-#       (alarme s'il est touché) : le régler juste après 925 mm.
+#   X : PLUS UTILISÉ. L'agitateur est fixe depuis le 01/11/2026 (fiche Mycélium v10) : la
+#       glissière, son NEMA 17, son pilote et ses 2 fins de course sont retirés de la carte.
 #   A : manivelle. NEMA 34 à codeur, pilote HBS86H en 48 V. Elle tourne sans fin, dans les deux
 #       sens : pas de limites logicielles. Jusqu'à 300 tr/min (fiche) = 108 000 °/min.
 #       Le capteur origine_manivelle voit du MÉTAL quand la manivelle n'est PAS en haut, rien sur
@@ -45,37 +43,14 @@ stepping:
   dir_delay_us: 2
   disable_delay_us: 0
 
-# Prise d'origine obligatoire à la mise sous tension (docs/decisions.md).
+# Aucun axe de cette carte ne prend son origine par « $H » : les mors seulement par « $HY »
+# (demandé par le Pi, bocal debout), la manivelle par le Pi (tour lent). Depuis que la glissière
+# est retirée (agitateur fixe), plus de prise d'origine obligatoire à la mise sous tension.
 start:
-  must_home: true
+  must_home: false
 
 axes:
   shared_stepper_disable_pin: NO_PIN
-
-  x:
-    # EXEMPLE : 1600 pas par tour sur le pilote, poulie GT2 de 20 dents (40 mm par tour).
-    steps_per_mm: 40
-    max_rate_mm_per_min: 12000
-    acceleration_mm_per_sec2: 500
-    max_travel_mm: 360
-    soft_limits: true
-    homing:
-      cycle: 1
-      positive_direction: false
-      mpos_mm: 565
-      feed_mm_per_min: 300
-      seek_mm_per_min: 2000
-      settle_ms: 250
-    motor0:
-      # EXEMPLES de broches : fdc_agitateur_garage, fdc_agitateur_dosage.
-      limit_neg_pin: gpio.36:low
-      limit_pos_pin: gpio.39:low
-      hard_limits: true
-      pulloff_mm: 2
-      standard_stepper:
-        step_pin: gpio.12
-        direction_pin: gpio.14
-        disable_pin: NO_PIN
 
   y:
     # EXEMPLE : 200 pas × 16 micro-pas par tour, vis gauche-droite au pas de 2 mm (l'écart se

@@ -357,7 +357,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 
   Simulateur : un seau de format A dosé en 4 couches, puis 2 petits seaux B avec un seul bocal. Tests, dont les
   verrous avec le chariot et la casse du bocal.
-- [ ] **19 ter. Mycélium : agitateur fixe à x 0,925 (plus de glissière)** — Modèle : Opus, effort moyen.
+- [x] **19 ter. Mycélium : agitateur fixe à x 0,925 (plus de glissière)** — Modèle : Opus, effort moyen.
   Sources : `docs/decisions.md`, « Agitateur du mycélium FIXE » (01/11/2026), recopiée de la fiche Mycélium v10
   (`mycelium/logiciel/mycelium-pour-logiciel.md` du projet mécanique) et des règles C1 à C4 du Remplissage. Les
   chiffres vont dans `pi/reglages/machine.yaml`, `docs/entrees-sorties.yaml` et `fluidnc/`, jamais dans le code.

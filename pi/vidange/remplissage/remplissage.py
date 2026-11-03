@@ -22,10 +22,13 @@ seau plein sur sa file, et une balance. Les gestes :
   barres. Cet angle est gardé jusqu'à la poussée ;
 - centrer : barres en position au contact du corps sous le rebord (+ un petit jeu), puis
   ouvertes ; l'alarme ALM du pilote d'une des 2 barres (elle force) arrête le geste et alerte ;
-- ramener au poste : y 0,135, plateau à la hauteur du poste (bord du seau à 0,78) ; plus de
-  descente du plateau pour rouler (la règle des anneaux du fût est supprimée, 31/10) ;
+- ramener au vidage : y 0,42, plateau à la hauteur du vidage (bord du seau à 0,78) : la griffe
+  vide le seau là (agitateur du mycélium fixe au-dessus du poste, 01/11/2026), jamais au poste
+  plateau haut ; plus de descente du plateau pour rouler (règle des anneaux supprimée, 31/10) ;
 - tourner pendant le versement de la griffe (`tourner_seau`) ;
-- dosage du mycélium : le Mycélium mène le chariot (`ecarter`, `amener_au_dosage`) ;
+- dosage du mycélium : le Mycélium mène le chariot (`ecarter`, `amener_au_dosage`) : du vidage
+  au poste (y 0,135, bord du seau ≤ 0,68 : spray et micropore, tâches 39 et 40), puis au dosage
+  (y 0,155, plateau à min(0,78 − h ; 0,575)), puis retour au vidage ;
 - ranger : le plateau revient à l'angle de l'anse, va à la file plateau en bas, le pousseur pousse
   le seau vers le stockage ; le registre reçoit son poids (les doses et la variété viennent du
   Mycélium) et une photo ;
@@ -149,7 +152,6 @@ class Remplissage:
         # Cases vides des autres modules (valeurs prudentes par défaut) :
         chariot_fut_en_place: Callable[[], bool] = lambda: False,
         refus_mycelium: Callable[[], str | None] = lambda: "agitateur du mycélium pas connu",
-        agitateur_au_garage: Callable[[], bool] = lambda: False,
         bras_galet_range: Callable[[], bool | None] = lambda: None,
         bras_spray_sorti: Callable[[], bool] = lambda: False,
         micropore_rentre: Callable[[], bool | None] = lambda: None,
@@ -157,8 +159,7 @@ class Remplissage:
         photo: Callable[[str], object] = lambda raison: None,
     ) -> None:
         """`chariot_fut_en_place` : PosteFut (chariot du fût au fond). `refus_mycelium` :
-        Mycelium.refus_chariot (le chariot peut-il rouler près du poste ?) ;
-        `agitateur_au_garage` : le contraire de Mycelium.dosage_en_cours. `bras_galet_range`,
+        Mycelium.refus_chariot (le chariot peut-il rouler près du poste ?). `bras_galet_range`,
         `bras_spray_sorti`, `micropore_rentre` : modules pas encore écrits (tâches 41, 39, 40).
         `vision` : QR du flanc et angle de l'anse. `photo(raison)` : photo notée au registre."""
         assert machine.remplissage is not None and machine.griffe is not None
@@ -178,7 +179,6 @@ class Remplissage:
         self._horloge = horloge
         self._chariot_fut = chariot_fut_en_place
         self._refus_mycelium = refus_mycelium
-        self._agitateur_au_garage = agitateur_au_garage
         self._bras_galet = bras_galet_range
         self._bras_spray = bras_spray_sorti
         self._micropore = micropore_rentre
@@ -208,7 +208,6 @@ class Remplissage:
         return Contexte(
             chariot_fut_en_place=self._chariot_fut(),
             refus_mycelium=self._refus_mycelium(),
-            agitateur_au_garage=self._agitateur_au_garage(),
             bras_galet_range=self._bras_galet(),
             bras_spray_sorti=self._bras_spray(),
             hauteur_seau=hauteur,
@@ -228,11 +227,19 @@ class Remplissage:
             raise ErreurEtape(f"remplissage : format de seau inconnu « {nom} »")
         return seau
 
-    def plateau_au_poste(self, format: str) -> float:
-        """Plateau au poste et au dosage : bord du seau à haut_z (0,78), 0,575 au plus."""
+    def plateau_au_vidage(self, format: str) -> float:
+        """Plateau au vidage par la griffe : bord du seau à haut_z (0,78), 0,575 au plus."""
         seau = self.format(format)
         assert seau.hauteur is not None
         return min(seau.haut_z - seau.hauteur, self.course_z[1])
+
+    def plateau_au_poste(self, format: str) -> float:
+        """Plateau au poste (sous le bocal du mycélium) : bord du seau à haut_z, mais jamais
+        au-dessus de verrous → poste_bord_max_z (0,68) ; 0,575 au plus."""
+        seau = self.format(format)
+        assert seau.hauteur is not None
+        bord = min(seau.haut_z, self.reglages.verrous.poste_bord_max_z)
+        return min(bord - seau.hauteur, self.course_z[1])
 
     def plateau_approche(self, format: str) -> float:
         """Plateau avant la pose : sous la hauteur de pose (et sous le contact d'une prise
@@ -277,7 +284,7 @@ class Remplissage:
         self._pas = pas
         cible = self.pose.avec(**pas.cibles)
         if pas.cibles:
-            refus = self.regles.refus_mouvement(self.pose, cible, self.contexte(), pas.dosage)
+            refus = self.regles.refus_mouvement(self.pose, cible, self.contexte())
             if refus is None:
                 refus = self._refus_regle_14(cible)
             if refus is not None:
@@ -385,7 +392,7 @@ class Remplissage:
         if not self.regles.barres_ouvertes(self._pose()):
             yield from self._barres(self.reglages.barres.ouvertes_m, "barres ouvertes")
 
-    def _plateau(self, z: float, texte: str, dosage: bool = False) -> Geste:
+    def _plateau(self, z: float, texte: str) -> Geste:
         """Plateau à z ; pousseur rentré et barres ouvertes d'abord s'il le faut."""
         pose = self._pose()
         if abs(pose.z - z) <= _EGAL:
@@ -399,7 +406,7 @@ class Remplissage:
             )
             if ouvrir:
                 yield from self._barres_ouvertes()
-        yield Pas(texte, {"z": z}, dosage=dosage)
+        yield Pas(texte, {"z": z})
 
     def _rouler(self, y: float, texte: str) -> Geste:
         """Rouler jusqu'à y ; le plateau descend d'abord si le trajet le demande."""
@@ -442,7 +449,8 @@ class Remplissage:
         return EtatChariot(y=y, plateau_z=pose.z, immobile=immobile)
 
     def ecarter(self) -> None:
-        """Le recul pendant le passage de l'agitateur (y ≥ 0,40), plateau où il est."""
+        """Le recul pour le demi-tour du bocal (y ≥ 0,40) : au vidage (y 0,42), plateau où il
+        est."""
         self.lancer(self.geste_ecarter)
 
     def amener_au_dosage(self, plateau_z: float) -> None:
@@ -451,25 +459,33 @@ class Remplissage:
     def geste_ecarter(self) -> Geste:
         pose = self._pose()
         if pose.y < self.reglages.ecarte_y - self.reglages.tolerance_y_m:
-            yield from self._a_la_place(self.reglages.ecarte_y, "recul pour l'agitateur")
+            yield from self._a_la_place(self.reglages.vidage_y, "retour au vidage")
 
     def geste_au_dosage(self, plateau_z: float) -> Geste:
-        """Arrêt pour le dosage : y 0,155, plateau à min(0,78 − h ; 0,575), barres ouvertes,
-        pousseur rentré."""
+        """Le seau au poste (y 0,135, bord du seau ≤ 0,68 : spray et micropore, tâches 39 et 40,
+        cases vides), puis au dosage : y 0,155, plateau à min(0,78 − h ; 0,575), barres
+        ouvertes, pousseur rentré."""
         yield from self._barres_ouvertes()
+        yield from self._pousseur_rentre()
+        if self.seau is not None:
+            poste = self.plateau_au_poste(self.seau.format)
+            if self._pose().z > poste:
+                yield Pas("plateau à la hauteur du poste", {"z": poste})
+            yield from self._rouler(self.reglages.poste_y, "seau au poste (spray, micropore)")
         yield from self._a_la_place(self.reglages.dosage_y, "seau sous le bocal du mycélium")
-        yield from self._plateau(plateau_z, "plateau à la hauteur du dosage", dosage=True)
+        yield from self._plateau(plateau_z, "plateau à la hauteur du dosage")
 
     # ------------------------------------------------------------ pour la Griffe
 
-    def seau_au_poste(self) -> bool:
-        """Un seau au poste, plateau à sa hauteur, rien en cours : la griffe peut verser."""
+    def seau_au_vidage(self) -> bool:
+        """Un seau au vidage (y 0,42), plateau à sa hauteur, rien en cours : la griffe peut
+        verser."""
         if not self.libre() or self.seau is None or self.pose is None:
             return False
         pose = self.chariot.position()
         return (
-            self.regles.a(pose.y, self.reglages.poste_y)
-            and abs(pose.z - self.plateau_au_poste(self.seau.format)) <= self.reglages.tolerance_m
+            self.regles.a(pose.y, self.reglages.vidage_y)
+            and abs(pose.z - self.plateau_au_vidage(self.seau.format)) <= self.reglages.tolerance_m
         )
 
     def tourner_seau(self, tourne: bool) -> None:
@@ -898,15 +914,16 @@ class Remplissage:
         yield from self._barres(hw, "centrer le seau (barres au contact)", centrage=True)
         yield from self._barres_ouvertes()
 
-    def geste_ramener_au_poste(self) -> Geste:
-        """Retour en y 0,135, plateau à la hauteur du poste (bord du seau à 0,78)."""
+    def geste_ramener_au_vidage(self) -> Geste:
+        """Retour en y 0,42 (vidage par la griffe), plateau à la hauteur du vidage (bord du seau à
+        0,78)."""
         seau = self.seau
         if seau is None:
             raise ErreurEtape("remplissage : pas de seau sur le plateau")
         yield from self._barres_ouvertes()
-        yield from self._a_la_place(self.reglages.poste_y, "retour au poste")
+        yield from self._a_la_place(self.reglages.vidage_y, "retour au vidage")
         yield from self._plateau(
-            self.plateau_au_poste(seau.format), "plateau à la hauteur du poste"
+            self.plateau_au_vidage(seau.format), "plateau à la hauteur du vidage"
         )
 
     def _seau_a_ranger(self) -> SeauPlateau:

@@ -86,15 +86,16 @@ le fond intérieur d'un seau vide posé là (contact_z), et une deuxième place 
 
 ## Étape 6 : le porte-bocal
 
-1. Régler dans `prehension → porte_bocal` la position du bocal au garage (x 0,565, y 0,150 : à vérifier) et
-   `face_z` : face de la tête quand le bocal est à sa hauteur exacte entre les mors (1 mm de jeu sous le
-   fond et au-dessus de la capsule ; ≈ 1,0625 manivelle en bas). Régler `orientation_deg` pour que les
-   méplats soient en face des mors.
-2. Agitateur au garage, **manivelle en bas**, bielle dans le trou de 7 cm (`mycelium → course_agitation_m`
-   à 0.07) ; griffe en **butée haute**. Le panneau du poste du fût peut rester levé : dans la petite zone
-   du garage (± 5 mm autour du bocal), la tête a le droit de descendre (seule exception à l'isolation du fût).
-3. `vidange-prehension porte-bocal 1.4 0.75 0.95 --manivelle-en-bas` (place d'un bocal plein, avec vos
-   cotes ; `--manivelle-en-bas` dit que vous avez vu la manivelle en bas) : le bocal est pris, posé (mors
+1. Vérifier dans `prehension → porte_bocal` la position du bocal (agitateur fixe : x 0,925, y 0,150, le
+   même que `mycelium → bocal`) et `face_z` : face de la tête au contact de la capsule **manivelle en
+   haut** (≈ 1,05, fiche Mycélium v10). Régler `orientation_deg` pour que les méplats soient en face des
+   mors.
+2. **Manivelle en haut**, caméra du dosage à 0° (vers le bocal), chariot de remplissage reculé ou au
+   poste. Le panneau du poste du fût peut rester levé : x 0,925 est hors de l'isolation du fût.
+3. `vidange-prehension porte-bocal 1.0 0.75 0.95 --manivelle-en-haut` (place d'un bocal plein, avec vos
+   cotes ; `--manivelle-en-haut` dit que vous avez vu la manivelle en haut et la caméra à 0°). Attention :
+   le trajet est en ligne droite ; partir d'un endroit d'où il ne passe pas près du boîtier de la caméra
+   du bocal (x 0,99-1,16, y < 0,335). Le bocal est pris, posé (mors
    ouverts, mors approchés à « Ø 98 » à faible courant, lâché, remontée de 5 mm, serrage), repris (mors
    serrés pour descendre, puis ouverts) et reposé. Regarder que les mors ne touchent pas le bocal pendant la
    descente.

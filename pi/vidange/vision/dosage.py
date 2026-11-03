@@ -2,7 +2,7 @@
 63° = seau.
 
     camera = CameraDosage(reglages.machine, photographe, ServoPwm(reglages.machine.camera_dosage),
-                          agitateur_gare=mycelium.camera_peut_pivoter,
+                          hors_demi_tour=mycelium.camera_peut_pivoter,
                           griffe_hors_boite=griffe.hors_boite_camera_dosage,
                           prehension_hors_boite=prehension.hors_boite_camera_dosage)
     camera.ranger()                           # au démarrage : vers le bocal (verrou vérifié)
@@ -11,10 +11,11 @@
     camera.commencer_photo_seau("S1293", 2, "B327", 150.0, cycle)   # après chaque dose
     camera.photo_seau_finie()
 
-Elle pivote SEULEMENT si l'agitateur est garé (bocal x ≤ 0,62) ET si griffe et préhension sont
-hors de la boîte x < 1,10, y < 0,34, z 0,95-1,08 ; pendant qu'elle pivote, griffe et préhension
-refusent d'y entrer, et l'agitateur attend la fin de la photo (étape du Mycélium) : elle est
-revenue avant le retour de l'agitateur ou du godet.
+Agitateur fixe (décision du 01/11/2026, point 6) : aucune condition sur la manivelle, le bocal ni
+le chariot de remplissage. Elle pivote SEULEMENT hors du demi-tour du bocal ET si griffe et
+préhension sont hors de la boîte x < 1,10, y < 0,34, z 0,95-1,08 ; pendant qu'elle pivote, griffe
+et préhension refusent d'y entrer, le demi-tour ne démarre pas (Mycélium, `pivote`) et la
+préhension ne pose ni ne reprend le bocal : elle est revenue à 0° avant.
 
 Le servo ne dit pas où il est : la caméra est dite « pivotée » depuis l'ordre de tourner vers
 le seau jusqu'à `pivot_s` après l'ordre de revenir au bocal, et tant qu'elle n'a pas été rangée
@@ -97,7 +98,7 @@ class CameraDosage:
         machine: Machine,
         photographe: Photographe | None,
         servo: Servo,
-        agitateur_gare: Callable[[], bool],
+        hors_demi_tour: Callable[[], bool],
         griffe_hors_boite: Callable[[], bool],
         prehension_hors_boite: Callable[[], bool],
         attendre: Callable[[float], None] = time.sleep,
@@ -110,7 +111,7 @@ class CameraDosage:
         self.photographe = photographe
         self.servo = servo
         self._verrous = (
-            ("agitateur du mycélium pas garé", agitateur_gare),
+            ("demi-tour du bocal du mycélium en cours", hors_demi_tour),
             ("griffe dans la boîte de la caméra du dosage", griffe_hors_boite),
             ("préhension dans la boîte de la caméra du dosage", prehension_hors_boite),
         )
@@ -134,7 +135,8 @@ class CameraDosage:
         return None
 
     def pivote(self) -> bool:
-        """Pour la griffe et la préhension : la caméra pivote (ou sa position est inconnue)."""
+        """Pour la griffe, la préhension et le demi-tour du bocal : la caméra pivote (ou sa
+        position est inconnue)."""
         return self._pivote
 
     def _tourner(self, angle: float) -> None:
@@ -174,8 +176,8 @@ class CameraDosage:
     def commencer_photo_seau(
         self, seau: str, couche: int, bocal: str, grammes: float, cycle: int | None = None
     ) -> None:
-        """Après chaque dose (agitateur rentré au garage) : pivote vers le seau, photo, revient
-        au bocal. La photo est notée au registre avec sa dose."""
+        """Après chaque dose (bocal remis debout) : pivote vers le seau, photo, revient au bocal.
+        La photo est notée au registre avec sa dose."""
         if self._fil is not None and self._fil.is_alive():
             return
         if not self._en_fond:

@@ -33,14 +33,13 @@ axes:
   griffe_z: {vitesse: 0.15, acceleration: 0.5}
   griffe_a: {vitesse: 90, acceleration: 180}
   griffe_b: {vitesse: 0.05, acceleration: 0.5}
-  # Agitateur du mycélium : ses vitesses (machine.yaml → mycelium → vitesses) passent avant
+  # Agitateur du mycélium (fixe) : ses vitesses (machine.yaml → mycelium → vitesses) passent avant
   # celles-ci. Manivelle en °/s (300 tr/min = 1800 °/s).
-  agitateur_x: {vitesse: 0.1, acceleration: 0.5}
+  manivelle: {vitesse: 1800, acceleration: 3600}
   # Tête de préhension : ses vitesses plus lentes (machine.yaml → prehension → vitesses)
   # passent avant celles-ci.
   prehension_z: {vitesse: 0.15, acceleration: 0.5}
   prehension_a: {vitesse: 90, acceleration: 180}
-  manivelle: {vitesse: 1800, acceleration: 3600}
   # Brosses du lavage (°/s) : noyau jusqu'à 200 tr/min, couronne 100 tr/min.
   lavage_noyau: {vitesse: 1200, acceleration: 2400}
   lavage_couronne: {vitesse: 600, acceleration: 1200}
@@ -73,7 +72,7 @@ griffe:
 # dessous), en kg/s à la vitesse d'agitation (moins vite quand elle tourne plus lentement), mycélium d'un bocal neuf, durées du demi-tour du bocal (≈ 2,3 s, fiche du
 # Porte-bocal ; le vrai porte-bocal tourne sur un faux FluidNC) et d'un trajet du chariot de
 # remplissage, et les seaux à doser (un seau A en 4 couches, puis 2 petits seaux B avec un seul
-# bocal). Le bocal attend au garage (position agitateur_garage de machine.yaml).
+# bocal). Le bocal attend manivelle en bas (position agitateur_attente de machine.yaml).
 mycelium:
   debit_kg_s: 0.02
   bocal_kg: 0.9
@@ -93,7 +92,7 @@ prehension:
   seau_pose: {x: 1.9, y: 0.6, contact_z: 0.6}
   couvercle: {x: 1.6, y: 0.75, contact_z: 0.8}
   couvercle_pose: {x: 1.9, y: 0.75, contact_z: 0.8}
-  bocal: {x: 1.4, y: 0.75, contact_z: 0.95}
+  bocal: {x: 1.0, y: 0.75, contact_z: 0.95}
   capsule: {x: 1.5, y: 0.5, contact_z: 0.85}
   vissage: {x: 1.7, y: 0.5, contact_z: 0.9}
   mors_s: 3

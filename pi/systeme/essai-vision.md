@@ -91,7 +91,7 @@ Pour chaque caméra (`plafond`, `tete_griffe`, `dosage`) :
    `pinctrl get 18` doit dire `PWM0_CHAN2` (sinon, chercher la bonne fonction pour le Pi 5 et corriger la
    ligne). `ls /sys/class/pwm/` : noter le nom de la puce (`pwmchip0` ou `pwmchip2`...) et l'écrire dans
    `machine.yaml → camera_dosage → pwm → fichier` (canal 2 pour GPIO18).
-3. **Avant de tourner le servo** : agitateur au garage, griffe et préhension loin de la boîte (x < 1,10,
+3. **Avant de tourner le servo** : pas de demi-tour du bocal en cours, griffe et préhension loin de la boîte (x < 1,10,
    y < 0,34, z 0,95-1,08). L'outil ne vérifie pas ce verrou.
 4. `vidange-vision servo bocal`, puis `vidange-vision servo seau` : la caméra doit viser le bocal, puis le seau.
    Si l'angle n'est pas bon, essayer `vidange-vision servo 60`, `65`... et corriger `angle_seau_deg` (ou

@@ -6,7 +6,7 @@
 
 Cette procédure ne peut se faire qu'**après la tâche 20** (Porte-bocal : demi-tour du bocal), **la
 tâche 22 bis** (carte de pesée RS485 du plateau du chariot de remplissage) et une fois la carte FluidNC
-n° 3 câblée (glissière X, manivelle A). Elle sert à **mesurer les chiffres marqués EXEMPLE** dans
+n° 3 câblée (manivelle A ; plus de glissière : l'agitateur est fixe depuis la tâche 19 ter). Elle sert à **mesurer les chiffres marqués EXEMPLE** dans
 `pi/reglages/machine.yaml` (partie `mycelium`, et `mycelium_kg` des formats), puis à faire un premier
 dosage lent, Karulium à côté de l'arrêt d'urgence. Compter une demi-journée.
 
@@ -19,8 +19,8 @@ main sur l'arrêt d'urgence.
 - Le fichier `fluidnc/mycelium_lavage.yaml` est complété avec les **vraies broches** (plan de câblage)
   et les **vrais pas par mm** (réglage des pilotes, poulie de la courroie GT2), puis envoyé à la carte
   (page web → « Mises à jour »). Tant qu'il dit « EXEMPLE », ne pas l'envoyer.
-- La position machine de la carte est **dans le repère du portique** : X = position de l'agitateur
-  (mm, 565 au garage, 925 au dosage). A = angle du moteur de la manivelle (°) : FluidNC ne sait pas
+- L'agitateur est **fixe** : le bocal est toujours en (0,925 ; 0,150). A = angle du moteur de la
+  manivelle (°) : FluidNC ne sait pas
   où est le haut, c'est le Pi qui le trouve (prise d'origine de la manivelle, tâche 20 :
   `essai-porte-bocal.md`, étape 1). Ci-dessous, « H » = l'angle du moteur manivelle en haut que
   cette étape a donné.
@@ -34,28 +34,26 @@ Dans les commandes ci-dessous, `vidange-fluidnc` veut dire
 ## Étape 1 : prise d'origine et repère
 
 1. Lancer la console de la carte : `vidange-fluidnc console mycelium_lavage`.
-2. Envoyer `$H`. La glissière doit rouler vers le garage et s'arrêter sur son fin de course (la
-   manivelle ne bouge pas : son origine est prise par le Pi). Envoyer `?` : `MPos` doit dire X = 565.
+2. Chariot de remplissage à y ≥ 0,40 (le tour lent passe manivelle en haut).
 3. Faire la prise d'origine de la manivelle (`essai-porte-bocal.md`, étape 1) et noter H.
 4. Manivelle en haut : `$J=G53 A<H> F3600` : elle doit être **pile en haut** (bocal au plus haut) ;
    sinon, corriger `manivelle → origine → decalage_deg`. Manivelle en bas : `$J=G53 A<H + 180> F3600`.
-5. Glissière : `$J=G53 X865 F3000`. Mesurer au mètre : l'agitateur doit être **au demi-tour**
-   (x 0,865 dans le repère du portique). Puis `$J=G53 X925 F3000` : le bocal doit être **au-dessus de
-   l'axe du seau** (x 0,925), sans toucher le fin de course du dosage. Sinon, corriger les pas par mm.
-6. Revenir au garage : `$J=G53 X565 F3000`.
+5. Mesurer au mètre : le bocal doit être **au-dessus de l'axe du seau** (x 0,925, y 0,150), centre
+   du bocal à z 1,059 manivelle en haut. Sinon, le dire au projet mécanique (`mycelium → bocal`).
+6. Laisser la manivelle **en bas** (l'attente).
 
 ## Étape 2 : les verrous, à vide
 
 Le chariot de remplissage n'étant pas encore écrit (module Remplissage), ces verrous se vérifient
 par les tests automatiques. Sur la machine, vérifier seulement à l'œil, en déplaçant à la main :
 
-1. Chariot de remplissage à y 0,40 (ou plus) : l'agitateur roule sans rien toucher.
-2. Agitateur au dosage, manivelle en bas : le chariot passe sous le bocal sans le toucher, jusqu'à
-   y 0,155, plateau à 0,53 m (seau A) puis à 0,575 m (seau de 5 L).
-3. Au garage, **bielle dans le trou de 7 cm**, bocal vide en place : faire tourner la manivelle à la
-   main, très lentement, et regarder le fond du bocal : il doit passer **au-dessus de la marche du poste
-   du fût** (z 0,88). Ne pas essayer le trou de 10 cm au garage : le fond toucherait la marche (c'est
-   pourquoi le Pi refuse de tourner au garage avec `course_agitation_m: 0.10`).
+1. Chariot de remplissage à y 0,40 (ou plus), manivelle en haut : le demi-tour du bocal se fait sans
+   rien toucher.
+2. Manivelle en bas : le chariot passe sous le bocal sans le toucher, au poste (y 0,135) **bord du seau
+   à 0,68 au plus** (à 0,70 il touche), puis au dosage (y 0,155), plateau à 0,53 m (seau A) puis à
+   0,575 m (seau de 5 L).
+3. Bielle dans le trou de 7 cm puis 10 cm, seau au dosage : faire tourner la manivelle à la main, très
+   lentement : le bocal ne touche ni le seau ni le chariot.
 
 ## Étape 3 : la balance du plateau
 
@@ -72,12 +70,11 @@ par les tests automatiques. Sur la machine, vérifier seulement à l'œil, en d�
 1. Bocal plein dans le porte-bocal, seau A vide sur le plateau.
 2. Lancer un dosage d'une couche depuis la page web (essai du module « mycelium »), vitesses de
    l'exemple. Regarder :
-   - le chariot s'écarte, l'agitateur roule au demi-tour, manivelle en bas, le bocal se retourne,
-     manivelle en haut, roule au dosage, manivelle en bas ;
-   - le chariot revient, la casse du bloc (5 s, 200 tr/min), puis l'agitation ;
+   - chariot au vidage (y 0,42), manivelle en haut, le bocal se retourne, manivelle en bas ;
+   - le chariot va au poste (y 0,135), puis au dosage (y 0,155), la casse du bloc (5 s,
+     200 tr/min), puis l'agitation ;
    - la manivelle s'arrête **pile en bas** quand la dose est atteinte ;
-   - le chariot repart, manivelle en haut, roule au demi-tour, manivelle en bas, bocal remis
-     debout, manivelle en haut, retour au garage.
+   - le chariot repart au vidage, manivelle en haut, bocal remis debout, manivelle en bas.
 3. Peser le seau sur une balance de cuisine : comparer à la dose notée dans le journal
    (« Mycélium : seau ..., couche 1 : ... g »). Si la dose dépasse souvent, augmenter
    `dose → arret_avant_kg` (grains qui tombent pendant l'arrêt).
@@ -90,7 +87,7 @@ par les tests automatiques. Sur la machine, vérifier seulement à l'œil, en d�
 ## Étape 5 : un bocal pour 2 petits seaux
 
 1. Deux seaux de 5 L, de la même variété : vérifier que le bocal reste dans le porte-bocal entre les
-   deux (remis debout, retour au garage pendant que le chariot change de seau, nouveau demi-tour).
+   deux (remis debout, manivelle en bas pendant que le chariot change de seau, nouveau demi-tour).
 2. Vérifier que la casse du bloc ne se fait qu'au 1er seau.
 
 ## Ce qu'il faut renvoyer

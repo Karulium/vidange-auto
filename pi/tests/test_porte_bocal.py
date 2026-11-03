@@ -130,7 +130,7 @@ def test_capteur_manivelle_debranche_ou_toujours_actionne(vu):
 
 def test_origine_sur_le_faux_fluidnc_et_capteur_deregle():
     with BancAgitateur(demi_zone=75) as banc:
-        attendre(lambda: banc.agitateur.glissiere_x() == pytest.approx(0.925), ignorer=ErreurEtape)
+        attendre(lambda: "A" in banc.liaison.etat.positions)
         banc.agitateur.executer(Pas("origine", origine=True), None)
         with pytest.raises(ErreurEtape, match="capteur manivelle : zone sans métal") as erreur:
             attendre(lambda: banc.agitateur.fini() and False, 5)
@@ -304,19 +304,19 @@ def test_demi_tour_refuse():
         banc.materiel.poser_bocal()
         banc.faire(banc.porte_bocal.serrer_bocal)
         # Le Mycélium l'interdit (manivelle en haut...).
-        banc.porte_bocal.verrou = lambda: "le demi-tour du bocal ne se fait que manivelle en bas"
+        banc.porte_bocal.verrou = lambda: "le demi-tour du bocal ne se fait que manivelle en haut"
         with pytest.raises(ErreurEtape, match="refusé : le demi-tour du bocal ne se fait que"):
             banc.porte_bocal.retourner_tete_en_bas()
         assert not any(banc.faux.sorties.values())
 
 
 def test_regles_du_demi_tour():
-    au_demi_tour = PoseAgitateur(x=0.865, angle=180)
-    assert REGLES.refus_demi_tour(au_demi_tour, ECARTE) is None
-    assert "manivelle en bas" in REGLES.refus_demi_tour(au_demi_tour.avec(angle=0), ECARTE)
-    assert "pas au demi-tour" in REGLES.refus_demi_tour(au_demi_tour.avec(x=0.925), ECARTE)
+    # Agitateur fixe (tâche 19 ter) : demi-tour manivelle en haut, chariot à y ≥ 0,40.
+    en_haut = PoseAgitateur(angle=0)
+    assert REGLES.refus_demi_tour(en_haut, ECARTE) is None
+    assert "manivelle en haut" in REGLES.refus_demi_tour(en_haut.avec(angle=180), ECARTE)
     pas_ecarte = EtatChariot(y=0.2, plateau_z=0.53)
-    assert "chariot de remplissage" in REGLES.refus_demi_tour(au_demi_tour, pas_ecarte)
+    assert "chariot de remplissage" in REGLES.refus_demi_tour(en_haut, pas_ecarte)
 
 
 # ---------------------------------------------------------------- Mycélium au simulateur
@@ -345,24 +345,27 @@ def test_simulateur_avec_le_vrai_porte_bocal():
     # Prise d'origine de la manivelle d'abord ; 2 bocaux : mors ouverts, bocal serré.
     assert textes[0] == "origine de la manivelle (tour lent)"
     assert textes.count("mors ouverts") == 2 and textes.count("bocal serré") == 2
-    # Au demi-tour, manivelle en bas ; elle remonte avant que la glissière roule.
+    # Demi-tour manivelle en haut ; elle redescend ensuite (l'attente). Au 1er bocal, elle est
+    # déjà en haut (pose du bocal).
     debut = textes.index("bocal tête en bas")
-    assert textes[debut - 2 : debut + 4] == [
-        "rouler jusqu'au demi-tour",
-        "manivelle en bas",
+    assert textes[debut - 2 : debut + 2] == [
+        "mors ouverts",
+        "bocal serré",
         "bocal tête en bas",
-        "manivelle en haut",
-        "rouler jusqu'au dosage",
         "manivelle en bas",
     ]
     debut = textes.index("bocal remis debout")
-    assert textes[debut - 3 : debut + 3] == [
+    assert textes[debut - 1 : debut + 2] == [
         "manivelle en haut",
-        "rouler jusqu'au demi-tour",
-        "manivelle en bas",
         "bocal remis debout",
+        "manivelle en bas",
+    ]
+    # Couche suivante (même bocal) : manivelle en haut, tête en bas, manivelle en bas.
+    suivant = textes.index("bocal tête en bas", debut)
+    assert textes[suivant - 1 : suivant + 2] == [
         "manivelle en haut",
-        "rouler jusqu'au garage",
+        "bocal tête en bas",
+        "manivelle en bas",
     ]
 
 
@@ -382,11 +385,11 @@ def test_simulateur_photo_de_controle_douteuse():
     assert len(mycelium.doses) == 1
 
 
-def test_simulateur_demi_tour_refuse_manivelle_en_haut():
+def test_simulateur_demi_tour_refuse_manivelle_en_bas():
     with Simulateur(REGLAGES, LISTE, "dosage_mycelium") as simu:
         mycelium = mycelium_du_simulateur(simu)
-        simu.etat_axes.positions.update(agitateur_x=0.865, manivelle=0)
-        assert "manivelle en bas" in mycelium.refus_demi_tour()
+        simu.etat_axes.positions.update(manivelle=180)
+        assert "manivelle en haut" in mycelium.refus_demi_tour()
         porte_bocal = mycelium.porte_bocal
         with pytest.raises(ErreurEtape, match="refusé : le demi-tour du bocal ne se fait que"):
             porte_bocal.retourner_tete_en_bas()
@@ -408,7 +411,7 @@ def test_outil_sur_le_faux_fluidnc(reglages, capsys):
     remplacer(reglages / "fluidnc.yaml", "  periode_etat_s: 0.2", "  periode_etat_s: 0.02")
     remplacer(reglages / "fluidnc.yaml", "  delai_silence_s: 2", "  delai_silence_s: 0.5")
     textes = {}
-    # Chaque appel a sa carte imaginaire neuve : agitateur au demi-tour, bocal serré, debout.
+    # Chaque appel a sa carte imaginaire neuve : bocal serré, debout.
     for commande in ("etat", "ouvrir", "serrer", "tete-en-bas"):
         code = outil(["--faux", "--reglages", str(reglages), commande])
         textes[commande] = capsys.readouterr()
@@ -417,4 +420,4 @@ def test_outil_sur_le_faux_fluidnc(reglages, capsys):
     assert "Mors ouverts : écart 103.0 mm" in textes["ouvrir"].out
     assert "Mors serrés : écart 95.0 mm" in textes["serrer"].out
     assert "Manivelle en haut : H = " in textes["tete-en-bas"].out
-    assert "Bocal tête en bas, manivelle en haut." in textes["tete-en-bas"].out
+    assert "Bocal tête en bas, manivelle en bas." in textes["tete-en-bas"].out

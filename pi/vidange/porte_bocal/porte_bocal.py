@@ -24,8 +24,8 @@ position est l'écart entre les 2 mors.
 - Les mors ne bougent jamais bocal tête en bas (il tomberait).
 
 Le demi-tour (motoréducteur JGY370 par un pont en H : le sens du courant donne le sens) :
-1. conditions : celles de l'agitateur (`verrou`, donné par le Mycélium : au demi-tour,
-   manivelle en bas, chariot de remplissage écarté) et bocal serré ;
+1. conditions : celles de l'agitateur (`verrou`, donné par le Mycélium : manivelle en haut,
+   chariot de remplissage à y ≥ 0,40, caméra du dosage à 0°) et bocal serré ;
 2. le doigt du verrou est retiré (électroaimant) et le moteur part dans le bon sens ;
 3. le doigt est relâché après `relache_s` : il frotte, puis entre dans le trou suivant ; le
    moteur s'arrête quand le contact « verrou engagé » revient (sinon, au bout de

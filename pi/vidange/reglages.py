@@ -590,7 +590,7 @@ class Griffe(Modele):
     doses: DosesGriffe
     formats: dict[Nom, FormatSeau] = Field(min_length=1)
     format_par_defaut: Nom
-    # Axe du seau au poste de remplissage, en position du mât (Remplissage pas figé).
+    # Le mât quand la griffe vide dans le seau du chariot de remplissage (au vidage, y 0,42).
     seau_remplissage: tuple[float, float]
     # Où le mât attend, hors de la zone du chariot du fût, quand le fût est vide.
     attente: tuple[float, float]
@@ -622,9 +622,9 @@ class Griffe(Modele):
 
 # Délais (machine.yaml → durees) des étapes du Mycélium.
 DUREES_MYCELIUM = ("mycelium_geste_max", "mycelium_chariot_max", "mycelium_agitation_max")
-# Les 2 axes de l'agitateur du Mycélium (carte n° 3) et leur unité.
+# L'axe de l'agitateur du Mycélium (carte n° 3) et son unité. L'agitateur est FIXE depuis le
+# 01/11/2026 (plus de glissière) : seule la manivelle bouge.
 AXES_MYCELIUM = {
-    "agitateur_x": "m",  # glissière de l'agitateur (repère du portique)
     "manivelle": "deg",  # manivelle qui secoue le bocal (360° = un tour)
 }
 
@@ -632,7 +632,7 @@ AXES_MYCELIUM = {
 class ChariotMycelium(Modele):
     """Le chariot de remplissage vu du Mycélium (verrous, hauteur du plateau)."""
 
-    # L'agitateur ne roule que si le chariot est à y ≥ y_ecarte_min.
+    # Demi-tour du bocal, et manivelle ailleurs qu'en bas, seulement chariot à y ≥ y_ecarte_min.
     y_ecarte_min: float
     # Le seau sous le bocal : chariot à y_dosage.
     y_dosage: float
@@ -679,17 +679,14 @@ class ManivelleMycelium(Modele):
     # Angle (°) de « manivelle en haut » ; « en bas » = 180° plus loin. Écart permis (°).
     angle_haut_deg: float
     tolerance_deg: float = Field(gt=0)
-    # Les 3 trous de la manivelle (course du bocal, m), et la plus grande permise au garage
-    # (au-delà, le fond du bocal toucherait la marche du poste du fût).
+    # Les 3 trous de la manivelle (course du bocal, m).
     courses_possibles_m: list[float] = Field(min_length=1)
-    course_max_garage_m: float = Field(gt=0)
     # Vitesse la plus forte permise (tr/min, fiche).
     max_tr_min: float = Field(gt=0)
     origine: OrigineManivelle
 
 
 class VitessesMycelium(Modele):
-    glissiere_m_s: float = Field(gt=0)
     # Manivelle (tr/min) : pour aller en haut ou en bas, pour doser, pour la casse du bloc.
     placement_tr_min: float = Field(gt=0)
     agitation_tr_min: float = Field(gt=0)
@@ -724,19 +721,15 @@ class PeseeMycelium(Modele):
 
 
 class Mycelium(Modele):
-    """Module Mycélium (dosage), validé le 24/10/2026 (option B : module relevé de 12 mm).
+    """Module Mycélium (dosage), fiche v10 du 01/11/2026 : agitateur FIXE au-dessus du poste.
 
-    Repère du portique, en mètres ; x = position de l'agitateur sur sa glissière. Un verrou du
-    logiciel ne protège que la machine : la sécurité des personnes reste câblée.
+    Repère du portique, en mètres. Un verrou du logiciel ne protège que la machine : la sécurité
+    des personnes reste câblée.
     """
 
     exemple: bool = False
-    garage_x: float
-    demi_tour_x: float
-    dosage_x: float
-    tolerance_x_m: float = Field(gt=0)
-    # La caméra du dosage ne pivote vers le seau que si l'agitateur est à x ≤ camera_x_max.
-    camera_x_max: float
+    # Axe du bocal (x, y), toujours au même endroit (plus de glissière).
+    bocal: tuple[float, float]
     # Axe de la manivelle (m) : pour mémoire (aucun geste n'en dépend).
     manivelle_z: float
     # Course choisie à la main (trou de la bielle), tenue à jour par Karulium (m).
@@ -750,10 +743,6 @@ class Mycelium(Modele):
     @model_validator(mode="after")
     def _verifier(self) -> "Mycelium":
         erreurs = []
-        if not self.garage_x < self.demi_tour_x < self.dosage_x:
-            erreurs.append("garage_x < demi_tour_x < dosage_x : dans cet ordre")
-        if self.camera_x_max < self.garage_x:
-            erreurs.append("camera_x_max : la caméra doit pouvoir pivoter agitateur au garage")
         manivelle = self.manivelle
         if self.course_agitation_m not in manivelle.courses_possibles_m:
             possibles = ", ".join(f"{c:g}" for c in manivelle.courses_possibles_m)
@@ -998,15 +987,9 @@ class PorteBocalPrehension(Modele):
     rayon_zone_m: float = Field(gt=0)
     # Attente maximale d'un geste des mors (s).
     mors_max_s: float = Field(gt=0)
-    # Zone du garage : axe de la tête à zone_garage_m près de (x, y) en x et en y. Seule
-    # exception à l'isolation du fût : la tête y descend à la verticale, agitateur au garage
-    # manivelle en bas avec la course déclarée course_manivelle_m (celle de face_z), mors ouverts
-    # pour poser, serrés pour prendre, griffe en butée haute.
-    zone_garage_m: float = Field(gt=0)
-    course_manivelle_m: float = Field(gt=0)
-    # Haut de la capsule manivelle en haut (m) : la tête (et l'objet tenu) ne passe pas au-dessus
-    # du bocal au garage, à marge_bocal_m près, tant que la manivelle n'est pas en bas.
-    capsule_manivelle_haut_z: float
+    # Autour du bocal (son rayon + celui de la tête + marge_bocal_m), sous face_z + marge_bocal_m
+    # (capsule manivelle en haut, son plus haut) : la tête n'y va que pour poser ou reprendre le
+    # bocal, à la verticale (axe sur celui du bocal), manivelle en haut.
     marge_bocal_m: float = Field(ge=0)
 
 
@@ -1310,8 +1293,8 @@ class PwmServo(Modele):
 
 class CameraDosage(Modele):
     """La caméra du dosage sur son servo DS3225 (docs/decisions.md, règle 2). La boîte interdite
-    à la griffe et à la préhension pendant qu'elle pivote est « prehension → camera_dosage » ;
-    l'agitateur garé, « mycelium → camera_x_max »."""
+    à la griffe et à la préhension pendant qu'elle pivote est « prehension → camera_dosage ».
+    Pas de pivot pendant le demi-tour du bocal (décision du 01/11/2026, point 6)."""
 
     exemple: bool = False
     # Nom du signal du servo dans docs/entrees-sorties.yaml.
@@ -1373,6 +1356,9 @@ class VerrousRemplissage(Modele):
     spray_plateau_max_z: float
     spray_bord_max_z: float
     spray_entraxe_min_m: float = Field(gt=0)
+    # Règle 8 (agitateur fixe, 01/11/2026) : en deçà du dosage (y < dosage_y, le poste), bord du
+    # seau (plateau + h) ≤ poste_bord_max_z TOUJOURS (manivelle en bas : à 0,70 le seau touche).
+    poste_bord_max_z: float
     # Règle 7 : chariot du fût pas en place : bout du chariot côté allée (y + bout_y_m) ≤
     # poste_fut → remplissage_y_bout_max.
     bout_y_m: float = Field(ge=0)
@@ -1523,11 +1509,13 @@ class Remplissage(Modele):
     exemple: bool = False
     # Axe du plateau en x (le chariot roule en y).
     axe_x: float
-    # Positions en y : poste (sous la griffe), dosage du mycélium, recul pendant le passage de
-    # l'agitateur (au moins), pose du seau vide et du couvercle.
+    # Positions en y : poste (spray, micropore ; sous le bocal du mycélium), dosage du mycélium,
+    # recul (au moins) pour le demi-tour du bocal, vidage par la griffe (le seau vide y attend),
+    # pose du seau vide et du couvercle.
     poste_y: float
     dosage_y: float
     ecarte_y: float
+    vidage_y: float
     pose_y: float
     # Écarts permis (m, °) ; un mouvement est vérifié point par point, tous les tant (m).
     tolerance_y_m: float = Field(gt=0)
@@ -1575,8 +1563,8 @@ class Remplissage(Modele):
                 erreurs.append(f"{nom} : du plus petit au plus grand")
         if self.couvercles.y_demi_tour_griffe_min < self.couvercles.y:
             erreurs.append("couvercles → y_demi_tour_griffe_min : au moins couvercles → y")
-        if not self.poste_y < self.ecarte_y:
-            erreurs.append("ecarte_y doit être au-delà de poste_y")
+        if not self.poste_y < self.dosage_y < self.ecarte_y <= self.vidage_y:
+            erreurs.append("poste_y < dosage_y < ecarte_y ≤ vidage_y : dans cet ordre")
         if v.barres_ouvertes_min > self.barres.ouvertes_m:
             erreurs.append("barres → ouvertes_m doit être au moins verrous → barres_ouvertes_min")
         if erreurs:
@@ -2220,14 +2208,6 @@ class Machine(Modele):
                 erreurs.append(f"mycelium : délai « {nom} » absent de durees")
         if erreurs:
             return erreurs
-        debut, fin = self.axes["agitateur_x"].course
-        for nom in ("garage_x", "demi_tour_x", "dosage_x"):
-            x = getattr(mycelium, nom)
-            if not debut - 1e-9 <= x <= fin + 1e-9:
-                erreurs.append(
-                    f"mycelium → {nom} : x {x:g} hors de la course de agitateur_x "
-                    f"({debut:g} à {fin:g} m)"
-                )
         debut, fin = self.axes["manivelle"].course
         tours = mycelium.tours_max() + 1
         if tours * 360 > min(-debut, fin):
@@ -2333,20 +2313,11 @@ class Machine(Modele):
             )
         mycelium = self.mycelium
         if mycelium is not None:
-            if abs(porte_bocal.x - mycelium.garage_x) > porte_bocal.zone_garage_m:
+            x, y = mycelium.bocal
+            if math.hypot(porte_bocal.x - x, porte_bocal.y - y) > prehension.tolerance_m:
                 erreurs.append(
-                    f"prehension → porte_bocal → x : {porte_bocal.x:g} m, loin du garage de "
-                    f"l'agitateur (mycelium → garage_x : {mycelium.garage_x:g} m)"
-                )
-            manivelle = mycelium.manivelle
-            course = porte_bocal.course_manivelle_m
-            if (
-                course not in manivelle.courses_possibles_m
-                or course > manivelle.course_max_garage_m
-            ):
-                erreurs.append(
-                    f"prehension → porte_bocal → course_manivelle_m : {course:g} m n'est pas un "
-                    "trou de la manivelle permis au garage (mycelium → manivelle)"
+                    f"prehension → porte_bocal : ({porte_bocal.x:g} ; {porte_bocal.y:g}), pas "
+                    f"sur le bocal du mycélium (mycelium → bocal : ({x:g} ; {y:g}))"
                 )
         if self.griffe.camera_bocal.z_haut is None:
             erreurs.append("griffe → camera_bocal : il faut « z_haut » pour la préhension")
@@ -2572,7 +2543,7 @@ class Machine(Modele):
                 )
 
         r = remplissage
-        for nom in ("poste_y", "dosage_y", "ecarte_y", "pose_y"):
+        for nom in ("poste_y", "dosage_y", "ecarte_y", "vidage_y", "pose_y"):
             dans(nom, "remplissage_y", getattr(r, nom))
         dans("couvercles → y", "remplissage_y", r.couvercles.y)
         dans("plateau_en_bas_z", "plateau_z", r.plateau_en_bas_z)
@@ -2636,10 +2607,21 @@ class Machine(Modele):
                     f"joues ({joues:g})"
                 )
             plateau = min(seau.haut_z - seau.hauteur, self.axes["plateau_z"].course[1])
+            dans(f"formats → {nom} (plateau au vidage)", "plateau_z", plateau)
+            # Au poste, bord du seau ≤ verrous → poste_bord_max_z (règle 8).
+            bord = min(seau.haut_z, r.verrous.poste_bord_max_z)
+            plateau = min(bord - seau.hauteur, self.axes["plateau_z"].course[1])
             dans(f"formats → {nom} (plateau au poste)", "plateau_z", plateau)
         for nom in r.formats:
             if nom not in self.griffe.formats:
                 erreurs.append(f"remplissage → formats → {nom} : absent de griffe → formats")
+        x, y = self.griffe.seau_remplissage
+        # Le mât au-dessus du seau au vidage (à remplissage → tolerance_y_m près).
+        if math.hypot(x - r.axe_x, y - r.vidage_y) > r.tolerance_y_m + 1e-9:
+            erreurs.append(
+                f"griffe → seau_remplissage ({x:g} ; {y:g}) : il faut le mât sur le seau au vidage "
+                f"(remplissage → axe_x : {r.axe_x:g}, vidage_y : {r.vidage_y:g})"
+            )
         mycelium = self.mycelium
         if mycelium is not None:
             if abs(mycelium.chariot.y_dosage - r.dosage_y) > 1e-9:

@@ -11,10 +11,12 @@ le solveur (tâche 23). C'est le scénario « remplissage » du simulateur, et u
     rendre_le_seau_du_dessus   après une prise double : le seau du dessus rendu au stockage
     orienter_l_anse        QR du flanc lu, oreilles de l'anse à 45° des barres
     centrer                barres en position au contact du corps, puis ouvertes
-    ramener_au_poste       y 0,135, plateau à la hauteur du poste (agitateur au garage)
-    verser                 versement de la griffe : le seau tourne
-    doser                  le Mycélium dose la couche (il mène le chariot)
-    revenir_au_poste       couche suivante : retour au poste (agitateur au garage)
+    ramener_au_vidage      y 0,42, plateau à la hauteur du vidage (manivelle du mycélium en bas
+                           si le chariot part de près du poste)
+    verser                 versement de la griffe au vidage : le seau tourne
+    doser                  le Mycélium dose la couche (il mène le chariot : poste, dosage, retour
+                           au vidage)
+    revenir_au_vidage      couche suivante : retour au vidage (plateau à sa hauteur)
     ranger                 anse à son angle, chariot à sa file plateau en bas, le pousseur pousse ;
                            ou sur la bande du haut (plateau à 0,4985), quand le tiroir est plein
     fin                    plus de seau
@@ -100,12 +102,9 @@ def module_remplissage(
         boucle = (magasin.boucle,)
     fin = Condition("geste du chariot de remplissage fini", remplissage.geste_fini)
     fin_tete = Condition("geste de la préhension fini", prehension.geste_fini)
-    garage = Condition(
-        "agitateur du mycélium au garage (le chariot peut rouler et monter au poste)",
-        lambda: (
-            remplissage.contexte().agitateur_au_garage
-            and remplissage.contexte().refus_mycelium is None
-        ),
+    manivelle_en_bas = Condition(
+        "manivelle du mycélium en bas, arrêtée (le chariot peut rouler près du poste)",
+        lambda: remplissage.contexte().refus_mycelium is None,
     )
     libre = Condition("chariot de remplissage libre", remplissage.libre)
     # Règle 7 : sans le chariot du fût en place, l'axe du plateau reste à y ≤ 0,475.
@@ -203,7 +202,7 @@ def module_remplissage(
     def apres_dose() -> str:
         if plan.couche < remplissage.format(plan.seau.format).couches:
             plan.couche += 1
-            return "revenir_au_poste"
+            return "revenir_au_vidage"
         return "ranger"
 
     def ranger():
@@ -289,7 +288,7 @@ def module_remplissage(
             geste(
                 "aller_a_la_pose",
                 lambda: remplissage.geste_aller_a_la_pose(plan.seau.format),
-                entree=(garage, pose_permise),
+                entree=(manivelle_en_bas, pose_permise),
             ),
             geste_tete("prendre_le_seau", prendre),
             geste_tete("poser_le_seau", poser, apres_pose),
@@ -298,23 +297,30 @@ def module_remplissage(
             ),
             geste("orienter_l_anse", remplissage.geste_orienter_anse),
             geste("centrer", remplissage.geste_centrer),
-            geste("ramener_au_poste", remplissage.geste_ramener_au_poste, entree=(garage,)),
+            geste(
+                "ramener_au_vidage", remplissage.geste_ramener_au_vidage, entree=(manivelle_en_bas,)
+            ),
             geste("verser", verser),
             Etape(
                 "doser",
                 "Le Mycélium dose la couche : regarder son module s'il est en alarme.",
                 action=doser,
-                fin=Condition("dose de la couche versée", lambda: not mycelium.couche_en_attente()),
+                fin=Condition(
+                    "dose de la couche versée, bocal remis debout, manivelle en bas",
+                    lambda: not mycelium.couche_en_attente() and not mycelium.dosage_en_cours(),
+                ),
                 delai_max=DOSAGE,
                 ensuite=apres_dose,
             ),
             geste(
-                "revenir_au_poste",
-                remplissage.geste_ramener_au_poste,
+                "revenir_au_vidage",
+                remplissage.geste_ramener_au_vidage,
                 lambda: "verser",
-                entree=(libre, garage),
+                entree=(libre, manivelle_en_bas),
             ),
-            geste("ranger", ranger, apres_rangement, entree=(libre, garage, file_permise)),
+            geste(
+                "ranger", ranger, apres_rangement, entree=(libre, manivelle_en_bas, file_permise)
+            ),
             *etapes_stockage,
             Etape("fin", "Rien à faire : plus de seau à remplir.", ensuite=lambda: None),
         ),

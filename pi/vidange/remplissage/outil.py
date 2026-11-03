@@ -10,7 +10,7 @@
   vidange-remplissage tourner 90              plateau tourné de tant de degrés
   vidange-remplissage pose seau_a             chariot à la pose du seau vide de ce format
   vidange-remplissage centrer seau_a          barres au contact (en position), puis ouvertes
-  vidange-remplissage poste seau_a            ramener au poste (plateau à la hauteur du format)
+  vidange-remplissage vidage seau_a           ramener au vidage (plateau à la hauteur du format)
   vidange-remplissage ranger seau_a file_1    pousser le seau du plateau sur cette file
   vidange-remplissage ranger seau_a bande_haut   ... ou sur la bande du haut (plateau à 0,4985)
   vidange-remplissage couvercles              mode couvercles (retourneur)
@@ -19,7 +19,7 @@
 
 Les gestes sont ceux du programme, avec tous leurs verrous (vidange.remplissage.regles). Le
 chariot du fût est lu (règle 7). L'agitateur du mycélium, le bras du galet et la tête du
-micropore ne sont pas lus : --agitateur-au-garage, --galet-range et --micropore-rentre disent
+micropore ne sont pas lus : --manivelle-en-bas, --galet-range et --micropore-rentre disent
 qu'on les a vus (sinon le chariot ne roule pas près du poste, le plateau ne monte pas au-dessus
 de 0,26, la préhension ne descend pas). Procédure complète : pi/systeme/essai-remplissage.md. À ne
 lancer que programme principal arrêté (une seule liaison par carte).
@@ -65,7 +65,7 @@ ATTENDUS = {
     "tourner": 1,
     "pose": 1,
     "centrer": 1,
-    "poste": 1,
+    "vidage": 1,
     "ranger": 2,
     "couvercles": 0,
     "inspection": 0,
@@ -97,9 +97,9 @@ def main(arguments: list[str] | None = None) -> int:
     )
     lecteur.add_argument("--faux", action="store_true", help="avec un faux FluidNC")
     lecteur.add_argument(
-        "--agitateur-au-garage",
+        "--manivelle-en-bas",
         action="store_true",
-        help="agitateur du mycélium vu au garage, manivelle en haut",
+        help="manivelle du mycélium vue en bas, arrêtée",
     )
     lecteur.add_argument("--galet-range", action="store_true", help="bras du galet vu rangé")
     lecteur.add_argument(
@@ -149,13 +149,12 @@ def main(arguments: list[str] | None = None) -> int:
             chariot.demarrer(arret)
             time.sleep(0.5)
             poste = PosteFut(machine.poste_fut, materiel, lecture_directe=True)
-            garage = options.agitateur_au_garage
+            en_bas = options.manivelle_en_bas
             remplissage = Remplissage(
                 machine,
                 chariot,
                 chariot_fut_en_place=lambda: not poste.echange_en_cours,
-                refus_mycelium=lambda: None if garage else "agitateur pas vu au garage",
-                agitateur_au_garage=lambda: garage,
+                refus_mycelium=lambda: None if en_bas else "manivelle du mycélium pas vue en bas",
                 bras_galet_range=lambda: True if options.galet_range else None,
                 micropore_rentre=lambda: True if options.micropore_rentre else None,
             )
@@ -234,7 +233,7 @@ def _faire(options: argparse.Namespace, remplissage: Remplissage, chariot: Chari
         "couvercles": r.geste_mode_couvercles,
         "inspection": r.geste_mode_inspection,
     }
-    if commande in ("pose", "centrer", "poste", "ranger"):
+    if commande in ("pose", "centrer", "vidage", "ranger"):
         format = valeurs[0]
         if format not in r.reglages.formats:
             print(f"Format inconnu : {format}", file=sys.stderr)
@@ -245,7 +244,7 @@ def _faire(options: argparse.Namespace, remplissage: Remplissage, chariot: Chari
         gestes.update(
             pose=lambda: r.geste_aller_a_la_pose(format),
             centrer=r.geste_centrer,
-            poste=r.geste_ramener_au_poste,
+            vidage=r.geste_ramener_au_vidage,
             ranger=lambda: (
                 r.geste_ranger_en_haut()
                 if valeurs[1] == "bande_haut"

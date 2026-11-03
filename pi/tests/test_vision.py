@@ -468,7 +468,7 @@ def test_lavage_refuse_si_la_camera_du_plafond_doute():
 
 class Verrous:
     def __init__(self) -> None:
-        self.agitateur = self.griffe = self.prehension = True
+        self.demi_tour = self.griffe = self.prehension = True
 
 
 def camera_dosage(tmp_path, registre=None, attendre=lambda s: None):
@@ -478,7 +478,7 @@ def camera_dosage(tmp_path, registre=None, attendre=lambda s: None):
         MACHINE,
         p,
         servo,
-        lambda: verrous.agitateur,
+        lambda: verrous.demi_tour,
         lambda: verrous.griffe,
         lambda: verrous.prehension,
         attendre=attendre,
@@ -505,7 +505,7 @@ def test_photo_du_seau_apres_la_dose_notee_avec_sa_dose(tmp_path):
 def test_camera_du_dosage_ne_pivote_que_tout_le_monde_hors_de_la_boite(tmp_path):
     camera, servo, verrous = camera_dosage(tmp_path)
     for nom, texte in (
-        ("agitateur", "agitateur du mycélium pas garé"),
+        ("demi_tour", "demi-tour du bocal du mycélium en cours"),
         ("griffe", "griffe dans la boîte"),
         ("prehension", "préhension dans la boîte"),
     ):
@@ -561,6 +561,9 @@ def test_mycelium_photographie_le_seau_apres_chaque_dose():
 
         def photo_seau_finie(self):
             return True
+
+        def pivote(self):
+            return False
 
     camera = FausseCamera()
     with Simulateur(REGLAGES, LISTE, "dosage_mycelium") as simu:
