@@ -999,12 +999,37 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   accélération réduite seau tenu, places de photo, garage de repos, rotation de la tête refusée au-delà de x 2,0,
   alarme d'un pilote. Outil d'essai et procédure sur le vrai matériel (sens des axes, équerre, fins de course) ;
   « testé sur le vrai matériel : non ».
-- [ ] **36 bis. Portique : corrections après la PR n° 56** — à écrire en entier quand le fil Griffe aura donné le point
-  de recherche de A et les angles dans le repère du logiciel (`docs/decisions.md`, « Portique, réponses à la PR
-  n° 56 », points 3 et 4). Contiendra : hauteurs de pose vraies et prise double A et D sans séparation (point 2) ;
-  règle « bout côté fût » avec condition de hauteur, et retrait du « 0° ou 180° » au-delà de x 2,0 (point 3) ;
-  origines A et B de la griffe (point 4). Le lavage (point 1) attend la décision mécanique. **Ne pas faire tant que
-  cette ligne ne donne pas les règles.**
+- [ ] **36 bis. Portique : corrections après la PR n° 56** — Modèle : Opus, effort moyen. **À faire après la tâche
+  19 ter.** Source : `docs/decisions.md`, « Portique, réponses à la PR n° 56 » (03/11/2026), et ci-dessous (fils
+  Griffe et Portique, 03/11). Repère des angles du logiciel partout : A = 0 bras le long du pont (axe y), raclette
+  vers −x (côté fût), A positif = sens trigonométrique vu de dessus.
+  1. **Hauteurs de pose vraies** (`remplissage → formats → pose_plateau_z`) : A 0,4675, B 0,5125, C 0,4925,
+     D 0,4625 (remplacer les exemples, dont le 0,475 de A). Vérifié au démarrage : face à l'étape c) de la prise
+     double (pose + 0,003 − 0,028) ≥ bas de la course de la préhension (0,45), sinon le format doit être marqué
+     sans séparation (point 2).
+  2. **Prise double sans séparation pour A et D** : nouveau réglage par format, `separation_sur_chariot` (vrai pour
+     B et C, faux pour A et D). Faux : la préhension repose les 2 seaux emboîtés sur une place libre (fin de lot)
+     et refait le dégerbage ; pas d'étapes a) à i). Tests des deux cas.
+  3. **Bout côté fût** (`portique → bouts_bloques_griffe`) : une bande avec une condition de hauteur, `{pont_x:
+     [0.233, 0.30], axes_z_max: 1.05, angles_deg: [180]}` (seul A = 180° : à 0° la raclette, à ± 90° les bras,
+     en biais jusqu'à 0,143, touchent la traverse ; à 180° il reste 15 mm). Retirer la bande « x 2,0-2,495 :
+     0° ou 180° » : au-delà de x 2,0, la règle reste seulement « pas de rotation » (`griffe → rotation →
+     pont_x_max`). Tests : A = 0 refusé à pont 0,25 axes 1,0, permis à axes 1,06 ; A = 180 permis ; A = 90 permis
+     à pont 2,2 (sans rotation).
+  4. **Origines A et B de la griffe** (remplacer l'exemple de la PR n° 56) : 2 fins de course NF à levier,
+     `fdc_origine_godet_griffe` et `fdc_origine_rotation_griffe` dans `docs/entrees-sorties.yaml` (`exemple: true`,
+     sur le multiconducteur de la griffe). **B** : 2 mm vers l'ouvert, puis vers FERMÉ, lent, à courant réduit,
+     jusqu'au fin de course = « fermé nominal » (0) ; butées logicielles 0 à +36 mm ; blocage vu par le codeur
+     avant le fin de course : arrêt, alarme « godet bloqué, vider au-dessus d'un seau ». **A** : fanion de 180°,
+     actionné pour A de −180° à 0, libre de 0 à +180° ; son état dit de quel côté de 0 est la tête ; tourner vers
+     le bord, approche finale toujours en +, lente ; recherche limitée à 190° (sinon alarme), jamais au-delà de
+     ± 180° ; origine = A 0. Ordre (`portique → origine`) : portique (Z, Y, X) ; B, Z en haut ; aller au point de
+     recherche (0,86 ; 0,57) tête à 0° ou 180°, descendre les axes à 1,075, godet fermé ; A ; remonter. Si la
+     dernière position connue de A n'était ni 0° ni 180° (coupure pendant une rotation en bas) : ne pas monter Z,
+     alarme, tête remise à la main. Ce point (0,86 ; 0,57), axes 1,075, godet fermé, sert aussi à tous les
+     demi-tours de la griffe hors du fût (`griffe → point_demi_tour`), à la place de tout autre point.
+  5. Le lavage (point 1 de la décision) **n'est pas dans cette tâche** : il attend la décision mécanique.
+  Tests de chaque point ; `vidange --verifier` et le simulateur passent.
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
   (le Lavage a besoin de la Préhension, qui tient le seau pendant tout le lavage).
   Sources (recopiées ici le 29/10/2026) : fiche du module « Préhension », **validé définitivement le 27/10/2026**,

@@ -523,8 +523,8 @@ si l'une pose problème, elle le dit dans sa PR.
      **sans séparation sur le chariot** ; B et C gardent l'ordre a) à i). Pas de course en plus (la Préhension :
      changer rail, crémaillère et chaîne Z).
   3. « Au bout côté fût » (fil Portique) : règle à part de celle de x 2,0. **Pont entre 0,233 et 0,30 et axes de la
-     tête sous 1,05 : tête à un seul angle** (sinon elle touche la traverse) ; angle dans le repère du logiciel
-     demandé au fil Griffe. Hors de là, rotation libre (règle des axes ≤ 1,075 godet ouvert, ≤ 1,11 fermé). Au-delà
+     tête sous 1,05 : tête à A = 180° seulement** (réponse du fil Portique : à 0° la raclette, à ± 90° les bras,
+     en biais jusqu'à 0,143, touchent la traverse ; à 180° il reste 15 mm). Hors de là, rotation libre (règle des axes ≤ 1,075 godet ouvert, ≤ 1,11 fermé). Au-delà
      de x 2,0 : pas de rotation, **sans** limite d'angle (le « 0° ou 180° seulement » de la PR est retiré).
   4. Origines A et B de la griffe (fil Griffe, niveau 1) : 2 micro-interrupteurs NF à levier. **B** : origine
      « fermé nominal », recherche 2 mm vers l'ouvert puis **vers fermé**, lente, à courant réduit (jamais ouvrir :
@@ -534,8 +534,9 @@ si l'une pose problème, elle le dit dans sa PR.
      axes ≤ 1,11. Ordre : portique (Z, Y, X), puis B (Z en haut), puis aller au point de recherche de A, tête à un
      angle de bras « le long d'un axe », descendre, puis A. Si la dernière position connue de A n'était pas un de
      ces angles (coupure pendant une rotation en bas) : ne pas monter Z, alarme, tête remise à la main. Point de
-     recherche (0,708 ; 0,74 proposé, interdit par la table v45.111) et correspondance des angles : demandés au fil
-     Griffe. Entrées : à confirmer après la validation du matériel (`exemple: true`).
+     recherche (réponse du fil Griffe, 03/11) : **(0,86 ; 0,57), axes 1,075, godet fermé** (aussi pour tous les
+     demi-tours de la griffe hors du fût) ; le point (0,708 ; 0,74) est abandonné (interdit par la table v45.111).
+     Repère des angles : celui du logiciel (A = 0 bras le long du pont, raclette vers −x) ; origine de A = 0. Entrées : à confirmer après la validation du matériel (`exemple: true`).
   5. Garage du chariot : **centre du chariot à 0,50** (mâts à 0,46), comme dans la PR.
   Ces corrections vont dans la tâche 36 bis.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
