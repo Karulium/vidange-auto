@@ -1005,11 +1005,11 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   vers −x (côté fût), A positif = sens trigonométrique vu de dessus.
   1. **Hauteurs de pose vraies** (`remplissage → formats → pose_plateau_z`) : A 0,4675, B 0,5125, C 0,4925,
      D 0,4625 (remplacer les exemples, dont le 0,475 de A). Vérifié au démarrage : face à l'étape c) de la prise
-     double (pose + 0,003 − 0,028) ≥ bas de la course de la préhension (0,45), sinon le format doit être marqué
-     sans séparation (point 2).
-  2. **Prise double sans séparation pour A et D** : nouveau réglage par format, `separation_sur_chariot` (vrai pour
-     B et C, faux pour A et D). Faux : la préhension repose les 2 seaux emboîtés sur une place libre (fin de lot)
-     et refait le dégerbage ; pas d'étapes a) à i). Tests des deux cas.
+     double (pose + 0,003 − 0,028) ≥ bas de la course de la face de la préhension, sinon erreur au démarrage.
+  2. **Préhension +22 cm** (décision, point 8) : course de `prehension_z` (face 1,10 → 0,23) et de la plaque Z
+     (`portique → plaques_z → prehension`, 1,308 → 2,178) ; prise double sur le chariot pour les 4 formats (ordre
+     a) à i), plus de cas « sans séparation ») ; nouvelle règle : plaque Z de la préhension au-dessus de 2,02 →
+     mât de la préhension à y ≤ 0,80 (vérifiée au démarrage et à chaque mouvement). Tests.
   3. **Bout côté fût** (`portique → bouts_bloques_griffe`) : une bande avec une condition de hauteur, `{pont_x:
      [0.233, 0.30], axes_z_max: 1.05, angles_deg: [180]}` (seul A = 180° : à 0° la raclette, à ± 90° les bras,
      en biais jusqu'à 0,143, touchent la traverse ; à 180° il reste 15 mm). Retirer la bande « x 2,0-2,495 :
@@ -1035,6 +1035,9 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
      obligatoires** (à 180° il ne resterait que 5 mm devant la traverse basse ; au-dessus, rotation libre), par
      exemple `{pont_x: [0.223, 0.233], axes_z_max: 1.05, angles_deg: []}` (aucun angle permis sous 1,05). Test. Places du lavage remises à x 0,352 (centre du fût de lavage) et décalage du brossage à
      0,002 ; jet d'air en relatif au centre : A (+2 ; −15,2), B (+2 ; −23), C (+2 ; 0), D (+2 ; −11,5) mm.
+  6. **Rails X +0,43** (décision, point 9) : course du pont 0,223 → 2,925 (`pont_x`, `portique`), mât de la griffe
+     x ≤ 2,738 (`stockage → trajets → griffe_x_max`, avant 2,325), préhension x ≤ 3,054, garage de repos et place
+     de photo côté stockage à pont 2,925 (vision). Les places du stockage agrandi sont dans la tâche 35 ter.
   Tests de chaque point ; `vidange --verifier` et le simulateur passent.
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
   (le Lavage a besoin de la Préhension, qui tient le seau pendant tout le lavage).
