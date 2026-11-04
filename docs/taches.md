@@ -932,6 +932,16 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   pour la bande du haut ; chariot à y 0,215 plateau haut permis (plus de règle des anneaux) ; places et capacité par
   format ; seau mal aligné à la photo ⇒ arrêt ; scénario du simulateur avec 18 seaux A. « Testé sur le vrai
   matériel : non ».
+- [ ] **35 ter. Stockage agrandi de 43 cm** — Modèle : Sonnet, effort moyen. **À faire après la tâche 36 bis.**
+  Source : `docs/decisions.md`, « Stockage agrandi de 43 cm » (04/11/2026), points 1 à 6. Dans `pi/reglages/machine.yaml`
+  (`stockage`) : 3 panneaux (`panneaux → p1, p2, p3`) ; tiroir `butee_x: 3.012`, `places` et `centres_x` de tous les
+  formats et de toutes les files (la place sous la caméra du fond reste vide pour A et D sur la file 0,215 : le
+  pousseur s'arrête au codeur sur la 2e place) ; cale de C inchangée ; bande du haut `bord_x_max: 2.87` et les places
+  des 4 formats ; bocaux `paires: 14`, `impaires: 13` ; coin des suspects ; boîtes ; hublot (2,93 ; 0,22). Dans
+  `docs/entrees-sorties.yaml` : la boucle du stockage devient 4 microrupteurs en série (tiroir + P1 + P2 + P3), une
+  seule entrée (nom et description). Vérifié au démarrage : capacité A 26, B 28, C 22, D 23 ; aucune place hors
+  du tiroir (1,10-3,012) ni de la bande (bord ≤ 2,87) ; coin des suspects dans le quinconce. Tests : reprendre ceux
+  du stockage aux nouveaux chiffres, un lot plein de chaque format dans le simulateur. `vidange --verifier` passe.
 - [x] **36. Portique : axes du pont et des deux Z, prise d'origine, vitesses, garage, carte n° 1** — Modèle : Opus,
   effort moyen. **Avant le solveur (tâche 23).**
   Sources (recopiées ici le 01/11/2026) : fiche du module « Portique », **gelé le 28/10/2026**, et le fichier écrit

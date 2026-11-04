@@ -509,6 +509,28 @@ si l'une pose problème, elle le dit dans sa PR.
      Fermeture des seaux, qui s'occupe des couvercles).
   3. Photo de contrôle de la bande du haut : le faux « bien placé » reste tant que les réglages sont en
      `exemple: true` (on regarde à l'œil pendant les essais) ; la vraie lecture vient avec la tâche 22 ter.
+- **Stockage agrandi de 43 cm** (validé par Karulium le 04/11/2026, 17:58 ; fil Stockage,
+  `stockage/logiciel/stockage-pour-logiciel.md` (encadré du début) et `places-agrandi-43.md`). Le stockage commence
+  toujours à x 1,10 ; tout ce qui était au bout avance de +0,43.
+  1. Plateau du haut : **3 panneaux** P1 x 1,155-1,770, P2 1,7825-2,3975, P3 2,410-3,025 ; microrupteurs à x 1,510 /
+     2,1375 / 2,765 ; **4 contacts en série** (tiroir + 3 panneaux) sur une seule entrée. Tapis jusqu'à x 2,8585.
+  2. Tiroir : tôle x 1,10-3,04, **butée (face d'appui) x 3,012**. Places (centres x) :
+     - A : file 0,215 : 2,6065 / 2,3345 / 2,0625 / 1,7905 / 1,5185 / 1,2465 (place 2,8785 vide, sous la caméra du
+       fond) ; files 0,50 et 0,785 : 2,8785 / 2,6065 / 2,3345 / 2,0625 / 1,7905 / 1,5185 / 1,2465 ;
+     - B : les 3 files : 2,897 / 2,662 / 2,427 / 2,192 / 1,957 / 1,722 / 1,487 (7 par file) ;
+     - C : files 0,215 et 0,785 : 2,862 / 2,562 / 2,262 / 1,962 / 1,662 / 1,362 ; file 0,50 (cale de 15 cm) :
+       2,712 / 2,412 / 2,112 / 1,812 / 1,512 ;
+     - D : file 0,215 : 2,592 / 2,312 / 2,032 / 1,752 / 1,472 (place 2,872 vide) ; files 0,50 et 0,785 : 2,872 /
+       2,592 / 2,312 / 2,032 / 1,752 / 1,472.
+  3. Bande du haut (y 0,215), **bord du couvercle ≤ 2,87** (hublot x 2,88-2,98) : A 2,73 / 2,458 / 2,186 / 1,914 /
+     1,642 / 1,37 ; B 2,755 / 2,52 / 2,285 / 2,05 / 1,815 / 1,58 / 1,345 ; C 2,7125 / 2,4125 / 2,1125 / 1,8125 /
+     1,5125 ; D 2,73 / 2,45 / 2,17 / 1,89 / 1,61 / 1,33.
+  4. Capacité d'un lot : **A 26, B 28, C 22, D 23** (tiroir + bande du haut).
+  5. Bocaux : rangées paires **14** (x 1,2075 → 2,6375), impaires **13** (x 1,2625 → 2,5825) : **122 places**. Coin des
+     suspects (fil logiciel, accepté par le Stockage) : même forme, 3 places vers le bout : suspects [8,11] [8,12]
+     [8,13] [7,10] [7,11] [7,12] [6,11] [6,12] [6,13] ; séparation [5,10] [5,11] [5,12] [6,10] [7,9] [8,10].
+  6. Boîtes à capsules en **(2,95 ; 0,53)** et **(2,95 ; 0,80)** ; hublot en **(2,93 ; 0,22)**, boîtier x 2,87-2,99.
+     Mât de la griffe à x ≤ 2,738 (Portique). Piles de vides, couvercles, semence, caméra du bocal : inchangés.
 - **Portique, réponses à la PR n° 56** (tâche 36, 03/11/2026 ; fils Lavage, Remplissage, Portique, Griffe) :
   1. Lavage : **12 mm ne conviennent pas** (fil Lavage) : la tête doit être au centre du fût de lavage à ± 2 mm
      (brosses coaxiales au seau ; à 12 mm, le seau B n'est plus brossé d'un côté et le seau C bloque). C'est un
