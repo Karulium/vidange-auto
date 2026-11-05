@@ -1050,6 +1050,19 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   6. **Rails X +0,43** (décision, point 9) : course du pont 0,223 → 2,925 (`pont_x`, `portique`), mât de la griffe
      x ≤ 2,738 (`stockage → trajets → griffe_x_max`, avant 2,325), préhension x ≤ 3,054, garage de repos et place
      de photo côté stockage à pont 2,925 (vision). Les places du stockage agrandi sont dans la tâche 35 ter.
+  7. **Origine de la rotation de la tête de préhension** (décision « Origine de la rotation de la tête », 05/11) :
+     `origine_rotation_tete` = capteur Hall sous la poulie de 60 dents (description à corriger). Prise d'origine
+     de A (`fluidnc/prehension.yaml`) : approche finale lente, toujours dans le même sens ; la recherche ne doit
+     jamais faire plus d'un peu plus d'un tour (le Hall voit l'aimant à chaque tour : une recherche longue
+     tomberait sur le mauvais tour et vrillerait le cordon). Pour cela, le Pi **enregistre l'angle cumulé** de A
+     (tours compris) dans un fichier à chaque arrêt (comme les autres états gardés au redémarrage) ; avant la prise
+     d'origine, il ramène la tête près de 0 avec cet angle, puis cherche le Hall. Après une coupure en pleine
+     rotation (angle enregistré pas à jour) : l'écran demande « vérifier que le cordon n'est pas vrillé » et attend
+     la confirmation avant la prise d'origine. Nouveau réglage `prehension → angle_meplats_deg` (angle « méplats
+     en face des mors en V » par rapport au Hall, EXEMPLE 0, à mesurer à la mise en service, procédure dans
+     `pi/systeme/essai-prehension.md`). Pose et prise au porte-bocal : aller à la plus proche de
+     `angle_meplats_deg + k × 120°` (dans ± 500°), donc au plus 60° de rotation, tolérance ± 3°. Tests : alignement
+     depuis 0°, 59°, 61°, 490° ; angle enregistré relu après un redémarrage ; coupure ⇒ confirmation demandée.
   Tests de chaque point ; `vidange --verifier` et le simulateur passent.
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
   (le Lavage a besoin de la Préhension, qui tient le seau pendant tout le lavage).
