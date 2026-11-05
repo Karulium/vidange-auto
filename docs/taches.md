@@ -1139,6 +1139,64 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   et d'un bocal, pose et reprise au porte-bocal, vissage. Tests, dont : vide qui lâche pendant la levée (feed hold,
   2 échecs ⇒ alerte), deux seaux pris, contact trop bas, choc, isolation du fût, XY refusé tête basse, vissage
   au-delà de 150 N, zéro du vide au démarrage.
+- [ ] **17 bis. Poste du fût : plateau de pesée sans fil (côté Pi)** — Modèle : Opus, effort moyen. **À faire après
+  la tâche 35 ter.**
+  Sources : `docs/decisions.md`, « Poste du fût : plateau de pesée sans fil » (05/11/2026), recopiée de
+  `poste-fut-pour-logiciel.md` v10 du projet mécanique. Les chiffres vont dans `pi/reglages/` et
+  `docs/entrees-sorties.yaml`, jamais dans le code. Ne pas écrire les programmes des ESP32-C3 (tâche 17 ter).
+
+  *Gestes à la main* (le rappel de l'écran est à refaire) : fût posé debout sur le plateau entre les 4 cales,
+  soupape enlevée, trou bouché ; plateau roulé et poussé contre les 2 butées d'angle du fond, 2 roulettes freinées ;
+  grand volet rabattu, panneau long levé ; appui sur « Prêt ». Fin : volet relevé, freins desserrés, plateau sorti.
+  Plus de prise à brancher, de goupille ni de sangles.
+  1. **Signaux** (`docs/entrees-sorties.yaml`) : renommer `chariot_fut_en_place` en `plateau_fut_en_place` partout
+     (code, réglages, simulateur, textes de l'écran : « chariot du fût » devient « plateau du fût »). `pesee_fut`
+     n'est plus sur `GPIO20/21` : c'est un appareil du bus `rs485_pesee`, `adresse: 4`, avec un nouvel `appareil`
+     (par exemple `boite_poste_fut`) pour que la fabrication du programme des cartes RP2040 ne le prenne pas. Le
+     reed du plateau n'est **pas** un signal du Pi. Pas de capteur de volet ni de fût posé. Tout reste `exemple: true`.
+  2. **Lecture** : réutiliser le code du bus des pesées (`pi/vidange/pesees/`) pour les registres 0 à 7 ;
+     vérifier la signature **0x5046** (pas 0x5053) ; lire aussi les registres 8 à 12 (reed, recharge, USB-C de
+     secours, tension en mV, %, signal en dBm + 200, trames perdues). Une ligne `pesee_fut` dans `tour:` de
+     `pesees.yaml`, interrogée au plus une fois par seconde (réglage) pour ne pas ralentir la griffe (≥ 80 mesures
+     par seconde, à vérifier dans un test). Retirer le code qui lit le HX711 directement par les GPIO s'il ne sert
+     plus à rien d'autre.
+  3. **Étalonnage** dans `pi/reglages/pesees.yaml → etalonnage → pesee_fut` (retirer `zero_brut` et `brut_par_kg` de
+     `machine.yaml → poste_fut → pesee`). Tare plateau + boîtier + fût vide + couvercle ≈ 59,4 kg ; bornes
+     plausibles ≈ 50 à 200 kg ; tout EXEMPLE. La boîte fait déjà la moyenne de 5 : le Pi ne refait pas une médiane
+     de 5 lectures (1 par seconde, ce serait 5 s) ; garder seulement le rejet d'une valeur hors bornes. Mesure lue
+     seulement griffe hors du fût, comme avant.
+  4. **Pesée absente** : pas de réponse, registre 4 bit 2, ou âge (registre 3) > 2 s (réglage) ⇒ « pesée absente »,
+     affichée, au journal, une alerte dans la file (une seule par absence, pas une par seconde). Jamais un arrêt.
+     Elle revient seule. **« Prêt » n'exige plus la pesée** : plateau en place + signaux stables 2 s + appui. Au
+     « Prêt » sans pesée : cycle commencé sans poids du fût plein ; seaux notés « sans pesée du fût » dans le
+     registre et dans `mesures[]` (`docs/django.md` : le dire). Après `plateau_fut_en_place` vrai, si la pesée ne
+     répond pas dans 5 s (réglage) : message « pesée absente » sur le poste (pas de refus).
+  5. **Batterie** (`pesees.yaml`, EXEMPLES) : ≥ 3,6 V bon ; < 3,5 V alerte « recharger le plateau » ; < 3,3 V alerte
+     forte « pesée bientôt absente » ; plateau au poste depuis plus de 10 min sans « recharge en cours » : alerte
+     « recharge sans contact en panne ? ». Niveau en % et signal radio affichés à l'écran et sur la page web.
+     Vérification au démarrage : seuils dans le bon ordre.
+  6. Mettre à jour la procédure d'essai du poste (`pi/systeme/essai-poste-fut.md`) : tare plateau vide, masse
+     connue ≈ 20 kg au centre, radio coupée (débrancher la boîte) ⇒ « pesée absente » sans arrêt.
+  Simulateur : fausse boîte du poste (trames, radio muette, accu faible), scénario « échange de fût » repris avec le
+  plateau. Tests : « Prêt » accepté sans pesée ; signature 0x5053 refusée pour `pesee_fut` ; mesure de 2,5 s ⇒
+  absente ; une seule alerte pour une longue absence ; retour de la pesée sans redémarrer ; seuils de l'accu ;
+  plateau 10 min sans recharge ⇒ alerte ; la griffe garde ses 80 mesures par seconde avec `pesee_fut` dans le tour.
+  `vidange --verifier` passe.
+- [ ] **17 ter. Programmes des 2 ESP32-C3 du poste du fût (plateau et boîte du poste)** — Modèle : Opus, effort
+  moyen. **À faire après la tâche 17 bis.** Vrai matériel : procédure d'essai pas à pas, « testé sur le vrai
+  matériel : non ».
+  Sources : la même décision que 17 bis, et `poste-fut-pour-logiciel.md` (programmes). Dans un dossier
+  `poste_fut_radio/` à côté de `pesee/`, sur le même modèle (réglages copiés depuis `pesees.yaml` à la fabrication,
+  tests sur PC avec faux HX711 et fausses trames, CI).
+  - **Plateau** : dort, se réveille sur le reed ; lit le HX711 à 10 mesures par seconde (RATE à la masse), moyenne
+    de 5, une trame ESP-NOW toutes les 0,5 s (brut, numéro, HX711 muet, tension et %, recharge, USB-C de secours) ;
+    tension de l'accu par pont diviseur ; se rendort 30 s après l'ouverture du reed.
+  - **Boîte du poste** : toujours alimentée ; reçoit les trames (seulement de l'adresse radio du plateau, dans les
+    réglages, jamais dans le code) ; répond en Modbus RTU à 115 200 bauds, 8N1, registres 0 à 12 et signature
+    0x5046 de 17 bis ; bit « radio muette » si rien depuis 2 s ; MAX3485 avec DE/RE. Reprendre le code Modbus de
+    `pesee/src/modbus.c` si c'est possible.
+  - Pas de Wi-Fi ni de réseau : ESP-NOW seulement (exception décidée par Karulium). Mise à jour par le câble USB,
+    comme les autres cartes.
 - [ ] 38. Nettoyage
 - [ ] **38 bis. Capteurs d'ozone Winsen ZE25-O3 en UART (ozone_1 et ozone_2)** — Modèle : Sonnet, effort moyen.
   Sources (recopiées ici le 31/10/2026) : fiche du module « Nettoyage », de nouveau **gelé le 31/10/2026** (choix du

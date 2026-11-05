@@ -587,6 +587,29 @@ si l'une pose problème, elle le dit dans sa PR.
      de repos et place de photo côté stockage : **pont à 2,925**. La caméra du plafond reste en (1,45 ; 0,545) tant
      que le fil Guidage caméra ne dit pas autre chose.
   Ces corrections vont dans la tâche 36 bis.
+- **Poste du fût : plateau de pesée sans fil** (validé par Karulium le 05/11/2026, 01:26 ; fil Poste du fût,
+  `poste-fut-pour-logiciel.md` v10 du 05/11) : le chariot retourneur disparaît (rochet, cliquet, goupille, sangles,
+  prise magnétique, HX711 relié au Pi). Le fût arrive debout sur un **plateau à 4 roulettes** ; le retournement se
+  fait dans le culbuteur du pasteurisateur, hors de la machine. Centre du fût, enceinte, volet, panneau et « Prêt »
+  ne changent pas.
+  1. `chariot_fut_en_place` devient **`plateau_fut_en_place`** (même inductif M12 PNP dans la butée d'angle, il voit
+     le bord du plateau). Même règle de zone pour le pont. Il reste câblé en 24 V : il marche sans la radio.
+  2. **Radio ESP-NOW entre deux ESP32-C3** (plateau → boîte du poste), sans Wi-Fi ni réseau : c'est le choix de
+     Karulium (« ne rien brancher »), une **exception** à la règle « rien sans fil » des cartes de pesée. Elle ne
+     porte que la pesée, jamais un verrou ni une sécurité.
+  3. La boîte du poste est un esclave **Modbus RTU** du bus `rs485_pesee` (adresse 4, EXEMPLE), registres 0 à 7 du
+     même sens que `pesee/README.md`, signature **0x5046** ; registres 8 à 12 en plus (reed du plateau, recharge,
+     tension et % de l'accu, signal radio, trames perdues). 2 mesures par seconde (moyenne de 5) ; précision voulue
+     ± 0,2 kg fût immobile. 4 capteurs de 150 kg en parallèle sur **un seul HX711**. Étalonnage sur le Pi
+     (`pesees.yaml`).
+  4. **La pesée n'entre plus dans « Prêt »** : « Prêt » = plateau en place + signaux stables 2 s + appui. Radio muette
+     (pas de réponse, bit « radio muette », ou mesure de plus de 2 s) ⇒ pesée « absente » : affichée, au journal,
+     alerte ; **la machine ne s'arrête jamais pour ça** (la griffe trouve le fond au toucher) ; le seau est noté
+     « sans pesée du fût » ; la pesée revient seule.
+  5. Batterie (accu 18650, recharge sans contact au poste) : alerte « recharger le plateau » sous 3,5 V, alerte forte
+     sous 3,3 V, alerte « recharge en panne » si plateau au poste depuis 10 min sans recharge (seuils : réglages,
+     EXEMPLES).
+  Les numéros d'entrées viendront de l'Implantation. Côté Pi : tâche 17 bis ; programmes des 2 ESP32-C3 : 17 ter.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
