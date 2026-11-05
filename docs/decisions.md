@@ -618,6 +618,17 @@ si l'une pose problème, elle le dit dans sa PR.
 - **Préhension figée** (27/10/2026) : capteur inductif M8 24 V ; capteur de vide sur l'ADS1115 **en 3,3 V**
   (pas de pont diviseur) ; pour poser ou prendre un bocal sur le porte-bocal, la tête est orientée à ± 3°
   (grâce aux méplats) et ne tourne pas entre les mors.
+- **Origine de la rotation de la tête de préhension** (fil Préhension, 05/11/2026, niveau 1, après une question de
+  Karulium) : l'origine `origine_rotation_tete` est le **capteur Hall sous la poulie de 60 dents**.
+  1. Recherche du Hall **toujours lente et toujours dans le même sens** (répétabilité meilleure que 1°).
+  2. Une constante réglée à la mise en service : l'angle « méplats en face des mors en V » par rapport au Hall.
+  3. Pose ou prise au porte-bocal (± 3°, règle ci-dessus) : la tête va sur la **plus proche des 3 positions des
+     méplats** (elles se répètent tous les 120°) : jamais plus de 60° de rotation pour s'aligner.
+  4. L'**angle cumulé** de la tête (tours compris) est enregistré à chaque arrêt, pour rester dans ± 500° (cordon
+     spiralé).
+  5. Après une coupure en pleine rotation : avant de chercher le Hall, l'écran demande à l'opérateur de vérifier
+     que le cordon n'est pas vrillé.
+  Côté logiciel : tâche 36 bis, point 7.
 
 ## Accès à distance et mises à jour (Karulium, 26/10/2026)
 
