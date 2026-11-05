@@ -215,9 +215,11 @@ si l'une pose problème, elle le dit dans sa PR.
      chariot à y ≥ 0,40 → manivelle en haut → demi-tour → manivelle en bas → dosage. Au retour : chariot à
      y ≥ 0,40 → manivelle en haut → bocal remis debout → manivelle en bas → reprise. Demi-tour inchangé (manivelle en
      haut, chariot à y ≥ 0,40, caméra à 0°, tête de préhension hors de la zone du point 3).
-     Hauteur de contact de la capsule : **réglable** `prehension → porte_bocal → contact_capsule_z` (EXEMPLE 1,0325,
-     fiche v10 ; la maquette dessine 1,047 : écart signalé au fil Mycélium), arrêt sur le contact de la tête comme pour
-     les autres prises.
+     Hauteur de contact de la capsule (fiche Mycélium v10b, 05/11, d'accord avec la maquette) : manivelle en bas, elle
+     dépend du trou du maneton : **1,047 / 1,077 / 1,108 pour une course de 10 / 7 / 4 cm** (manivelle en haut :
+     1,147, jamais atteinte). Réglage `prehension → porte_bocal → contact_capsule_z: {0.10: 1.047, 0.07: 1.077,
+     0.04: 1.108}`, choisi avec `mycelium → course_agitation_m` (vérifié au démarrage : la course réglée doit être
+     dans la table) ; approche 5 cm au-dessus ; arrêt sur le contact de la tête comme pour les autres prises.
   3. Hauteur du porte-bocal (Maquette, 05/11, v45.117) : **l'hypothèse « rien au-dessus de 1,05 » est fausse**.
      Plus haut point : 1,070 manivelle en bas, 1,170 manivelle en haut, **1,208 pendant le demi-tour** ; support fixe
      de la glissière verticale jusqu'à 1,167 (x 0,84-1,01, y −0,027-0,016) ; boîtier de la caméra du dosage jusqu'à
