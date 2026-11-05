@@ -1019,7 +1019,9 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   2. **Préhension +22 cm** (décision, point 8) : course de `prehension_z` (face 1,10 → 0,23) et de la plaque Z
      (`portique → plaques_z → prehension`, 1,308 → 2,178) ; prise double sur le chariot pour les 4 formats (ordre
      a) à i), plus de cas « sans séparation ») ; nouvelle règle : plaque Z de la préhension au-dessus de 2,02 →
-     mât de la préhension à y ≤ 0,80 (vérifiée au démarrage et à chaque mouvement). Tests.
+     mât de la préhension à y ≤ 0,80 (vérifiée au démarrage et à chaque mouvement). Mât plus souple : face de la
+     préhension sous `portique → tete_basse_z` (0,60, EXEMPLE), accélération X et Y multipliée par
+     `portique → facteur_acceleration_tete_basse` (0,5, EXEMPLE), en plus de la règle « seau tenu ». Tests.
   3. **Bout côté fût** (`portique → bouts_bloques_griffe`) : une bande avec une condition de hauteur, `{pont_x:
      [0.233, 0.30], axes_z_max: 1.05, angles_deg: [180]}` (seul A = 180° : à 0° la raclette, à ± 90° les bras,
      en biais jusqu'à 0,143, touchent la traverse ; à 180° il reste 15 mm). Retirer la bande « x 2,0-2,495 :

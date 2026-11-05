@@ -570,13 +570,18 @@ si l'une pose problème, elle le dit dans sa PR.
   7. Correction du fil Griffe (03/11) : les origines A et B sont **2 capteurs inductifs M12, portée 4 mm, PNP, NO**,
      10-30 V sur le +24 V du câble, signal à +24 V quand ils voient le métal (2 entrées 24 V actives hautes) :
      B actif quand la fourchette arrive à « fermé » ; A actif quand il voit le fanion (A de −180° à 0°). Le principe
-     et les sens ne changent pas. La Maquette confirme le point (0,86 ; 0,57) sur la v45.112 (un tour complet libre).
+     et les sens ne changent pas. **Validé par Karulium le 05/11 (01:22)** ; numéros des entrées à choisir avec
+     l'Implantation. La Maquette confirme le point (0,86 ; 0,57) sur la v45.112 (un tour complet libre).
   8. **Préhension +22 cm** (validée par Karulium le 04/11, 17:59) : mât et colonne allongés de 22 cm, plaque Z de la
      préhension de **2,178 à 1,308 (course 0,870)** ; face de la ventouse de **1,10 à 0,23** (0,21 au tout bout du
      rail). Nouvelle règle (Portique) : plaque Z de la préhension **au-dessus de z 2,02 → mât de la préhension à
      y ≤ 0,80** (sinon le brin de la chaîne Z touche le plénum du Nettoyage). Conséquence (fil Remplissage) : la
      prise double se fait de nouveau **sur le chariot pour les 4 formats** (ordre a) à i)) ; la règle « A et D :
      reposer les 2 seaux et refaire le dégerbage » du point 2 est **retirée**.
+     Préhension (05/11) : la lèvre va de 0,21 à 1,10 ; on garde **0,23** comme bas de course (0,21 = tout bout du
+     rail, sur la butée). Le mât est plus souple en travers (≈ 4 mm pour 20 N) : **accélérations et freinages plus
+     doux en X et Y quand la tête est basse** (choix du fil logiciel, niveau 1 : face sous 0,60 → accélération X et Y
+     divisée par 2, EXEMPLE à régler aux essais). Rotation inchangée (± 500°).
   9. **Rails X +0,43** (validés par Karulium le 04/11, 18:26, avec le stockage agrandi) : pont de **0,223 à 2,925**
      (remplace 2,495) ; mât de la griffe à **x ≤ 2,738** (au-dessus du stockage), préhension à **x ≤ 3,054** ; garage
      de repos et place de photo côté stockage : **pont à 2,925**. La caméra du plafond reste en (1,45 ; 0,545) tant
