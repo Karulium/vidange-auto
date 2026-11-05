@@ -221,7 +221,10 @@ si l'une pose problème, elle le dit dans sa PR.
      0.04: 1.108}`, choisi avec `mycelium → course_agitation_m` (vérifié au démarrage : la course réglée doit être
      dans la table) ; arrêt sur le contact de la tête comme pour les autres prises. La face de la préhension monte au
      plus à 1,10 : approche à 1,10. **Course de 4 cm (contact 1,108) : pose impossible** ; le démarrage refuse une
-     course dont le contact dépasse la face haute moins 1 cm (question posée au fil Mycélium le 05/11).
+     course dont le contact dépasse la face haute moins 1 cm. Réponse du fil Mycélium (05/11, niveau 1) : la course
+     de 4 cm ne sert pas au cycle automatique (le trou reste dans la manivelle, le logiciel le refuse) ; **course par
+     défaut 10 cm** (`mycelium → course_agitation_m: 0.10`, saisie par l'opérateur quand il change le maneton de
+     trou ; la machine ne la détecte pas) ; 7 cm reste accepté.
   3. Hauteur du porte-bocal (Maquette, 05/11, v45.117) : **l'hypothèse « rien au-dessus de 1,05 » est fausse**.
      Plus haut point : 1,070 manivelle en bas, 1,170 manivelle en haut, **1,208 pendant le demi-tour** ; support fixe
      de la glissière verticale jusqu'à 1,167 (x 0,84-1,01, y −0,027-0,016) ; boîtier de la caméra du dosage jusqu'à
