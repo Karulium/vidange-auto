@@ -932,6 +932,16 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   pour la bande du haut ; chariot à y 0,215 plateau haut permis (plus de règle des anneaux) ; places et capacité par
   format ; seau mal aligné à la photo ⇒ arrêt ; scénario du simulateur avec 18 seaux A. « Testé sur le vrai
   matériel : non ».
+- [ ] **35 ter. Stockage agrandi de 43 cm** — Modèle : Sonnet, effort moyen. **À faire après la tâche 36 bis.**
+  Source : `docs/decisions.md`, « Stockage agrandi de 43 cm » (04/11/2026), points 1 à 6. Dans `pi/reglages/machine.yaml`
+  (`stockage`) : 3 panneaux (`panneaux → p1, p2, p3`) ; tiroir `butee_x: 3.012`, `places` et `centres_x` de tous les
+  formats et de toutes les files (la place sous la caméra du fond reste vide pour A et D sur la file 0,215 : le
+  pousseur s'arrête au codeur sur la 2e place) ; cale de C inchangée ; bande du haut `bord_x_max: 2.87` et les places
+  des 4 formats ; bocaux `paires: 14`, `impaires: 13` ; coin des suspects ; boîtes ; hublot (2,93 ; 0,22). Dans
+  `docs/entrees-sorties.yaml` : la boucle du stockage devient 4 microrupteurs en série (tiroir + P1 + P2 + P3), une
+  seule entrée (nom et description). Vérifié au démarrage : capacité A 26, B 28, C 22, D 23 ; aucune place hors
+  du tiroir (1,10-3,012) ni de la bande (bord ≤ 2,87) ; coin des suspects dans le quinconce. Tests : reprendre ceux
+  du stockage aux nouveaux chiffres, un lot plein de chaque format dans le simulateur. `vidange --verifier` passe.
 - [x] **36. Portique : axes du pont et des deux Z, prise d'origine, vitesses, garage, carte n° 1** — Modèle : Opus,
   effort moyen. **Avant le solveur (tâche 23).**
   Sources (recopiées ici le 01/11/2026) : fiche du module « Portique », **gelé le 28/10/2026**, et le fichier écrit
@@ -1005,22 +1015,25 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   vers −x (côté fût), A positif = sens trigonométrique vu de dessus.
   1. **Hauteurs de pose vraies** (`remplissage → formats → pose_plateau_z`) : A 0,4675, B 0,5125, C 0,4925,
      D 0,4625 (remplacer les exemples, dont le 0,475 de A). Vérifié au démarrage : face à l'étape c) de la prise
-     double (pose + 0,003 − 0,028) ≥ bas de la course de la préhension (0,45), sinon le format doit être marqué
-     sans séparation (point 2).
-  2. **Prise double sans séparation pour A et D** : nouveau réglage par format, `separation_sur_chariot` (vrai pour
-     B et C, faux pour A et D). Faux : la préhension repose les 2 seaux emboîtés sur une place libre (fin de lot)
-     et refait le dégerbage ; pas d'étapes a) à i). Tests des deux cas.
+     double (pose + 0,003 − 0,028) ≥ bas de la course de la face de la préhension, sinon erreur au démarrage.
+  2. **Préhension +22 cm** (décision, point 8) : course de `prehension_z` (face 1,10 → 0,23) et de la plaque Z
+     (`portique → plaques_z → prehension`, 1,308 → 2,178) ; prise double sur le chariot pour les 4 formats (ordre
+     a) à i), plus de cas « sans séparation ») ; nouvelle règle : plaque Z de la préhension au-dessus de 2,02 →
+     mât de la préhension à y ≤ 0,80 (vérifiée au démarrage et à chaque mouvement). Mât plus souple : face de la
+     préhension sous `portique → tete_basse_z` (0,60, EXEMPLE), accélération X et Y multipliée par
+     `portique → facteur_acceleration_tete_basse` (0,5, EXEMPLE), en plus de la règle « seau tenu ». Tests.
   3. **Bout côté fût** (`portique → bouts_bloques_griffe`) : une bande avec une condition de hauteur, `{pont_x:
      [0.233, 0.30], axes_z_max: 1.05, angles_deg: [180]}` (seul A = 180° : à 0° la raclette, à ± 90° les bras,
      en biais jusqu'à 0,143, touchent la traverse ; à 180° il reste 15 mm). Retirer la bande « x 2,0-2,495 :
      0° ou 180° » : au-delà de x 2,0, la règle reste seulement « pas de rotation » (`griffe → rotation →
      pont_x_max`). Tests : A = 0 refusé à pont 0,25 axes 1,0, permis à axes 1,06 ; A = 180 permis ; A = 90 permis
      à pont 2,2 (sans rotation).
-  4. **Origines A et B de la griffe** (remplacer l'exemple de la PR n° 56) : 2 fins de course NF à levier,
-     `fdc_origine_godet_griffe` et `fdc_origine_rotation_griffe` dans `docs/entrees-sorties.yaml` (`exemple: true`,
-     sur le multiconducteur de la griffe). **B** : 2 mm vers l'ouvert, puis vers FERMÉ, lent, à courant réduit,
-     jusqu'au fin de course = « fermé nominal » (0) ; butées logicielles 0 à +36 mm ; blocage vu par le codeur
-     avant le fin de course : arrêt, alarme « godet bloqué, vider au-dessus d'un seau ». **A** : fanion de 180°,
+  4. **Origines A et B de la griffe** (remplacer l'exemple de la PR n° 56) : 2 capteurs inductifs M12 PNP NO
+     (actifs à +24 V quand ils voient le métal), `origine_godet_griffe` (actif godet « fermé ») et
+     `origine_rotation_griffe` (actif pour A de −180° à 0°) dans `docs/entrees-sorties.yaml` (`exemple: true`,
+     2 entrées 24 V actives hautes, sur le multiconducteur de la griffe). **B** : 2 mm vers l'ouvert, puis vers FERMÉ, lent, à courant réduit,
+     jusqu'au capteur actif = « fermé nominal » (0) ; butées logicielles 0 à +36 mm ; blocage vu par le codeur
+     avant le capteur : arrêt, alarme « godet bloqué, vider au-dessus d'un seau ». **A** : fanion de 180°,
      actionné pour A de −180° à 0, libre de 0 à +180° ; son état dit de quel côté de 0 est la tête ; tourner vers
      le bord, approche finale toujours en +, lente ; recherche limitée à 190° (sinon alarme), jamais au-delà de
      ± 180° ; origine = A 0. Ordre (`portique → origine`) : portique (Z, Y, X) ; B, Z en haut ; aller au point de
@@ -1028,7 +1041,28 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
      dernière position connue de A n'était ni 0° ni 180° (coupure pendant une rotation en bas) : ne pas monter Z,
      alarme, tête remise à la main. Ce point (0,86 ; 0,57), axes 1,075, godet fermé, sert aussi à tous les
      demi-tours de la griffe hors du fût (`griffe → point_demi_tour`), à la place de tout autre point.
-  5. Le lavage (point 1 de la décision) **n'est pas dans cette tâche** : il attend la décision mécanique.
+  5. **Pont jusqu'à x 0,223** (décision de Karulium du 03/11, point 6) : course de `pont_x`, `griffe → pont_x_min`,
+     place de photo du stockage (`vision`), et tout ce qui disait 0,233 comme limite du pont.
+     Bout côté fût : en plus de la bande du point 3, **pont de 0,223 à 0,233 : axes de la griffe ≥ 1,05
+     obligatoires** (à 180° il ne resterait que 5 mm devant la traverse basse ; au-dessus, rotation libre), par
+     exemple `{pont_x: [0.223, 0.233], axes_z_max: 1.05, angles_deg: []}` (aucun angle permis sous 1,05). Test. Places du lavage remises à x 0,352 (centre du fût de lavage) et décalage du brossage à
+     0,002 ; jet d'air en relatif au centre : A (+2 ; −15,2), B (+2 ; −23), C (+2 ; 0), D (+2 ; −11,5) mm.
+  6. **Rails X +0,43** (décision, point 9) : course du pont 0,223 → 2,925 (`pont_x`, `portique`), mât de la griffe
+     x ≤ 2,738 (`stockage → trajets → griffe_x_max`, avant 2,325), préhension x ≤ 3,054, garage de repos et place
+     de photo côté stockage à pont 2,925 (vision). Les places du stockage agrandi sont dans la tâche 35 ter.
+  7. **Origine de la rotation de la tête de préhension** (décision « Origine de la rotation de la tête », 05/11) :
+     `origine_rotation_tete` = capteur Hall sous la poulie de 60 dents (description à corriger). Prise d'origine
+     de A (`fluidnc/prehension.yaml`) : approche finale lente, toujours dans le même sens ; la recherche ne doit
+     jamais faire plus d'un peu plus d'un tour (le Hall voit l'aimant à chaque tour : une recherche longue
+     tomberait sur le mauvais tour et vrillerait le cordon). Pour cela, le Pi **enregistre l'angle cumulé** de A
+     (tours compris) dans un fichier à chaque arrêt (comme les autres états gardés au redémarrage) ; avant la prise
+     d'origine, il ramène la tête près de 0 avec cet angle, puis cherche le Hall. Après une coupure en pleine
+     rotation (angle enregistré pas à jour) : l'écran demande « vérifier que le cordon n'est pas vrillé » et attend
+     la confirmation avant la prise d'origine. Nouveau réglage `prehension → angle_meplats_deg` (angle « méplats
+     en face des mors en V » par rapport au Hall, EXEMPLE 0, à mesurer à la mise en service, procédure dans
+     `pi/systeme/essai-prehension.md`). Pose et prise au porte-bocal : aller à la plus proche de
+     `angle_meplats_deg + k × 120°` (dans ± 500°), donc au plus 60° de rotation, tolérance ± 3°. Tests : alignement
+     depuis 0°, 59°, 61°, 490° ; angle enregistré relu après un redémarrage ; coupure ⇒ confirmation demandée.
   Tests de chaque point ; `vidange --verifier` et le simulateur passent.
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
   (le Lavage a besoin de la Préhension, qui tient le seau pendant tout le lavage).
@@ -1118,6 +1152,64 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   et d'un bocal, pose et reprise au porte-bocal, vissage. Tests, dont : vide qui lâche pendant la levée (feed hold,
   2 échecs ⇒ alerte), deux seaux pris, contact trop bas, choc, isolation du fût, XY refusé tête basse, vissage
   au-delà de 150 N, zéro du vide au démarrage.
+- [ ] **17 bis. Poste du fût : plateau de pesée sans fil (côté Pi)** — Modèle : Opus, effort moyen. **À faire après
+  la tâche 35 ter.**
+  Sources : `docs/decisions.md`, « Poste du fût : plateau de pesée sans fil » (05/11/2026), recopiée de
+  `poste-fut-pour-logiciel.md` v10 du projet mécanique. Les chiffres vont dans `pi/reglages/` et
+  `docs/entrees-sorties.yaml`, jamais dans le code. Ne pas écrire les programmes des ESP32-C3 (tâche 17 ter).
+
+  *Gestes à la main* (le rappel de l'écran est à refaire) : fût posé debout sur le plateau entre les 4 cales,
+  soupape enlevée, trou bouché ; plateau roulé et poussé contre les 2 butées d'angle du fond, 2 roulettes freinées ;
+  grand volet rabattu, panneau long levé ; appui sur « Prêt ». Fin : volet relevé, freins desserrés, plateau sorti.
+  Plus de prise à brancher, de goupille ni de sangles.
+  1. **Signaux** (`docs/entrees-sorties.yaml`) : renommer `chariot_fut_en_place` en `plateau_fut_en_place` partout
+     (code, réglages, simulateur, textes de l'écran : « chariot du fût » devient « plateau du fût »). `pesee_fut`
+     n'est plus sur `GPIO20/21` : c'est un appareil du bus `rs485_pesee`, `adresse: 4`, avec un nouvel `appareil`
+     (par exemple `boite_poste_fut`) pour que la fabrication du programme des cartes RP2040 ne le prenne pas. Le
+     reed du plateau n'est **pas** un signal du Pi. Pas de capteur de volet ni de fût posé. Tout reste `exemple: true`.
+  2. **Lecture** : réutiliser le code du bus des pesées (`pi/vidange/pesees/`) pour les registres 0 à 7 ;
+     vérifier la signature **0x5046** (pas 0x5053) ; lire aussi les registres 8 à 12 (reed, recharge, USB-C de
+     secours, tension en mV, %, signal en dBm + 200, trames perdues). Une ligne `pesee_fut` dans `tour:` de
+     `pesees.yaml`, interrogée au plus une fois par seconde (réglage) pour ne pas ralentir la griffe (≥ 80 mesures
+     par seconde, à vérifier dans un test). Retirer le code qui lit le HX711 directement par les GPIO s'il ne sert
+     plus à rien d'autre.
+  3. **Étalonnage** dans `pi/reglages/pesees.yaml → etalonnage → pesee_fut` (retirer `zero_brut` et `brut_par_kg` de
+     `machine.yaml → poste_fut → pesee`). Tare plateau + boîtier + fût vide + couvercle ≈ 59,4 kg ; bornes
+     plausibles ≈ 50 à 200 kg ; tout EXEMPLE. La boîte fait déjà la moyenne de 5 : le Pi ne refait pas une médiane
+     de 5 lectures (1 par seconde, ce serait 5 s) ; garder seulement le rejet d'une valeur hors bornes. Mesure lue
+     seulement griffe hors du fût, comme avant.
+  4. **Pesée absente** : pas de réponse, registre 4 bit 2, ou âge (registre 3) > 2 s (réglage) ⇒ « pesée absente »,
+     affichée, au journal, une alerte dans la file (une seule par absence, pas une par seconde). Jamais un arrêt.
+     Elle revient seule. **« Prêt » n'exige plus la pesée** : plateau en place + signaux stables 2 s + appui. Au
+     « Prêt » sans pesée : cycle commencé sans poids du fût plein ; seaux notés « sans pesée du fût » dans le
+     registre et dans `mesures[]` (`docs/django.md` : le dire). Après `plateau_fut_en_place` vrai, si la pesée ne
+     répond pas dans 5 s (réglage) : message « pesée absente » sur le poste (pas de refus).
+  5. **Batterie** (`pesees.yaml`, EXEMPLES) : ≥ 3,6 V bon ; < 3,5 V alerte « recharger le plateau » ; < 3,3 V alerte
+     forte « pesée bientôt absente » ; plateau au poste depuis plus de 10 min sans « recharge en cours » : alerte
+     « recharge sans contact en panne ? ». Niveau en % et signal radio affichés à l'écran et sur la page web.
+     Vérification au démarrage : seuils dans le bon ordre.
+  6. Mettre à jour la procédure d'essai du poste (`pi/systeme/essai-poste-fut.md`) : tare plateau vide, masse
+     connue ≈ 20 kg au centre, radio coupée (débrancher la boîte) ⇒ « pesée absente » sans arrêt.
+  Simulateur : fausse boîte du poste (trames, radio muette, accu faible), scénario « échange de fût » repris avec le
+  plateau. Tests : « Prêt » accepté sans pesée ; signature 0x5053 refusée pour `pesee_fut` ; mesure de 2,5 s ⇒
+  absente ; une seule alerte pour une longue absence ; retour de la pesée sans redémarrer ; seuils de l'accu ;
+  plateau 10 min sans recharge ⇒ alerte ; la griffe garde ses 80 mesures par seconde avec `pesee_fut` dans le tour.
+  `vidange --verifier` passe.
+- [ ] **17 ter. Programmes des 2 ESP32-C3 du poste du fût (plateau et boîte du poste)** — Modèle : Opus, effort
+  moyen. **À faire après la tâche 17 bis.** Vrai matériel : procédure d'essai pas à pas, « testé sur le vrai
+  matériel : non ».
+  Sources : la même décision que 17 bis, et `poste-fut-pour-logiciel.md` (programmes). Dans un dossier
+  `poste_fut_radio/` à côté de `pesee/`, sur le même modèle (réglages copiés depuis `pesees.yaml` à la fabrication,
+  tests sur PC avec faux HX711 et fausses trames, CI).
+  - **Plateau** : dort, se réveille sur le reed ; lit le HX711 à 10 mesures par seconde (RATE à la masse), moyenne
+    de 5, une trame ESP-NOW toutes les 0,5 s (brut, numéro, HX711 muet, tension et %, recharge, USB-C de secours) ;
+    tension de l'accu par pont diviseur ; se rendort 30 s après l'ouverture du reed.
+  - **Boîte du poste** : toujours alimentée ; reçoit les trames (seulement de l'adresse radio du plateau, dans les
+    réglages, jamais dans le code) ; répond en Modbus RTU à 115 200 bauds, 8N1, registres 0 à 12 et signature
+    0x5046 de 17 bis ; bit « radio muette » si rien depuis 2 s ; MAX3485 avec DE/RE. Reprendre le code Modbus de
+    `pesee/src/modbus.c` si c'est possible.
+  - Pas de Wi-Fi ni de réseau : ESP-NOW seulement (exception décidée par Karulium). Mise à jour par le câble USB,
+    comme les autres cartes.
 - [ ] 38. Nettoyage
 - [ ] **38 bis. Capteurs d'ozone Winsen ZE25-O3 en UART (ozone_1 et ozone_2)** — Modèle : Sonnet, effort moyen.
   Sources (recopiées ici le 31/10/2026) : fiche du module « Nettoyage », de nouveau **gelé le 31/10/2026** (choix du

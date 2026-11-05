@@ -509,6 +509,28 @@ si l'une pose problème, elle le dit dans sa PR.
      Fermeture des seaux, qui s'occupe des couvercles).
   3. Photo de contrôle de la bande du haut : le faux « bien placé » reste tant que les réglages sont en
      `exemple: true` (on regarde à l'œil pendant les essais) ; la vraie lecture vient avec la tâche 22 ter.
+- **Stockage agrandi de 43 cm** (validé par Karulium le 04/11/2026, 17:58 ; fil Stockage,
+  `stockage/logiciel/stockage-pour-logiciel.md` (encadré du début) et `places-agrandi-43.md`). Le stockage commence
+  toujours à x 1,10 ; tout ce qui était au bout avance de +0,43.
+  1. Plateau du haut : **3 panneaux** P1 x 1,155-1,770, P2 1,7825-2,3975, P3 2,410-3,025 ; microrupteurs à x 1,510 /
+     2,1375 / 2,765 ; **4 contacts en série** (tiroir + 3 panneaux) sur une seule entrée. Tapis jusqu'à x 2,8585.
+  2. Tiroir : tôle x 1,10-3,04, **butée (face d'appui) x 3,012**. Places (centres x) :
+     - A : file 0,215 : 2,6065 / 2,3345 / 2,0625 / 1,7905 / 1,5185 / 1,2465 (place 2,8785 vide, sous la caméra du
+       fond) ; files 0,50 et 0,785 : 2,8785 / 2,6065 / 2,3345 / 2,0625 / 1,7905 / 1,5185 / 1,2465 ;
+     - B : les 3 files : 2,897 / 2,662 / 2,427 / 2,192 / 1,957 / 1,722 / 1,487 (7 par file) ;
+     - C : files 0,215 et 0,785 : 2,862 / 2,562 / 2,262 / 1,962 / 1,662 / 1,362 ; file 0,50 (cale de 15 cm) :
+       2,712 / 2,412 / 2,112 / 1,812 / 1,512 ;
+     - D : file 0,215 : 2,592 / 2,312 / 2,032 / 1,752 / 1,472 (place 2,872 vide) ; files 0,50 et 0,785 : 2,872 /
+       2,592 / 2,312 / 2,032 / 1,752 / 1,472.
+  3. Bande du haut (y 0,215), **bord du couvercle ≤ 2,87** (hublot x 2,88-2,98) : A 2,73 / 2,458 / 2,186 / 1,914 /
+     1,642 / 1,37 ; B 2,755 / 2,52 / 2,285 / 2,05 / 1,815 / 1,58 / 1,345 ; C 2,7125 / 2,4125 / 2,1125 / 1,8125 /
+     1,5125 ; D 2,73 / 2,45 / 2,17 / 1,89 / 1,61 / 1,33.
+  4. Capacité d'un lot : **A 26, B 28, C 22, D 23** (tiroir + bande du haut).
+  5. Bocaux : rangées paires **14** (x 1,2075 → 2,6375), impaires **13** (x 1,2625 → 2,5825) : **122 places**. Coin des
+     suspects (fil logiciel, accepté par le Stockage) : même forme, 3 places vers le bout : suspects [8,11] [8,12]
+     [8,13] [7,10] [7,11] [7,12] [6,11] [6,12] [6,13] ; séparation [5,10] [5,11] [5,12] [6,10] [7,9] [8,10].
+  6. Boîtes à capsules en **(2,95 ; 0,53)** et **(2,95 ; 0,80)** ; hublot en **(2,93 ; 0,22)**, boîtier x 2,87-2,99.
+     Mât de la griffe à x ≤ 2,738 (Portique). Piles de vides, couvercles, semence, caméra du bocal : inchangés.
 - **Portique, réponses à la PR n° 56** (tâche 36, 03/11/2026 ; fils Lavage, Remplissage, Portique, Griffe) :
   1. Lavage : **12 mm ne conviennent pas** (fil Lavage) : la tête doit être au centre du fût de lavage à ± 2 mm
      (brosses coaxiales au seau ; à 12 mm, le seau B n'est plus brossé d'un côté et le seau C bloque). C'est un
@@ -526,7 +548,7 @@ si l'une pose problème, elle le dit dans sa PR.
      tête sous 1,05 : tête à A = 180° seulement** (réponse du fil Portique : à 0° la raclette, à ± 90° les bras,
      en biais jusqu'à 0,143, touchent la traverse ; à 180° il reste 15 mm). Hors de là, rotation libre (règle des axes ≤ 1,075 godet ouvert, ≤ 1,11 fermé). Au-delà
      de x 2,0 : pas de rotation, **sans** limite d'angle (le « 0° ou 180° seulement » de la PR est retiré).
-  4. Origines A et B de la griffe (fil Griffe, niveau 1) : 2 micro-interrupteurs NF à levier. **B** : origine
+  4. Origines A et B de la griffe (fil Griffe, niveau 1) : 2 capteurs (voir point 7). **B** : origine
      « fermé nominal », recherche 2 mm vers l'ouvert puis **vers fermé**, lente, à courant réduit (jamais ouvrir :
      le godet peut être plein) ; butées logicielles 0 à +36 mm ; blocage avant l'interrupteur : arrêt, alarme
      « godet bloqué, vider au-dessus d'un seau ». **A** : fanion de 180° (actionné de −180° à 0°, libre de 0° à
@@ -538,7 +560,56 @@ si l'une pose problème, elle le dit dans sa PR.
      demi-tours de la griffe hors du fût) ; le point (0,708 ; 0,74) est abandonné (interdit par la table v45.111).
      Repère des angles : celui du logiciel (A = 0 bras le long du pont, raclette vers −x) ; origine de A = 0. Entrées : à confirmer après la validation du matériel (`exemple: true`).
   5. Garage du chariot : **centre du chariot à 0,50** (mâts à 0,46), comme dans la PR.
+  6. **Décision de Karulium (03/11, 22:50)** : le pont va jusqu'à **x ≥ 0,223** (butée logicielle, limite accordée le
+     08/10), au lieu de 0,233. La tête de préhension atteint ainsi **x 0,352**, dans l'axe des brosses du Lavage :
+     le point 1 est réglé, places du lavage à nouveau à 0,352 (et relatives au centre du fût de lavage). Le poste
+     du fût ne bouge pas, aucune pièce ne change. Fins de course X placés au montage pour déclencher vers 0,20,
+     avant la butée mécanique (≈ 0,12). La Maquette a vérifié la griffe à cette limite : aucun contact.
+     Bout côté fût (fil Portique, 03/11) : **pont sous 0,233 → axes de la griffe ≥ 1,05 obligatoires** (à 180° il ne
+     resterait que 5 mm devant la traverse basse) ; de 0,233 à 0,30, axes sous 1,05 : A = 180° seulement (point 3).
+  7. Correction du fil Griffe (03/11) : les origines A et B sont **2 capteurs inductifs M12, portée 4 mm, PNP, NO**,
+     10-30 V sur le +24 V du câble, signal à +24 V quand ils voient le métal (2 entrées 24 V actives hautes) :
+     B actif quand la fourchette arrive à « fermé » ; A actif quand il voit le fanion (A de −180° à 0°). Le principe
+     et les sens ne changent pas. **Validé par Karulium le 05/11 (01:22)** ; numéros des entrées à choisir avec
+     l'Implantation. La Maquette confirme le point (0,86 ; 0,57) sur la v45.112 (un tour complet libre).
+  8. **Préhension +22 cm** (validée par Karulium le 04/11, 17:59) : mât et colonne allongés de 22 cm, plaque Z de la
+     préhension de **2,178 à 1,308 (course 0,870)** ; face de la ventouse de **1,10 à 0,23** (0,21 au tout bout du
+     rail). Nouvelle règle (Portique) : plaque Z de la préhension **au-dessus de z 2,02 → mât de la préhension à
+     y ≤ 0,80** (sinon le brin de la chaîne Z touche le plénum du Nettoyage). Conséquence (fil Remplissage) : la
+     prise double se fait de nouveau **sur le chariot pour les 4 formats** (ordre a) à i)) ; la règle « A et D :
+     reposer les 2 seaux et refaire le dégerbage » du point 2 est **retirée**.
+     Préhension (05/11) : la lèvre va de 0,21 à 1,10 ; on garde **0,23** comme bas de course (0,21 = tout bout du
+     rail, sur la butée). Le mât est plus souple en travers (≈ 4 mm pour 20 N) : **accélérations et freinages plus
+     doux en X et Y quand la tête est basse** (choix du fil logiciel, niveau 1 : face sous 0,60 → accélération X et Y
+     divisée par 2, EXEMPLE à régler aux essais). Rotation inchangée (± 500°).
+  9. **Rails X +0,43** (validés par Karulium le 04/11, 18:26, avec le stockage agrandi) : pont de **0,223 à 2,925**
+     (remplace 2,495) ; mât de la griffe à **x ≤ 2,738** (au-dessus du stockage), préhension à **x ≤ 3,054** ; garage
+     de repos et place de photo côté stockage : **pont à 2,925**. La caméra du plafond reste en (1,45 ; 0,545) tant
+     que le fil Guidage caméra ne dit pas autre chose.
   Ces corrections vont dans la tâche 36 bis.
+- **Poste du fût : plateau de pesée sans fil** (validé par Karulium le 05/11/2026, 01:26 ; fil Poste du fût,
+  `poste-fut-pour-logiciel.md` v10 du 05/11) : le chariot retourneur disparaît (rochet, cliquet, goupille, sangles,
+  prise magnétique, HX711 relié au Pi). Le fût arrive debout sur un **plateau à 4 roulettes** ; le retournement se
+  fait dans le culbuteur du pasteurisateur, hors de la machine. Centre du fût, enceinte, volet, panneau et « Prêt »
+  ne changent pas.
+  1. `chariot_fut_en_place` devient **`plateau_fut_en_place`** (même inductif M12 PNP dans la butée d'angle, il voit
+     le bord du plateau). Même règle de zone pour le pont. Il reste câblé en 24 V : il marche sans la radio.
+  2. **Radio ESP-NOW entre deux ESP32-C3** (plateau → boîte du poste), sans Wi-Fi ni réseau : c'est le choix de
+     Karulium (« ne rien brancher »), une **exception** à la règle « rien sans fil » des cartes de pesée. Elle ne
+     porte que la pesée, jamais un verrou ni une sécurité.
+  3. La boîte du poste est un esclave **Modbus RTU** du bus `rs485_pesee` (adresse 4, EXEMPLE), registres 0 à 7 du
+     même sens que `pesee/README.md`, signature **0x5046** ; registres 8 à 12 en plus (reed du plateau, recharge,
+     tension et % de l'accu, signal radio, trames perdues). 2 mesures par seconde (moyenne de 5) ; précision voulue
+     ± 0,2 kg fût immobile. 4 capteurs de 150 kg en parallèle sur **un seul HX711**. Étalonnage sur le Pi
+     (`pesees.yaml`).
+  4. **La pesée n'entre plus dans « Prêt »** : « Prêt » = plateau en place + signaux stables 2 s + appui. Radio muette
+     (pas de réponse, bit « radio muette », ou mesure de plus de 2 s) ⇒ pesée « absente » : affichée, au journal,
+     alerte ; **la machine ne s'arrête jamais pour ça** (la griffe trouve le fond au toucher) ; le seau est noté
+     « sans pesée du fût » ; la pesée revient seule.
+  5. Batterie (accu 18650, recharge sans contact au poste) : alerte « recharger le plateau » sous 3,5 V, alerte forte
+     sous 3,3 V, alerte « recharge en panne » si plateau au poste depuis 10 min sans recharge (seuils : réglages,
+     EXEMPLES).
+  Les numéros d'entrées viendront de l'Implantation. Côté Pi : tâche 17 bis ; programmes des 2 ESP32-C3 : 17 ter.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
@@ -547,6 +618,17 @@ si l'une pose problème, elle le dit dans sa PR.
 - **Préhension figée** (27/10/2026) : capteur inductif M8 24 V ; capteur de vide sur l'ADS1115 **en 3,3 V**
   (pas de pont diviseur) ; pour poser ou prendre un bocal sur le porte-bocal, la tête est orientée à ± 3°
   (grâce aux méplats) et ne tourne pas entre les mors.
+- **Origine de la rotation de la tête de préhension** (fil Préhension, 05/11/2026, niveau 1, après une question de
+  Karulium) : l'origine `origine_rotation_tete` est le **capteur Hall sous la poulie de 60 dents**.
+  1. Recherche du Hall **toujours lente et toujours dans le même sens** (répétabilité meilleure que 1°).
+  2. Une constante réglée à la mise en service : l'angle « méplats en face des mors en V » par rapport au Hall.
+  3. Pose ou prise au porte-bocal (± 3°, règle ci-dessus) : la tête va sur la **plus proche des 3 positions des
+     méplats** (elles se répètent tous les 120°) : jamais plus de 60° de rotation pour s'aligner.
+  4. L'**angle cumulé** de la tête (tours compris) est enregistré à chaque arrêt, pour rester dans ± 500° (cordon
+     spiralé).
+  5. Après une coupure en pleine rotation : avant de chercher le Hall, l'écran demande à l'opérateur de vérifier
+     que le cordon n'est pas vrillé.
+  Côté logiciel : tâche 36 bis, point 7.
 
 ## Accès à distance et mises à jour (Karulium, 26/10/2026)
 

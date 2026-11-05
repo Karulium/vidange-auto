@@ -6,9 +6,11 @@ on:
   push:
     branches: [main]
 
+# Machine de GitHub figée sur Ubuntu 24.04 : avec ubuntu-latest passé à 26.04 (novembre 2026), la
+# fabrication de l'outil pioasm du Pico SDK 2.1.1 échoue (programme de l'accéléromètre).
 jobs:
   pi:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: pi
@@ -31,7 +33,7 @@ jobs:
 
   # Programme du RP2040 de l'accéléromètre : essais sur PC, puis fabrication du vrai programme.
   accelerometre:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       PICO_SDK_VERSION: "2.1.1"
     steps:
@@ -76,7 +78,7 @@ jobs:
   # Programme des cartes de pesée (RP2040 + HX711, bus RS485) : essais sur PC, puis fabrication
   # d'un programme par carte.
   pesee:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       PICO_SDK_VERSION: "2.1.1"
     steps:
