@@ -814,3 +814,9 @@ Les chiffres ci-dessous vont dans `pi/reglages/machine.yaml`, jamais dans le cod
   (alerte). Valeur au plafond : affichée « ≥ 10 ppm », jamais « 10 ».
 - **La sécurité ozone reste câblée.** Son appareil n'est pas encore choisi (question posée à Karulium). Le Pi lit
   l'ozone pour informer et attendre ; aucun code ne la remplace ni ne la simule.
+- **Réponses à la PR n° 79** (06/11/2026, niveau 1, tranché par Claude) :
+  1. Vitesse, mode d'envoi, position de la valeur et unité : vérifiés sur la notice papier à l'étape 2 de la
+     procédure d'essai (`pi/systeme/essai-ozone.md`), puis corrigés dans `entrees-sorties.yaml` si besoin. La fiche
+     du module Nettoyage (06/11) confirme 9600 8N1 et ppm = valeur × 0,01.
+  2. Mode **envoi automatique** (une trame par seconde, rien à demander) ; question-réponse gardé en réglage.
+  3. Capteur « muet » après **5 s** sans trame valable (EXEMPLE, à régler à l'essai).
