@@ -674,8 +674,9 @@ si l'une pose problème, elle le dit dans sa PR.
   Les numéros d'entrées viendront de l'Implantation. Côté Pi : tâche 17 bis ; programmes des 2 ESP32-C3 : 17 ter.
 - **Portique, réponses à la PR n° 75** (tâche 36 bis, 06/11/2026, niveau 1, fil logiciel) :
   1. Le pilote boucle fermée du godet ne laisse pas FluidNC baisser son courant : prise d'origine du godet **lente**,
-     et la sortie d'alarme des pilotes A et B de la griffe va sur l'entrée libre **E12 de la carte n° 1** (EXEMPLE,
-     transmis au fil Portique pour le plan de câblage).
+     et les sorties d'alarme des pilotes A et B de la griffe vont **en parallèle sur l'entrée libre E12 de la carte
+     n° 1** (E10 et E11 servent aux origines), signal « alarme A ou B » (EXEMPLE). Le fil Portique est d'accord
+     (06/11) ; à vérifier sur la notice des pilotes : sorties à collecteur ouvert, même sens actif.
   2. Longueur du rail du pont : 3,0 m en EXEMPLE (la course 0,223 → 2,925 doit y tenir), à mesurer à la mise en
      service.
   3. Accélération X/Y divisée par 2 tête basse (face sous 0,60) : gardée jusqu'aux essais.
