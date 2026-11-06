@@ -798,8 +798,8 @@ Les chiffres ci-dessous vont dans `pi/reglages/machine.yaml`, jamais dans le cod
 
 ## État des modules (26/10/2026)
 
-- **Figés** (on peut coder leurs gestes) : Poste du fût, Lavage, Griffe (Transfert), Porte-bocal, Mycélium, Guidage caméra, Préhension, écran Nextion, Portique (gelé le 28/10/2026, tâche 36).
-- **Pas encore figés** (case vide seulement) : Remplissage, Stockage, Nettoyage, Spray, Micropore, Fermeture des seaux, Air comprimé, Entonnoir.
+- **Figés** (on peut coder leurs gestes) : Poste du fût, Lavage, Griffe (Transfert), Porte-bocal, Mycélium, Guidage caméra, Préhension, écran Nextion, Portique (gelé le 28/10/2026, tâche 36), Nettoyage (gelé le 28/10/2026, regelé le 04/11/2026, tâche 38 : store, purge, nuit UV-ozone, mode maïs).
+- **Pas encore figés** (case vide seulement) : Remplissage, Stockage, Spray, Micropore, Fermeture des seaux, Air comprimé, Entonnoir.
 - Références encore à choisir : fins de course du Remplissage, microrupteurs du Stockage.
 
 ## Capteurs d'ozone ZE25-O3 (tâche 38 bis, 06/11/2026)
@@ -820,3 +820,49 @@ Les chiffres ci-dessous vont dans `pi/reglages/machine.yaml`, jamais dans le cod
      du module Nettoyage (06/11) confirme 9600 8N1 et ppm = valeur × 0,01.
   2. Mode **envoi automatique** (une trame par seconde, rien à demander) ; question-réponse gardé en réglage.
   3. Capteur « muet » après **5 s** sans trame valable (EXEMPLE, à régler à l'essai).
+
+## Nettoyage : store, purge, nuit UV-ozone, mode maïs (tâche 38, 06/11/2026)
+
+Source : fiche `nettoyage/logiciel/nettoyage-pour-logiciel.md` du projet mécanique (module gelé le 28/10/2026,
+regelé le 04/11/2026 ; lot validé par Karulium les 27/10, 31/10, 01/11 et 04/11). Positions de l'enceinte
+(`enceinte-04-11.yaml`) et chiffres : `pi/reglages/machine.yaml → nettoyage` ; code : `pi/vidange/nettoyage/`.
+
+- **Sécurité câblée, le Pi lit et attend.** `store_ferme` (2e contact) dans la boucle d'arrêt du portique ; chaîne
+  UV-ozone (reeds du bas du store + porte du spray en série) devant `generateur_ozone` et `lampe_uv` ; verrous du
+  store fermés sans courant, clé de dépannage. **Le Pi ne commande pas le moteur du store** (commande maintenue :
+  2 boutons câblés, fins de course dans le moteur). L'alarme d'ozone câblée n'a pas encore d'appareil : aucun code
+  ne la remplace ; son contact `ozone_securite_ok`, s'il est un jour dans la liste, est seulement affiché.
+- **Purge** : chiffres figés (7 min au moins ; particules dedans ≤ 1,5 × dehors stable 1 min ; surpression ≥ 8 Pa,
+  5 Pa avec balais ; alerte à 20 min). Pendant la purge, le chef refuse le dosage de la semence, l'ouverture d'une
+  capsule et le versement dans un seau ouvert (« purge en cours ») : `Chef.permission(geste)`. Capteur de purge
+  absent ou muet : condition jamais vraie (alerte à 20 min, Karulium attend ou passe outre, noté au journal).
+- **Nuit UV-ozone** : seuils figés (ouverture et retour sous 0,1 ppm stable 15 min, fuite dehors > 0,1 ppm).
+  Durées d'EXEMPLE (génération 2 min, contact 2 h compté depuis le départ, retour au plus 6 h depuis le départ,
+  départ 22 h). Après une coupure : générateur coupé, reprise à l'attente du retour, jamais de génération seule.
+  Nuit en erreur : store verrouillé ; seule la clé l'ouvre ; la nuit est close quand le store est refermé.
+- **Choix de la tâche 38 (tranchés par Claude, en attente des réponses de Karulium, PR de la tâche 38)** :
+  rien ne commence store ouvert (condition générale du chef, sauf en mode maïs) ; store ouvert pendant un cycle :
+  alerte « store mal fermé » et pause ; purge aussi au démarrage du Pi si le store est déjà fermé ; verrous
+  libérés et store pas ouvert au bout de `deverrouille_max_s` (60 s, EXEMPLE) : verrous remis ; une nuit prévue
+  est annulée par un redémarrage ; « mesure incohérente » = l'ozone dedans n'a jamais atteint `attendu_min_ppm`
+  (1 ppm, EXEMPLE) pendant la génération ; le Pi coupe aussi le compresseur (`relais_compresseur`) et le
+  ventilateur de l'armoire (`coupure_ventilateur_armoire`, contact fermé au repos) pendant la nuit ; mode « maïs »
+  ajouté aux modes ; une fuite part tout de suite par la file d'envoi (cycle « nettoyage » à elle).
+- **Cases vides** (pièces pas choisies, pas de pilote réel) : capteurs de particules (PMS5003 ou SPS30, UART),
+  pression différentielle, convertisseur de la consigne 0-10 V du ventilateur (`vidange/nettoyage/capteurs.py`).
+- **Réponses à la PR n° 80** (06/11/2026, niveau 1, tranché par Claude) :
+  1. Consigne 0-10 V du ventilateur : module PWM → 0-10 V sur une GPIO du Pi (EXEMPLE GPIO19), plutôt qu'une carte
+     GP8403 en I2C ; choix signalé au fil Nettoyage (pièce à ajouter à sa fiche).
+  2. Capteurs de la purge : restent en case vide. Recommandation SPS30 (particules) et SDP810-125Pa (pression)
+     transmise au fil Nettoyage, à qui revient le choix des pièces.
+  3. Alarme d'ozone câblée : question posée à Karulium par le fil Nettoyage ; si elle a un contact sec, le Pi le lit
+     seulement pour l'afficher (`ozone_securite_ok`).
+  4. Panneau long du poste du fût pendant la nuit : pas une condition de départ ; les deux positions sont acceptées
+     et notées au journal, « levé » (contact fermé) est la position normale ; jamais exiger « rabattu » (avec un fût,
+     il ne peut pas se rabattre). Réponse du fil Poste du fût, 06/11.
+  5. Store ouvert pendant un cycle : pause de toute la machine (le portique est déjà arrêté par le câblage). Oui.
+  6. Pi qui démarre store déjà fermé : purge lancée. Oui.
+  7. Compresseur et ventilateur de l'armoire coupés par le Pi pendant la nuit (pas une sécurité de personne). Oui.
+  8. Verrous remis 60 s après une libération si le store n'a pas été levé. Oui.
+  9. « Mesure incohérente » = `ozone_dedans` jamais monté à 1 ppm pendant la génération (générateur ou capteur en
+     panne). Oui.

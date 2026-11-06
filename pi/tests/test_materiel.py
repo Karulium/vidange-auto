@@ -35,6 +35,7 @@ def test_au_depart_rien_n_est_actionne_et_tout_est_au_repos(faux_et_materiel):
         "onduleur_sur_batterie": False,
         "plateau_fut_en_place": False,
         "bouton_pret_fut": False,
+        "store_ferme": False,
     }
     assert materiel.lire("voyant_buzzer") is False
     assert faux.commande("voyant_buzzer") is False
@@ -137,13 +138,13 @@ def entrees_par_un_pcf8574(entrees_sorties):
         r"    # Exemple de liaison par GPIO direct\.\n.*?tirage: haut\n",
         "    liaison:\n      type: i2c\n      signal: entrees_bus\n"
         "      broches:\n        E1: P0\n        E2: P1\n        E3: P2\n        E4: P3\n"
-        "        E5: P4\n        E6: P5\n      niveau_actif: bas\n",
+        "        E5: P4\n        E6: P5\n        E7: P6\n      niveau_actif: bas\n",
         texte,
         flags=re.DOTALL,
     )
     texte += (
         "  entrees_bus:\n    carte: pi\n    broche: [GPIO2, GPIO3]\n    type: i2c\n"
-        "    tension: 3.3\n    adresse: 0x21\n    module: armoire\n    appareil: pcf8574\n"
+        "    tension: 3.3\n    adresse: 0x22\n    module: armoire\n    appareil: pcf8574\n"
         "    fichier: /dev/i2c-1\n"
     )
     entrees_sorties.write_text(texte, encoding="utf-8")
@@ -155,7 +156,7 @@ def test_entrees_24v_par_un_pcf8574(entrees_sorties):
     assert materiel.lire("fdc_stockage_haut") is False
     faux.actionner("fdc_stockage_haut")
     assert materiel.lire("fdc_stockage_haut") is True
-    assert faux.bus["/dev/i2c-1"].appareils[0x21].niveau("P2") is False
+    assert faux.bus["/dev/i2c-1"].appareils[0x22].niveau("P2") is False
 
 
 def test_mesure_analogique_convertie(faux_et_materiel):

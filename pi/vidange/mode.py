@@ -1,4 +1,4 @@
-"""Le mode de la machine : production, lavage ou UV-ozone.
+"""Le mode de la machine : production, lavage, UV-ozone ou maïs.
 
     mode = ModeMachine(donnees / "mode.json", chef, registre)
     mode.actuel            # « production »
@@ -9,10 +9,16 @@ On ne change de mode que machine au repos (aucun module en route ni en alarme). 
 gardé dans un fichier (il survit à une coupure) et chaque changement est noté dans le
 registre (qui, quand, ancien, nouveau). Les modules liront le mode quand leurs gestes
 seront écrits ; la sécurité (UV, ozone, panneau du poste du fût) reste câblée.
+
+Mode maïs (tâche 38) : store ouvert, ventilateur de l'enceinte coupé (la vapeur moisit le filtre
+HEPA), pas de purge ; le portique lent par la clé relève du module Portique.
+D'autres morceaux peuvent refuser le changement (`refus_supplementaires` : le Nettoyage pendant
+une nuit UV-ozone).
 """
 
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 from vidange.chef import Chef
@@ -21,7 +27,7 @@ from vidange.registre import ErreurRegistre, Registre
 
 journal = donner_journal("mode")
 
-MODES = {"production": "Production", "lavage": "Lavage", "uv_ozone": "UV-ozone"}
+MODES = {"production": "Production", "lavage": "Lavage", "uv_ozone": "UV-ozone", "mais": "Maïs"}
 PAR_DEFAUT = "production"
 
 
@@ -35,6 +41,8 @@ class ModeMachine:
         self.chef = chef
         self.registre = registre
         self._actuel = self._lire()
+        # Autres raisons de refuser un changement : refus() → raison, ou None.
+        self.refus_supplementaires: list[Callable[[], str | None]] = []
 
     def _lire(self) -> str:
         if not self.fichier.exists():
@@ -62,6 +70,10 @@ class ModeMachine:
         occupes = [m.module for m in self.chef.etat().modules if m.statut in ("en_cours", "alarme")]
         if occupes:
             return f"pas pendant un cycle ({', '.join(occupes)})"
+        for refus in self.refus_supplementaires:
+            raison = refus()
+            if raison is not None:
+                return raison
         return None
 
     def changer(self, nouveau: str, qui: str) -> None:

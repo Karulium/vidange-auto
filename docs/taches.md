@@ -1229,7 +1229,93 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
     `pesee/src/modbus.c` si c'est possible.
   - Pas de Wi-Fi ni de réseau : ESP-NOW seulement (exception décidée par Karulium). Mise à jour par le câble USB,
     comme les autres cartes.
-- [ ] 38. Nettoyage
+- [x] **38. Nettoyage : store, purge après fermeture, nuit UV-ozone, mode maïs** — Modèle : Opus, effort moyen.
+  **À faire après la tâche 38 bis** (lecture des ZE25-O3 `ozone_dedans` et `ozone_dehors`). Source, recopiée ici le
+  06/11/2026 : `nettoyage/logiciel/nettoyage-pour-logiciel.md` du projet mécanique (module Nettoyage gelé, lot validé
+  par Karulium les 27/10, 31/10, 01/11 et 04/11). Positions : `nettoyage/logiciel/enceinte-04-11.yaml`. Elles vont
+  dans `pi/reglages/machine.yaml → nettoyage` (figées) ; le code ne lit que leurs noms.
+  *Sécurité câblée* (le Pi lit seulement, pour informer et attendre) :
+  - `store_ferme` (2e contact) est dans la boucle d'arrêt du portique ;
+  - la chaîne UV-ozone (reeds bas du store + `porte_spray` en série) alimente `generateur_ozone` et `lampe_uv` ;
+  - les verrous du store sont fermés sans courant, avec une clé de dépannage ;
+  - le moteur du store est en commande maintenue : 2 boutons câblés, fins de course dans le moteur. **Le Pi ne
+    commande pas le moteur du store.**
+  - L'alarme d'ozone câblée (« porte verrouillée tant que l'ozone dépasse 0,1 ppm ») n'a plus d'appareil choisi
+    (question posée à Karulium) : **n'écrire aucun code qui la remplace.** Prévoir seulement une entrée facultative
+    `ozone_securite_ok` (contact, pour informer), absente tant qu'elle n'est pas dans les réglages.
+  1. **Signaux** (`docs/entrees-sorties.yaml`, tous `exemple: true`, broches plus tard avec l'Implantation) :
+     - entrées : `store_ferme` (2 reeds en série, 24 V, fermé = store fermé) ;
+     - sorties relais : `verrous_store` (sous tension = déverrouillé), `eclairage_enceinte` (2 rubans LED 12 V
+       ensemble), `ventilateur_enceinte` (230 V), `generateur_ozone` (prise du VEVOR), `lampe_uv` (ballast) ;
+     - sortie 0-10 V : `consigne_ventilateur` (moteur EC) ;
+     - capteurs pas encore choisis, en **case vide** (interface + faux du simulateur, pas de pilote réel) :
+       `particules_dedans`, `particules_dehors` (PMS5003 ou SPS30, UART), `pression_enceinte` (pression
+       différentielle, Pa).
+  2. **Store** :
+     - Demande « ouvrir le store » (écran, page web) refusée si un cycle tourne, pendant la purge, ou en mode
+       UV-ozone tant que l'ozone n'est pas fini (point 4). Sinon : `verrous_store` sous tension, et c'est affiché.
+     - `store_ferme` faux ⇒ état « store ouvert » : aucun mouvement lancé, et c'est dit à l'écran.
+     - `store_ferme` vrai stable 2 s (réglage) ⇒ verrous remis (hors tension), puis purge (point 3), sauf en mode
+       maïs.
+     - `store_ferme` encore faux 60 s (réglage) après une demande de fermeture, ou qui retombe pendant un cycle ⇒
+       alerte « store mal fermé », pas d'ozone ni de purge.
+  3. **Purge après fermeture** :
+     - Au départ : `ventilateur_enceinte` en marche, consigne « plein ».
+     - Pendant la purge : **interdits** le dosage de la semence, l'ouverture d'une capsule et le versement dans un
+       seau ouvert. Les modules Mycélium et Remplissage demandent la permission au chef, qui la refuse avec la
+       raison « purge en cours ». Le reste tourne ; l'UV des têtes est permis.
+     - Fin de purge quand **toutes** ces conditions sont vraies :
+       - au moins 7 min ;
+       - `particules_dedans` ≤ 1,5 × `particules_dehors`, stable 1 min ;
+       - `pression_enceinte` ≥ 8 Pa (5 Pa avec balais : réglage).
+       Alors : consigne « normal ».
+     - Pas finie après 20 min ⇒ alerte. Les gestes restent interdits ; Karulium décide à l'écran : continuer
+       d'attendre ou passer outre. Passer outre est noté au journal.
+     - Store rouvert pendant la purge ⇒ purge remise à zéro.
+     - Un capteur de purge absent ou muet ⇒ cette condition n'est jamais vraie (donc alerte à 20 min), jamais
+       « vraie par défaut ».
+  4. **Nuit UV-ozone** (mode `uv_ozone`, qui existe déjà) :
+     - Conditions de départ : `store_ferme`, verrous remis, `porte_spray` fermée, `reed_panneau_poste_fut` comme le
+       demande le Poste du fût, aucun cycle. Sinon : refus, avec la raison.
+     - Départ à l'heure réglée (EXEMPLE 22 h) ou tout de suite.
+     - Le Pi coupe `ventilateur_enceinte`, le compresseur (`relais_compresseur`, module Air) et le ventilateur de
+       l'armoire.
+     - `generateur_ozone` marche pendant `t_generation` (EXEMPLE 2 min), puis s'arrête.
+     - Attente de `t_contact` (EXEMPLE 2 h), avec `ozone_dedans` noté au journal. La valeur au plafond s'affiche
+       « ≥ 10 ppm ».
+     - Retour : `ozone_dedans` < 0,1 ppm stable 15 min. Alors le compresseur et les ventilateurs sont de nouveau
+       permis. Le store reste verrouillé jusqu'à une demande d'ouverture, qui n'est permise qu'avec ozone < 0,1 ppm.
+     - Erreurs :
+       - pas sous 0,1 ppm après `t_max_retour` (EXEMPLE 6 h), ou capteur muet, ou mesure incohérente ⇒ alerte (file
+         réseau), store verrouillé ; ouverture seulement par la clé de dépannage ;
+       - `ozone_dehors` > 0,1 ppm à tout moment ⇒ alerte forte « fuite d'ozone » (écran, voyant et buzzer s'ils
+         existent dans `entrees-sorties.yaml`, file) et `generateur_ozone` coupé ;
+       - `store_ferme` qui tombe ou `porte_spray` ouverte pendant la nuit ⇒ générateur coupé (le câblage le coupe
+         aussi), alerte.
+     - Reprise après une coupure de courant en pleine nuit : le générateur reste coupé, et le Pi reprend à
+       l'attente du retour (ozone < 0,1 ppm stable 15 min). Il ne relance jamais une génération seul.
+  5. **Lampe UV des têtes** : `lampe_uv` permise seulement store fermé, pendant le garage UV du bain des têtes
+     (5 + 5 min, figé). Brancher seulement le relais et sa permission ; le geste du bain reste celui de son module.
+  6. **Mode maïs** : store ouvert, ventilateur coupé (la vapeur moisit le HEPA), pas de purge. Le portique lent par
+     la clé relève du module Portique : ne pas le refaire.
+  7. **Éclairage** : `eclairage_enceinte` allumé à la demande (écran) et pendant un cycle, éteint en mode UV-ozone.
+  Réglages : tous les chiffres du § 3 de la source (`machine.yaml → nettoyage`). Ceux marqués « exemple » portent
+  `exemple: true`. Vérification au démarrage : durées positives, `t_generation` < `t_contact` < `t_max_retour`,
+  niveaux du ventilateur entre 0 et 10 V et croissants (arrêt < normal < plein).
+  Simulateur : faux store (ouvrir, fermer, reed qui rebondit), faux capteurs de particules et de pression, scénarios
+  « fermeture puis purge », « purge trop longue », « nuit UV-ozone complète » et « fuite d'ozone dehors ».
+  Tests :
+  - refus d'ouvrir pendant cycle, purge ou ozone ;
+  - verrous remis après 2 s stables ;
+  - purge finie seulement quand les 3 conditions sont vraies ;
+  - dosage refusé pendant la purge ;
+  - purge remise à zéro si le store se rouvre ;
+  - capteur muet ⇒ jamais « fini » ;
+  - nuit complète, générateur jamais relancé après une coupure ;
+  - fuite dehors ⇒ générateur coupé ;
+  - store ouvert pendant la nuit.
+  `vidange --verifier` passe. Procédure d'essai pas à pas sur le vrai matériel (store, verrous, ventilateur,
+  générateur à blanc, enceinte vide, personne dedans) ; « testé sur le vrai matériel : non ».
 - [x] **38 bis. Capteurs d'ozone Winsen ZE25-O3 en UART (ozone_1 et ozone_2)** — Modèle : Sonnet, effort moyen.
   Sources (recopiées ici le 31/10/2026) : fiche du module « Nettoyage », de nouveau **gelé le 31/10/2026** (choix du
   ZE25-O3 validé par Karulium), plan d'implantation. Remplace la lecture Modbus de l'ozone (tâche 2 :

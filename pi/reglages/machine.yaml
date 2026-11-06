@@ -51,6 +51,9 @@
 #     vitesse, plage du compte-tours, avant_hall_deg > precision_compte_tours_deg ;
 #   - remplissage : face de la préhension à l'étape c) de la prise double (pose + face au-dessus
 #     du plateau − descente de la tête) dans la course de prehension_z ;
+#   - nettoyage : durées positives, t_generation_s < t_contact_s < t_max_retour_s, niveaux du
+#     ventilateur entre 0 et 10 V et croissants (arrêt < normal < plein), course du store égale au
+#     trajet de sa barre basse, purge minimale plus courte que son alerte ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
 
 exemple: true
@@ -318,6 +321,12 @@ durees:
   remplissage_geste_max: 300
   # Le dosage d'une couche, mené par le Mycélium (bocal neuf, trajets, agitation). EXEMPLE.
   remplissage_dosage_max: 1200
+  # Nettoyage, scénarios du simulateur (gestes de Karulium) : store ouvert ou fermé (course,
+  # rebond, 2 s de stabilité), purge (au plus alerte_s, plus de marge), une phase de la nuit
+  # UV-ozone (au plus t_max_retour, plus de marge). EXEMPLE.
+  nettoyage_store_max: 120
+  nettoyage_purge_max: 1500
+  nettoyage_nuit_max: 25200
 
 # Poste du fût. Ces chiffres-là sont VRAIS (fiche du module « Poste du fût », validée le
 # 23/10/2026, et plan de commande v221), sauf la partie « pesee » (à étalonner, voir plus bas).
@@ -1543,6 +1552,103 @@ portique:
   bouts_bloques_griffe:
     - {pont_x: [0.223, 0.233], axes_z_max: 1.05, angles_deg: []}
     - {pont_x: [0.233, 0.30], axes_z_max: 1.05, angles_deg: [180]}
+
+# Nettoyage : enceinte propre, store, air, UV, ozone (module gelé le 28/10/2026, regelé le 04/11/2026 ;
+# tâche 38, source nettoyage/logiciel/nettoyage-pour-logiciel.md du 06/11). Le Pi lit et attend : la
+# sécurité est câblée (store dans la boucle d'arrêt du portique, chaîne UV-ozone, verrous fermés sans
+# courant avec clé de dépannage, alarme d'ozone câblée). Le Pi ne commande PAS le moteur du store.
+# Les chiffres marqués EXEMPLE sont à régler aux essais (pi/systeme/essai-nettoyage.md) ; les autres
+# sont figés.
+nettoyage:
+  exemple: true
+  # Le Pi relit les signaux de l'enceinte tous les combien (s). EXEMPLE.
+  periode_s: 0.5
+  # Chiffres figés de l'enceinte (enceinte-04-11.yaml, validé par Karulium le 04/11/2026, agrandissement
+  # + 43 cm). Repère du portique, en m : x du bout côté fût vers les portes, y du mur (−0,25) vers
+  # l'allée, z depuis le contreplaqué du conteneur. Boîtes = [min, max] sur chaque axe.
+  geometrie:
+    enceinte:
+      # Entre poteaux, sol PVC fini à 0,002, dessous du toit 2,355.
+      interieur: {x: [-0.130, 3.150], y: [-0.250, 1.190], z: [0.002, 2.355]}
+      exterieur: {x: [-0.163, 3.183], y: [-0.250, 1.193], z: [0.0, 2.378]}
+      sol_pvc_dessus_z: 0.002
+      dos_ane: {x: [-0.16, 3.179], y: [1.15, 1.19], z: [0.002, 0.008]}
+      bondes: [[1.30, -0.10], [2.45, -0.15]]   # centres x, y
+      bonde_diametre_m: 0.11
+    store:
+      tube_axe: {y: 1.250, z: 2.270, x: [-0.145, 3.165]}   # tube octogonal 60
+      moteur: {cote: portes, x: [2.630, 3.165], tension_v: 24}
+      nappe_plan_y: 1.196
+      barre_basse_ferme_z: [0.027, 0.067]    # posée sur le seuil (fin de course basse du moteur)
+      barre_basse_ouvert_z_bas: 2.205        # sous le coffre (fin de course haute, réglée au montage)
+      course_m: 2.178
+      coffre: {x: [-0.16, 3.18], y: [1.315, 1.318], z: [2.205, 2.355]}
+      reed_bas: {x: [-0.09, 3.13], y: [1.194, 1.204], z: [0.072, 0.082]}
+      verrous: {x: [-0.1, 3.13], y: [1.205, 1.235], z: [0.032, 0.062]}
+      securite_anti_ecrasement: commande_maintenue   # ni bord sensible ni cellule (Karulium 01/11)
+    plenum:
+      boite: {x: [-0.100, 3.130], y: [0.960, 1.190], z: [2.097, 2.355]}
+      fente_soufflage: {x: [-0.1, 3.13], y: [1.105, 1.155], z: [2.099, 2.1]}
+      entree_gaine_x: 3.130
+      generateur_ozone: {x: [-0.08, 0.12], y: [0.985, 1.105], z: [2.13, 2.29]}
+    reprise_air:
+      grille: {x: [3.183, 3.184], y: [0.06, 0.44], z: [1.91, 2.29]}
+      caisson_filtrant: {x: [3.19, 3.51], y: [0.05, 0.45], z: [1.89, 2.31]}
+      boite_hepa: {x: [3.19, 3.55], y: [0.45, 0.68], z: [1.92, 2.28]}
+      ventilateur: {centre_x: 3.370, centre_z: 2.100}
+    rubans_led:
+      cote_mur: {x: [-0.12, 3.14], y: [-0.175, -0.155], z: [2.196, 2.2]}
+      cote_facade: {x: [-0.13, 3.15], y: [1.158, 1.16], z: [2.112, 2.138]}   # sur la traverse du store
+    capteurs:
+      ozone_dedans: {x: [1.9, 1.96], y: [1.14, 1.18], z: [1.5, 1.56]}
+      ozone_dehors: {x: [3.183, 3.213], y: [1.15, 1.21], z: [0.55, 0.63]}
+      particules_dedans: {x: [1.97, 2.05], y: [1.13, 1.18], z: [1.48, 1.56]}
+  store:
+    # « store_ferme » (2 reeds du bas en série) vrai depuis 2 s pour le croire (rebonds). EXEMPLE.
+    stabilite_s: 2
+    # Durée d'une montée ou d'une descente (s). EXEMPLE.
+    mouvement_s: 40
+    # Demande de fermeture, et store toujours pas fermé au bout de 60 s : alerte « store mal fermé ».
+    # EXEMPLE.
+    alerte_fermeture_s: 60
+    # Verrous libérés (sous tension) et store jamais ouvert au bout de 60 s : verrous remis. EXEMPLE.
+    deverrouille_max_s: 60
+  # Purge après fermeture (règle du 12/10, figée) : fin quand les 3 conditions sont vraies.
+  purge:
+    duree_min_s: 420                  # au moins 7 min
+    alerte_s: 1200                    # pas finie à 20 min : alerte, Karulium décide
+    rapport_particules_max: 1.5       # particules_dedans ≤ 1,5 × particules_dehors...
+    stabilite_particules_s: 60        # ... stable 1 min
+    pression_fin_pa: 8                # pression_enceinte ≥ 8 Pa...
+    pression_fin_balais_pa: 5         # ... ou 5 Pa avec balais au store
+    balais: false                     # store avec balais : true (à dire à l'installation)
+    pression_normale_pa: [10, 15]     # surpression normale, pour information
+  # Consigne 0-10 V du moteur EC du ventilateur (il s'arrête sans signal). EXEMPLES, réglés avec le
+  # registre (débit visé au plein : 250-300 m³/h à 300 Pa).
+  ventilateur:
+    arret_v: 0
+    normal_v: 5
+    plein_v: 10
+  # Nuit UV-ozone (mode « uv_ozone », personne présent).
+  ozone:
+    seuil_ouverture_ppm: 0.1          # figé (docs/decisions.md) : retour sous 0,1 ppm...
+    stabilite_retour_s: 900           # ... stable 15 min (figé)
+    seuil_fuite_ppm: 0.1              # figé : ozone_dehors au-dessus = fuite
+    # Comptés depuis le départ de la nuit. EXEMPLES (à mesurer aux essais avec le ZE25 du dedans).
+    t_generation_s: 120               # générateur en marche 2 min
+    t_contact_s: 7200                 # fin du contact à 2 h
+    t_max_retour_s: 21600             # pas sous 0,1 ppm à 6 h : alerte
+    heure_depart: "22:00"             # EXEMPLE
+    journal_s: 60                     # ozone_dedans noté au registre chaque minute. EXEMPLE.
+    # Pendant le contact, au moins 1 ppm lu dedans, sinon « mesure incohérente » (générateur en
+    # panne ou capteur faux ?). EXEMPLE.
+    attendu_min_ppm: 1
+    # Le panneau long du poste du fût n'est pas une condition de départ (fil Poste du fût, 06/11) :
+    # levé (contact fermé, position normale) ou rabattu, il est seulement noté au journal.
+  # Lampe UV-C des têtes : garage UV après le bain des têtes, 5 + 5 min (figé). Le geste est celui
+  # du bain des têtes ; le Pi ne permet la lampe que store fermé.
+  uv_tetes:
+    garage_s: [300, 300]
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

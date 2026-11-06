@@ -2057,6 +2057,222 @@ class Portique(Modele):
         return self
 
 
+# ------------------------------------------------------------------ nettoyage
+
+
+class Boite(Modele):
+    """Une boîte dans le repère du portique : [min, max] sur chaque axe (m)."""
+
+    x: Intervalle
+    y: Intervalle
+    z: Intervalle
+
+    @model_validator(mode="after")
+    def _dans_l_ordre(self) -> "Boite":
+        for axe, (debut, fin) in (("x", self.x), ("y", self.y), ("z", self.z)):
+            if debut >= fin:
+                raise ValueError(f"sur {axe}, aller du plus petit au plus grand")
+        return self
+
+
+class EnceinteGeometrie(Modele):
+    interieur: Boite
+    exterieur: Boite
+    sol_pvc_dessus_z: float
+    dos_ane: Boite
+    # Centres (x, y) des bondes du sol.
+    bondes: list[tuple[float, float]] = Field(default_factory=list)
+    bonde_diametre_m: float = Field(gt=0)
+
+
+class TubeStore(Modele):
+    x: Intervalle
+    y: float
+    z: float
+
+
+class MoteurStore(Modele):
+    cote: Literal["portes", "fut"]
+    x: Intervalle
+    tension_v: float = Field(gt=0)
+
+
+class StoreGeometrie(Modele):
+    tube_axe: TubeStore
+    moteur: MoteurStore
+    nappe_plan_y: float
+    # Barre basse posée sur le seuil (fin de course basse du moteur).
+    barre_basse_ferme_z: Intervalle
+    # Dessous de la barre basse, store en haut (fin de course haute du moteur).
+    barre_basse_ouvert_z_bas: float
+    course_m: float = Field(gt=0)
+    coffre: Boite
+    reed_bas: Boite
+    verrous: Boite
+    # Ni bord sensible ni cellule (Karulium, 01/11) : la commande maintenue câblée protège.
+    securite_anti_ecrasement: Literal["commande_maintenue"]
+
+
+class PlenumGeometrie(Modele):
+    boite: Boite
+    fente_soufflage: Boite
+    entree_gaine_x: float
+    generateur_ozone: Boite
+
+
+class VentilateurGeometrie(Modele):
+    centre_x: float
+    centre_z: float
+
+
+class RepriseAirGeometrie(Modele):
+    grille: Boite
+    caisson_filtrant: Boite
+    boite_hepa: Boite
+    ventilateur: VentilateurGeometrie
+
+
+class RubansLed(Modele):
+    cote_mur: Boite
+    cote_facade: Boite
+
+
+class GeometrieNettoyage(Modele):
+    """Chiffres figés de l'enceinte propre (validés par Karulium le 04/11/2026) : le Pi ne fait
+    bouger aucun de ces éléments ; ils sont gardés ici pour les autres modules et les essais."""
+
+    enceinte: EnceinteGeometrie
+    store: StoreGeometrie
+    plenum: PlenumGeometrie
+    reprise_air: RepriseAirGeometrie
+    rubans_led: RubansLed
+    capteurs: dict[Nom, Boite] = Field(default_factory=dict)
+
+
+class StoreNettoyage(Modele):
+    """Ce que le Pi fait du store (il ne commande pas son moteur : commande maintenue câblée)."""
+
+    # « store_ferme » vrai depuis ce temps (s) pour le croire (le reed peut rebondir).
+    stabilite_s: float = Field(gt=0)
+    # Durée d'une montée ou d'une descente (s), pour information.
+    mouvement_s: float = Field(gt=0)
+    # Après une demande de fermeture, store toujours pas fermé au bout de ce temps (s) : alerte.
+    alerte_fermeture_s: float = Field(gt=0)
+    # Verrous libérés et store jamais ouvert au bout de ce temps (s) : verrous remis.
+    deverrouille_max_s: float = Field(gt=0)
+
+
+class PurgeNettoyage(Modele):
+    """Purge après fermeture du store (règle du 12/10, figée)."""
+
+    duree_min_s: float = Field(gt=0)
+    alerte_s: float = Field(gt=0)
+    # particules_dedans ≤ ce rapport × particules_dehors, stable pendant stabilite_particules_s.
+    rapport_particules_max: float = Field(gt=0)
+    stabilite_particules_s: float = Field(gt=0)
+    # Surpression de l'enceinte pour finir la purge (Pa), sans ou avec balais au store.
+    pression_fin_pa: float = Field(gt=0)
+    pression_fin_balais_pa: float = Field(gt=0)
+    balais: bool = False
+    # Surpression normale, purge finie (Pa) : pour information.
+    pression_normale_pa: Intervalle
+
+    @property
+    def pression_fin(self) -> float:
+        return self.pression_fin_balais_pa if self.balais else self.pression_fin_pa
+
+
+class VentilateurNettoyage(Modele):
+    """Consigne 0-10 V du moteur EC (il s'arrête sans signal) : 3 niveaux (V)."""
+
+    arret_v: float = Field(ge=0, le=10)
+    normal_v: float = Field(ge=0, le=10)
+    plein_v: float = Field(ge=0, le=10)
+
+
+class OzoneNettoyage(Modele):
+    """La nuit UV-ozone (personne présent). La sécurité ozone reste câblée."""
+
+    # Ozone dedans sous ce seuil (ppm), stable stabilite_retour_s : fin de la nuit, ouverture.
+    seuil_ouverture_ppm: float = Field(gt=0)
+    stabilite_retour_s: float = Field(gt=0)
+    # Ozone dehors au-dessus (ppm) : fuite (alerte forte, générateur coupé).
+    seuil_fuite_ppm: float = Field(gt=0)
+    # Comptés depuis le départ de la nuit (s) : génération, fin du contact, retour au plus tard.
+    t_generation_s: float = Field(gt=0)
+    t_contact_s: float = Field(gt=0)
+    t_max_retour_s: float = Field(gt=0)
+    # Heure de départ réglée (« 22:00 »).
+    heure_depart: Annotated[str, StringConstraints(pattern=r"^([01][0-9]|2[0-3]):[0-5][0-9]$")]
+    # ozone_dedans noté au registre tous les combien (s).
+    journal_s: float = Field(gt=0)
+    # Au moins cette valeur (ppm) lue dedans pendant le contact, sinon « mesure incohérente ».
+    attendu_min_ppm: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "OzoneNettoyage":
+        if not self.t_generation_s < self.t_contact_s < self.t_max_retour_s:
+            raise ValueError(
+                "il faut t_generation_s < t_contact_s < t_max_retour_s (comptés depuis le départ)"
+            )
+        return self
+
+
+class UvTetes(Modele):
+    """Lampe UV-C des têtes : garage UV après le bain des têtes (figé : 5 + 5 min)."""
+
+    garage_s: list[Annotated[float, Field(gt=0)]] = Field(min_length=1)
+
+
+class Nettoyage(Modele):
+    """Nettoyage : enceinte, store, air, UV, ozone (module gelé le 28/10/2026, regelé le
+    04/11/2026). Le Pi lit et attend ; la sécurité est câblée (store dans la boucle d'arrêt du
+    portique, chaîne UV-ozone, verrous fermés sans courant, alarme d'ozone câblée)."""
+
+    # Vrai tant que des chiffres sont des exemples (durées de l'ozone, heure, ventilateur...).
+    exemple: bool = False
+    # Relit ses signaux tous les combien (s).
+    periode_s: float = Field(gt=0)
+    geometrie: GeometrieNettoyage
+    store: StoreNettoyage
+    purge: PurgeNettoyage
+    ventilateur: VentilateurNettoyage
+    ozone: OzoneNettoyage
+    uv_tetes: UvTetes
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Nettoyage":
+        erreurs = []
+        v = self.ventilateur
+        if not v.arret_v < v.normal_v < v.plein_v:
+            erreurs.append("ventilateur : il faut arret_v < normal_v < plein_v (entre 0 et 10 V)")
+        purge = self.purge
+        if purge.duree_min_s >= purge.alerte_s:
+            erreurs.append("purge : duree_min_s doit être plus courte que alerte_s")
+        if purge.stabilite_particules_s > purge.alerte_s:
+            erreurs.append("purge : stabilite_particules_s plus longue que alerte_s")
+        bas, haut = purge.pression_normale_pa
+        if bas > haut:
+            erreurs.append("purge → pression_normale_pa : aller du plus petit au plus grand")
+        if purge.pression_fin_balais_pa > purge.pression_fin_pa:
+            erreurs.append("purge : pression_fin_balais_pa doit être au plus pression_fin_pa")
+        store = self.geometrie.store
+        course = store.barre_basse_ouvert_z_bas - store.barre_basse_ferme_z[0]
+        if abs(course - store.course_m) > 0.005:
+            erreurs.append(
+                f"geometrie → store : course_m {store.course_m:g} m, mais la barre basse va de "
+                f"{store.barre_basse_ferme_z[0]:g} à {store.barre_basse_ouvert_z_bas:g} "
+                f"({course:.3f} m)"
+            )
+        if store.barre_basse_ferme_z[0] >= store.barre_basse_ferme_z[1]:
+            erreurs.append("geometrie → store → barre_basse_ferme_z : du plus petit au plus grand")
+        if self.store.alerte_fermeture_s < self.store.mouvement_s:
+            erreurs.append("store : alerte_fermeture_s plus courte que la descente (mouvement_s)")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -2098,6 +2314,8 @@ class Machine(Modele):
     stockage: Stockage | None = None
     # Portique : pont, chariot, les deux Z (None : pas de portique, pour des réglages d'essai).
     portique: Portique | None = None
+    # Nettoyage : enceinte, store, purge, nuit UV-ozone (None : pas de nettoyage).
+    nettoyage: Nettoyage | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -3670,18 +3888,29 @@ class EvenementSimule(Modele):
     kg: float | None = None
     debranchee: bool = False
     radio_muette: bool = False
+    # ... ou mesure de docs/entrees-sorties.yaml (analogique ou ozone) qui prend cette valeur,
+    # dans l'unité du signal (ozone_dehors : ppm).
+    mesure: Nom | None = None
+    valeur: float | None = None
 
     @model_validator(mode="after")
     def _une_seule_chose(self) -> "EvenementSimule":
         capteur = self.capteur is not None and self.actionne is not None
         choses = (self.kg is not None) + self.debranchee + self.radio_muette
         pesee = self.pesee is not None and choses == 1
+        mesure = self.mesure is not None and self.valeur is not None
         reste_capteur = self.capteur is not None or self.actionne is not None
         reste_pesee = self.pesee is not None or choses > 0
-        if not ((capteur and not reste_pesee) or (pesee and not reste_capteur)):
+        reste_mesure = self.mesure is not None or self.valeur is not None
+        if not (
+            (capteur and not reste_pesee and not reste_mesure)
+            or (pesee and not reste_capteur and not reste_mesure)
+            or (mesure and not reste_capteur and not reste_pesee)
+        ):
             raise ValueError(
                 "écrire « capteur » et « actionne », ou « pesee » avec « kg », "
-                "« debranchee: true » ou « radio_muette: true » (une seule chose par événement)"
+                "« debranchee: true » ou « radio_muette: true », ou « mesure » et « valeur » "
+                "(une seule chose par événement)"
             )
         return self
 
@@ -3831,6 +4060,31 @@ class StockageSimule(Modele):
     files_pleines: dict[Nom, Annotated[int, Field(ge=0)]] = Field(default_factory=dict)
 
 
+class NettoyageSimule(Modele):
+    """L'enceinte imaginaire du Nettoyage : store, air, particules, surpression, ozone."""
+
+    # Le store met course_s à monter ou descendre (Karulium tient le bouton) ; arrivé en bas, le
+    # reed rebondit (ouvert / fermé toutes les rebond_pas_s) pendant rebond_s.
+    course_s: float = Field(gt=0)
+    rebond_s: float = Field(ge=0)
+    rebond_pas_s: float = Field(gt=0)
+    # Particules (µg/m³) : dehors (le conteneur), dedans quand le store est ouvert ; store fermé,
+    # ventilateur à plein, le dedans tend vers fond × dehors (air filtré par le HEPA) avec cette
+    # constante de temps (s ; plus longue quand le ventilateur tourne moins vite).
+    particules_dehors: float = Field(gt=0)
+    particules_ouvert: float = Field(gt=0)
+    particules_fond: float = Field(gt=0)
+    constante_particules_s: float = Field(gt=0)
+    # Surpression (Pa) avec une consigne de 10 V, store fermé ; constante de temps (s) ; facteur
+    # quand le HEPA est colmaté (scénario « purge_trop_longue »).
+    pression_10v_pa: float = Field(gt=0)
+    constante_pression_s: float = Field(gt=0)
+    facteur_hepa_colmate: float = Field(gt=0, le=1)
+    # Ozone dedans (ppm) : montée quand le générateur est alimenté, demi-vie (s).
+    montee_ozone_ppm_s: float = Field(gt=0)
+    demi_vie_ozone_s: float = Field(gt=0)
+
+
 class ScenarioSimule(Modele):
     """Un scénario : capteurs actionnés au départ et événements, à la place de ceux du haut."""
 
@@ -3869,6 +4123,8 @@ class ReglagesSimulateur(Modele):
     remplissage: RemplissageSimule | None = None
     # Le stockage imaginaire (piles de seaux vides, seaux rangés dans le tiroir).
     stockage: StockageSimule | None = None
+    # L'enceinte imaginaire du Nettoyage (store, air, ozone).
+    nettoyage: NettoyageSimule | None = None
 
 
 # ---------------------------------------------------------- accelerometre.yaml

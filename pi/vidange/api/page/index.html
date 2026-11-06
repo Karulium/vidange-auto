@@ -122,6 +122,7 @@
       <div id="gos"></div>
       <div id="alarmes"></div>
       <div id="poste-fut"></div>
+      <div id="nettoyage"></div>
       <h2>Modules</h2>
       <div id="modules"></div>
       <button id="bouton-anciennes" class="petit">Voir les dernières alarmes (même acquittées)</button>
@@ -357,6 +358,7 @@ function afficherEtat(etat) {
       }, "J'ai corrigé : acquitter"))));
 
   afficherPosteFut(etat.poste_fut);
+  afficherNettoyage(etat.nettoyage);
 
   remplir("modules", ...(etat.modules.length ? etat.modules.map((m) =>
     el("div", { classe: "carte " + (m.statut === "alarme" ? "alarme" : m.attend ? "attention" : "ok") },
@@ -403,6 +405,63 @@ function afficherPosteFut(poste) {
         classe: "gros vert",
         surclick: () => ordre("/api/poste-fut/pret", "Poste du fût prêt."),
       }, "PRÊT")));
+}
+
+const PHASES_NUIT = {
+  attente_depart: "prévue", generation: "génération", contact: "contact",
+  retour: "retour sous le seuil", fini: "finie", erreur: "EN ERREUR",
+};
+
+function oui(ok) { return ok ? "oui" : "non"; }
+
+// L'enceinte (tâche 38) : le Pi libère seulement les verrous du store, jamais son moteur.
+function afficherNettoyage(n) {
+  if (!n) { remplir("nettoyage"); return; }
+  const grave = n.fuite || n.nuit === "erreur";
+  const classe = grave ? "alarme" : (n.store === "ferme" && !n.purge ? "ok" : "attention");
+  const bouton = (texte, chemin, message, question, couleur) => el("button", {
+    classe: "petit" + (couleur ? " " + couleur : ""),
+    surclick: () => { if (!question || confirm(question)) ordre("/api/nettoyage/" + chemin, message); },
+  }, texte);
+  const fermePasLibre = n.store === "ferme" && !n.verrous_liberes;
+  remplir("nettoyage",
+    el("h2", {}, "Enceinte (nettoyage)"),
+    el("div", { classe: "carte " + classe },
+      el("strong", {}, n.fuite ? "FUITE D'OZONE DEHORS" : n.store_libelle
+        + (n.verrous_liberes ? " — verrous libres" : "") + (n.store_mal_ferme ? " — MAL FERMÉ" : "")),
+      el("div", {}, "Mode : " + n.mode + " · ventilateur : " + n.ventilateur
+        + " · éclairage : " + (n.eclairage ? "allumé" : "éteint")),
+      el("div", {}, "Ozone dedans " + n.ozone_dedans + " · dehors " + n.ozone_dehors
+        + (n.ozone_securite_ok === null ? "" : " · alarme ozone câblée : " + (n.ozone_securite_ok ? "OK" : "DÉCLENCHÉE"))),
+      n.purge && el("div", { classe: n.purge_alerte ? "quoi" : "" },
+        "Purge depuis " + Math.round(n.purge_depuis_s / 60) + " min : durée " + oui(n.purge_duree_ok)
+        + ", particules " + oui(n.purge_particules_ok) + " (" + (n.particules_dedans ?? "?") + " dedans, "
+        + (n.particules_dehors ?? "?") + " dehors), pression " + oui(n.purge_pression_ok) + " ("
+        + (n.pression_pa ?? "?") + " Pa). Pas de dosage ni de versement."),
+      n.nuit && el("div", { classe: n.nuit === "erreur" ? "quoi" : "" },
+        "Nuit UV-ozone : " + (PHASES_NUIT[n.nuit] || n.nuit)
+        + (n.nuit_depart_prevu ? " à " + n.nuit_depart_prevu.slice(11, 16) : "")
+        + (n.nuit_depuis_s !== null && n.nuit !== "fini" ? ", depuis " + Math.round(n.nuit_depuis_s / 60) + " min" : "")
+        + (n.nuit_erreur ? " — " + n.nuit_erreur : "")),
+      (n.mode === "uv_ozone" || n.nuit) && el("div", { classe: "doux" },
+        "Panneau long du poste du fût : " + n.panneau + " (pas une condition de la nuit)."),
+      n.refus_ouverture && el("div", { classe: "doux" }, "Ouverture du store : " + n.refus_ouverture + "."),
+      ...n.messages.slice(-3).map((m) => el("div", { classe: "doux" }, m)),
+      el("div", {},
+        fermePasLibre
+          ? (n.refus_ouverture ? null : bouton("Ouvrir le store (verrous)", "ouvrir", "Verrous du store libérés."))
+          : bouton("Je ferme le store", "fermer", "Fermeture du store notée."),
+        bouton(n.eclairage ? "Éteindre" : "Allumer", n.eclairage ? "eteindre" : "eclairage", "Éclairage changé."),
+        n.purge && bouton("Passer outre la purge", "outre", "Purge passée outre (journal).",
+          "Finir la purge sans ses conditions ? (noté au journal)", "orange"),
+        n.nuit === "attente_depart"
+          ? bouton("Annuler la nuit", "annuler_nuit", "Nuit UV-ozone annulée.")
+          : (n.refus_nuit ? null : bouton("Nuit UV-ozone à l'heure réglée", "nuit", "Nuit UV-ozone prévue.",
+            "Lancer la nuit UV-ozone à l'heure réglée ? Personne dans l'enceinte.")),
+        !n.refus_nuit
+          ? bouton("Nuit UV-ozone tout de suite", "nuit_maintenant", "Nuit UV-ozone lancée.",
+            "Lancer la nuit UV-ozone TOUT DE SUITE ? Personne dans l'enceinte, store fermé.", "orange")
+          : null)));
 }
 
 async function rafraichir() {

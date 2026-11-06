@@ -19,6 +19,9 @@ Les modules sont écrits comme pour la vraie machine ; ils reçoivent des axes i
 (`simulateur.axes()`) à la place des vrais, et un poste du fût sur le faux matériel
 (`simulateur.poste_fut()`).
 
+Ce qui tourne en fond sur la vraie machine (le Nettoyage relit store et capteurs chaque seconde)
+tourne ici à chaque instant simulé : `simulateur.ajouter_fond(nettoyage.observer)`.
+
 Un scénario nommé de simulateur.yaml (« echange_fut »...) remplace les capteurs du départ et les
 événements du haut du fichier : `Simulateur(reglages, liste, scenario="echange_fut")`.
 """
@@ -81,6 +84,8 @@ class Simulateur:
         self._a_venir: list[tuple[float, EvenementSimule]] = []
         self._faits: list[tuple[float, str]] = []
         self._joue = False
+        # Tâches de fond : (appelée à chaque instant, prochain instant où elle a à faire).
+        self._fond: list[tuple[Callable[[], object], Callable[[], float | None] | None]] = []
         for capteur in depart:
             self._actionner(capteur, True, "capteurs_actionnes")
 
@@ -128,6 +133,18 @@ class Simulateur:
         boite = self.boite_poste_fut()
         boite.brut, boite.radio_muette, boite.debranche = pesee.brut(kg), False, False
 
+    def ajouter_fond(
+        self, tourner: Callable[[], object], prochain: Callable[[], float | None] | None = None
+    ) -> None:
+        """Une tâche de fond (boucle d'un service), appelée à chaque instant simulé, avant le
+        chef. `prochain` : l'heure simulée où elle aura quelque chose à faire (un reed qui
+        rebondit...), pour ne pas la sauter ; None : rien de prévu."""
+        self._fond.append((tourner, prochain))
+
+    def noter(self, texte: str) -> None:
+        """Un événement à cet instant, dans le planning (message d'un service de fond...)."""
+        self._faits.append((self.temps, texte))
+
     # ------------------------------------------------------------ jouer
 
     def jouer(self, modules: Iterable[Module]) -> Planning:
@@ -163,6 +180,8 @@ class Simulateur:
         while True:
             avant = _photo(self.chef.etat())
             self._faire_evenements()
+            for tourner, _ in self._fond:
+                tourner()
             self._donner_les_go()
             self.chef.avancer()
             etat = self.chef.etat()
@@ -202,6 +221,10 @@ class Simulateur:
         arrivee = self._axes.prochaine_arrivee()
         if arrivee is not None and arrivee > self.temps:
             candidats.append(arrivee)
+        for _, prochain in self._fond:
+            heure = prochain() if prochain is not None else None
+            if heure is not None and heure > self.temps:
+                candidats.append(heure)
         return min(candidats)
 
     def _observer(self, etat: EtatChef) -> None:
@@ -236,6 +259,8 @@ class Simulateur:
                 self._actionner(evenement.capteur, bool(evenement.actionne), "evenements")
                 etat = "actionné" if evenement.actionne else "relâché"
                 self._faits.append((self.temps, f"capteur « {evenement.capteur} » {etat}"))
+            elif evenement.mesure is not None:
+                self._faits.append((self.temps, self._mesurer(evenement)))
             else:
                 self._faits.append((self.temps, self._peser(evenement)))
         self._a_venir = restent
@@ -260,6 +285,19 @@ class Simulateur:
             return f"pesée « {nom} » : la boîte du poste ne répond plus"
         boite.radio_muette = True
         return f"pesée « {nom} » : radio du plateau muette"
+
+    def _mesurer(self, evenement: EvenementSimule) -> str:
+        """Une mesure du faux matériel (analogique ou ozone) prend une valeur."""
+        nom, valeur = evenement.mesure, evenement.valeur
+        assert nom is not None and valeur is not None
+        try:
+            self.fabrique.regler(nom, valeur)
+        except KeyError:
+            raise ErreurSimulation(
+                f"simulateur.yaml, evenements : « {nom} » n'est pas une mesure (analogique ou "
+                "ozone) de docs/entrees-sorties.yaml"
+            ) from None
+        return f"mesure « {nom} » : {valeur:g}"
 
     def _actionner(self, capteur: str, actionne: bool, ou: str) -> None:
         try:

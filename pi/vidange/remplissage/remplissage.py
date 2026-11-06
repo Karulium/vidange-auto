@@ -112,6 +112,12 @@ QUOI_FAIRE_BOCAL = (
     "La tête et la balance ne sont pas d'accord sur le poids du bocal posé : regarder la vidéo "
     "(bocal de travers, posé à côté ?). Corriger, puis acquitter et donner le Go."
 )
+QUOI_FAIRE_PURGE = (
+    "Le versement dans le seau ouvert attend la fin de la purge de l'enceinte (store refermé) : "
+    "attendre qu'elle finisse (page MODE, ENCEINTE), puis acquitter et donner le Go."
+)
+# Le geste protégé du chef (vidange.chef.chef.GESTES_PROTEGES) que demande le Remplissage.
+VERSEMENT = "versement_seau_ouvert"
 
 # Écart sous lequel deux positions sont égales (m ou °).
 _EGAL = 1e-6
@@ -157,11 +163,14 @@ class Remplissage:
         micropore_rentre: Callable[[], bool | None] = lambda: None,
         vision: VisionSeau | None = None,
         photo: Callable[[str], object] = lambda raison: None,
+        permission: Callable[[str], str | None] = lambda geste: None,
     ) -> None:
         """`plateau_fut_en_place` : PosteFut (plateau du fût au fond). `refus_mycelium` :
         Mycelium.refus_chariot (le chariot peut-il rouler près du poste ?). `bras_galet_range`,
         `bras_spray_sorti`, `micropore_rentre` : modules pas encore écrits (tâches 41, 39, 40).
-        `vision` : QR du flanc et angle de l'anse. `photo(raison)` : photo notée au registre."""
+        `vision` : QR du flanc et angle de l'anse. `photo(raison)` : photo notée au registre.
+        `permission(geste)` : Chef.permission, demandée avant le versement dans le seau ouvert
+        (« versement_seau_ouvert ») ; None = permis."""
         assert machine.remplissage is not None and machine.griffe is not None
         self.reglages = machine.remplissage
         self.formats = machine.griffe.formats
@@ -184,6 +193,7 @@ class Remplissage:
         self._micropore = micropore_rentre
         self.vision = vision
         self._photo = photo
+        self._permission = permission
         self.seau: SeauPlateau | None = None
         # Après une prise double : la tête tient le seau du dessus (à rendre au stockage).
         self.seau_du_dessus = False
@@ -494,6 +504,9 @@ class Remplissage:
             if self._rotation:
                 self.arreter()
             return
+        refus = self.refus_versement()
+        if refus is not None:
+            raise ErreurEtape(f"remplissage : versement refusé : {refus}", QUOI_FAIRE_PURGE)
         if self.mode != "seaux":
             raise ErreurEtape(f"remplissage : pas de rotation en mode « {self.mode} »")
         pose = self.chariot.position()
@@ -507,8 +520,18 @@ class Remplissage:
         self.lancer(tourner)
         self._rotation = True
 
+    def refus_versement(self) -> str | None:
+        """Le chef permet-il le versement dans le seau ouvert (purge du Nettoyage) ?"""
+        return self._permission(VERSEMENT)
+
+    def versement_permis(self) -> bool:
+        return self.refus_versement() is None
+
     def geste_tourner(self, duree_s: float) -> Geste:
         """Le seau tourne pendant tant de secondes (versement du simulateur, essais)."""
+        refus = self.refus_versement()
+        if refus is not None:
+            raise ErreurEtape(f"remplissage : versement refusé : {refus}", QUOI_FAIRE_PURGE)
         pose = self._pose()
         tour = self.reglages.vitesses.rotation * duree_s
         sens = -1 if pose.a > 0 else 1

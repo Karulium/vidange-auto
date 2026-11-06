@@ -247,6 +247,8 @@ def remplissage_du_simulateur(
         horloge=horloge,
         refus_mycelium=refus_mycelium,
         vision=vision,
+        # Versement dans un seau ouvert : permission du chef (refusée pendant une purge).
+        permission=simulateur.chef.permission,
         **options,
     )
     porte_bocal = FauxPorteBocal(simule_mycelium.demi_tour_s, horloge)
@@ -272,6 +274,7 @@ def remplissage_du_simulateur(
         nouveau_bocal,
         horloge=horloge,
         prehension_hors_zone=prehension.hors_zone_porte_bocal,
+        permission=simulateur.chef.permission,
     )
     liste = simule.seaux if seaux_simules is None else seaux_simules
     seaux = {seau.seau: seau for seau in liste}

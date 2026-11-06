@@ -9,6 +9,9 @@
     chef.etat()               # pour les écrans : ce que fait chaque module, ce qu'il attend
     chef.memoriser("exemple", seau="S1293", cycle=12)  # gardé dans le carnet (reprise)
     chef.sur_alarme.append(f)  # f(alarme) est appelée à chaque nouvelle alarme (bilan...)
+    chef.interdire(refus)      # refus(geste) : pourquoi ce geste est interdit maintenant, ou None
+    chef.permission("dosage_semence")  # demandée par un module avant un geste : None = permis
+    chef.conditions_generales.append(Condition("store fermé", test))  # pour toutes les étapes
 
 Plusieurs modules peuvent tourner en même temps : ils se partagent les zones réservées.
 Un module « exclusif » (lieu sûr) passe avant tous les autres : tant qu'il est en route,
@@ -25,6 +28,13 @@ pour reprendre au bon seau. Par convention, « cycle » y est le numéro du cycl
 
 Les conditions et les actions sont appelées par le chef lui-même : elles doivent être rapides
 (lire un capteur, envoyer une ligne), jamais attendre.
+
+Permissions (tâche 38) : certains gestes « à l'air » (GESTES_PROTEGES : dosage de la semence,
+ouverture d'une capsule, versement dans un seau ouvert) sont demandés au chef avant de partir
+(`permission`). Un autre morceau du programme peut les interdire pour un temps (`interdire` :
+le Nettoyage pendant la purge, raison « purge en cours »). Les conditions générales (store de
+l'enceinte fermé...) sont attendues avant chaque étape de chaque module, comme ses conditions
+d'entrée. Rien de cela ne protège personne : la sécurité est câblée.
 """
 
 import json
@@ -36,7 +46,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from vidange.chef.carnet import Carnet
-from vidange.chef.etapes import ErreurChef, ErreurEtape, Etape, Module
+from vidange.chef.etapes import Condition, ErreurChef, ErreurEtape, Etape, Module
 from vidange.chef.zones import Reservations
 from vidange.journal import donner_journal
 from vidange.quoi_faire import ERREUR_PROGRAMME, pour_erreur
@@ -50,6 +60,13 @@ Phase = Literal["go", "entree", "fin"]
 Statut = Literal["en_cours", "alarme", "fini", "abandonne"]
 
 ATTENTE_GO = "Go de Karulium"
+
+# Gestes « à l'air » qu'un module demande au chef avant de les faire (Chef.permission).
+GESTES_PROTEGES = {
+    "dosage_semence": "dosage de la semence",
+    "ouverture_capsule": "ouverture d'une capsule",
+    "versement_seau_ouvert": "versement dans un seau ouvert",
+}
 
 
 @dataclass(frozen=True)
@@ -156,6 +173,10 @@ class Chef:
         self._fil: threading.Thread | None = None
         # Appelées (sous le verrou du chef : elles doivent être rapides) à chaque nouvelle alarme.
         self.sur_alarme: list[Callable[[Alarme], object]] = []
+        # Qui peut interdire un geste protégé : refus(geste) → raison, ou None.
+        self._interdictions: list[Callable[[str], str | None]] = []
+        # Attendues avant chaque étape de chaque module (rapides, comme toutes les conditions).
+        self.conditions_generales: list[Condition] = []
 
     # ------------------------------------------------------------ marche / arrêt
 
@@ -176,6 +197,29 @@ class Chef:
     def _boucle(self) -> None:
         while not self._arret.wait(self._reglages.periode_s):
             self.avancer()
+
+    # ------------------------------------------------------------ permissions
+
+    def interdire(self, refus: Callable[[str], str | None]) -> None:
+        """`refus(geste)` dira pourquoi un geste protégé est interdit maintenant (ou None)."""
+        self._interdictions.append(refus)
+
+    def permission(self, geste: str) -> str | None:
+        """Un module demande s'il peut faire ce geste protégé : None = permis, sinon la raison."""
+        if geste not in GESTES_PROTEGES:
+            raise ErreurChef(f"geste protégé inconnu « {geste} »")
+        for refus in list(self._interdictions):
+            raison = refus(geste)
+            if raison is not None:
+                return raison
+        return None
+
+    def condition_permission(self, geste: str) -> Condition:
+        """La permission d'un geste protégé, comme condition d'entrée d'une étape."""
+        return Condition(
+            f"permission du chef : {GESTES_PROTEGES[geste]} (pas de purge en cours)",
+            lambda: self.permission(geste) is None,
+        )
 
     # ------------------------------------------------------------ modules
 
@@ -453,7 +497,7 @@ class Chef:
             self._alarme(d, f"erreur : {erreur}", quoi_faire)
 
     def _peut_entrer(self, d: _Deroulement) -> bool:
-        for condition in d.etape.entree:
+        for condition in (*self.conditions_generales, *d.etape.entree):
             if not condition.test():
                 d.attend = condition.texte
                 return False

@@ -101,6 +101,7 @@ cartes:
         E4: GPIO25
         E5: GPIO26
         E6: GPIO16
+        E7: GPIO20
       niveau_actif: bas
       tirage: haut
   relais_1:
@@ -151,6 +152,29 @@ cartes:
       vitesse_bauds: 9600
       parite: aucune
       delai_reponse_s: 0.5
+  # Nettoyage (tâche 38) : relais 230 V du ventilateur, du générateur d'ozone, de la lampe UV, du
+  # compresseur et du ventilateur de l'armoire ; relais 12 V des verrous du store et des LED.
+  # Liaison d'EXEMPLE (2e PCF8574 à l'adresse 0x21), comme la carte n° 1.
+  relais_2:
+    exemple: true
+    description: Carte 8 relais n° 2 (enceinte du Nettoyage, 230 V)
+    entrees: 0
+    sorties: 8
+    tension_max: 230
+    isolee: true
+    liaison:
+      type: i2c
+      signal: relais_2_bus
+      broches:
+        K1: P0
+        K2: P1
+        K3: P2
+        K4: P3
+        K5: P4
+        K6: P5
+        K7: P6
+        K8: P7
+      niveau_actif: bas
   # 2ᵉ adaptateur USB-RS485, réservé aux 3 cartes de pesée embarquées (RP2040 + HX711 : griffe,
   # préhension, plateau du remplissage) et à la boîte du poste du fût (pesée du plateau du fût,
   # tâche 17 bis), séparé des liaisons série des capteurs d'ozone (docs/decisions.md, 28/10).
@@ -1207,3 +1231,113 @@ signaux:
     type: logique
     tension: 5
     module: lavage
+  # Nettoyage (tâche 38 ; fiche du module gelé, lot validé les 27/10, 31/10, 01/11 et 04/11).
+  # Broches : EXEMPLES, à remplir avec l'Implantation (armoire). Le Pi lit et attend : la sécurité est
+  # câblée (store_ferme dans la boucle d'arrêt du portique par son 2e contact ; chaîne UV-ozone : reeds
+  # du bas du store + porte_spray en série dans l'alimentation de generateur_ozone et lampe_uv ;
+  # verrous fermés sans courant, clé de dépannage). Le moteur du store n'est PAS un signal du Pi
+  # (commande maintenue : 2 boutons câblés, fins de course dans le moteur).
+  # Pas encore dans la liste (capteurs pas choisis, « case vide » dans vidange/nettoyage/capteurs.py) :
+  #   particules_dedans, particules_dehors (PMS5003 ou SPS30, UART) ; pression_enceinte (pression
+  #   différentielle enceinte / conteneur, Pa) ; ozone_securite_ok (contact de l'alarme d'ozone câblée,
+  #   appareil pas choisi : facultatif, le Pi l'affiche seulement s'il est ici).
+  store_ferme:
+    exemple: true
+    # Les 2 reeds IP67 du bas du store EN SÉRIE : fermé = store fermé aux deux bouts.
+    description: Store de l'enceinte fermé (2 reeds du bas en série ; pour informer, la sécurité est câblée)
+    carte: entrees_24v_1
+    broche: E7
+    type: contact
+    tension: 24
+    repos: ouvert
+    module: nettoyage
+  verrous_store:
+    exemple: true
+    # 2 verrous électriques 12 V, FERMÉS SANS COURANT : le store reste verrouillé si le Pi s'arrête.
+    description: Verrous du store (commandé = sous tension = déverrouillé)
+    carte: relais_2
+    broche: K1
+    type: relais
+    tension: 12
+    repos: ouvert
+    module: nettoyage
+  eclairage_enceinte:
+    exemple: true
+    description: Éclairage de l'enceinte (alimentation 12 V des 2 rubans LED, toujours ensemble)
+    carte: relais_2
+    broche: K2
+    type: relais
+    tension: 12
+    repos: ouvert
+    module: nettoyage
+  ventilateur_enceinte:
+    exemple: true
+    description: Ventilateur de l'enceinte (coupure 230 V du moteur EC)
+    carte: relais_2
+    broche: K3
+    type: relais
+    tension: 230
+    repos: ouvert
+    module: nettoyage
+  generateur_ozone:
+    exemple: true
+    # Prise du générateur VEVOR (il repart seul en HOLD après une coupure : c'est le relais qui
+    # commande). Alimenté seulement par la chaîne UV-ozone câblée.
+    description: Générateur d'ozone (relais sur sa prise 230 V, derrière la chaîne câblée)
+    carte: relais_2
+    broche: K4
+    type: relais
+    tension: 230
+    repos: ouvert
+    module: nettoyage
+  lampe_uv:
+    exemple: true
+    description: Lampe UV-C des têtes (ballast 230 V, derrière la chaîne câblée)
+    carte: relais_2
+    broche: K5
+    type: relais
+    tension: 230
+    repos: ouvert
+    module: nettoyage
+  relais_compresseur:
+    exemple: true
+    # Module Air comprimé (pas figé) : le Pi le coupe pendant la nuit UV-ozone.
+    description: Compresseur (commandé = alimenté)
+    carte: relais_2
+    broche: K6
+    type: relais
+    tension: 230
+    repos: ouvert
+    module: air_comprime
+  coupure_ventilateur_armoire:
+    exemple: true
+    # Contact FERMÉ au repos : le ventilateur de l'armoire tourne si le Pi s'arrête. Le Pi le coupe
+    # pendant la nuit UV-ozone (commandé = ventilateur coupé).
+    description: Coupure du ventilateur de l'armoire (commandé = coupé)
+    carte: relais_2
+    broche: K7
+    type: relais
+    tension: 230
+    repos: ferme
+    module: armoire
+  consigne_ventilateur:
+    exemple: true
+    # Consigne 0-10 V du moteur EC (il s'arrête sans signal). Convertisseur PAS ENCORE CHOISI (sortie
+    # PWM du Pi + module PWM → 0-10 V, ou convertisseur I2C) : « case vide » pour l'instant.
+    description: Consigne 0-10 V du ventilateur de l'enceinte (convertisseur à choisir)
+    carte: pi
+    broche: GPIO19
+    type: pwm
+    tension: 3.3
+    module: nettoyage
+  relais_2_bus:
+    exemple: true
+    description: Liaison I2C vers la puce PCF8574 de la carte relais n° 2
+    carte: pi
+    broche: [GPIO2, GPIO3]
+    type: i2c
+    tension: 3.3
+    adresse: 0x21
+    module: armoire
+    appareil: pcf8574
+    fichier: /dev/i2c-1
