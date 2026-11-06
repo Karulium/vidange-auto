@@ -1067,6 +1067,13 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
      `angle_meplats_deg + k × 120°` (dans ± 500°), donc au plus 60° de rotation, tolérance ± 3°. Tests : alignement
      depuis 0°, 59°, 61°, 490° ; angle enregistré relu après un redémarrage ; coupure ⇒ confirmation demandée ;
      tour pris au compte-tours à 370° ; compte-tours et angle enregistré en désaccord de 40° ⇒ confirmation demandée.
+  8. **Couloir d'accès au bocal** (décision « Agitateur fixe, réponses à la PR n° 64 », point (c)) : remplacer le
+     trajet d'accès « en ligne droite depuis n'importe quel point hors de la zone » par un réglage
+     `prehension → porte_bocal → couloir: {depart: [0.925, 0.40], face_z: 1.10, demi_largeur_x_tete: 0.06,
+     largeur_x_bocal: [-0.06, 0.04], demi_largeur_x_mors: 0.005}`. Seul trajet permis dans la zone : du départ à la
+     verticale du bocal en −y (et retour en +y), face à 1,10, manivelle en bas, x dans la largeur permise (tête seule
+     ou avec bocal). Tests : arrivée côté mur refusée ; arrivée par +x refusée ; bocal tenu à x 0,925 + 0,05 refusé ;
+     tête seule à x 0,925 + 0,05 acceptée ; trajet du départ à la verticale accepté.
   Tests de chaque point ; `vidange --verifier` et le simulateur passent.
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
   (le Lavage a besoin de la Préhension, qui tient le seau pendant tout le lavage).

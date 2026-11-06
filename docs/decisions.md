@@ -242,6 +242,14 @@ si l'une pose problème, elle le dit dans sa PR.
   manivelle arrêtée en bas. Un « couloir d'accès » (départ, direction, largeur, tête seule et avec bocal) est demandé
   à la Maquette le 06/11 ; il ira dans une tâche suivante comme réglage, tout autre trajet refusé. (b) Dans la zone
   du porte-bocal, on garde la **somme** rayon de la tête + 1 cm + rayon de l'objet (plus prudent).
+  (c) **Couloir d'accès au bocal** (Maquette, 06/11, `mycelium/logiciel/acces-porte-bocal.md`) : un seul couloir,
+     **côté allée** : départ en (0,925 ; 0,40), face à 1,10, trajet en −y jusqu'à y 0,150, puis descente jusqu'au
+     contact de la capsule (et le même chemin au retour). Côté mur : moteur du demi-tour et support de la glissière ;
+     côtés en x : plaques des mors et pièces en V : interdits. Largeur : tête seule x 0,925 ± 0,06 ; avec un bocal
+     −0,06 / +0,04 jusqu'à l'entrée des mors (caméra du dosage côté +x), puis ± 0,005 dans le porte-bocal. Le
+     chariot de remplissage ne gêne pas (au poste ou reculé). **Réserve** : la pièce en V du haut recoupe la capsule
+     du bocal tenu à 1,10 (mors ouverts de 20 mm, pièces v10d) ; question posée au fil Porte-bocal. D'ici là, pose
+     seulement mors grands ouverts (déjà le cas). Côté logiciel : tâche 36 bis, point 8.
 - **Griffe : table « Y minimum du mât » avec l'agitateur fixe** (Maquette v45.111, 02/11/2026,
   `maquette/table-y-min-mat-griffe-v45.111.md` ; remplace les points 2 et 3 de la section du 01/11 ci-dessous).
   y du mât = repère du portique. Godet fermé / à moitié ouvert / grand ouvert, tête bras le long du pont. Bandes de x
