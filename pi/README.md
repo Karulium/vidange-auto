@@ -238,7 +238,7 @@ en une fraction de seconde), et sort le planning : chaque étape, quand elle com
 - Plusieurs modules peuvent être rejoués ensemble : ils se partagent zones et cartes comme sur la machine.
 - **Scénarios** nommés (`scenarios:` dans `simulateur.yaml`) : leurs capteurs et événements remplacent ceux
   du haut du fichier (`--scenario nom`). Un événement peut aussi régler la fausse pesée du poste du fût
-  (`pesee: pesee_fut`, `kg: 165`, `radio_muette: true` ou `debranchee: true`). Le module `poste_fut` joue
+  (`pesee: pesee_fut`, `kg: 129`, `radio_muette: true` ou `debranchee: true`). Le module `poste_fut` joue
   le scénario `echange_fut` par défaut (`echange_fut_sans_pesee` : radio du plateau muette).
 - Un module reçoit des axes imaginaires (`simulateur.axes()`) à la place des vrais `Axes`, avec les mêmes noms ;
   son code ne change pas. Pour qu'un nouveau module soit simulable, l'ajouter à `MODULES` dans

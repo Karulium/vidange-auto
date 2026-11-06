@@ -103,6 +103,6 @@ accu_plateau_fut:
   bon_v: 3.6
   recharger_v: 3.5
   bientot_absente_v: 3.3
-  # Plateau au poste depuis plus de 10 min sans « recharge en cours » : alerte « recharge sans
-  # contact en panne ? ».
+  # Plateau au poste depuis plus de 10 min sans le « 5 V de la recharge sans contact présent »
+  # (vrai aussi accu plein) : alerte « recharge sans contact en panne ? ».
   sans_recharge_max_s: 600

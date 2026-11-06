@@ -87,7 +87,7 @@ def _ligne(pesee: PeseePlateau) -> str:
     plateau = lecture.plateau
     if plateau is None:
         return poids
-    recharge = "en recharge" if plateau.en_recharge else "PAS EN RECHARGE"
+    recharge = "recharge 5 V" if plateau.recharge_presente else "PAS DE 5 V DE RECHARGE"
     return (
         f"{poids}   accu {plateau.accu_mv / 1000:.2f} V {plateau.accu_pct:3d} % {recharge}"
         + ("  (USB-C)" if plateau.sur_usb else "")

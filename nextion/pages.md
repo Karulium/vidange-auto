@@ -237,7 +237,7 @@ pour « Prêt » (la pesée n'y entre pas).
 | `b_retour` | Bouton | 242 | 182 | 234 | 86 | 2 | 10 |
 
 - `t_titre` : « PLATEAU ABSENT » (gris), « EN PLACE, PAS PRÊT » (jaune), « PRÊT » (vert). Texte centré.
-- `t_poids` : « Substrat : 105,6 kg · accu 80 % · radio -60 dBm », ou « Pesée absente : radio du
+- `t_poids` : « Substrat : 95,6 kg · accu 80 % · radio -60 dBm », ou « Pesée absente : radio du
   plateau muette » ; « accu 18 % : RECHARGER » quand l'accu est faible.
 - `t_gestes` (2 lignes) : « À la main : fût sur les cales, soupape enlevée, butées du fond, 2 freins,
   volet rabattu, panneau levé. »

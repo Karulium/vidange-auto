@@ -23,11 +23,13 @@ Elle a 5 registres de plus :
 
 | Registre | Contenu |
 |---|---|
-| 8 | plateau : 1 = reed fermé (au poste), 2 = recharge en cours, 4 = alimenté par l'USB-C |
+| 8 | plateau : 1 = reed fermé (au poste), 2 = 5 V de la recharge présent (*), 4 = sur l'USB-C |
 | 9 | tension de l'accu du plateau, en mV (dernière trame) |
 | 10 | niveau de l'accu, en % (calculé par le plateau) |
 | 11 | force du signal radio, en dBm + 200 (120 = −80 dBm) |
 | 12 | trames radio perdues (numéros sautés), depuis le démarrage de la boîte |
+
+(*) 5 V de la recharge sans contact présent, pas « en charge » : il reste vrai accu plein.
 """
 
 from dataclasses import dataclass, replace
@@ -44,7 +46,7 @@ NB_REGISTRES_BOITE = 13
 SIGNATURE_BOITE = 0x5046
 ETAT_RADIO_MUETTE = 4
 PLATEAU_AU_POSTE = 1
-PLATEAU_EN_RECHARGE = 2
+PLATEAU_RECHARGE_PRESENTE = 2
 PLATEAU_SUR_USB = 4
 # Registre 11 : force du signal en dBm + ce décalage.
 DECALAGE_SIGNAL_DBM = 200
@@ -55,7 +57,7 @@ class Plateau:
     """Ce que la boîte du poste du fût dit du plateau (dernière trame radio reçue)."""
 
     au_poste: bool
-    en_recharge: bool
+    recharge_presente: bool
     sur_usb: bool
     accu_mv: int
     accu_pct: int
@@ -103,7 +105,7 @@ def decoder_boite(registres: list[int]) -> MesureCarte:
         radio_muette=bool(registres[4] & ETAT_RADIO_MUETTE),
         plateau=Plateau(
             au_poste=bool(plateau & PLATEAU_AU_POSTE),
-            en_recharge=bool(plateau & PLATEAU_EN_RECHARGE),
+            recharge_presente=bool(plateau & PLATEAU_RECHARGE_PRESENTE),
             sur_usb=bool(plateau & PLATEAU_SUR_USB),
             accu_mv=registres[9],
             accu_pct=registres[10],
@@ -152,7 +154,7 @@ def encoder(mesure: MesureCarte, signature: int = SIGNATURE) -> list[int]:
         return registres
     bits = (
         (PLATEAU_AU_POSTE if plateau.au_poste else 0)
-        | (PLATEAU_EN_RECHARGE if plateau.en_recharge else 0)
+        | (PLATEAU_RECHARGE_PRESENTE if plateau.recharge_presente else 0)
         | (PLATEAU_SUR_USB if plateau.sur_usb else 0)
     )
     return registres + [

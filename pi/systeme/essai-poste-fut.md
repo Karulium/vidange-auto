@@ -76,11 +76,12 @@ Dans les commandes ci-dessous, `vidange-es` veut dire
    ```
 
    Une ligne par seconde, par exemple
-   `poids lu    63.20 kg   substrat     3.80 kg   accu 3.95 V  84 % en recharge   radio -58 dBm, 0 trames perdues`.
+   `poids lu    63.20 kg   substrat     3.80 kg   accu 3.95 V  84 % recharge 5 V   radio -58 dBm, 0 trames perdues`.
    Les poids sont faux tant que la pesée n'est pas étalonnée (étape 5) : on regarde seulement qu'**ils
    changent quand on appuie** sur le plateau, et qu'ils restent **stables** (à quelques dixièmes près) sans
    y toucher. Avant l'étalonnage, la ligne peut dire `ÉCHEC : poids rejeté` : c'est normal.
-2. Regarder aussi : `en recharge` (la recharge sans contact marche), le **signal radio** (au-dessus de
+2. Regarder aussi : `recharge 5 V` (le 5 V de la recharge sans contact arrive au plateau ; il est là
+   aussi accu plein, ce n'est pas « en charge »), le **signal radio** (au-dessus de
    −80 dBm, c'est bon), et les **trames perdues** (elles ne doivent presque pas monter).
 3. Ctrl+C pour finir.
 4. **Si « ÉCHEC : pesée absente : la boîte du poste ne répond pas »** : la boîte n'est pas vue sur le bus.
@@ -90,7 +91,7 @@ Dans les commandes ci-dessous, `vidange-es` veut dire
 5. **Si « ÉCHEC : pesée absente : radio du plateau muette »** : la boîte répond mais n'entend pas le
    plateau. Plateau bien au fond ? Accu chargé (brancher l'USB-C de secours) ? Voyant de la carte du
    plateau ? Adresse radio du plateau bien recopiée dans les réglages de la boîte (tâche 17 ter) ?
-6. **Si « PAS EN RECHARGE »** plateau au fond : les bobines de la recharge sans contact ne sont pas face à
+6. **Si « PAS DE 5 V DE RECHARGE »** plateau au fond : les bobines de la recharge sans contact ne sont pas face à
    face, ou le récepteur est en panne. Le noter.
 
 ## Étape 5 : l'étalonnage (zéro, poids connu, tare)
@@ -117,17 +118,20 @@ jamais lui-même dans les réglages. Après chaque recopie, sauvegarder le fichi
 3. **Vérifier** : reposer le poids au centre, lancer `vidange-pesee lire` : le poids lu doit être le poids
    connu (à 0,2 kg près). Le poser près de chaque coin : même résultat (sinon, un des 4 capteurs est mal
    fixé ou mal câblé). Ctrl+C.
-4. **Tare (fût vide)** : poser un **fût vide** sur le plateau, entre les 4 cales, couvercle compris.
+4. **Tare (fût vide)** : le zéro a été fait **plateau vide** (point 1). Poser maintenant un **fût vide**
+   sur le plateau, entre les 4 cales, **avec son couvercle** (posé dessus).
 
    ```
    vidange-pesee tare
    ```
 
    Recopier la ligne `tare_kg: ...` dans `pi/reglages/machine.yaml`, partie `poste_fut` → `pesee`.
-   Attention : avec le zéro fait plateau vide, le poids lu ne compte plus le plateau ni le boîtier ;
-   la tare sera donc d'environ 33 kg (fût 29,5 kg + couvercle 3,9 kg), pas 59,4 kg (voir la question de
-   la PR de la tâche 17 bis).
-5. Régler `plausible_kg` (même partie) : poids lu permis, du fût vide (tare) au fût plein. Une valeur hors
+   La tare mesurée est le poids du fût vide et de son couvercle : environ 33,4 kg (fût 29,5 kg +
+   couvercle 3,9 kg). Le plateau et le boîtier n'y sont pas : le zéro les a déjà retirés. Si la ligne
+   dit beaucoup plus (≈ 60 kg), le zéro n'a pas été fait plateau vide : refaire le point 1.
+5. **Ensuite seulement**, régler `plausible_kg` (même partie), à partir de la tare mesurée : poids lu
+   permis, du fût vide (tare) au fût plein (tare + 96 kg de substrat au plus, ≈ 129 kg). Exemple du dépôt :
+   `[25, 150]`. Une valeur hors
    de ces bornes est **rejetée** (pas de poids) : la borne basse doit rester **sous la tare** (sinon, à la
    fin de la vidange, le fût presque vide serait « rejeté »), la borne haute au-dessus d'un fût plein.
 6. Dans `machine.yaml` (`poste_fut` → `pesee`), passer `exemple: true` à `exemple: false`. Vérifier les
@@ -171,15 +175,16 @@ jamais lui-même dans les réglages. Après chaque recopie, sauvegarder le fichi
 
 ## Étape 6 bis : l'accu du plateau
 
-1. Plateau au poste : la page web montre « Plateau : accu ... % (... V, en recharge) · radio ... dBm ».
+1. Plateau au poste : la page web montre « Plateau : accu ... % (... V, recharge 5 V présente) · radio ... dBm ».
 2. **Accu faible** (seulement si un accu presque vide est sous la main, sinon passer cette étape et la
    noter « pas faite ») : mettre cet accu dans le plateau, émetteur de la recharge sans contact débranché.
    Sous 3,5 V, une alerte « Accu du plateau faible : recharger le plateau » ; sous 3,3 V, « pesée bientôt
    absente ». Rien ne s'arrête. Remettre le bon accu.
 3. **Recharge en panne** : plateau au poste, débrancher le câble de l'émetteur de la recharge sans contact.
    Au bout de 10 min, une alerte « recharge sans contact en panne ? ». La rebrancher.
-   À noter : si la carte du plateau dit « pas en recharge » quand l'accu est **plein**, cette alerte
-   viendra aussi accu plein (voir la question de la PR de la tâche 17 bis).
+4. **Accu plein** (si l'essai a laissé le plateau au poste assez longtemps pour que l'accu soit plein) :
+   émetteur branché, plateau au fond 10 min de plus. Il ne doit **pas** y avoir d'alerte « recharge sans
+   contact en panne ? » : la carte du plateau dit « 5 V de la recharge présent », pas « en charge ».
 
 ## Étape 7 : le panneau et le mode
 

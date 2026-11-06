@@ -4141,8 +4141,9 @@ class AccuPlateauFut(Modele):
     bon_v: float = Field(gt=0, le=5)
     recharger_v: float = Field(gt=0, le=5)
     bientot_absente_v: float = Field(gt=0, le=5)
-    # Plateau au poste depuis plus de ... (s) sans « recharge en cours » : alerte « recharge
-    # sans contact en panne ? ».
+    # Plateau au poste depuis plus de ... (s) sans le « 5 V de la recharge sans contact présent »
+    # (registre 8, bit 1 = valeur 2 ; vrai aussi accu plein) : alerte « recharge sans contact en
+    # panne ? ».
     sans_recharge_max_s: float = Field(gt=0, le=86400)
 
     @model_validator(mode="after")

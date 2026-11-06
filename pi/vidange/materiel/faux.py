@@ -321,7 +321,7 @@ class FausseBoitePosteFut(FausseCartePesee):
         self.age_ms = 0
         self.radio_muette = False
         self.au_poste = True
-        self.en_recharge = True
+        self.recharge_presente = True
         self.sur_usb = False
         self.accu_mv = 3900
         self.accu_pct = 80
@@ -346,7 +346,7 @@ class FausseBoitePosteFut(FausseCartePesee):
                 radio_muette=muette,
                 plateau=carte_pesee.Plateau(
                     au_poste=self.au_poste,
-                    en_recharge=self.en_recharge,
+                    recharge_presente=self.recharge_presente,
                     sur_usb=self.sur_usb,
                     accu_mv=self.accu_mv,
                     accu_pct=self.accu_pct,

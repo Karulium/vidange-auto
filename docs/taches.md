@@ -1189,7 +1189,8 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
      plus à rien d'autre.
   3. **Étalonnage** dans `pi/reglages/pesees.yaml → etalonnage → pesee_fut` (retirer `zero_brut` et `brut_par_kg` de
      `machine.yaml → poste_fut → pesee`). Tare plateau + boîtier + fût vide + couvercle ≈ 59,4 kg ; bornes
-     plausibles ≈ 50 à 200 kg ; tout EXEMPLE. La boîte fait déjà la moyenne de 5 : le Pi ne refait pas une médiane
+     plausibles ≈ 50 à 200 kg ; tout EXEMPLE (corrigé : zéro plateau vide, donc tare 33,4 kg et bornes 25 à 150 kg,
+     `docs/decisions.md`, réponses à la PR n° 77). La boîte fait déjà la moyenne de 5 : le Pi ne refait pas une médiane
      de 5 lectures (1 par seconde, ce serait 5 s) ; garder seulement le rejet d'une valeur hors bornes. Mesure lue
      seulement griffe hors du fût, comme avant.
   4. **Pesée absente** : pas de réponse, registre 4 bit 2, ou âge (registre 3) > 2 s (réglage) ⇒ « pesée absente »,
@@ -1218,6 +1219,10 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   - **Plateau** : dort, se réveille sur le reed ; lit le HX711 à 10 mesures par seconde (RATE à la masse), moyenne
     de 5, une trame ESP-NOW toutes les 0,5 s (brut, numéro, HX711 muet, tension et %, recharge, USB-C de secours) ;
     tension de l'accu par pont diviseur ; se rendort 30 s après l'ouverture du reed.
+  - **Recharge** (réponse de Karulium à la PR n° 77, `docs/decisions.md`) : le bit 1 (valeur 2) du registre 8 veut
+    dire « **5 V de la recharge sans contact présent** », **pas** « en charge » : il reste vrai quand l'accu est
+    plein (sinon l'alerte « recharge sans contact en panne ? » viendrait à chaque accu plein). Le plateau le met
+    dans la trame, la boîte le recopie tel quel.
   - **Boîte du poste** : toujours alimentée ; reçoit les trames (seulement de l'adresse radio du plateau, dans les
     réglages, jamais dans le code) ; répond en Modbus RTU à 115 200 bauds, 8N1, registres 0 à 12 et signature
     0x5046 de 17 bis ; bit « radio muette » si rien depuis 2 s ; MAX3485 avec DE/RE. Reprendre le code Modbus de

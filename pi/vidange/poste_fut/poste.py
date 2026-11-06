@@ -135,7 +135,7 @@ class EtatPoste:
     # Accu et radio du plateau (dernière trame ; None si la radio ne parle pas).
     accu_v: float | None
     accu_pct: int | None
-    en_recharge: bool | None
+    recharge_presente: bool | None
     signal_dbm: int | None
     # "" si l'accu va bien, sinon l'alerte en cours (« recharger le plateau »...).
     accu: str
@@ -221,7 +221,8 @@ class PosteFut:
         self._infos_plateau: Plateau | None = None
         self._absence_signalee = False
         self._accu_signale = ACCU_BON
-        # Plateau en place : dernière fois qu'on l'a vu en recharge (ou son arrivée).
+        # Plateau en place : dernière fois qu'il a dit « 5 V de la recharge présent »
+        # (ou son arrivée). Ce bit reste vrai accu plein : pas de fausse alerte.
         self._recharge_vue_a: float | None = None
         self._recharge_signalee = False
         self._cycle: int | None = None
@@ -358,7 +359,7 @@ class PosteFut:
             self._alerter(message, QUOI_FAIRE_ACCU)
         if self._plateau.valeur is not True:
             return
-        if infos.en_recharge:
+        if infos.recharge_presente:
             self._recharge_vue_a = maintenant
         depuis = self._recharge_vue_a if self._recharge_vue_a is not None else maintenant
         if maintenant - depuis > seuils.sans_recharge_max_s and not self._recharge_signalee:
@@ -369,7 +370,7 @@ class PosteFut:
                 "contact en panne ?",
                 QUOI_FAIRE_RECHARGE,
             )
-        elif infos.en_recharge:
+        elif infos.recharge_presente:
             self._recharge_signalee = False
 
     def _alerter(self, message: str, quoi_faire: str) -> None:
@@ -453,7 +454,7 @@ class PosteFut:
                 poids_net_kg=None if poids is None or self.pesee is None else self.pesee.net(poids),
                 accu_v=None if infos is None else infos.accu_mv / 1000,
                 accu_pct=None if infos is None else infos.accu_pct,
-                en_recharge=None if infos is None else infos.en_recharge,
+                recharge_presente=None if infos is None else infos.recharge_presente,
                 signal_dbm=None if infos is None else infos.signal_dbm,
                 accu="" if niveau is None else TEXTES_ACCU[niveau],
                 manque=() if self._pret else tuple(self._manque()),

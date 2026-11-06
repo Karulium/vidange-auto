@@ -200,13 +200,13 @@ evenements:
 scenarios:
   # Échange d'un fût au poste (tâche 17 bis) : le plateau du fût vide s'en va, le suivant arrive.
   echange_fut:
-    # Au départ, le plateau du fût vide est au fond, sa radio parle : 62 kg lus (fût vide et son
-    # couvercle, 59,4 kg, et un reste de substrat).
+    # Au départ, le plateau du fût vide est au fond, sa radio parle : 36 kg lus (fût vide et son
+    # couvercle, 33,4 kg, et un reste de substrat de 2,6 kg).
     capteurs_actionnes: [plateau_fut_en_place]
     evenements:
       - attente_s: 0
         pesee: pesee_fut
-        kg: 62
+        kg: 36
       # Karulium relève le volet, desserre les freins et sort le plateau.
       - attente_s: 40
         capteur: plateau_fut_en_place
@@ -220,10 +220,11 @@ scenarios:
       - attente_s: 340
         capteur: plateau_fut_en_place
         actionne: true
-      # L'aimant du poste réveille le plateau : sa radio parle de nouveau (165 kg lus).
+      # L'aimant du poste réveille le plateau : sa radio parle de nouveau (129 kg lus : 95,6 kg
+      # de substrat et 33,4 kg de tare).
       - attente_s: 342
         pesee: pesee_fut
-        kg: 165
+        kg: 129
       # 2 roulettes freinées, volet rabattu, panneau levé, puis « Prêt ».
       - attente_s: 430
         capteur: bouton_pret_fut
@@ -248,15 +249,15 @@ scenarios:
       - attente_s: 31
         capteur: bouton_pret_fut
         actionne: false
-  # Vidange d'un fût par la griffe : plateau au fond, panneau levé (production), 119,4 kg lus
-  # (60 kg de substrat et 59,4 kg de tare), « Prêt » au bout de 5 s ; puis prises, couches,
+  # Vidange d'un fût par la griffe : plateau au fond, panneau levé (production), 93,4 kg lus
+  # (60 kg de substrat et 33,4 kg de tare), « Prêt » au bout de 5 s ; puis prises, couches,
   # passe de fond, fût vide.
   vidange_fut:
     capteurs_actionnes: [plateau_fut_en_place, reed_panneau_poste_fut]
     evenements:
       - attente_s: 0
         pesee: pesee_fut
-        kg: 119.4
+        kg: 93.4
       - attente_s: 5
         capteur: bouton_pret_fut
         actionne: true

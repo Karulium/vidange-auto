@@ -359,11 +359,12 @@ poste_fut:
     # EXEMPLE : tare et bornes à mesurer sur la vraie pesée (pi/systeme/essai-poste-fut.md),
     # puis passer « exemple » à false.
     exemple: true
-    # Plateau + boîtier (≈ 26 kg) + fût vide (29,5 kg) + couvercle (3,9 kg).
-    tare_kg: 59.4
-    # Poids lu plausible avec un fût sur le plateau (au plus ≈ 160 kg) : hors bornes, la valeur
+    # Le zéro est fait plateau vide (pesees.yaml) : le poids lu est donc fût vide (29,5 kg)
+    # + couvercle (3,9 kg) + substrat (96 kg au plus). Tare = fût vide + couvercle.
+    tare_kg: 33.4
+    # Poids lu plausible avec un fût sur le plateau (au plus ≈ 129 kg) : hors bornes, la valeur
     # est rejetée (pas de poids).
-    plausible_kg: [50, 200]
+    plausible_kg: [25, 150]
     # Plateau en place et pas de poids au bout de 5 s : « pesée absente » (jamais un arrêt).
     delai_apres_plateau_s: 5
     # Somme des doses de la griffe contre baisse de la pesée : avertissement au-delà de 3 kg.
