@@ -944,3 +944,9 @@ code : `pi/vidange/spray/` ; table des registres (langue commune avec la tâche 
   ou attendre. Dose incomplète, trop forte (+ 1 g) ou interrompue : notée et alertée, le cycle continue.
   Bras pas rangé : un seul nouvel essai automatique, puis alarme forte.
 - Testé sur le vrai matériel : non (procédure `pi/systeme/essai-spray.md`, après la tâche 39 bis).
+- **Spray, réponses à la PR n° 82** (tâche 39, 06/11/2026, niveau 1, tranché par Claude) :
+  1. Erreur du spray : la machine s'arrête et l'écran propose « Sans spray » ou « Attendre » (comme la fiche du module).
+  2. Amorce : 1 g (EXEMPLE) ajouté à la première dose après un changement de flacon, noté à part ; pas de seau perdu.
+  3. Bouton « Cartouche N confirmée » en attendant le lien QR du logiciel de culture : suffisant.
+  4. Doses ≈ 1 g par litre de seau (A 11, B 5, C 10, D 10 g ; Karulium 25/09 : ≈ 10 ml pour 10 L) : EXEMPLES, réglés
+     aux essais.
