@@ -34,6 +34,7 @@ from vidange.reglages import (
     rediger,
     traduire_erreurs,
 )
+from vidange.trame_ze25 import DERNIER_OCTET_SOMME, PREMIER_OCTET_SOMME, trame_valable
 
 ENTREES = ("contact", "pnp", "npn", "mesure")
 SORTIES = ("relais", "logique")
@@ -61,12 +62,15 @@ Appareil = Literal[
     "ads1115",
     "pcf8574",
     "mcp23017",
-    "transmetteur_modbus",
+    "ze25_o3",
     "nextion",
     "accelerometre",
     "carte_pesee",
     "boite_poste_fut",
 ]
+# Capteur d'ozone Winsen ZE25-O3 : une liaison série à lui seul (un adaptateur USB-RS485 par
+# capteur), pas un appareil Modbus (protocole : vidange/trame_ze25.py).
+CAPTEUR_OZONE = "ze25_o3"
 # Carte de pesée RP2040 + HX711 sur un bus RS485, lue en Modbus (pesee/README.md).
 CARTE_PESEE = "carte_pesee"
 # Boîte du poste du fût : reçoit par radio les mesures du plateau de pesée et répond sur le même
@@ -158,15 +162,56 @@ class Conversion(Modele):
         return self
 
 
-class Modbus(Modele):
-    """Mesure lue dans un registre d'un appareil Modbus RTU (RS485)."""
+class CapteurOzone(Modele):
+    """Réglages d'un capteur d'ozone ZE25-O3 (à vérifier sur sa notice papier)."""
 
-    registre: int = Field(ge=0, le=0xFFFF)
-    # 3 : registres de maintien (« holding »), 4 : registres d'entrée (« input »).
-    fonction: Literal[3, 4]
-    # Valeur = nombre lu dans le registre × échelle.
-    echelle: float
-    signe: bool = False
+    # « envoi_automatique » : le capteur parle tout seul ; « question_reponse » : le Pi demande.
+    mode: Literal["envoi_automatique", "question_reponse"]
+    # Valeur en ppm = nombre de la trame × ce pas.
+    pas_ppm: float = Field(gt=0)
+    # Pleine échelle du capteur : à partir de là, la valeur est « au plafond » (≥), pas exacte.
+    plafond_ppm: float = Field(gt=0)
+    # Sans trame valable depuis ce délai, le capteur est dit muet.
+    delai_muet_s: float = Field(gt=0)
+    # Positions (de 1 à 7) des 2 octets de la valeur dans la trame de 9 octets, poids fort
+    # d'abord. Elles ne sont pas les mêmes en envoi automatique et en question-réponse.
+    position_valeur: tuple[int, int]
+    # Question-réponse seulement : la trame de question, 9 octets en hexadécimal.
+    question: bytes | None = None
+
+    @field_validator("question", mode="before")
+    @classmethod
+    def _question_en_hexa(cls, valeur: Any) -> Any:
+        if isinstance(valeur, str):
+            try:
+                return bytes.fromhex(valeur)
+            except ValueError:
+                raise ValueError(
+                    "doit s'écrire en hexadécimal (exemple : FF0186000000000079)"
+                ) from None
+        return valeur
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "CapteurOzone":
+        erreurs: list[str] = []
+        premier, dernier = PREMIER_OCTET_SOMME, DERNIER_OCTET_SOMME
+        if not all(premier <= p <= dernier for p in self.position_valeur):
+            erreurs.append(f"« position_valeur » : des positions de {premier} à {dernier}")
+        if self.position_valeur[0] == self.position_valeur[1]:
+            erreurs.append("« position_valeur » : les 2 positions doivent être différentes")
+        if self.mode == "question_reponse":
+            if self.question is None:
+                erreurs.append("en question-réponse, « question » (la trame à envoyer) est requise")
+            elif not trame_valable(self.question):
+                erreurs.append(
+                    "« question » : une trame de 9 octets commençant par FF, "
+                    "avec la bonne somme de contrôle"
+                )
+        elif self.question is not None:
+            erreurs.append("« question » ne sert qu'en question-réponse")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
 
 
 class Carte(Modele):
@@ -202,8 +247,8 @@ class Signal(Modele):
     # Pour une mesure : son unité, et comment passer des volts à la valeur.
     unite: str = ""
     conversion: Conversion | None = None
-    # Pour un appareil Modbus : où lire sa mesure.
-    modbus: Modbus | None = None
+    # Pour un capteur d'ozone : son protocole et ses seuils.
+    ozone: CapteurOzone | None = None
     # Pour une entrée tout-ou-rien : l'état attendu à la check-list de démarrage (porte fermée,
     # sécurité en état...). Un autre état empêche de lancer la production, avec son nom.
     au_demarrage: Literal["actionne", "repos"] | None = None
@@ -246,13 +291,15 @@ class Signal(Modele):
             erreurs.append("« au_demarrage » ne sert qu'aux entrées contact, pnp ou npn")
         if self.conversion is not None and self.type != "mesure":
             erreurs.append("« conversion » ne sert qu'aux signaux de type mesure")
-        if self.appareil == "transmetteur_modbus":
-            if self.modbus is None:
-                erreurs.append("un transmetteur Modbus doit dire où lire sa mesure (« modbus: »)")
-            if self.adresse is None:
-                erreurs.append("un transmetteur Modbus doit avoir son adresse (exemple : 1)")
-        elif self.modbus is not None:
-            erreurs.append("« modbus » ne sert qu'à un appareil transmetteur_modbus")
+        if self.appareil == CAPTEUR_OZONE:
+            if self.ozone is None:
+                erreurs.append("un capteur d'ozone doit dire son protocole (« ozone: »)")
+            if self.type != "serie":
+                erreurs.append("un capteur d'ozone est sur une liaison série (« type: serie »)")
+            if self.adresse is not None:
+                erreurs.append("un capteur d'ozone n'a pas d'adresse (ce n'est pas du Modbus)")
+        elif self.ozone is not None:
+            erreurs.append(f"« ozone » ne sert qu'à un appareil {CAPTEUR_OZONE}")
         if self.appareil in PESEES_DU_BUS:
             if self.type != "serie":
                 erreurs.append("une pesée du bus RS485 est sur un bus série (« type: serie »)")

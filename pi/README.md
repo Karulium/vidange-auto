@@ -24,7 +24,8 @@ Pas encore de vrai module de la machine.
 | `vidange/fluidnc/outil.py` | Commande `vidange-fluidnc` (lister les ports, console) pour les essais |
 | `vidange/materiel/materiel.py` | Entrées/sorties du Pi par leur nom : lire, commander, mesurer |
 | `vidange/materiel/puces.py` | GPIO du Pi, bus I2C, PCF8574, MCP23017, ADS1115, SHT31, carte de pesée HX711 |
-| `vidange/materiel/modbus.py` | Modbus RTU sur RS485 (transmetteurs d'ozone, cartes de pesée) |
+| `vidange/materiel/modbus.py` | Modbus RTU sur RS485 (cartes de pesée) |
+| `vidange/materiel/ozone.py`, `vidange/trame_ze25.py` | Capteurs d'ozone ZE25-O3 en UART : trames de 9 octets, somme de contrôle, capteur muet, valeur au plafond |
 | `vidange/materiel/carte_pesee.py` | Table des registres d'une carte de pesée RP2040 + HX711 du bus RS485 |
 | `vidange/pesees/` | Cartes de pesée du bus RS485 lues à tour de rôle ; commande `vidange-pesees` (essais) |
 | `vidange/materiel/faux.py` | Faux capteurs et fausses cartes pour les tests et le simulateur |
@@ -145,7 +146,7 @@ with Materiel(liste) as materiel:  # liste = charger_entrees_sorties(...)
     materiel.ecrire("voyant_buzzer", True)  # True = relais commandé
     materiel.mesurer("vide_venturi")  # dans l'unité de la liste (kPa...)
     materiel.ambiance("sht31_armoire")  # .temperature_c, .humidite_pct
-    materiel.mesurer("ozone_1")  # ppm, par RS485
+    materiel.lire_ozone("ozone_dedans")  # ppm (ZE25-O3, une liaison série par capteur)
 ```
 
 - Le code ne pense jamais en niveaux électriques : « actionné » et « commandé » tiennent compte du sens

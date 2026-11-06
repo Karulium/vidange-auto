@@ -10,6 +10,9 @@ soit testé lui aussi. Seules les broches GPIO du Pi sont imitées plus haut (`F
     faux.regler("vide_venturi", -40)                  # dans l'unité du signal
     faux.regler_ambiance("sht31_armoire", 28.5, 70)
     faux.regler_pesee("pesee_griffe", 1_234_567)     # mesure brute d'une pesée du bus RS485
+    faux.regler("ozone_dedans", 0.85)                      # ppm : le faux ZE25-O3 envoie ses trames
+    faux.capteur_ozone("ozone_dedans").muet = True         # capteur d'ozone : plus aucune trame
+    faux.capteur_ozone("ozone_dedans").injecter(b"\xff\x00")  # octets de travers, à la main
     faux.commande("voyant_buzzer")                    # ce qu'a fait le programme
     faux.debrancher("sht31_armoire")                  # la puce ne répond plus
     faux.debrancher("pesee_fut")                      # la boîte du poste ne répond plus
@@ -27,6 +30,7 @@ from vidange.entrees_sorties import (
     BOITE_POSTE_FUT,
     BROCHES_DES_PUCES,
     PESEES_DU_BUS,
+    CapteurOzone,
     EntreesSorties,
     LiaisonUsbSerie,
 )
@@ -34,6 +38,7 @@ from vidange.materiel import carte_pesee
 from vidange.materiel.materiel import Branchement, tracer_branchements
 from vidange.materiel.modbus import crc_modbus
 from vidange.materiel.puces import Ads1115, BusI2c, Tirage, crc_sht31
+from vidange.trame_ze25 import trame_avec_valeur
 
 
 def _pas_de_reponse() -> OSError:
@@ -358,6 +363,73 @@ class FausseBoitePosteFut(FausseCartePesee):
         )
 
 
+class FauxCapteurOzone:
+    """Un capteur d'ozone ZE25-O3 sur sa liaison série, vu comme un port (il fait aussi le port).
+
+    En envoi automatique, une trame nouvelle arrive à chaque lecture (sauf `emission_automatique`
+    éteinte ou `muet`) ; en question-réponse, il répond à la bonne question."""
+
+    def __init__(self, reglage: CapteurOzone) -> None:
+        self.reglage = reglage
+        self.brut = 0
+        self.muet = False
+        self.emission_automatique = True
+        self.cable_coupe = False
+        self.ouvertures = 0
+        self._tampon = bytearray()
+
+    @property
+    def debranche(self) -> bool:
+        return self.muet
+
+    @debranche.setter
+    def debranche(self, valeur: bool) -> None:
+        self.muet = valeur
+
+    def trame(self) -> bytes:
+        return trame_avec_valeur(self.brut, self.reglage.position_valeur)
+
+    def injecter(self, octets: bytes) -> None:
+        """Des octets arrivent au Pi, tels quels (trame abîmée, coupée...)."""
+        self._tampon += octets
+
+    def ouvrir(self) -> "FauxCapteurOzone":
+        if self.cable_coupe:
+            raise OSError("faux ozone : adaptateur débranché")
+        self.ouvertures += 1
+        self._tampon.clear()
+        return self
+
+    @property
+    def in_waiting(self) -> int:
+        if self.cable_coupe:
+            raise OSError("faux ozone : adaptateur débranché")
+        if self.reglage.mode == "envoi_automatique" and self.emission_automatique and not self.muet:
+            self._tampon += self.trame()
+        return len(self._tampon)
+
+    def write(self, donnees: bytes) -> int:
+        if self.cable_coupe:
+            raise OSError("faux ozone : adaptateur débranché")
+        if self.reglage.mode == "question_reponse" and not self.muet:
+            if donnees == self.reglage.question:
+                self._tampon += self.trame()
+        return len(donnees)
+
+    def read(self, nombre: int) -> bytes:
+        if self.cable_coupe:
+            raise OSError("faux ozone : adaptateur débranché")
+        morceau = bytes(self._tampon[:nombre])
+        del self._tampon[:nombre]
+        return morceau
+
+    def reset_input_buffer(self) -> None:
+        self._tampon.clear()
+
+    def close(self) -> None:
+        pass
+
+
 class FauxRs485:
     """Un fil RS485 (port série) avec des appareils à leur adresse."""
 
@@ -409,6 +481,7 @@ class FausseFabrique:
         self.gpios: dict[str, FauxGpio] = {}
         self.bus: dict[str, FauxBusI2c] = {}
         self.rs485: dict[str, FauxRs485] = {}
+        self.ozones: dict[str, FauxCapteurOzone] = {}
         classes = {
             "sht31": FauxSht31,
             "ads1115": FauxAds1115,
@@ -423,6 +496,10 @@ class FausseFabrique:
                 bus = self.bus.setdefault(ressource[1], FauxBusI2c())
                 if ressource[2] not in bus.appareils:
                     bus.appareils[ressource[2]] = classes[ressource[3]]()
+            elif branchement.sorte == "ozone":
+                reglage = liste.signaux[branchement.nom].ozone
+                assert reglage is not None
+                self.ozones.setdefault(ressource[1], FauxCapteurOzone(reglage))
             else:
                 rs485 = self.rs485.setdefault(ressource[1], FauxRs485())
                 signal = liste.signaux[branchement.nom]
@@ -435,9 +512,6 @@ class FausseFabrique:
                     )
                     rs485.appareils.setdefault(signal.adresse, classe())
                     continue
-                assert signal.modbus is not None
-                transmetteur = rs485.appareils.setdefault(signal.adresse, FauxTransmetteurModbus())
-                transmetteur.registres.setdefault(signal.modbus.registre, 0)
         # Au départ, aucun capteur n'est actionné.
         for nom, branchement in self.branchements.items():
             if branchement.sorte == "entree":
@@ -451,7 +525,10 @@ class FausseFabrique:
     def bus_i2c(self, fichier: str) -> BusI2c:
         return self.bus.setdefault(fichier, FauxBusI2c())
 
-    def port_serie(self, liaison: LiaisonUsbSerie) -> FauxRs485:
+    def port_serie(self, liaison: LiaisonUsbSerie) -> FauxRs485 | FauxCapteurOzone:
+        for carte, ozone in self.ozones.items():
+            if self.liste.cartes[carte].liaison == liaison:
+                return ozone.ouvrir()
         for carte, rs485 in self.rs485.items():
             if self.liste.cartes[carte].liaison == liaison:
                 return rs485.ouvrir()
@@ -471,6 +548,8 @@ class FausseFabrique:
             return self.gpios[ressource[1]]
         if ressource[0] == "i2c":
             return self.bus[ressource[1]].appareils[ressource[2]]
+        if branchement.sorte == "ozone":
+            return self.ozones[ressource[1]]
         signal = self.liste.signaux[branchement.nom]
         return self.rs485[ressource[1]].appareils[signal.adresse]
 
@@ -485,13 +564,13 @@ class FausseFabrique:
         return branchement.actif(self._appareil(branchement).niveau(branchement.broche))
 
     def regler(self, nom: str, valeur: float) -> None:
-        """Mesure analogique ou Modbus, dans l'unité du signal."""
-        branchement = self._branchement(nom, "mesure", "modbus")
+        """Mesure analogique, ou ozone en ppm, dans l'unité du signal."""
+        branchement = self._branchement(nom, "mesure", "ozone")
         signal = self.liste.signaux[nom]
         appareil = self._appareil(branchement)
-        if branchement.sorte == "modbus":
-            assert signal.modbus is not None
-            appareil.registres[signal.modbus.registre] = round(valeur / signal.modbus.echelle)
+        if branchement.sorte == "ozone":
+            assert signal.ozone is not None
+            appareil.brut = round(valeur / signal.ozone.pas_ppm)
             return
         volts = valeur
         if signal.conversion is not None:
@@ -508,6 +587,10 @@ class FausseFabrique:
         """Mesure brute d'une pesée du bus RS485 (nombre signé de 24 bits)."""
         self._appareil(self._branchement(nom, "pesee")).brut = brut
 
+    def capteur_ozone(self, nom: str) -> FauxCapteurOzone:
+        """Le faux capteur d'ozone d'un signal (le rendre muet, lui injecter des octets...)."""
+        return self._appareil(self._branchement(nom, "ozone"))
+
     def carte_pesee(self, nom: str) -> FausseCartePesee:
         """La fausse carte de pesée du bus RS485 d'un signal (la figer, couper son HX711...),
         ou la fausse boîte du poste du fût (FausseBoitePosteFut : radio, accu...)."""
@@ -517,10 +600,10 @@ class FausseFabrique:
         return appareil
 
     def debrancher(self, nom: str, debranche: bool = True) -> None:
-        """La puce I2C, le transmetteur ou la carte de pesée du signal ne répond plus
+        """La puce I2C, le capteur d'ozone ou la carte de pesée du signal ne répond plus
         (ou de nouveau)."""
         branchement = self._branchement(
-            nom, "mesure", "modbus", "ambiance", "entree", "sortie", "pesee"
+            nom, "mesure", "ozone", "ambiance", "entree", "sortie", "pesee"
         )
         if branchement.ressource[0] == "gpio":
             raise KeyError("faux : une broche GPIO du Pi ne se débranche pas")

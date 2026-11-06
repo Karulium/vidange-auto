@@ -16,7 +16,7 @@
 | Micro USB | Écoute des bruits anormaux | Côté Pi |
 | Voyant + buzzer « attention » (sortie relais ou GPIO) | Prévenir sur place avant un mouvement lancé à distance ou une reprise | Côté Pi |
 | Pile de l'horloge du Pi 5 | Heure juste sans réseau | Rien |
-| Adaptateur USB-RS485 | 2 transmetteurs d'ozone | Côté Pi |
+| 2 adaptateurs USB-RS485 (un par capteur) | 2 capteurs d'ozone ZE25-O3 en UART (`ozone_dedans`, `ozone_dehors`), pour informer seulement | Côté Pi |
 | 2ᵉ adaptateur USB-RS485 | Bus des 3 cartes de pesée | Côté Pi |
 | Cartes 8 relais, cartes d'entrées 24 V optocouplées | Sorties et entrées tout-ou-rien | Réglages + côté Pi |
 | Caméras : plafond (Camera Module 3 Wide), tête de griffe (USB 5 Mpx), dosage (sur servo) | Vision, QR, photos | Côté Pi |

@@ -1,4 +1,4 @@
-"""Modbus RTU sur RS485 : lecture de registres (transmetteurs d'ozone).
+"""Modbus RTU sur RS485 : lecture de registres (cartes de pesée).
 
 Seule la lecture est écrite (fonctions 3 et 4) : le Pi ne fait qu'afficher ces mesures.
 Une trame : adresse, fonction, données, puis une somme de contrôle (CRC-16 Modbus).

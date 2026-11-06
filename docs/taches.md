@@ -1230,7 +1230,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   - Pas de Wi-Fi ni de réseau : ESP-NOW seulement (exception décidée par Karulium). Mise à jour par le câble USB,
     comme les autres cartes.
 - [ ] 38. Nettoyage
-- [ ] **38 bis. Capteurs d'ozone Winsen ZE25-O3 en UART (ozone_1 et ozone_2)** — Modèle : Sonnet, effort moyen.
+- [x] **38 bis. Capteurs d'ozone Winsen ZE25-O3 en UART (ozone_1 et ozone_2)** — Modèle : Sonnet, effort moyen.
   Sources (recopiées ici le 31/10/2026) : fiche du module « Nettoyage », de nouveau **gelé le 31/10/2026** (choix du
   ZE25-O3 validé par Karulium), plan d'implantation. Remplace la lecture Modbus de l'ozone (tâche 2 :
   `pi/vidange/materiel/modbus.py`, `transmetteur_modbus`).

@@ -1,6 +1,7 @@
 """Tests des entrées/sorties du Pi par leur nom, avec le faux matériel."""
 
 import re
+import time
 
 import pytest
 
@@ -96,7 +97,7 @@ def relais_par(entrees_sorties, liaison):
     """La carte relais reliée autrement : même programme, même nom de signal."""
     texte = entrees_sorties.read_text(encoding="utf-8")
     debut = texte.index("    # Exemple de liaison par une puce I2C PCF8574")
-    fin = texte.index("  rs485_ozone:")
+    fin = texte.index("  rs485_ozone_dedans:")
     entrees_sorties.write_text(texte[:debut] + liaison + texte[fin:], encoding="utf-8")
 
 
@@ -186,13 +187,13 @@ def test_ambiance_de_l_armoire(faux_et_materiel):
     assert ambiance.humidite_pct == pytest.approx(88, abs=0.01)
 
 
-def test_ozone_par_modbus(faux_et_materiel):
+def test_ozone_en_ppm(faux_et_materiel):
     faux, materiel = faux_et_materiel
-    faux.regler("ozone_1", 0.085)
-    faux.regler("ozone_2", 0.012)
-    assert materiel.mesurer("ozone_1") == pytest.approx(0.085)
-    assert materiel.mesurer("ozone_2") == pytest.approx(0.012)
-    assert materiel.unite("ozone_1") == "ppm"
+    faux.regler("ozone_dedans", 0.85)
+    faux.regler("ozone_dehors", 0.12)
+    assert materiel.mesurer("ozone_dedans") == pytest.approx(0.85)
+    assert materiel.mesurer("ozone_dehors") == pytest.approx(0.12)
+    assert materiel.unite("ozone_dedans") == "ppm"
 
 
 def test_puce_debranchee_le_reste_continue(faux_et_materiel):
@@ -200,10 +201,14 @@ def test_puce_debranchee_le_reste_continue(faux_et_materiel):
     faux.debrancher("sht31_armoire")
     with pytest.raises(ErreurMateriel, match="signal « sht31_armoire » : puce I2C 0x44"):
         materiel.ambiance("sht31_armoire")
-    faux.debrancher("ozone_1")
-    with pytest.raises(ErreurMateriel, match="signal « ozone_1 » : rs485_ozone, appareil 1"):
-        materiel.mesurer("ozone_1")
-    assert materiel.mesurer("ozone_2") == 0
+    materiel.mesurer("ozone_dedans")  # il a parlé une fois, puis plus rien
+    faux.debrancher("ozone_dedans")
+    # 100 s plus tard, sans une trame : muet (l'horloge du lecteur avance, pas le test).
+    lecteur = materiel._ozones["ozone_dedans"]
+    lecteur._horloge = lambda: time.monotonic() + 100
+    with pytest.raises(ErreurMateriel, match="signal « ozone_dedans » : rs485_ozone_dedans : muet"):
+        materiel.mesurer("ozone_dedans")
+    assert materiel.mesurer("ozone_dehors") == 0  # l'autre capteur n'est pas gêné
     faux.debrancher("sht31_armoire", False)
     materiel.ambiance("sht31_armoire")
 
@@ -234,7 +239,7 @@ def test_mauvais_usage_d_un_nom(faux_et_materiel):
         materiel.ecrire("porte_spray", True)
     with pytest.raises(ErreurMateriel, match="le Pi ne le lit pas lui-même"):
         materiel.lire("ecran_nextion")
-    with pytest.raises(ErreurMateriel, match="pas « mesure ou modbus »"):
+    with pytest.raises(ErreurMateriel, match="pas « mesure ou ozone »"):
         materiel.mesurer("sht31_armoire")
 
 

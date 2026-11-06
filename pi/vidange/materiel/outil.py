@@ -19,6 +19,7 @@ from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.journal import configurer_journal
 from vidange.materiel.faux import FausseFabrique
 from vidange.materiel.materiel import Materiel, tracer_branchements
+from vidange.materiel.ozone import texte_ppm
 from vidange.materiel.puces import ErreurMateriel
 from vidange.reglages import ErreurReglages
 
@@ -32,6 +33,11 @@ def valeur(materiel: Materiel, nom: str) -> str:
             return "COMMANDÉE" if materiel.lire(nom) else "repos"
         if sorte == "pesee":
             return f"{materiel.peser(nom)} (mesure brute, voir vidange-pesees)"
+        if sorte == "ozone":
+            reglage = materiel.liste.signaux[nom].ozone
+            mesure = materiel.lire_ozone(nom)
+            texte = texte_ppm(mesure, reglage.plafond_ppm)
+            return f"{texte} ({mesure.trames_ignorees} trames ignorées)"
         if sorte == "ambiance":
             ambiance = materiel.ambiance(nom)
             return f"{ambiance.temperature_c:.1f} °C, {ambiance.humidite_pct:.0f} %"

@@ -10,7 +10,7 @@ def test_lister(entrees_sorties, capsys):
     assert "voyant_buzzer (sortie) : repos" in sortie
     assert "sht31_armoire (ambiance) : 25.0 °C, 50 %" in sortie
     assert "vide_venturi (mesure) : 12.49 kPa" in sortie  # 0 V sur la voie → 12,49 kPa (la droite)
-    assert "ozone_1 (modbus) : 0 ppm" in sortie
+    assert "ozone_dedans (ozone) : 0,00 ppm" in sortie
     assert (
         "Pas lus par le Pi lui-même : servo_camera_dosage, ads1115_bus, ecran_nextion, "
         "accelerometre_fil, relais_1_bus" in sortie
@@ -29,9 +29,9 @@ def test_commander(entrees_sorties, capsys):
 
 def test_lister_seulement_quelques_signaux(entrees_sorties, capsys):
     arguments = ["--entrees-sorties", str(entrees_sorties), "--faux", "lister"]
-    assert outil.main([*arguments, "sht31_armoire", "ozone_2"]) == 0
+    assert outil.main([*arguments, "sht31_armoire", "ozone_dehors"]) == 0
     sortie = capsys.readouterr().out
-    assert "sht31_armoire (ambiance)" in sortie and "ozone_2 (modbus)" in sortie
+    assert "sht31_armoire (ambiance)" in sortie and "ozone_dehors (ozone)" in sortie
     assert "porte_spray" not in sortie
     assert outil.main([*arguments, "ecran_nextion"]) == 2
     assert "pas lus par le Pi lui-même : ecran_nextion" in capsys.readouterr().out

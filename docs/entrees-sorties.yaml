@@ -124,20 +124,36 @@ cartes:
         K7: P6
         K8: P7
       niveau_actif: bas
-  rs485_ozone:
+  # Capteurs d'ozone Winsen ZE25-O3 (0 à 10 ppm) : UN adaptateur USB-RS485 PAR capteur (2 liaisons
+  # séparées : ozone_dedans et ozone_dehors), chacun reconnu par son numéro de série. Le ZE25-O3
+  # parle en série (UART) : 9600 bauds, 8 bits, sans parité, 1 arrêt, trames de 9 octets
+  # (vidange/trame_ze25.py). Valeurs À VÉRIFIER sur la notice papier avant l'essai.
+  # delai_reponse_s : ne sert qu'à ouvrir le port ; l'attente d'une trame est « delai_muet_s ».
+  rs485_ozone_dedans:
     exemple: true
-    description: Adaptateur USB-RS485 des 2 transmetteurs d'ozone
+    description: Adaptateur USB-RS485 du capteur d'ozone (dedans)
     tension_max: 5
     isolee: false
     liaison:
       type: usb_serie
-      numero_serie_usb: "EXEMPLE-RS485"
+      numero_serie_usb: "EXEMPLE-RS485-OZONE-DEDANS"
+      vitesse_bauds: 9600
+      parite: aucune
+      delai_reponse_s: 0.5
+  rs485_ozone_dehors:
+    exemple: true
+    description: Adaptateur USB-RS485 du capteur d'ozone (dehors)
+    tension_max: 5
+    isolee: false
+    liaison:
+      type: usb_serie
+      numero_serie_usb: "EXEMPLE-RS485-OZONE-DEHORS"
       vitesse_bauds: 9600
       parite: aucune
       delai_reponse_s: 0.5
   # 2ᵉ adaptateur USB-RS485, réservé aux 3 cartes de pesée embarquées (RP2040 + HX711 : griffe,
   # préhension, plateau du remplissage) et à la boîte du poste du fût (pesée du plateau du fût,
-  # tâche 17 bis), séparé du Modbus de l'ozone (docs/decisions.md, 28/10).
+  # tâche 17 bis), séparé des liaisons série des capteurs d'ozone (docs/decisions.md, 28/10).
   # Puce à numéro de série unique (FT232 ou CP2102N). Programme des cartes : pesee/.
   # delai_reponse_s : une question et sa réponse durent ≈ 3 ms ; au-delà de ce délai, la carte
   # est dite muette pour cette question (le Pi passe à la suivante).
@@ -456,36 +472,40 @@ signaux:
     module: armoire
     appareil: pcf8574
     fichier: /dev/i2c-1
-  ozone_1:
+  ozone_dedans:
     exemple: true
-    description: Transmetteur d'ozone n° 1 (pour afficher ; la sécurité ozone est câblée)
-    carte: rs485_ozone
+    description: Capteur d'ozone ZE25-O3 (dedans) ; le Pi l'affiche et attend, la sécurité ozone est câblée
+    carte: rs485_ozone_dedans
     broche: [A, B]
     type: serie
     tension: 5
-    adresse: 1
     module: armoire
-    appareil: transmetteur_modbus
+    appareil: ze25_o3
     unite: ppm
-    modbus:
-      registre: 0
-      fonction: 3
-      echelle: 0.001
-  ozone_2:
+    # EXEMPLES, à vérifier sur la notice du ZE25-O3.
+    ozone:
+      mode: envoi_automatique   # ou question_reponse (alors « question: » est obligatoire)
+      position_valeur: [4, 5]   # octets de la valeur (poids fort, poids faible) ; en question-réponse : [2, 3]
+      pas_ppm: 0.01             # ppm par unité de la trame
+      plafond_ppm: 10           # pleine échelle : à partir de là, l'écran dit « ≥ 10 ppm »
+      delai_muet_s: 5           # sans trame valable depuis ce délai : capteur « muet »
+  ozone_dehors:
     exemple: true
-    description: Transmetteur d'ozone n° 2 (pour afficher ; la sécurité ozone est câblée)
-    carte: rs485_ozone
+    description: Capteur d'ozone ZE25-O3 (dehors) ; le Pi l'affiche et attend, la sécurité ozone est câblée
+    carte: rs485_ozone_dehors
     broche: [A, B]
     type: serie
     tension: 5
-    adresse: 2
     module: armoire
-    appareil: transmetteur_modbus
+    appareil: ze25_o3
     unite: ppm
-    modbus:
-      registre: 0
-      fonction: 3
-      echelle: 0.001
+    # EXEMPLES, à vérifier sur la notice du ZE25-O3.
+    ozone:
+      mode: envoi_automatique   # ou question_reponse (alors « question: » est obligatoire)
+      position_valeur: [4, 5]   # octets de la valeur (poids fort, poids faible) ; en question-réponse : [2, 3]
+      pas_ppm: 0.01             # ppm par unité de la trame
+      plafond_ppm: 10           # pleine échelle : à partir de là, l'écran dit « ≥ 10 ppm »
+      delai_muet_s: 5           # sans trame valable depuis ce délai : capteur « muet »
   plateau_fut_en_place:
     exemple: true
     # Inductif M12 PNP dans l'aile arrière de la butée d'angle côté portique : voit le bord du
