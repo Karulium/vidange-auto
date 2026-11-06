@@ -97,7 +97,7 @@ class Contexte:
     panneau_rabattu: bool = False
     # La caméra du dosage pivote (ou va pivoter).
     camera_dosage_pivote: bool = False
-    # Le chariot du fût est absent ou en mouvement.
+    # Le plateau du fût est absent ou en mouvement.
     echange_fut: bool = False
     # L'objet tenu (None : rien).
     objet: Objet | None = None

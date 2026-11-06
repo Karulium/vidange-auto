@@ -38,17 +38,13 @@ from vidange.reglages import (
 ENTREES = ("contact", "pnp", "npn", "mesure")
 SORTIES = ("relais", "logique")
 BUS = ("i2c", "serie")
-# Carte de pesée HX711 lue directement par 2 broches du Pi : [DT, SCK] (données, horloge).
-PESEE = "pesee"
 # Sortie PWM matérielle du Pi (servo de la caméra du dosage) : commandée par la vision, pas par
 # le matériel tout-ou-rien.
 PWM = "pwm"
 # Types qui ont un état au repos (contact ouvert ou fermé).
 AVEC_REPOS = ("contact", "pnp", "npn", "relais")
 
-TypeSignal = Literal[
-    "contact", "pnp", "npn", "mesure", "relais", "logique", "i2c", "serie", "pesee", "pwm"
-]
+TypeSignal = Literal["contact", "pnp", "npn", "mesure", "relais", "logique", "i2c", "serie", "pwm"]
 # Entrées et sorties tout-ou-rien (pas les mesures).
 TOUT_OU_RIEN = ("contact", "pnp", "npn", "relais", "logique")
 
@@ -69,9 +65,15 @@ Appareil = Literal[
     "nextion",
     "accelerometre",
     "carte_pesee",
+    "boite_poste_fut",
 ]
 # Carte de pesée RP2040 + HX711 sur un bus RS485, lue en Modbus (pesee/README.md).
 CARTE_PESEE = "carte_pesee"
+# Boîte du poste du fût : reçoit par radio les mesures du plateau de pesée et répond sur le même
+# bus, en Modbus (tâche 17 bis). Pas une carte RP2040 : son programme n'est pas fait par pesee/.
+BOITE_POSTE_FUT = "boite_poste_fut"
+# Les appareils de pesée du bus RS485 des pesées.
+PESEES_DU_BUS = (CARTE_PESEE, BOITE_POSTE_FUT)
 Texte = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 
 
@@ -242,11 +244,6 @@ class Signal(Modele):
                 erreurs.append(f"« {champ} » ne sert qu'aux bus (i2c, serie)")
         if self.au_demarrage is not None and self.type not in ("contact", "pnp", "npn"):
             erreurs.append("« au_demarrage » ne sert qu'aux entrées contact, pnp ou npn")
-        if self.type == PESEE and len(self.broche) != 2:
-            erreurs.append(
-                "une pesée (HX711) a 2 broches, dans cet ordre : [DT, SCK] "
-                "(exemple : [GPIO20, GPIO21])"
-            )
         if self.conversion is not None and self.type != "mesure":
             erreurs.append("« conversion » ne sert qu'aux signaux de type mesure")
         if self.appareil == "transmetteur_modbus":
@@ -256,11 +253,13 @@ class Signal(Modele):
                 erreurs.append("un transmetteur Modbus doit avoir son adresse (exemple : 1)")
         elif self.modbus is not None:
             erreurs.append("« modbus » ne sert qu'à un appareil transmetteur_modbus")
-        if self.appareil == CARTE_PESEE:
+        if self.appareil in PESEES_DU_BUS:
             if self.type != "serie":
-                erreurs.append("une carte de pesée est sur un bus série (« type: serie »)")
+                erreurs.append("une pesée du bus RS485 est sur un bus série (« type: serie »)")
             if self.adresse is None or not 1 <= self.adresse <= 247:
-                erreurs.append("une carte de pesée doit avoir son adresse sur le bus, de 1 à 247")
+                erreurs.append(
+                    "une pesée du bus RS485 doit avoir son adresse sur le bus, de 1 à 247"
+                )
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self
@@ -484,9 +483,8 @@ class EntreesSorties(Modele):
             if puce == "ads1115":
                 permis = ("mesure",)
             elif directe:
-                # Le Pi lui-même : pas d'entrée analogique, mais ses bus, la pesée (HX711) et
-                # ses sorties PWM.
-                permis = (*TOUT_OU_RIEN, *BUS, PESEE, PWM)
+                # Le Pi lui-même : pas d'entrée analogique, mais ses bus et ses sorties PWM.
+                permis = (*TOUT_OU_RIEN, *BUS, PWM)
             else:
                 permis = TOUT_OU_RIEN
             if signal.type not in permis:

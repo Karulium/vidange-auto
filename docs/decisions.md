@@ -672,6 +672,20 @@ si l'une pose problème, elle le dit dans sa PR.
      sous 3,3 V, alerte « recharge en panne » si plateau au poste depuis 10 min sans recharge (seuils : réglages,
      EXEMPLES).
   Les numéros d'entrées viendront de l'Implantation. Côté Pi : tâche 17 bis ; programmes des 2 ESP32-C3 : 17 ter.
+- **Plateau de pesée, réponses à la PR n° 77** (tâche 17 bis, 06/11/2026, niveau 1, tranché par Claude) :
+  1. **Tare** : le zéro est fait **plateau vide** (`pesees.yaml`), donc le poids lu = fût vide (29,5 kg) + couvercle
+     (3,9 kg) + substrat (96 kg au plus). `machine.yaml → poste_fut → pesee` : **tare 33,4 kg**, bornes plausibles
+     **25 à 150 kg** (EXEMPLES). Simulateur : `vidange_fut` lit 93,4 kg (60 kg de substrat), `echange_fut` lit 36 kg
+     pour le fût vide puis 129 kg pour le fût plein. À l'essai : mesurer la vraie tare (fût vide + couvercle sur le
+     plateau taré), puis régler les bornes.
+  2. **Bit 1 (valeur 2) du registre 8** de la boîte du poste : « **5 V de la recharge sans contact présent** », pas
+     « en charge » : il reste vrai accu plein, donc un accu plein ne déclenche pas l'alerte « recharge sans contact en
+     panne ? » (code : `recharge_presente`). À faire ainsi dans le programme du plateau (tâche 17 ter).
+  3. **Alertes du poste** (pesée absente, accu faible, recharge en panne) : des **alarmes du registre** (écran, page
+     web, envoi avec le cycle), **pour information seulement**. Elles ne bloquent jamais le cycle : ni le « Prêt », ni
+     la vidange, ni le seau suivant n'attendent leur acquittement (la pesée n'arrête jamais la machine). Vérifié dans
+     le code (le chef ne lit pas les alarmes du registre ; la check-list les dit « attention », jamais « bloquant ») et
+     par deux tests (`test_alarmes_du_poste_ne_bloquent_jamais`, `test_alarmes_du_poste_ne_bloquent_pas_la_vidange`).
 - **Portique, réponses à la PR n° 75** (tâche 36 bis, 06/11/2026, niveau 1, fil logiciel) :
   1. Le pilote boucle fermée du godet ne laisse pas FluidNC baisser son courant : prise d'origine du godet **lente**,
      et les sorties d'alarme des pilotes A et B de la griffe vont **en parallèle sur l'entrée libre E12 de la carte

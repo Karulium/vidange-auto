@@ -116,42 +116,29 @@ class Rectangle(Modele):
 
 
 class PeseeFut(Modele):
-    """Pesée du chariot du fût (carte HX711 lue par le Pi)."""
+    """Pesée du plateau du fût (sans fil : boîte du poste sur le bus des pesées, tâche 17 bis).
 
-    # Vrai tant que l'étalonnage et la tare n'ont pas été faits sur la vraie pesée.
+    L'étalonnage (zéro, pente) est dans pesees.yaml (etalonnage → pesee_fut), comme les autres
+    pesées du bus ; ici, ce que le poste du fût fait du poids."""
+
+    # Vrai tant que la tare et les bornes n'ont pas été mesurées sur la vraie pesée.
     exemple: bool = False
-    # Étalonnage (pi/systeme/essai-poste-fut.md) : mesure brute à vide, et nombre de points
-    # de la mesure brute par kilogramme posé.
-    zero_brut: int
-    brut_par_kg: float
-    # Poids du berceau + fût vide (kg) : poids net du substrat = poids lu − tare.
+    # Poids lu avec un fût vide et son couvercle (kg) : poids net du substrat = poids lu − tare.
     tare_kg: float = Field(ge=0)
-    # Poids lu (berceau + fût + contenu) plausible quand un fût est en place (kg).
+    # Poids lu plausible quand un fût est sur le plateau (kg) : une valeur hors de ces bornes
+    # est rejetée (pas de poids).
     plausible_kg: Intervalle
-    # Une pesée = la médiane de plusieurs lectures ; une lecture qui s'en écarte de plus de
-    # « ecart_aberrant_kg » est jetée ; il en faut au moins « lectures_valides_min ».
-    lectures: int = Field(ge=1, le=50)
-    lectures_valides_min: int = Field(ge=1)
-    ecart_aberrant_kg: float = Field(gt=0)
-    # Attente maximale de la carte à chaque lecture (s) : au-delà, « pesée débranchée ».
-    delai_reponse_s: float = Field(gt=0)
-    # Une pesée tous les combien (s), sur la machine.
-    periode_s: float = Field(gt=0)
+    # Après « plateau en place », la pesée doit répondre dans ce délai (s) : sinon, « pesée
+    # absente » (message, journal, alerte ; jamais un refus ni un arrêt).
+    delai_apres_plateau_s: float = Field(gt=0)
     # Écart permis entre la somme des doses de la griffe et la baisse de la pesée (kg) :
     # au-delà, un avertissement (pas un arrêt).
     ecart_doses_max_kg: float = Field(gt=0)
 
     @model_validator(mode="after")
     def _verifier(self) -> "PeseeFut":
-        erreurs = []
-        if self.brut_par_kg == 0:
-            erreurs.append("brut_par_kg ne peut pas valoir 0")
         if self.plausible_kg[0] >= self.plausible_kg[1]:
-            erreurs.append("plausible_kg : aller du plus petit au plus grand")
-        if self.lectures_valides_min > self.lectures:
-            erreurs.append("lectures_valides_min ne peut pas dépasser lectures")
-        if erreurs:
-            raise ValueError("\n".join(erreurs))
+            raise ValueError("plausible_kg : aller du plus petit au plus grand")
         return self
 
 
@@ -172,8 +159,8 @@ class PosteFut(Modele):
     # Fond intérieur et bord, à peu près : le fond est trouvé au toucher par la griffe.
     fut_fond_interieur_z: float
     fut_bord_z: float
-    # Chariot du fût absent ou en mouvement : le pont reste hors de cet intervalle de x
-    # (le chariot monte à 1,06, le chariot X du pont descend à 1,11).
+    # Plateau du fût absent ou en mouvement : le pont reste hors de cet intervalle de x
+    # (le fût monte à 1,06, le chariot X du pont descend à 1,11).
     pont_interdit_x: Intervalle
     # Pendant ce temps, le bout du chariot de remplissage reste à y ≤ cette valeur
     # (poste ou files 1 et 2, jamais devant la 3ᵉ file).
@@ -645,7 +632,7 @@ class Griffe(Modele):
     format_par_defaut: Nom
     # Le mât quand la griffe vide dans le seau du chariot de remplissage (au vidage, y 0,42).
     seau_remplissage: tuple[float, float]
-    # Où le mât attend, hors de la zone du chariot du fût, quand le fût est vide.
+    # Où le mât attend, hors de la zone du plateau du fût, quand le fût est vide.
     attente: tuple[float, float]
 
     @model_validator(mode="after")
@@ -1505,7 +1492,7 @@ class VerrousRemplissage(Modele):
     # Règle 8 (agitateur fixe, 01/11/2026) : en deçà du dosage (y < dosage_y, le poste), bord du
     # seau (plateau + h) ≤ poste_bord_max_z TOUJOURS (manivelle en bas : à 0,70 le seau touche).
     poste_bord_max_z: float
-    # Règle 7 : chariot du fût pas en place : bout du chariot côté allée (y + bout_y_m) ≤
+    # Règle 7 : plateau du fût pas en place : bout du chariot côté allée (y + bout_y_m) ≤
     # poste_fut → remplissage_y_bout_max.
     bout_y_m: float = Field(ge=0)
     # Règle 9 (préhension) : pas de descente de la face de la tête sous tant au-dessus du
@@ -3666,7 +3653,7 @@ class MouvementSimule(Modele):
 
 class EvenementSimule(Modele):
     """Un capteur qui change pendant la simulation (Karulium ferme un panneau...),
-    ou une pesée qui change (poids posé, prise débranchée)."""
+    ou une pesée qui change (poids posé, boîte qui ne répond plus, radio du plateau muette)."""
 
     # Compté depuis le début de cette étape (« module.etape ») ; sans « apres » : depuis le
     # début de la simulation.
@@ -3677,21 +3664,24 @@ class EvenementSimule(Modele):
     # Entrée tout-ou-rien de docs/entrees-sorties.yaml, actionnée ou non...
     capteur: Nom | None = None
     actionne: bool | None = None
-    # ... ou pesée (signal de type pesee) : poids lu en kg, ou prise débranchée.
+    # ... ou pesée du poste du fût (pesee_fut) : poids lu en kg (la radio parle), boîte qui ne
+    # répond plus (debranchee), ou radio du plateau muette (plateau endormi, accu vide).
     pesee: Nom | None = None
     kg: float | None = None
     debranchee: bool = False
+    radio_muette: bool = False
 
     @model_validator(mode="after")
     def _une_seule_chose(self) -> "EvenementSimule":
         capteur = self.capteur is not None and self.actionne is not None
-        pesee = self.pesee is not None and (self.kg is not None) != self.debranchee
+        choses = (self.kg is not None) + self.debranchee + self.radio_muette
+        pesee = self.pesee is not None and choses == 1
         reste_capteur = self.capteur is not None or self.actionne is not None
-        reste_pesee = self.pesee is not None or self.kg is not None or self.debranchee
+        reste_pesee = self.pesee is not None or choses > 0
         if not ((capteur and not reste_pesee) or (pesee and not reste_capteur)):
             raise ValueError(
-                "écrire « capteur » et « actionne », ou « pesee » avec « kg » ou "
-                "« debranchee: true » (une seule chose par événement)"
+                "écrire « capteur » et « actionne », ou « pesee » avec « kg », "
+                "« debranchee: true » ou « radio_muette: true » (une seule chose par événement)"
             )
         return self
 
@@ -4125,8 +4115,51 @@ class EtalonnagePesee(Modele):
         return self
 
 
+class PeseeLente(Modele):
+    """Une pesée du bus lue moins souvent que les autres (la boîte du poste du fût)."""
+
+    # Au plus une question toutes les ... (s).
+    espacement_s: float = Field(gt=0, le=60)
+    # Mesure plus vieille que ça (ms) : la pesée est dite muette (remplace age_max_ms).
+    age_max_ms: int = Field(gt=0, le=60000)
+
+    @model_validator(mode="after")
+    def _age(self) -> "PeseeLente":
+        if self.age_max_ms <= self.espacement_s * 1000:
+            raise ValueError(
+                f"age_max_ms ({self.age_max_ms}) doit dépasser espacement_s "
+                f"({self.espacement_s:g} s) : sinon la pesée serait toujours dite muette"
+            )
+        return self
+
+
+class AccuPlateauFut(Modele):
+    """Accu 18650 du plateau de pesée du poste du fût : seuils des alertes (tâche 17 bis)."""
+
+    # Tension (V) : au moins bon_v = bon ; sous recharger_v : alerte « recharger le plateau » ;
+    # sous bientot_absente_v : alerte forte « pesée bientôt absente ».
+    bon_v: float = Field(gt=0, le=5)
+    recharger_v: float = Field(gt=0, le=5)
+    bientot_absente_v: float = Field(gt=0, le=5)
+    # Plateau au poste depuis plus de ... (s) sans le « 5 V de la recharge sans contact présent »
+    # (registre 8, bit 1 = valeur 2 ; vrai aussi accu plein) : alerte « recharge sans contact en
+    # panne ? ».
+    sans_recharge_max_s: float = Field(gt=0, le=86400)
+
+    @model_validator(mode="after")
+    def _ordre(self) -> "AccuPlateauFut":
+        if not self.bientot_absente_v < self.recharger_v <= self.bon_v:
+            raise ValueError(
+                "seuils de l'accu dans le désordre : il faut bientot_absente_v "
+                f"({self.bientot_absente_v:g}) < recharger_v ({self.recharger_v:g}) ≤ bon_v "
+                f"({self.bon_v:g})"
+            )
+        return self
+
+
 class ReglagesPesees(Modele):
-    """pesees.yaml : les cartes de pesée RP2040 + HX711 du bus RS485 des pesées."""
+    """pesees.yaml : les pesées du bus RS485 des pesées (cartes RP2040 + HX711, et la boîte du
+    poste du fût)."""
 
     exemple: bool = False
     # Nom de la carte RP2040 pour le Pico SDK (PICO_BOARD).
@@ -4138,9 +4171,13 @@ class ReglagesPesees(Modele):
     pause_entre_tours_ms: int = Field(ge=0, le=10000)
     # Mesure plus vieille que ça (ms) : la pesée est dite muette pour qui la lit.
     age_max_ms: int = Field(gt=0, le=60000)
+    # Pesées lues moins souvent, avec leur propre âge maximal (la boîte du poste du fût).
+    lentes: dict[Nom, PeseeLente] = {}
     # Plus aucune carte ne répond : nouvel essai toutes les ... (s).
     reconnexion_s: float = Field(gt=0, le=3600)
     etalonnage: dict[Nom, EtalonnagePesee] = Field(min_length=1)
+    # Accu du plateau du poste du fût (seulement s'il y a une boîte du poste sur le bus).
+    accu_plateau_fut: AccuPlateauFut | None = None
 
     @model_validator(mode="after")
     def _verifier_cartes(self) -> "ReglagesPesees":
@@ -4151,6 +4188,9 @@ class ReglagesPesees(Modele):
         for nom in self.etalonnage:
             if nom not in self.tour:
                 erreurs.append(f"etalonnage : « {nom} » n'est jamais lue (absente de « tour »)")
+        for nom in self.lentes:
+            if nom not in self.tour:
+                erreurs.append(f"lentes : « {nom} » n'est jamais lue (absente de « tour »)")
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self

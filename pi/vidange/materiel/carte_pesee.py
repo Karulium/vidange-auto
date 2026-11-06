@@ -14,9 +14,25 @@ La même table que dans le programme de la carte (pesee/src/mesures.h) :
 
 Le Pi lit les 8 d'un coup (fonction 4). Le poids en kilogrammes est calculé par le Pi
 (vidange.pesees) : la carte ne donne que la mesure brute.
+
+La boîte du poste du fût (ESP32-C3 qui reçoit par radio les mesures du plateau de pesée, tâche
+17 bis, programme : tâche 17 ter) répond sur le même bus avec les mêmes registres 0 à 7, sauf :
+la mesure est la moyenne de 5 faite par le plateau (2 par seconde), le registre 4 a un bit de
+plus (4 = radio du plateau muette : rien reçu depuis 2 s), et la signature est 0x5046 (« PF »).
+Elle a 5 registres de plus :
+
+| Registre | Contenu |
+|---|---|
+| 8 | plateau : 1 = reed fermé (au poste), 2 = 5 V de la recharge présent (*), 4 = sur l'USB-C |
+| 9 | tension de l'accu du plateau, en mV (dernière trame) |
+| 10 | niveau de l'accu, en % (calculé par le plateau) |
+| 11 | force du signal radio, en dBm + 200 (120 = −80 dBm) |
+| 12 | trames radio perdues (numéros sautés), depuis le démarrage de la boîte |
+
+(*) 5 V de la recharge sans contact présent, pas « en charge » : il reste vrai accu plein.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from vidange.materiel.puces import ErreurMateriel
 
@@ -25,6 +41,28 @@ NB_REGISTRES = 8
 SIGNATURE = 0x5053
 ETAT_HX711_MUET = 1
 ETAT_EXEMPLE = 2
+# La boîte du poste du fût.
+NB_REGISTRES_BOITE = 13
+SIGNATURE_BOITE = 0x5046
+ETAT_RADIO_MUETTE = 4
+PLATEAU_AU_POSTE = 1
+PLATEAU_RECHARGE_PRESENTE = 2
+PLATEAU_SUR_USB = 4
+# Registre 11 : force du signal en dBm + ce décalage.
+DECALAGE_SIGNAL_DBM = 200
+
+
+@dataclass(frozen=True)
+class Plateau:
+    """Ce que la boîte du poste du fût dit du plateau (dernière trame radio reçue)."""
+
+    au_poste: bool
+    recharge_presente: bool
+    sur_usb: bool
+    accu_mv: int
+    accu_pct: int
+    signal_dbm: int
+    trames_perdues: int
 
 
 @dataclass(frozen=True)
@@ -36,6 +74,9 @@ class MesureCarte:
     exemple: bool
     par_seconde: int
     trames_abimees: int
+    # Boîte du poste du fût seulement.
+    radio_muette: bool = False
+    plateau: Plateau | None = None
 
 
 def decoder(registres: list[int]) -> MesureCarte:
@@ -45,6 +86,36 @@ def decoder(registres: list[int]) -> MesureCarte:
             "l'appareil à cette adresse n'est pas une carte de pesée (mauvaise adresse, ou "
             "autre appareil sur le bus ?)"
         )
+    return _decoder_mesure(registres)
+
+
+def decoder_boite(registres: list[int]) -> MesureCarte:
+    """Les 13 registres de la boîte du poste du fût → la mesure, avec le plateau ;
+    ErreurMateriel si ce n'est pas elle (une carte de pesée RP2040 dit 0x5053)."""
+    if len(registres) != NB_REGISTRES_BOITE or registres[7] != SIGNATURE_BOITE:
+        trouve = f"0x{registres[7]:04X}" if len(registres) > 7 else "rien"
+        raise ErreurMateriel(
+            f"l'appareil à cette adresse n'est pas la boîte du poste du fût (signature {trouve}, "
+            f"0x{SIGNATURE_BOITE:04X} attendue : mauvaise adresse, ou carte de pesée RP2040 ?)"
+        )
+    mesure = _decoder_mesure(registres)
+    plateau = registres[8]
+    return replace(
+        mesure,
+        radio_muette=bool(registres[4] & ETAT_RADIO_MUETTE),
+        plateau=Plateau(
+            au_poste=bool(plateau & PLATEAU_AU_POSTE),
+            recharge_presente=bool(plateau & PLATEAU_RECHARGE_PRESENTE),
+            sur_usb=bool(plateau & PLATEAU_SUR_USB),
+            accu_mv=registres[9],
+            accu_pct=registres[10],
+            signal_dbm=registres[11] - DECALAGE_SIGNAL_DBM,
+            trames_perdues=registres[12],
+        ),
+    )
+
+
+def _decoder_mesure(registres: list[int]) -> MesureCarte:
     brut = registres[0] << 16 | registres[1]
     if brut >= 1 << 31:
         brut -= 1 << 32
@@ -60,11 +131,15 @@ def decoder(registres: list[int]) -> MesureCarte:
     )
 
 
-def encoder(mesure: MesureCarte) -> list[int]:
-    """L'inverse (pour la fausse carte des tests)."""
+def encoder(mesure: MesureCarte, signature: int = SIGNATURE) -> list[int]:
+    """L'inverse (pour les fausses cartes des tests) : 8 registres, ou 13 avec le plateau."""
     brut = mesure.brut & 0xFFFFFFFF
-    etat = (ETAT_HX711_MUET if mesure.hx711_muet else 0) | (ETAT_EXEMPLE if mesure.exemple else 0)
-    return [
+    etat = (
+        (ETAT_HX711_MUET if mesure.hx711_muet else 0)
+        | (ETAT_EXEMPLE if mesure.exemple else 0)
+        | (ETAT_RADIO_MUETTE if mesure.radio_muette else 0)
+    )
+    registres = [
         brut >> 16,
         brut & 0xFFFF,
         mesure.numero & 0xFFFF,
@@ -72,5 +147,20 @@ def encoder(mesure: MesureCarte) -> list[int]:
         etat,
         mesure.par_seconde,
         mesure.trames_abimees & 0xFFFF,
-        SIGNATURE,
+        signature,
+    ]
+    plateau = mesure.plateau
+    if plateau is None:
+        return registres
+    bits = (
+        (PLATEAU_AU_POSTE if plateau.au_poste else 0)
+        | (PLATEAU_RECHARGE_PRESENTE if plateau.recharge_presente else 0)
+        | (PLATEAU_SUR_USB if plateau.sur_usb else 0)
+    )
+    return registres + [
+        bits,
+        plateau.accu_mv & 0xFFFF,
+        plateau.accu_pct & 0xFFFF,
+        max(0, min(plateau.signal_dbm + DECALAGE_SIGNAL_DBM, 0xFFFF)),
+        plateau.trames_perdues & 0xFFFF,
     ]

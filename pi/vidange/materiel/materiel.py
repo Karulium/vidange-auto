@@ -5,8 +5,8 @@
         materiel.ecrire("voyant_buzzer", True)   # True = relais commandé
         materiel.mesurer("vide_venturi")         # valeur dans son unité (kPa...)
         materiel.ambiance("sht31_armoire")       # Ambiance(temperature_c, humidite_pct)
-        materiel.peser("pesee_fut", 0.5)          # mesure brute d'une carte HX711
-        materiel.lire_carte_pesee("pesee_griffe") # carte de pesée du bus RS485 (MesureCarte)
+        materiel.peser("pesee_griffe")            # mesure brute d'une pesée du bus RS485
+        materiel.lire_carte_pesee("pesee_griffe") # tout ce qu'elle dit (MesureCarte)
 
 Pour les tests et le simulateur : `Materiel(liste, FausseFabrique(liste))`.
 
@@ -29,9 +29,9 @@ from dataclasses import dataclass
 from typing import Literal, NamedTuple, Protocol
 
 from vidange.entrees_sorties import (
-    CARTE_PESEE,
+    BOITE_POSTE_FUT,
     ENTREES,
-    PESEE,
+    PESEES_DU_BUS,
     SORTIES,
     EntreesSorties,
     LiaisonGpio,
@@ -44,11 +44,9 @@ from vidange.materiel.carte_pesee import MesureCarte
 from vidange.materiel.modbus import ClientModbus, PortSerie
 from vidange.materiel.puces import (
     Ads1115,
-    BrochesHx711Gpio,
     BusI2c,
     BusI2cLinux,
     ErreurMateriel,
-    Hx711,
     Lignes,
     LignesGpio,
     Mcp23017,
@@ -68,8 +66,7 @@ class Ambiance(NamedTuple):
 
 # --------------------------------------------- d'où vient chaque signal (le plan)
 
-# Une ressource : ("gpio", fichier), ("i2c", fichier, adresse, puce), ("serie", carte)
-# ou ("hx711", fichier, broche DT, broche SCK).
+# Une ressource : ("gpio", fichier), ("i2c", fichier, adresse, puce) ou ("serie", carte).
 Ressource = tuple
 
 
@@ -115,15 +112,11 @@ def tracer_branchements(liste: EntreesSorties) -> dict[str, Branchement]:
         if isinstance(liaison, LiaisonUsbSerie):
             if signal.appareil == "transmetteur_modbus":
                 branchements[nom] = Branchement(nom, "modbus", ("serie", signal.carte))
-            elif signal.appareil == CARTE_PESEE:
+            elif signal.appareil in PESEES_DU_BUS:
                 branchements[nom] = Branchement(nom, "pesee", ("serie", signal.carte))
             continue
         if signal.type == "i2c" and signal.appareil == "sht31":
             branchements[nom] = Branchement(nom, "ambiance", _bus_i2c(signal))
-            continue
-        if signal.type == PESEE and isinstance(liaison, LiaisonGpio):
-            dt, sck = signal.broche
-            branchements[nom] = Branchement(nom, "pesee", ("hx711", liaison.fichier, dt, sck))
             continue
         if signal.type not in (*ENTREES, *SORTIES):
             continue
@@ -160,8 +153,6 @@ class Fabrique(Protocol):
     def bus_i2c(self, fichier: str) -> BusI2c: ...
 
     def port_serie(self, liaison: LiaisonUsbSerie) -> PortSerie: ...
-
-    def hx711(self, fichier: str, dt: str, sck: str) -> Hx711: ...
 
 
 class VraieFabrique:
@@ -200,9 +191,6 @@ class VraieFabrique:
             pass
         return port
 
-    def hx711(self, fichier: str, dt: str, sck: str) -> Hx711:
-        return Hx711(BrochesHx711Gpio(fichier, dt, sck))
-
 
 # ------------------------------------------------------------------ le Materiel
 
@@ -232,8 +220,6 @@ class Materiel:
         self._lignes: dict[Ressource, Lignes] = {}
         self._puces: dict[Ressource, Ads1115 | Sht31] = {}
         self._clients: dict[str, ClientModbus] = {}
-        # Cartes de pesée : chacune son verrou (une lecture attend la puce jusqu'à 0,1 s).
-        self._balances: dict[str, tuple[Hx711, threading.Lock]] = {}
         try:
             self._preparer()
         except Exception:
@@ -259,11 +245,6 @@ class Materiel:
                 self._clients[carte] = ClientModbus(
                     lambda liaison=liaison: self.fabrique.port_serie(liaison), nom=carte
                 )
-                continue
-            if sorte == "hx711":
-                balance = self.fabrique.hx711(*ressource[1:])
-                for branchement in groupe:
-                    self._balances[branchement.nom] = (balance, threading.Lock())
                 continue
             if sorte == "i2c" and ressource[3] in ("ads1115", "sht31"):
                 classe = Ads1115 if ressource[3] == "ads1115" else Sht31
@@ -305,7 +286,7 @@ class Materiel:
         try:
             return action()
         except ErreurMateriel as erreur:
-            # Même sorte d'erreur (LectureInterrompue reste LectureInterrompue).
+            # Même sorte d'erreur (PeseeMuette reste PeseeMuette).
             raise type(erreur)(f"signal « {nom} » : {erreur}") from None
         except OSError as erreur:
             raise ErreurMateriel(f"signal « {nom} » : {erreur}") from None
@@ -368,39 +349,36 @@ class Materiel:
         with self._verrou:
             return Ambiance(*self._au_nom_de(nom, puce.mesurer))
 
-    def peser(self, nom: str, delai_s: float) -> int:
-        """Mesure brute d'une carte de pesée HX711 (sans unité : voir vidange.poste_fut).
+    def peser(self, nom: str) -> int:
+        """Mesure brute d'une pesée du bus RS485 (sans unité : voir vidange.pesees).
 
-        Lève ErreurMateriel si la carte ne répond pas dans `delai_s` (prise débranchée) ou si
-        la lecture a été interrompue (LectureInterrompue : la refaire). Pour une carte du bus
-        RS485, `delai_s` ne sert pas (c'est celui de l'adaptateur) ; HX711 muet : PeseeMuette."""
-        branchement = self._branchement(nom, "pesee")
-        if branchement.ressource[0] == "serie":
-            mesure = self.lire_carte_pesee(nom)
-            if mesure.hx711_muet:
-                raise PeseeMuette(f"signal « {nom} » : HX711 muet (débranché ?)")
-            return mesure.brut
-        balance, verrou = self._balances[nom]
-        with verrou:
-            return self._au_nom_de(nom, lambda: balance.lire(delai_s))
+        Lève ErreurMateriel si elle ne répond pas ; HX711 muet ou radio du plateau muette :
+        PeseeMuette."""
+        mesure = self.lire_carte_pesee(nom)
+        if mesure.hx711_muet:
+            raise PeseeMuette(f"signal « {nom} » : HX711 muet (débranché ?)")
+        if mesure.radio_muette:
+            raise PeseeMuette(f"signal « {nom} » : radio du plateau muette")
+        return mesure.brut
 
     def lire_carte_pesee(self, nom: str) -> MesureCarte:
-        """Tout ce que dit une carte de pesée du bus RS485 (pesee/README.md), en une question.
+        """Tout ce que dit une pesée du bus RS485 (pesee/README.md), en une question : carte
+        RP2040 (8 registres, signature 0x5053) ou boîte du poste du fût (13 registres, signature
+        0x5046, avec le plateau).
 
-        Lève ErreurMateriel si la carte ne répond pas ou si ce n'est pas une carte de pesée."""
-        branchement = self._branchement(nom, "pesee")
+        Lève ErreurMateriel si elle ne répond pas ou si ce n'est pas l'appareil attendu."""
+        self._branchement(nom, "pesee")
         signal = self.liste.signaux[nom]
-        if branchement.ressource[0] != "serie" or signal.adresse is None:
-            raise ErreurMateriel(f"signal « {nom} » : pas une carte de pesée du bus RS485")
+        assert signal.adresse is not None
         client = self._clients[signal.carte]
         adresse = signal.adresse
+        boite = signal.appareil == BOITE_POSTE_FUT
+        nombre = carte_pesee.NB_REGISTRES_BOITE if boite else carte_pesee.NB_REGISTRES
         registres = self._au_nom_de(
-            nom,
-            lambda: client.lire_registres(
-                adresse, carte_pesee.FONCTION, 0, carte_pesee.NB_REGISTRES
-            ),
+            nom, lambda: client.lire_registres(adresse, carte_pesee.FONCTION, 0, nombre)
         )
-        return self._au_nom_de(nom, lambda: carte_pesee.decoder(registres))
+        decoder = carte_pesee.decoder_boite if boite else carte_pesee.decoder
+        return self._au_nom_de(nom, lambda: decoder(registres))
 
     def unite(self, nom: str) -> str:
         signal = self.liste.signaux[nom]
@@ -436,13 +414,7 @@ class Materiel:
 
     def fermer(self) -> None:
         self.mettre_au_repos()
-        balances = [balance.broches for balance, _ in self._balances.values()]
-        for objet in [
-            *self._lignes.values(),
-            *self._clients.values(),
-            *self._bus.values(),
-            *balances,
-        ]:
+        for objet in [*self._lignes.values(), *self._clients.values(), *self._bus.values()]:
             try:
                 objet.fermer()
             except Exception as erreur:
@@ -451,7 +423,6 @@ class Materiel:
         self._clients.clear()
         self._bus.clear()
         self._puces.clear()
-        self._balances.clear()
         self._commandes.clear()
 
     def __enter__(self) -> "Materiel":

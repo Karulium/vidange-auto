@@ -418,7 +418,7 @@ def test_vidange_d_un_fut_complet(tmp_path):
         assert griffe.doses.densite() == pytest.approx(0.62, rel=0.02)
         assert etat.messages[-1].startswith(f"Fût vide : {griffe.plan.seaux_finis} seaux")
         assert etat.doses_kg == pytest.approx(fut.verse_kg, abs=0.01)
-        assert etat.chariot  # le chariot peut partir : la griffe est hors de sa zone
+        assert etat.plateau  # le plateau peut partir : la griffe est hors de sa zone
         assert simulation.etat_axes.positions["pont_x"] > MACHINE.poste_fut.pont_interdit_x[1]
         suite = etapes(planning)
         assert suite[0] == "attendre_le_fut" and suite[-1] == "fut_vide"
@@ -426,6 +426,33 @@ def test_vidange_d_un_fut_complet(tmp_path):
         # Chaque prise est notée dans le registre ; il y en a au fond et le long de la paroi.
         lieux = {ligne["lieu"] for ligne in registre.lire("SELECT lieu FROM prises_griffe")}
         assert lieux == {"couche", "fond", "paroi"}
+    finally:
+        registre.fermer()
+
+
+def test_alarmes_du_poste_ne_bloquent_pas_la_vidange(tmp_path):
+    """Réponse à la PR n° 77 : accu du plateau presque vide, puis radio muette en pleine
+    vidange. Les alarmes du poste restent ouvertes (personne ne les acquitte) et le chef
+    enchaîne quand même les seaux jusqu'au fût vide."""
+    registre = Registre(tmp_path / "registre.sqlite", tmp_path / "photos")
+    muette = EvenementSimule(attente_s=60, pesee="pesee_fut", radio_muette=True)
+    try:
+        with Simulateur(reglages_simules(evenements=[muette]), LISTE, "vidange_fut") as simulation:
+            boite = simulation.boite_poste_fut()
+            boite.accu_mv, boite.accu_pct = 3200, 4
+            poste = simulation.poste_fut()
+            poste.registre = registre
+            griffe = griffe_du_simulateur(simulation)
+            planning = simulation.jouer([module_griffe(griffe)])
+            etat = poste.etat()
+        assert planning.fini, planning.probleme
+        assert etapes(planning)[-1] == "fut_vide" and griffe.plan.seaux_finis > 1
+        assert etat.messages[-1].startswith("Fût vide")
+        ouvertes = registre.alarmes_ouvertes()
+        messages = [a["message"] for a in ouvertes]
+        assert any(m.startswith("Accu du plateau presque vide") for m in messages)
+        assert any(m.startswith("Pesée du fût absente") for m in messages)
+        assert {a["module"] for a in ouvertes} == {"poste_fut"}
     finally:
         registre.fermer()
 
@@ -500,9 +527,9 @@ def test_pas_refuse_par_les_regles():
 
 
 def test_chariot_perdu_pendant_la_vidange():
-    perdu = EvenementSimule(attente_s=300, capteur="chariot_fut_en_place", actionne=False)
+    perdu = EvenementSimule(attente_s=300, capteur="plateau_fut_en_place", actionne=False)
     planning, _, simulation, _ = vider(reglages_simules(evenements=[perdu]))
-    assert "plus tenu : chariot du fût en place" in planning.probleme
+    assert "plus tenu : plateau du fût en place" in planning.probleme
     assert QUOI_FAIRE_PERTE in planning.probleme
     # Le pont s'est retiré hors de la zone du chariot, tête en haut.
     positions = simulation.etat_axes.positions

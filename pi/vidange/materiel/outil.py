@@ -31,7 +31,7 @@ def valeur(materiel: Materiel, nom: str) -> str:
         if sorte == "sortie":
             return "COMMANDÉE" if materiel.lire(nom) else "repos"
         if sorte == "pesee":
-            return f"{materiel.peser(nom, 0.5)} (mesure brute, voir vidange-pesee)"
+            return f"{materiel.peser(nom)} (mesure brute, voir vidange-pesees)"
         if sorte == "ambiance":
             ambiance = materiel.ambiance(nom)
             return f"{ambiance.temperature_c:.1f} °C, {ambiance.humidite_pct:.0f} %"

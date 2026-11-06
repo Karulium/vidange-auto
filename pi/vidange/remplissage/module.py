@@ -107,9 +107,9 @@ def module_remplissage(
         lambda: remplissage.contexte().refus_mycelium is None,
     )
     libre = Condition("chariot de remplissage libre", remplissage.libre)
-    # Règle 7 : sans le chariot du fût en place, l'axe du plateau reste à y ≤ 0,475.
+    # Règle 7 : sans le plateau du fût en place, l'axe du plateau reste à y ≤ 0,475.
     pose_permise = Condition(
-        "chariot du fût en place (le chariot de remplissage va à la pose du seau vide)",
+        "plateau du fût en place (le chariot de remplissage va à la pose du seau vide)",
         lambda: remplissage.place_permise(remplissage.reglages.pose_y),
     )
 
@@ -132,7 +132,7 @@ def module_remplissage(
         return rangement.files[place].y
 
     file_permise = Condition(
-        "chariot du fût en place (le chariot de remplissage va à la file du seau)",
+        "plateau du fût en place (le chariot de remplissage va à la file du seau)",
         lambda: remplissage.place_permise(y_du_rangement(file_du_seau())),
     )
 

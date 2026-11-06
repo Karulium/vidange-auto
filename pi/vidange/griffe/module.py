@@ -2,7 +2,7 @@
 
 Les étapes se répètent (prise, seau, prise...) : chacune dit, à sa fin, laquelle vient ensuite
 (`Griffe.apres_...`). Tout se passe sous la surveillance du poste du fût : si le chariot n'est
-plus vu, alarme, le mouvement s'arrête et le pont sort de la zone du chariot.
+plus vu, alarme, le mouvement s'arrête et le pont sort de la zone du plateau.
 
     attendre_le_fut      poste du fût prêt, panneau en position production
     revenir_au_fut       au-dessus du fût, à la hauteur des trajets
@@ -13,7 +13,7 @@ plus vu, alarme, le mouvement s'arrête et le pont sort de la zone du chariot.
     vider_dans_le_seau   couche en couronne
     tasser               fond du godet sur la couche, seau qui tourne
     essuyer_le_bord      dernière couche : raclette sur le bord du seau qui tourne
-    fut_vide             sortie de la zone du chariot, « finir_vidange » au poste du fût
+    fut_vide             sortie de la zone du plateau, « finir_vidange » au poste du fût
 
 Le Go de Karulium n'est pas demandé : le « Prêt » du poste du fût suffit à lancer la vidange.
 Après une alarme ou une coupure, le chef demande toujours le Go avant de refaire l'étape.

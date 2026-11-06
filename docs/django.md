@@ -184,17 +184,23 @@ Les champs :
 
 ### Les poids du fût (tâche 17, poste du fût)
 
-Un cycle `vidange` commence quand Karulium appuie sur « Prêt » au poste du fût. La pesée du chariot y
-ajoute ces `mesures` (`unite` : `kg`, `capteur` : `pesee_fut`, objet : `fut`, le code du fût s'il est
-connu, sinon `null`) :
+Un cycle `vidange` commence quand Karulium appuie sur « Prêt » au poste du fût. La pesée du plateau du
+fût (sans fil depuis la tâche 17 bis) y ajoute ces `mesures` (`capteur` : `pesee_fut`, objet : `fut`, le
+code du fût s'il est connu, sinon `null`, sauf indiqué) :
 
 | `nom` | Ce que c'est |
 |---|---|
-| `poids_fut_plein` | substrat dans le fût au « Prêt » (poids lu − tare du berceau et du fût vide) |
-| `poids_fut_restant` | substrat encore dans le fût, après chaque dose de la griffe, et à la fin |
-| `poids_fut_vide_total` | substrat sorti du fût pendant le cycle (plein − restant) ; absent si la pesée était débranchée à la fin |
+| `poids_fut_plein` | `kg` : substrat dans le fût au « Prêt » (poids lu − tare du fût vide et de son couvercle) ; absent si la pesée était absente au « Prêt » |
+| `poids_fut_restant` | `kg` : substrat encore dans le fût, après chaque dose de la griffe, et à la fin (seulement quand la pesée répond) |
+| `poids_fut_vide_total` | `kg` : substrat sorti du fût pendant le cycle (plein − restant) ; absent si la pesée était absente au « Prêt » ou à la fin |
+| `sans_pesee_fut` | valeur `1`, `unite` vide : **« sans pesée du fût »**. Au « Prêt » sans pesée (objet : `fut`) : le cycle a commencé sans poids du fût plein. Pendant la vidange (objet : `seau`, une ligne par seau) : ce seau a été rempli pendant que la pesée était absente ; tant que la griffe ne connaît pas le code du seau, l'objet est le `fut` et il y a une ligne par dose de la griffe |
 
-Un cycle `vidange` peut finir `abandonne` si le chariot est retiré avant la fin (fût pas vide).
+La pesée du fût est sans fil : si sa radio se tait, la machine ne s'arrête pas (la griffe trouve le fond au
+toucher), les seaux sont seulement notés `sans_pesee_fut`. L'app ne doit pas refuser un cycle sans
+`poids_fut_plein`. Les alertes du poste (pesée absente, accu du plateau faible, recharge en panne) sont dans
+`alarmes[]` du cycle (module `poste_fut`).
+
+Un cycle `vidange` peut finir `abandonne` si le plateau est retiré avant la fin (fût pas vide).
 L'app peut s'en servir pour le rendement d'un fût (seaux faits, poids vidé) ; rien n'est obligatoire.
 
 ### Ce que l'app « machine » en fera (rappel, voir plus haut)
