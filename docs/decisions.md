@@ -682,6 +682,11 @@ si l'une pose problème, elle le dit dans sa PR.
   3. Accélération X/Y divisée par 2 tête basse (face sous 0,60) : gardée jusqu'aux essais.
   4. Recherche du Hall de la tête de préhension limitée à **60°** (au lieu d'« un peu plus d'un tour ») : accepté ;
      le compte-tours donne déjà le tour à ± 3°, et la tête ne peut pas tomber sur l'aimant du tour suivant.
+- **Stockage agrandi, réponses à la PR n° 76** (tâche 35 ter, 06/11/2026, niveau 1, fil logiciel) : (1) 5 places de
+  piles de fin de lot pour A, C et D (au lieu de 4), conséquence du hublot reculé en (2,93 ; 0,22), avec la même
+  règle (bord ≤ 2,87, marge du hublot) : gardées ; confirmation demandée au fil Stockage le 06/11. (2) Effort du
+  pousseur (150 à 240 N, prévu pour 6 seaux par file, 7 maintenant) : inchangé, à mesurer à l'essai ; question
+  posée au fil Stockage le 06/11.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
