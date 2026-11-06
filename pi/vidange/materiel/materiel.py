@@ -4,6 +4,7 @@
         materiel.lire("reed_panneau_poste_fut")  # True = capteur actionné
         materiel.ecrire("voyant_buzzer", True)   # True = relais commandé
         materiel.mesurer("vide_venturi")         # valeur dans son unité (kPa...)
+        materiel.lire_ozone("ozone_dedans")           # MesureOzone (ppm, au plafond ou non)
         materiel.ambiance("sht31_armoire")       # Ambiance(temperature_c, humidite_pct)
         materiel.peser("pesee_griffe")            # mesure brute d'une pesée du bus RS485
         materiel.lire_carte_pesee("pesee_griffe") # tout ce qu'elle dit (MesureCarte)
@@ -30,6 +31,7 @@ from typing import Literal, NamedTuple, Protocol
 
 from vidange.entrees_sorties import (
     BOITE_POSTE_FUT,
+    CAPTEUR_OZONE,
     ENTREES,
     PESEES_DU_BUS,
     SORTIES,
@@ -42,6 +44,7 @@ from vidange.journal import donner_journal
 from vidange.materiel import carte_pesee
 from vidange.materiel.carte_pesee import MesureCarte
 from vidange.materiel.modbus import ClientModbus, PortSerie
+from vidange.materiel.ozone import LecteurOzone, MesureOzone
 from vidange.materiel.puces import (
     Ads1115,
     BusI2c,
@@ -75,7 +78,7 @@ class Branchement:
     """Comment un signal arrive au Pi, tiré de la liste des entrées/sorties."""
 
     nom: str
-    sorte: Literal["entree", "sortie", "mesure", "ambiance", "modbus", "pesee"]
+    sorte: Literal["entree", "sortie", "mesure", "ambiance", "ozone", "pesee"]
     ressource: Ressource
     # Broche tout-ou-rien (GPIO17, P0...) ou voie de l'ADS1115 (A0...).
     broche: str = ""
@@ -110,8 +113,8 @@ def tracer_branchements(liste: EntreesSorties) -> dict[str, Branchement]:
         if liaison is None:
             continue
         if isinstance(liaison, LiaisonUsbSerie):
-            if signal.appareil == "transmetteur_modbus":
-                branchements[nom] = Branchement(nom, "modbus", ("serie", signal.carte))
+            if signal.appareil == CAPTEUR_OZONE:
+                branchements[nom] = Branchement(nom, "ozone", ("serie", signal.carte))
             elif signal.appareil in PESEES_DU_BUS:
                 branchements[nom] = Branchement(nom, "pesee", ("serie", signal.carte))
             continue
@@ -220,6 +223,7 @@ class Materiel:
         self._lignes: dict[Ressource, Lignes] = {}
         self._puces: dict[Ressource, Ads1115 | Sht31] = {}
         self._clients: dict[str, ClientModbus] = {}
+        self._ozones: dict[str, LecteurOzone] = {}
         try:
             self._preparer()
         except Exception:
@@ -242,9 +246,16 @@ class Materiel:
                 carte = ressource[1]
                 liaison = self.liste.cartes[carte].liaison
                 assert isinstance(liaison, LiaisonUsbSerie)
-                self._clients[carte] = ClientModbus(
-                    lambda liaison=liaison: self.fabrique.port_serie(liaison), nom=carte
-                )
+                ouvrir = lambda liaison=liaison: self.fabrique.port_serie(liaison)  # noqa: E731
+                ozones = [b.nom for b in groupe if b.sorte == "ozone"]
+                if ozones:
+                    # Un capteur d'ozone a son adaptateur à lui : pas de Modbus, pas de partage.
+                    for nom in ozones:
+                        reglage = self.liste.signaux[nom].ozone
+                        assert reglage is not None
+                        self._ozones[nom] = LecteurOzone(ouvrir, reglage, nom=carte)
+                else:
+                    self._clients[carte] = ClientModbus(ouvrir, nom=carte)
                 continue
             if sorte == "i2c" and ressource[3] in ("ads1115", "sht31"):
                 classe = Ads1115 if ressource[3] == "ads1115" else Sht31
@@ -315,11 +326,11 @@ class Materiel:
         return resultat
 
     def mesurer(self, nom: str) -> float:
-        """Mesure analogique (ADS1115) ou transmetteur Modbus, dans l'unité du signal."""
-        branchement = self._branchement(nom, "mesure", "modbus")
+        """Mesure analogique (ADS1115) ou capteur d'ozone (ppm), dans l'unité du signal."""
+        branchement = self._branchement(nom, "mesure", "ozone")
         signal = self.liste.signaux[nom]
-        if branchement.sorte == "modbus":
-            return self._mesurer_modbus(nom, signal)
+        if branchement.sorte == "ozone":
+            return self.lire_ozone(nom).ppm
         puce = self._puces[branchement.ressource]
         assert isinstance(puce, Ads1115)
         with self._verrou:
@@ -329,17 +340,11 @@ class Materiel:
         (v0, v1), (y0, y1) = signal.conversion.volts, signal.conversion.valeurs
         return y0 + (volts - v0) * (y1 - y0) / (v1 - v0)
 
-    def _mesurer_modbus(self, nom: str, signal: Signal) -> float:
-        assert signal.modbus is not None and signal.adresse is not None
-        client = self._clients[signal.carte]
-        reglage = signal.modbus
-        brut = self._au_nom_de(
-            nom,
-            lambda: client.lire_registres(signal.adresse, reglage.fonction, reglage.registre)[0],
-        )
-        if reglage.signe and brut >= 0x8000:
-            brut -= 0x10000
-        return brut * reglage.echelle
+    def lire_ozone(self, nom: str) -> MesureOzone:
+        """Mesure d'un capteur d'ozone ZE25-O3. Lève CapteurMuet s'il ne dit plus rien."""
+        self._branchement(nom, "ozone")
+        lecteur = self._ozones[nom]
+        return self._au_nom_de(nom, lecteur.lire)
 
     def ambiance(self, nom: str) -> Ambiance:
         """Température (°C) et humidité (%) d'un SHT31."""
@@ -414,13 +419,19 @@ class Materiel:
 
     def fermer(self) -> None:
         self.mettre_au_repos()
-        for objet in [*self._lignes.values(), *self._clients.values(), *self._bus.values()]:
+        for objet in [
+            *self._lignes.values(),
+            *self._clients.values(),
+            *self._ozones.values(),
+            *self._bus.values(),
+        ]:
             try:
                 objet.fermer()
             except Exception as erreur:
                 journal.error("Fermeture du matériel : %s", erreur)
         self._lignes.clear()
         self._clients.clear()
+        self._ozones.clear()
         self._bus.clear()
         self._puces.clear()
         self._commandes.clear()

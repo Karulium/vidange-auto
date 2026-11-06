@@ -2,7 +2,7 @@
 
 **Testé sur le vrai matériel : non.** Les tests automatiques (GitHub Actions) n'utilisent que des
 **faux** capteurs. Cette procédure vérifie chaque carte branchée au Pi : capteur d'ambiance SHT31,
-convertisseur ADS1115 (vide du venturi), entrées 24 V, relais (voyant-buzzer), transmetteurs d'ozone.
+convertisseur ADS1115 (vide du venturi), entrées 24 V, relais (voyant-buzzer), capteurs d'ozone (essai à part).
 Compter environ 1 h la première fois. On peut faire les étapes séparément, au fil des branchements.
 
 ## Avant de commencer
@@ -113,20 +113,11 @@ la commande s'arrête sur elle : donner alors seulement les signaux à essayer, 
 
 - [ ] Relais correct, rien ne colle au démarrage
 
-## Étape 7 : transmetteurs d'ozone (RS485)
+## Étape 7 : capteurs d'ozone ZE25-O3
 
-1. Brancher l'adaptateur USB-RS485 sur le Pi et lire son numéro de série :
-   `sudo -u vidange /opt/vidange-auto/pi/.venv/bin/vidange-fluidnc lister` (cette commande liste tous les ports
-   série USB, pas seulement les cartes FluidNC). **Si le numéro est « AUCUN » : s'arrêter et le signaler**
-   (voir la question 2 de la PR).
-2. Écrire ce numéro dans la liste (carte `rs485_ozone`, `numero_serie_usb`, entre guillemets), ainsi que
-   la vitesse, l'adresse de chaque transmetteur, le registre et l'échelle de leur notice.
-3. Taper `vidange-es lister ozone_1 ozone_2`. Attendu : la même valeur (en ppm) que l'afficheur des
-   transmetteurs, s'ils en ont un ; environ 0 sans ozone.
-4. Débrancher un transmetteur : `ÉCHEC : ... pas de réponse`. Rebrancher : la mesure revient.
-5. Débrancher puis rebrancher l'adaptateur USB : après une ou deux lectures en échec, la mesure revient seule.
+Les 2 capteurs d'ozone ont leur propre procédure : `pi/systeme/essai-ozone.md`.
 
-- [ ] Ozone correct
+- [ ] Ozone fait (voir essai-ozone.md)
 
 ## À la fin
 

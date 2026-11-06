@@ -96,11 +96,12 @@ def test_hx711_muet_ou_carte_debranchee(materiel, faux):
 
 
 def test_l_ozone_et_les_pesees_sont_sur_deux_bus(liste, faux):
-    assert set(faux.rs485) == {"rs485_ozone", "rs485_pesee"}
+    assert set(faux.rs485) == {"rs485_pesee"}
+    assert set(faux.ozones) == {"rs485_ozone_dedans", "rs485_ozone_dehors"}
     with Materiel(liste, faux) as materiel:
-        faux.regler("ozone_1", 0.05)
+        faux.regler("ozone_dedans", 0.05)
         faux.regler_pesee("pesee_griffe", 77)
-        assert materiel.mesurer("ozone_1") == pytest.approx(0.05)
+        assert materiel.mesurer("ozone_dedans") == pytest.approx(0.05)
         assert materiel.peser("pesee_griffe") == 77
 
 

@@ -153,7 +153,7 @@ class Bilans:
                 entrees[nom] = _ou_erreur(lambda nom=nom: materiel.lire(nom))
             elif branchement.sorte == "sortie":
                 sorties[nom] = _ou_erreur(lambda nom=nom: materiel.lire(nom))
-            elif branchement.sorte in ("mesure", "modbus"):
+            elif branchement.sorte in ("mesure", "ozone"):
                 mesures[nom] = _ou_erreur(
                     lambda nom=nom: {"valeur": materiel.mesurer(nom), "unite": materiel.unite(nom)}
                 )

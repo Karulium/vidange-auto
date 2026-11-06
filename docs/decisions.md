@@ -801,3 +801,16 @@ Les chiffres ci-dessous vont dans `pi/reglages/machine.yaml`, jamais dans le cod
 - **Figés** (on peut coder leurs gestes) : Poste du fût, Lavage, Griffe (Transfert), Porte-bocal, Mycélium, Guidage caméra, Préhension, écran Nextion, Portique (gelé le 28/10/2026, tâche 36).
 - **Pas encore figés** (case vide seulement) : Remplissage, Stockage, Nettoyage, Spray, Micropore, Fermeture des seaux, Air comprimé, Entonnoir.
 - Références encore à choisir : fins de course du Remplissage, microrupteurs du Stockage.
+
+## Capteurs d'ozone ZE25-O3 (tâche 38 bis, 06/11/2026)
+
+- Les capteurs d'ozone sont des **Winsen ZE25-O3 en UART**, plus des transmetteurs Modbus. Signaux :
+  `ozone_dedans` et `ozone_dehors` (anciens `ozone_1` et `ozone_2`, renommés sur demande du fil Nettoyage).
+  Une liaison USB-RS485 par capteur (cartes `rs485_ozone_dedans`, `rs485_ozone_dehors`), reconnue par son numéro
+  de série ; aucune adresse. Le Modbus reste pour les cartes de pesée seulement.
+- Protocole écrit de mémoire (9600 bauds, trames de 9 octets, début 0xFF, somme de contrôle) : **à vérifier sur la
+  notice papier**. Les chiffres du capteur sont dans `docs/entrees-sorties.yaml` (bloc `ozone:`, `exemple: true`).
+- Trame à la somme fausse : ignorée et comptée. Pas de trame valable depuis `delai_muet_s` : capteur « muet »
+  (alerte). Valeur au plafond : affichée « ≥ 10 ppm », jamais « 10 ».
+- **La sécurité ozone reste câblée.** Son appareil n'est pas encore choisi (question posée à Karulium). Le Pi lit
+  l'ozone pour informer et attendre ; aucun code ne la remplace ni ne la simule.

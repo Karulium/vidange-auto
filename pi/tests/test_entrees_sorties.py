@@ -196,7 +196,10 @@ def test_liaisons_de_la_liste_du_depot():
     assert liste.cartes["entrees_24v_1"].liaison.broches["E1"] == "GPIO17"
     assert liste.cartes["relais_1"].liaison.signal == "relais_1_bus"
     assert liste.signaux["relais_1_bus"].appareil == "pcf8574"
-    assert liste.signaux["ozone_2"].modbus.echelle == 0.001
+    assert liste.signaux["ozone_dehors"].ozone.pas_ppm == 0.01
+    assert liste.signaux["ozone_dehors"].ozone.plafond_ppm == 10
+    # Deux liaisons séparées, deux adaptateurs différents.
+    assert liste.signaux["ozone_dedans"].carte != liste.signaux["ozone_dehors"].carte
 
 
 def test_repere_absent_de_la_liaison(entrees_sorties):
@@ -262,11 +265,13 @@ def test_signal_impossible_sur_cette_carte(entrees_sorties):
 
 def test_que_des_signaux_serie_sur_un_adaptateur_usb(entrees_sorties):
     remplacer(
-        entrees_sorties, "carte: relais_1\n    broche: K1", "carte: rs485_ozone\n    broche: K1"
+        entrees_sorties,
+        "carte: relais_1\n    broche: K1",
+        "carte: rs485_ozone_dedans\n    broche: K1",
     )
     message = erreur_de(entrees_sorties)
     assert (
-        "signal « voyant_buzzer » : la carte « rs485_ozone » est un port série, "
+        "signal « voyant_buzzer » : la carte « rs485_ozone_dedans » est un port série, "
         "elle ne porte que des signaux de type serie (pas relais)"
     ) in message
 
@@ -284,7 +289,7 @@ def test_bus_d_une_carte_sans_fichier(entrees_sorties):
     # alors la carte relais ne saurait pas par où passer.
     texte = entrees_sorties.read_text(encoding="utf-8")
     debut = texte.index("  relais_1_bus:")
-    bloc = texte[debut : texte.index("  ozone_1:")]
+    bloc = texte[debut : texte.index("  ozone_dedans:")]
     nouveau = bloc.replace("carte: pi", "carte: ads1115").replace("    fichier: /dev/i2c-1\n", "")
     entrees_sorties.write_text(texte.replace(bloc, nouveau), encoding="utf-8")
     message = erreur_de(entrees_sorties)
@@ -302,16 +307,39 @@ def test_appareil_i2c_oublie(entrees_sorties):
     assert "un signal i2c doit dire quel appareil est au bout" in erreur_de(entrees_sorties)
 
 
-def test_transmetteur_modbus_incomplet(entrees_sorties):
-    remplacer(entrees_sorties, "    adresse: 2\n", "")
+def test_capteur_ozone_sans_protocole(entrees_sorties):
+    texte = entrees_sorties.read_text(encoding="utf-8")
+    debut = texte.index("    ozone:\n      mode:")
+    fin = texte.index("  ozone_dehors:")
+    entrees_sorties.write_text(texte[:debut] + texte[fin:], encoding="utf-8")
+    assert "un capteur d'ozone doit dire son protocole" in erreur_de(entrees_sorties)
+
+
+def test_capteur_ozone_avec_une_adresse(entrees_sorties):
+    remplacer(entrees_sorties, "    appareil: ze25_o3\n", "    appareil: ze25_o3\n    adresse: 1\n")
+    assert "un capteur d'ozone n'a pas d'adresse" in erreur_de(entrees_sorties)
+
+
+def test_ozone_question_reponse_sans_question(entrees_sorties):
+    remplacer(entrees_sorties, "mode: envoi_automatique ", "mode: question_reponse")
+    assert "en question-réponse, « question » (la trame à envoyer) est requise" in (
+        erreur_de(entrees_sorties)
+    )
+
+
+def test_ozone_question_a_la_somme_fausse(entrees_sorties):
+    remplacer(entrees_sorties, "mode: envoi_automatique ", "mode: question_reponse")
     remplacer(
         entrees_sorties,
-        "    modbus:\n      registre: 0\n      fonction: 3\n      echelle: 0.001\n",
-        "",
+        "      delai_muet_s: 5 ",
+        '      question: "FF0186000000000078"\n      delai_muet_s: 5 ',
     )
-    message = erreur_de(entrees_sorties)
-    assert "un transmetteur Modbus doit dire où lire sa mesure" in message
-    assert "un transmetteur Modbus doit avoir son adresse" in message
+    assert "« question » : une trame de 9 octets commençant par FF" in erreur_de(entrees_sorties)
+
+
+def test_ozone_position_hors_trame(entrees_sorties):
+    remplacer(entrees_sorties, "position_valeur: [4, 5]", "position_valeur: [4, 8]")
+    assert "« position_valeur » : des positions de 1 à 7" in erreur_de(entrees_sorties)
 
 
 def test_conversion_avec_deux_fois_la_meme_tension(entrees_sorties):
@@ -322,12 +350,15 @@ def test_conversion_avec_deux_fois_la_meme_tension(entrees_sorties):
 def test_liaison_de_type_inconnu(entrees_sorties):
     remplacer(entrees_sorties, "      type: usb_serie", "      type: wifi")
     message = erreur_de(entrees_sorties)
-    assert "rs485_ozone → liaison : type: doit être l'un de : 'gpio', 'i2c', 'usb_serie'" in message
+    assert (
+        "rs485_ozone_dedans → liaison : type: doit être l'un de : 'gpio', 'i2c', 'usb_serie'"
+        in message
+    )
 
 
 def test_liaison_sans_type(entrees_sorties):
     remplacer(entrees_sorties, "      type: usb_serie\n", "")
-    assert "cartes → rs485_ozone → liaison : « type » manque" in erreur_de(entrees_sorties)
+    assert "cartes → rs485_ozone_dedans → liaison : « type » manque" in erreur_de(entrees_sorties)
 
 
 def test_au_demarrage_seulement_pour_les_entrees_tout_ou_rien(entrees_sorties):

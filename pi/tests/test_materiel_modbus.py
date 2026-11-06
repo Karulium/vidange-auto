@@ -1,4 +1,4 @@
-"""Tests du client Modbus RTU (transmetteurs d'ozone) contre le faux RS485."""
+"""Tests du client Modbus RTU (cartes de pesée) contre le faux RS485."""
 
 import pytest
 
@@ -23,15 +23,15 @@ def test_somme_de_controle():
 
 def test_lecture_de_registres():
     fil, _ = fil_avec_transmetteur(registres={4: 123, 5: 0xFFFF})
-    client = ClientModbus(fil.ouvrir, nom="rs485_ozone")
+    client = ClientModbus(fil.ouvrir, nom="rs485_pesee")
     assert client.lire_registres(1, 3, 4, 2) == [123, 0xFFFF]
 
 
 def test_pas_de_reponse():
     fil, transmetteur = fil_avec_transmetteur()
     transmetteur.debranche = True
-    client = ClientModbus(fil.ouvrir, nom="rs485_ozone")
-    with pytest.raises(ErreurMateriel, match="rs485_ozone, appareil 1 : pas de réponse"):
+    client = ClientModbus(fil.ouvrir, nom="rs485_pesee")
+    with pytest.raises(ErreurMateriel, match="rs485_pesee, appareil 1 : pas de réponse"):
         client.lire_registres(1, 3, 0)
     # Mauvaise adresse : pareil.
     with pytest.raises(ErreurMateriel, match="appareil 7 : pas de réponse"):
