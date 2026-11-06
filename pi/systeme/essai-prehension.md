@@ -87,24 +87,33 @@ le fond intérieur d'un seau vide posé là (contact_z), et une deuxième place 
 ## Étape 6 : le porte-bocal
 
 1. Vérifier dans `prehension → porte_bocal` la position du bocal (agitateur fixe : x 0,925, y 0,150, le
-   même que `mycelium → bocal`) et `face_z` : face de la tête au contact de la capsule **manivelle en
-   haut** (≈ 1,05, fiche Mycélium v10). Régler `orientation_deg` pour que les méplats soient en face des
-   mors.
-2. **Manivelle en haut**, caméra du dosage à 0° (vers le bocal), chariot de remplissage reculé ou au
-   poste. Le panneau du poste du fût peut rester levé : x 0,925 est hors de l'isolation du fût.
-3. `vidange-prehension porte-bocal 1.0 0.75 0.95 --manivelle-en-haut` (place d'un bocal plein, avec vos
-   cotes ; `--manivelle-en-haut` dit que vous avez vu la manivelle en haut et la caméra à 0°). Attention :
-   le trajet est en ligne droite ; partir d'un endroit d'où il ne passe pas près du boîtier de la caméra
-   du bocal (x 0,99-1,16, y < 0,335). Le bocal est pris, posé (mors
+   même que `mycelium → bocal`) et `contact_capsule_z` : face de la tête au contact de la capsule
+   **manivelle en bas**, selon le trou du maneton (1,047 / 1,077 / 1,108 pour 10 / 7 / 4 cm, fiche
+   Mycélium v10b). `mycelium → course_agitation_m` doit dire le trou où est vraiment la bielle (10 cm
+   par défaut ; 4 cm est refusé au démarrage : la tête ne peut pas poser le bocal). Régler
+   `orientation_deg` pour que les méplats soient en face des mors.
+2. **Manivelle en bas**, caméra du dosage à 0° (vers le bocal). Le chariot de remplissage peut être
+   reculé (y 0,40) ou au poste (y 0,135). Le panneau du poste du fût peut rester levé : x 0,925 est hors
+   de l'isolation du fût.
+3. `vidange-prehension porte-bocal 1.0 0.75 0.95 --manivelle-en-bas` (place d'un bocal plein, avec vos
+   cotes ; `--manivelle-en-bas` dit que vous avez vu la manivelle en bas, arrêtée, et la caméra à 0°).
+   La tête contourne la **zone du porte-bocal** (`prehension → zone_porte_bocal` : x 0,79-1,08,
+   y −0,03-0,27) : elle y entre seulement par un trajet en ligne droite, face en haut (1,10), jusqu'à la
+   verticale du bocal, puis descend et remonte à la verticale. Partir d'un endroit **côté allée** (y plus
+   grand que 0,38), d'où ce trajet ne passe ni au-dessus du support de la glissière verticale (y ≈ 0), ni
+   près du boîtier de la caméra du bocal (x 0,99-1,16, y < 0,335). Le bocal est pris, posé (mors
    ouverts, mors approchés à « Ø 98 » à faible courant, lâché, remontée de 5 mm, serrage), repris (mors
-   serrés pour descendre, puis ouverts) et reposé. Regarder que les mors ne touchent pas le bocal pendant la
-   descente.
-4. Contrôles des verrous (chacun doit s'arrêter **avant** que la tête descende au porte-bocal) :
-   - sans `--manivelle-en-bas` : « position de l'agitateur du mycélium inconnue : la tête ne passe pas
-     au-dessus de sa glissière » (l'outil ne lit pas l'agitateur : sans cette option, toute la glissière,
-     du garage au dosage, est interdite à la tête) ;
-   - griffe descendue de 2 cm (`G90 G1 Z1270 F300` à la console de la carte n° 1) : « il faut la griffe en butée
-     haute » ; la remonter ensuite (`G90 G1 Z1290 F300`).
+   serrés pour descendre, arrêt sur le contact de la capsule, puis mors ouverts) et reposé.
+   Regarder **pendant le trajet d'arrivée** que le bas du bocal tenu (≈ 0,93) ne touche rien du
+   porte-bocal (haut à 1,07 manivelle en bas), puis que les mors ne touchent pas le bocal pendant la
+   descente. Au moindre doute : arrêt d'urgence, et le noter (question de la PR de la tâche 19 ter).
+4. Contrôles des verrous (chacun doit s'arrêter **avant** que la tête entre dans la zone) :
+   - sans `--manivelle-en-bas` : « zone du porte-bocal ... manivelle du mycélium en bas (manivelle qui
+     bouge, demi-tour, ou position inconnue) » (l'outil ne lit pas l'agitateur : sans cette option, la
+     zone est interdite) ;
+   - programme principal : manivelle en haut, la tête ne va pas à la verticale du bocal ; et tant que la
+     tête est dans la zone, le Mycélium ne tourne pas la manivelle et ne retourne pas le bocal (« la tête
+     de préhension est dans la zone du porte-bocal »).
 5. Vérifier à la console de la carte n° 3, juste après l'approche, que le courant faible est bien pris par
    le pilote (`$/axes/y/motor0/tmc_2209/run_amps` doit répondre la valeur faible) et que le serrage est
    ensuite aussi ferme qu'avant (`essai-porte-bocal.md`, étape 4).

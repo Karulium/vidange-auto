@@ -15,12 +15,13 @@ Les règles (verrous du logiciel : ils protègent la MACHINE, jamais les personn
    moins haut si un seau tenu l'impose, règle 3).
 2. Isolation du fût : axe de la tête sous x isolation_fut_x_max et panneau du poste du fût pas vu
    « rabattu » ⇒ face en haut, sans exception (le porte-bocal est à x 0,925 depuis le 01/11).
-   Bocal de l'agitateur du Mycélium (FIXE en (0,925 ; 0,150)) : la tête (et l'objet tenu) ne
-   passe au-dessus de lui sous le haut de sa capsule manivelle en haut (porte_bocal → face_z, +
-   marge) que pour le poser ou le reprendre : à la verticale (axe sur le bocal), manivelle en
-   haut ; pour descendre, caméra du dosage à 0°, mors ouverts pour poser un bocal, serrés pour le
-   prendre. Manivelle qui bouge ou inconnue (demi-tour, agitation) : la tête ne passe pas du tout
-   au-dessus du bocal.
+   Zone du porte-bocal (`zone_porte_bocal`, agitateur FIXE, bocal en (0,925 ; 0,150)) : la tête
+   et l'objet tenu (rayon de la tête + marge + rayon de l'objet) ne vont jamais dans ce rectangle
+   plus bas que z_haut + marge ; la face montant au plus à haut_z, les trajets le contournent.
+   Seule exception, manivelle du mycélium arrêtée EN BAS : la verticale du bocal (axe sur le
+   bocal), pour le poser ou le reprendre, et le trajet du pont, face en haut, qui va en ligne
+   droite d'un point hors de la zone à cette verticale (ou en revient). Pour descendre sur le
+   bocal : caméra du dosage à 0°, mors ouverts pour poser un bocal, serrés pour le prendre.
 3. Seau tenu : son bord au plus à bord_max_operateur_z côté opérateur, à bord_max_piles_z
    au-dessus des piles.
 4. Boîtier de la caméra du bocal (griffe → camera_bocal) : près de lui, la tête et l'objet tenu
@@ -96,7 +97,7 @@ class Contexte:
     # L'objet tenu (None : rien).
     objet: Objet | None = None
     # La manivelle du Mycélium, arrêtée « haut » ou « bas » ; None : elle bouge (ou demi-tour),
-    # entre les deux, ou inconnue (la tête ne passe pas au-dessus du bocal).
+    # entre les deux, ou inconnue. La tête ne va dans la zone du porte-bocal que manivelle en bas.
     manivelle: str | None = None
     # Les mors du porte-bocal : « ouverts », « serres », ou None (entre les deux, inconnus).
     mors: str | None = None
@@ -109,8 +110,13 @@ def _m(valeur: float) -> str:
 class ReglesPrehension:
     def __init__(self, machine: Machine) -> None:
         assert machine.prehension is not None and machine.griffe is not None
-        assert machine.poste_fut is not None
+        assert machine.poste_fut is not None and machine.mycelium is not None
         self.reglages = machine.prehension
+        # Face de la tête au contact de la capsule, pour la course de l'agitation réglée (vérifié
+        # au démarrage).
+        contact = machine.prehension.porte_bocal.contact_z(machine.mycelium.course_agitation_m)
+        assert contact is not None
+        self.contact_capsule_z = contact
         self.poste = machine.poste_fut
         self.camera_bocal = machine.griffe.camera_bocal
         self.courses = {
@@ -177,12 +183,12 @@ class ReglesPrehension:
 
     def entre_les_mors(self, pose: Pose) -> bool:
         """La tête est-elle au bocal du porte-bocal (le bocal entre les mors, tenu ou à prendre) :
-        au-dessus de lui, face à moins de descente → approche_m de sa cote ?"""
+        au-dessus de lui, face à moins de descente → approche_m du contact de la capsule ?"""
         porte_bocal = self.reglages.porte_bocal
         return (
             math.hypot(pose.x - porte_bocal.x, pose.y - porte_bocal.y)
             <= porte_bocal.rayon_zone_m + _EGAL
-            and pose.z < porte_bocal.face_z + self.reglages.descente.approche_m - _EGAL
+            and pose.z < self.contact_capsule_z + self.reglages.descente.approche_m - _EGAL
         )
 
     def sur_le_bocal(self, pose: Pose) -> bool:
@@ -193,20 +199,24 @@ class ReglesPrehension:
             <= self.reglages.tolerance_m + _EGAL
         )
 
-    def pres_du_bocal(self, pose: Pose, objet: Objet | None, toute_hauteur: bool = False) -> bool:
-        """La tête (ou l'objet tenu) est-elle au-dessus du bocal de l'agitateur, plus bas que le
-        haut de sa capsule manivelle en haut (+ marge) ? `toute_hauteur` : à n'importe quelle
-        hauteur."""
-        porte_bocal = self.reglages.porte_bocal
-        marge = porte_bocal.marge_bocal_m
-        rayon = self.rayon(objet) + self.reglages.objets["bocal"].rayon_m + marge
-        if math.hypot(pose.x - porte_bocal.x, pose.y - porte_bocal.y) >= rayon - _EGAL:
+    def dans_zone_porte_bocal(self, pose: Pose, objet: Objet | None) -> bool:
+        """La tête (rayon de la tête + marge + rayon de l'objet tenu) est-elle dans le rectangle
+        de la zone du porte-bocal, plus bas que z_haut + marge ?"""
+        zone = self.reglages.zone_porte_bocal
+        rayon = (
+            self.reglages.rayon_tete_m + zone.marge_m + (0.0 if objet is None else objet.rayon_m)
+        )
+        dx = max(zone.x[0] - pose.x, 0.0, pose.x - zone.x[1])
+        dy = max(zone.y[0] - pose.y, 0.0, pose.y - zone.y[1])
+        if math.hypot(dx, dy) >= rayon - _EGAL:
             return False
-        return toute_hauteur or self.bas(pose, objet) < porte_bocal.face_z + marge - _EGAL
+        return self.bas(pose, objet) < zone.z_haut + zone.marge_m - _EGAL
 
     # ------------------------------------------------------------ une pose
 
-    def refus_pose(self, pose: Pose, contexte: Contexte) -> str | None:
+    def refus_pose(self, pose: Pose, contexte: Contexte, acces: bool = False) -> str | None:
+        """`acces` : la pose est sur le trajet qui mène à la verticale du bocal (ou en revient),
+        face en haut, manivelle en bas (refus_mouvement) : la zone du porte-bocal est permise."""
         p = self.reglages
         objet = contexte.objet
         pont = self.pont(pose)
@@ -224,28 +234,12 @@ class ReglesPrehension:
         if refus is not None:
             return refus
         basse = pose.z < p.haut_z - p.tolerance_m
-        # Bocal tenu, mors ouverts : c'est le bocal du porte-bocal (posé ou repris), seule la tête
-        # compte au-dessus du porte-bocal.
-        dessous = objet
-        if objet is not None and objet.sorte == "bocal" and contexte.mors == "ouverts":
-            dessous = None
-        if contexte.manivelle is None and self.pres_du_bocal(pose, dessous, toute_hauteur=True):
-            return (
-                "manivelle du mycélium qui bouge (ou demi-tour, ou position inconnue) : la tête ne "
-                "passe pas au-dessus de son bocal"
-            )
-        if self.pres_du_bocal(pose, dessous) and not (
-            self.sur_le_bocal(pose) and contexte.manivelle == "haut"
+        if (
+            not acces
+            and self.dans_zone_porte_bocal(pose, objet)
+            and not (self.sur_le_bocal(pose) and contexte.manivelle == "bas")
         ):
-            capsule = _m(p.porte_bocal.face_z)
-            bocal_tenu = ""
-            if objet is not None and objet.sorte == "bocal":
-                bocal_tenu = " (bocal tenu, mors pas ouverts : un bocal dans le porte-bocal ?)"
-            return (
-                f"bocal du mycélium (capsule jusqu'à {capsule} m manivelle en haut) : la tête ne "
-                "passe au-dessus de lui que pour le poser ou le reprendre, à la verticale, "
-                f"manivelle en haut{bocal_tenu}"
-            )
+            return self._texte_zone(contexte)
         if basse and pose.x < p.isolation_fut_x_max - _EGAL and not contexte.panneau_rabattu:
             return (
                 f"isolation du fût : tête à x {_m(pose.x)} m (sous {_m(p.isolation_fut_x_max)}) "
@@ -276,7 +270,35 @@ class ReglesPrehension:
             )
         return None
 
+    def _texte_zone(self, contexte: Contexte) -> str:
+        zone, porte_bocal = self.reglages.zone_porte_bocal, self.reglages.porte_bocal
+        manivelle = {"bas": "", "haut": " (manivelle en haut)"}.get(
+            contexte.manivelle or "", " (manivelle qui bouge, demi-tour, ou position inconnue)"
+        )
+        return (
+            f"zone du porte-bocal (x {_m(zone.x[0])} à {_m(zone.x[1])}, y {_m(zone.y[0])} à "
+            f"{_m(zone.y[1])}, jusqu'à z {_m(zone.z_haut)} m) : la tête la contourne ; elle n'y va "
+            f"que pour poser ou reprendre le bocal, à sa verticale ({_m(porte_bocal.x)} ; "
+            f"{_m(porte_bocal.y)}), manivelle du mycélium en bas{manivelle}"
+        )
+
     # ------------------------------------------------------------ un mouvement
+
+    def acces_porte_bocal(self, depart: Pose, arrivee: Pose, contexte: Contexte) -> bool:
+        """Le trajet du pont qui mène à la verticale du bocal (ou en revient) : en ligne droite,
+        depuis (ou vers) un point hors de la zone du porte-bocal, face en haut, manivelle en
+        bas."""
+        if contexte.manivelle != "bas" or abs(arrivee.z - depart.z) > _EGAL:
+            return False
+        if not self.en_haut(depart, contexte.objet, arrivee.y):
+            return False
+        if self.sur_le_bocal(arrivee) and not self.sur_le_bocal(depart):
+            dehors = depart
+        elif self.sur_le_bocal(depart) and not self.sur_le_bocal(arrivee):
+            dehors = arrivee
+        else:
+            return False
+        return not self.dans_zone_porte_bocal(dehors, contexte.objet)
 
     def refus_mouvement(self, depart: Pose, arrivee: Pose, contexte: Contexte) -> str | None:
         p = self.reglages
@@ -298,7 +320,7 @@ class ReglesPrehension:
         if (
             arrivee.z < depart.z - _EGAL
             and arrivee.z < p.haut_z - p.tolerance_m
-            and self.pres_du_bocal(arrivee, None, toute_hauteur=True)
+            and self.sur_le_bocal(arrivee)
         ):
             refus = self.refus_descente_porte_bocal(contexte)
             if refus is not None:
@@ -309,6 +331,7 @@ class ReglesPrehension:
             abs(arrivee.a - depart.a) / 1000,
         )
         points = max(1, math.ceil(longueur / p.pas_verification_m))
+        acces = bouge_xy and self.acces_porte_bocal(depart, arrivee, contexte)
         for i in range(points + 1):
             t = i / points
             pose = Pose(
@@ -321,17 +344,17 @@ class ReglesPrehension:
                     )
                 )
             )
-            refus = self.refus_pose(pose, contexte)
+            refus = self.refus_pose(pose, contexte, acces=acces)
             if refus is not None:
                 return refus
         return None
 
     def refus_descente_porte_bocal(self, contexte: Contexte) -> str | None:
-        """Descendre sur le bocal du porte-bocal : manivelle en haut, caméra du dosage à 0°, mors
+        """Descendre sur le bocal du porte-bocal : manivelle en bas, caméra du dosage à 0°, mors
         ouverts pour poser le bocal tenu, serrés (sur le bocal) pour le prendre, tête vide. Rien
         d'autre n'y descend."""
-        if contexte.manivelle != "haut":
-            return "il faut la manivelle du mycélium en haut"
+        if contexte.manivelle != "bas":
+            return "il faut la manivelle du mycélium en bas (pose et reprise manivelle en bas)"
         if contexte.camera_dosage_pivote:
             return "il faut la caméra du dosage à 0° (vers le bocal)"
         objet = contexte.objet

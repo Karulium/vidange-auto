@@ -77,7 +77,7 @@ def test_glissiere_retiree_des_entrees_sorties_et_de_fluidnc():
 
 
 def test_course_de_l_agitation_verifiee(reglages):
-    remplacer(reglages / "machine.yaml", "course_agitation_m: 0.07", "course_agitation_m: 0.08")
+    remplacer(reglages / "machine.yaml", "course_agitation_m: 0.10", "course_agitation_m: 0.08")
     message = erreur_de(reglages)
     assert (
         "course_agitation_m : 0.08 n'est pas un trou de la manivelle (0.04, 0.07, 0.1)" in message
@@ -208,6 +208,106 @@ def test_simulateur_un_seau_a_puis_deux_petits_seaux_avec_un_bocal():
     # attend en bas.
     angle = mycelium.agitateur.position().angle
     assert REGLES.en_bas(mycelium.agitateur.position()) and abs(angle) <= 360 * 200
+
+
+def test_cycle_au_simulateur_pose_du_bocal_manivelle_en_bas():
+    # Ordre complet (décision du 05/11/2026) : pose manivelle en bas → chariot à y ≥ 0,40 →
+    # manivelle en haut → demi-tour → manivelle en bas → dosage ; au retour : chariot à y ≥ 0,40 →
+    # manivelle en haut → bocal remis debout → manivelle en bas ; reprise manivelle en bas.
+    with Simulateur(REGLAGES, LISTE, "dosage_mycelium") as simu:
+        mycelium = mycelium_du_simulateur(simu)
+        suite: list[str] = []
+        envoyer, nouveau = mycelium._envoyer, mycelium._nouveau_bocal
+        chariot = mycelium.chariot
+        ecarter, amener = chariot.ecarter, chariot.amener_au_dosage
+
+        def manivelle() -> str:
+            return "en bas" if REGLES.en_bas(mycelium.agitateur.position()) else "PAS EN BAS"
+
+        def noter(pas):
+            if pas.porte_bocal in ("ouvrir", "serrer"):
+                suite.append(f"{pas.texte} (manivelle {manivelle()})")
+            elif pas.porte_bocal is not None or pas.texte in (
+                "manivelle en haut",
+                "manivelle en bas",
+            ):
+                suite.append(pas.texte)
+            envoyer(pas)
+
+        def poser(variete):
+            suite.append(f"pose du bocal (manivelle {manivelle()})")
+            return nouveau(variete)
+
+        def ecarte():
+            ecarter()
+            suite.append("chariot à y ≥ 0,40")
+
+        def au_dosage(plateau_z):
+            amener(plateau_z)
+            suite.append("seau au dosage")
+
+        mycelium._envoyer, mycelium._nouveau_bocal = noter, poser
+        chariot.ecarter, chariot.amener_au_dosage = ecarte, au_dosage
+        planning = simu.jouer([module_mycelium(mycelium)])
+    assert planning.fini, planning.probleme
+    assert suite[:8] == [
+        "chariot à y ≥ 0,40",
+        "mors ouverts (manivelle en bas)",
+        "pose du bocal (manivelle en bas)",
+        "bocal serré (manivelle en bas)",
+        "manivelle en haut",
+        "bocal tête en bas",
+        "manivelle en bas",
+        "seau au dosage",
+    ]
+    retour = suite.index("chariot à y ≥ 0,40", 8)
+    assert suite[retour : retour + 4] == [
+        "chariot à y ≥ 0,40",
+        "manivelle en haut",
+        "bocal remis debout",
+        "manivelle en bas",
+    ]
+    # 2e bocal : l'ancien est repris (mors ouverts) et le neuf posé, toujours manivelle en bas.
+    mors = [ligne for ligne in suite if "(manivelle" in ligne]
+    assert len(mors) == 6 and all(ligne.endswith("(manivelle en bas)") for ligne in mors)
+
+
+def test_pose_du_bocal_chariot_au_poste_acceptee():
+    with Simulateur(REGLAGES, LISTE, "dosage_mycelium") as simu:
+        mycelium = mycelium_du_simulateur(simu, faux_porte_bocal=True)
+        # Chariot de remplissage au poste (y 0,135), manivelle en bas : mors ouverts permis.
+        mycelium.chariot._trajet.arrivee = AU_POSTE
+        mycelium.lancer(mycelium.geste_changer_de_bocal)
+        assert mycelium._pas is not None and mycelium._pas.porte_bocal == "ouvrir"
+        # Manivelle en haut : les mors ne bougent pas (pose manivelle en haut refusée).
+        mycelium.arreter()
+        simu.etat_axes.positions["manivelle"] = 0.0
+        mycelium.chariot._trajet.arrivee = AU_VIDAGE
+        with pytest.raises(ErreurEtape, match="les mors ne bougent que manivelle en bas"):
+            mycelium.lancer(lambda: iter([Pas("mors ouverts", porte_bocal="ouvrir")]))
+
+
+def test_manivelle_immobile_tete_de_prehension_dans_la_zone():
+    with Simulateur(REGLAGES, LISTE, "dosage_mycelium") as simu:
+        dedans = [True]
+        mycelium = mycelium_du_simulateur(
+            simu, faux_porte_bocal=True, prehension_hors_zone=lambda: not dedans[0]
+        )
+        # Tête de préhension dans la zone du porte-bocal : ni manivelle, ni demi-tour.
+        with pytest.raises(ErreurEtape, match="tête de préhension est dans la zone"):
+            mycelium.lancer(mycelium.geste_retourner_le_bocal)
+        simu.etat_axes.positions["manivelle"] = 0.0
+        with pytest.raises(ErreurEtape, match="tête de préhension est dans la zone"):
+            mycelium.lancer(mycelium.geste_retourner_le_bocal)
+        # Les mors, eux, bougent (c'est la pose ou la reprise du bocal).
+        simu.etat_axes.positions["manivelle"] = 180.0
+        mycelium.lancer(mycelium.geste_changer_de_bocal)
+        assert mycelium._pas is not None and mycelium._pas.porte_bocal == "ouvrir"
+        # Tête sortie : le demi-tour part.
+        mycelium.arreter()
+        dedans[0] = False
+        mycelium.lancer(mycelium.geste_retourner_le_bocal)
+        assert mycelium._pas is not None and mycelium._pas.texte == "manivelle en haut"
 
 
 def test_casse_du_bloc_seulement_au_premier_seau_du_bocal():

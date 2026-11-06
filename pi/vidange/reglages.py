@@ -970,27 +970,57 @@ class VissagePrehension(Modele):
 
 
 class PorteBocalPrehension(Modele):
-    """Pose et reprise du bocal dans le porte-bocal, au garage de l'agitateur."""
+    """Pose et reprise du bocal dans le porte-bocal, sur l'agitateur fixe, MANIVELLE EN BAS
+    (décisions, « Agitateur fixe, réponses à la PR n° 64 », point 2)."""
 
-    # Axe du bocal (m) et face de la tête quand le bocal est à sa hauteur exacte entre les mors.
+    # Axe du bocal (m).
     x: float
     y: float
-    face_z: float
+    # Face de la tête au contact de la capsule (bocal à sa hauteur exacte entre les mors),
+    # manivelle en bas : elle dépend de la course de l'agitation (trou du maneton), choisie avec
+    # mycelium → course_agitation_m. {course (m) : face (m)}.
+    contact_capsule_z: dict[float, float] = Field(min_length=1)
+    # Le contact doit rester au moins tant sous la face haute (prehension → haut_z, m) : sinon
+    # la pose est impossible et le démarrage refuse cette course.
+    marge_face_haute_m: float = Field(ge=0)
     # Orientation de la tête (°, grâce aux méplats) et écart permis.
     orientation_deg: float
     tolerance_orientation_deg: float = Field(gt=0)
     # Écart permis sur la hauteur du bocal (m), remontée avant le serrage (m).
     tolerance_hauteur_m: float = Field(gt=0)
     remontee_min_m: float = Field(gt=0)
-    # Autour de l'axe du bocal (m) : tête « entre les mors » (elle ne tourne pas) sous face_z +
-    # descente → approche_m.
+    # Autour de l'axe du bocal (m) : tête « entre les mors » (elle ne tourne pas) sous le contact
+    # de la capsule + descente → approche_m.
     rayon_zone_m: float = Field(gt=0)
     # Attente maximale d'un geste des mors (s).
     mors_max_s: float = Field(gt=0)
-    # Autour du bocal (son rayon + celui de la tête + marge_bocal_m), sous face_z + marge_bocal_m
-    # (capsule manivelle en haut, son plus haut) : la tête n'y va que pour poser ou reprendre le
-    # bocal, à la verticale (axe sur celui du bocal), manivelle en haut.
-    marge_bocal_m: float = Field(ge=0)
+
+    def contact_z(self, course_m: float) -> float | None:
+        """Face de la tête au contact de la capsule pour cette course de l'agitation (None : pas
+        dans la table)."""
+        for course, face in self.contact_capsule_z.items():
+            if math.isclose(course, course_m, abs_tol=1e-9):
+                return face
+        return None
+
+
+class ZonePorteBocalPrehension(Modele):
+    """Zone du porte-bocal (décisions, « Agitateur fixe, réponses à la PR n° 64 », point 3) :
+    rectangle x, y où rien de la tête (rayon de la tête + marge_m + rayon de l'objet tenu) ne va
+    plus bas que z_haut + marge_m. Seule exception : la verticale du bocal, pour le poser ou le
+    reprendre."""
+
+    x: Intervalle
+    y: Intervalle
+    # Le plus haut point dans la zone (m) : porte-bocal pendant le demi-tour.
+    z_haut: float
+    marge_m: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "ZonePorteBocalPrehension":
+        if self.x[0] >= self.x[1] or self.y[0] >= self.y[1]:
+            raise ValueError("x et y : du plus petit au plus grand")
+        return self
 
 
 class Prehension(Modele):
@@ -1028,6 +1058,7 @@ class Prehension(Modele):
     objets: dict[Nom, ObjetPrehension]
     vissage: VissagePrehension
     porte_bocal: PorteBocalPrehension
+    zone_porte_bocal: ZonePorteBocalPrehension
 
     @model_validator(mode="after")
     def _verifier(self) -> "Prehension":
@@ -2306,13 +2337,41 @@ class Machine(Modele):
                 f"prehension_z ({debut:g} à {fin:g} m)"
             )
         porte_bocal = prehension.porte_bocal
-        if not debut <= porte_bocal.face_z <= fin:
+        zone = prehension.zone_porte_bocal
+        if not (
+            zone.x[0] <= porte_bocal.x <= zone.x[1] and zone.y[0] <= porte_bocal.y <= zone.y[1]
+        ):
             erreurs.append(
-                f"prehension → porte_bocal → face_z : {porte_bocal.face_z:g} m hors de la course "
-                f"de prehension_z ({debut:g} à {fin:g} m)"
+                f"prehension → zone_porte_bocal : le bocal ({porte_bocal.x:g} ; "
+                f"{porte_bocal.y:g}) n'est pas dans la zone"
             )
         mycelium = self.mycelium
-        if mycelium is not None:
+        if mycelium is None:
+            erreurs.append(
+                "prehension : il faut la partie « mycelium » (sa course de l'agitation choisit le "
+                "contact de la capsule)"
+            )
+        else:
+            course = mycelium.course_agitation_m
+            contact = porte_bocal.contact_z(course)
+            maximum = prehension.haut_z - porte_bocal.marge_face_haute_m
+            if contact is None:
+                erreurs.append(
+                    f"prehension → porte_bocal → contact_capsule_z : rien pour la course "
+                    f"{course:g} m (mycelium → course_agitation_m)"
+                )
+            elif contact < debut:
+                erreurs.append(
+                    f"prehension → porte_bocal → contact_capsule_z : {contact:g} m (course "
+                    f"{course:g} m) sous la course de prehension_z ({debut:g} à {fin:g} m)"
+                )
+            elif contact > maximum + 1e-9:
+                erreurs.append(
+                    f"mycelium → course_agitation_m : {course:g} m refusée, contact de la capsule "
+                    f"à {contact:g} m, au-dessus de la face haute ({prehension.haut_z:g} m) moins "
+                    f"{porte_bocal.marge_face_haute_m:g} m : la préhension ne peut pas poser le "
+                    "bocal (changer le maneton de trou)"
+                )
             x, y = mycelium.bocal
             if math.hypot(porte_bocal.x - x, porte_bocal.y - y) > prehension.tolerance_m:
                 erreurs.append(

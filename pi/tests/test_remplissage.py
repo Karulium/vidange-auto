@@ -708,11 +708,11 @@ def test_la_prehension_applique_la_regle_9():
             if not poste.echange_en_cours:
                 break
             simulation.temps += 0.5
-        # Au-dessus du chariot au poste, mais pas du bocal du mycélium (fixe en y 0,150).
-        prehension.lancer(lambda: prehension.geste_aller(REMPLISSAGE.axe_x, 0.30))
+        # Au-dessus du chariot au poste, mais hors de la zone du porte-bocal (y ≤ 0,27 + 5,5 cm).
+        prehension.lancer(lambda: prehension.geste_aller(REMPLISSAGE.axe_x, 0.35))
         while not prehension.geste_fini():
             simulation.temps += 0.25
-        cible = PosePrehension(REMPLISSAGE.axe_x, 0.30, 0.60, 0.0)
+        cible = PosePrehension(REMPLISSAGE.axe_x, 0.35, 0.60, 0.0)
         assert prehension.refus_manuel(cible) is None
         remplissage.lancer(lambda: remplissage.geste_barres(0.2))
         assert "il bouge" in prehension.refus_manuel(cible)

@@ -10,8 +10,9 @@ au-dessus du poste depuis le 01/11/2026, docs/decisions.md « Agitateur du mycé
 Une PoseAgitateur dit où est la manivelle (°). Le bocal est toujours au même endroit
 (`mycelium → bocal`). Le chariot de remplissage est décrit par EtatChariot.
 Les règles :
-1. Manivelle EN HAUT pour la pose et la reprise du bocal par la préhension, et pour le demi-tour ;
-   EN BAS dès que le chariot de remplissage est au poste, et pour attendre. La manivelle ne quitte
+1. Manivelle EN HAUT seulement pour le demi-tour ; EN BAS pour la pose et la reprise du bocal par
+   la préhension (décision du 05/11/2026), dès que le chariot de remplissage est au poste, et pour
+   attendre. La manivelle ne quitte
    « en bas » (aller en haut, prise d'origine) que chariot à y ≥ y_ecarte_min (0,40) ; chariot
    plus près du poste, elle ne fait qu'aller en bas (chariot arrêté), ou secouer au dosage (seau
    au dosage, arrêtée pile en bas).

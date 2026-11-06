@@ -443,13 +443,15 @@ mycelium.demander(Demande("S1293", "seau_a", couche=1, variete="pleurote_grise",
   (y 0,155, plateau à la hauteur du dosage) ; casse du bloc (1re agitation d'un bocal), agitation jusqu'à la
   dose, arrêt **pile en bas** ; le chariot repart au vidage ; manivelle en haut, bocal remis debout (photo de
   contrôle), manivelle en bas (l'attente).
-- **Changement de bocal** : chariot à y ≥ 0,40, manivelle en haut, mors ouverts, bocal neuf posé (Préhension,
-  case vide), serré (palpage : diamètre hors plage = bocal absent, cassé ou mal posé → alarme avec photo).
+- **Changement de bocal** : **manivelle en bas** (chariot reculé ou au poste), mors ouverts (l'ancien bocal
+  est repris), bocal neuf posé (Préhension, case vide), serré (palpage : diamètre hors plage = bocal absent,
+  cassé ou mal posé → alarme avec photo). La manivelle ne remonte ensuite que pour le demi-tour.
 - **Verrous** (`ReglesMycelium`) : demi-tour seulement manivelle en haut, chariot à y ≥ 0,40 et caméra du
   dosage à 0° ; la manivelle ne quitte « en bas » que chariot à y ≥ 0,40 (sauf l'agitation, seau au dosage) ;
   `mycelium.refus_chariot()` : le chariot ne roule près du poste que manivelle en bas, arrêtée ;
   `mycelium.camera_peut_pivoter()` (pas pendant le demi-tour) ; `mycelium.etat_manivelle()` pour la
-  préhension ; `mycelium.dosage_en_cours()` pour la griffe.
+  préhension ; `mycelium.dosage_en_cours()` pour la griffe ; ni manivelle ni demi-tour tant que la tête de
+  préhension est dans la zone du porte-bocal (`prehension_hors_zone=prehension.hors_zone_porte_bocal`).
 - **Surveillance** : saut de poids (bocal cassé ou tombé) → arrêt, alarme, photo ; poids qui ne monte plus au
   bout du temps maximal → alarme ; dans les deux cas le seau est marqué « pas bon » (`seaux.defaut`).
 - **Registre** : chaque dose avec sa couche (`doses_mycelium.couche`) et son bocal, la variété du bocal

@@ -240,7 +240,7 @@ class TeteSimulee:
 
 def prehension_du_simulateur(simulateur: Simulateur, **options: Any) -> Prehension:
     """La préhension sur la machine imaginaire : tête en haut (position prehension_haut), faux
-    porte-bocal, poste du fût du simulateur (panneau, chariot), manivelle du mycélium en haut
+    porte-bocal, poste du fût du simulateur (panneau, chariot), manivelle du mycélium en bas
     (prête pour le porte-bocal), lue sur les axes imaginaires. `options` :
     cases vides de Prehension (camera_dosage_pivote, anse_levee, photo...)."""
     reglages = simulateur.reglages
@@ -259,7 +259,7 @@ def prehension_du_simulateur(simulateur: Simulateur, **options: Any) -> Prehensi
     options.setdefault("echange_fut", lambda: poste.echange_en_cours)
     if machine.mycelium is not None and "manivelle" in machine.axes:
         mycelium = ReglesMycelium(machine)
-        etat.positions["manivelle"] = mycelium.angle_proche(0.0, bas=False)
+        etat.positions["manivelle"] = mycelium.angle_proche(0.0, bas=True)
 
         def manivelle() -> str | None:
             pose = PoseAgitateur(etat.positions["manivelle"])

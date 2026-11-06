@@ -4,7 +4,7 @@
   vidange-prehension vide                     vanne ouverte 5 s : le vide lu (ventouse sur vitre)
   vidange-prehension prendre-poser seau 1.6 0.6 0.6  1.9 0.6 0.6 --format seau_a
                                               prendre un objet (x y contact_z), le poser ailleurs
-  vidange-prehension porte-bocal 1.4 0.75 0.95 --manivelle-en-haut
+  vidange-prehension porte-bocal 1.0 0.75 0.95 --manivelle-en-bas
                                               bocal pris là, posé au porte-bocal, repris, reposé
   vidange-prehension visser 1.5 0.5 0.85  1.7 0.5 0.9
                                               capsule prise là, vissée sur le bocal d'ici
@@ -13,9 +13,9 @@
 Les gestes sont ceux du programme, avec tous leurs verrous (vidange.prehension). Les cotes sont
 en mètres, dans le repère du portique : x, y = axe de la tête ; contact_z = face de la tête quand
 elle touche l'objet. Le panneau du poste du fût est lu (isolation du fût). L'agitateur du
-mycélium (fixe) n'est pas lu : --manivelle-en-haut dit qu'on a vu sa manivelle en haut, arrêtée,
-et la caméra du dosage à 0° (sinon la tête ne va pas au porte-bocal et ne passe pas au-dessus du
-bocal : la position de la manivelle est inconnue).
+mycélium (fixe) n'est pas lu : --manivelle-en-bas dit qu'on a vu sa manivelle en bas, arrêtée,
+et la caméra du dosage à 0° (sinon la tête ne va pas dans la zone du porte-bocal : la position de
+la manivelle est inconnue).
 Procédure complète :
 pi/systeme/essai-prehension.md. À ne lancer que programme principal arrêté (une seule liaison
 par carte).
@@ -78,9 +78,9 @@ def main(arguments: list[str] | None = None) -> int:
     lecteur.add_argument("--faux", action="store_true", help="avec de faux FluidNC")
     lecteur.add_argument("--format", help="format du seau (machine.yaml → griffe → formats)")
     lecteur.add_argument(
-        "--manivelle-en-haut",
+        "--manivelle-en-bas",
         action="store_true",
-        help="manivelle du mycélium vue en haut, caméra du dosage à 0° (porte-bocal)",
+        help="manivelle du mycélium vue en bas, caméra du dosage à 0° (porte-bocal)",
     )
     lecteur.add_argument(
         "commande", choices=["etat", "vide", "prendre-poser", "porte-bocal", "visser"]
@@ -158,7 +158,7 @@ def main(arguments: list[str] | None = None) -> int:
                 porte_bocal,
                 panneau_rabattu=poste.panneau_vu_rabattu,
                 echange_fut=lambda: poste.echange_en_cours,
-                manivelle=lambda: "haut" if options.manivelle_en_haut else None,
+                manivelle=lambda: "bas" if options.manivelle_en_bas else None,
             )
             return _faire(options, reglages, prehension, tete)
         except (ErreurEtape, ErreurFluidnc, ErreurMateriel, ErreurVide) as erreur:

@@ -24,8 +24,10 @@ main sur l'arrêt d'urgence.
   où est le haut, c'est le Pi qui le trouve (prise d'origine de la manivelle, tâche 20 :
   `essai-porte-bocal.md`, étape 1). Ci-dessous, « H » = l'angle du moteur manivelle en haut que
   cette étape a donné.
-- La bielle est dans le trou de **4 cm** pour commencer, et `course_agitation_m: 0.04` dans
-  `machine.yaml` (le Pi ne voit pas le trou : c'est ce réglage qu'il croit).
+- La bielle est dans le trou de **10 cm** (le trou par défaut), et `course_agitation_m: 0.10` dans
+  `machine.yaml` (le Pi ne voit pas le trou : c'est ce réglage qu'il croit ; le changer à chaque
+  changement de trou). 7 cm est accepté ; **4 cm est refusé au démarrage** : la préhension ne pourrait
+  pas poser le bocal (contact de la capsule à 1,108, la face monte au plus à 1,10).
 - Pas de bocal dans le porte-bocal pour les étapes 1 et 2.
 
 Dans les commandes ci-dessous, `vidange-fluidnc` veut dire
@@ -70,6 +72,8 @@ par les tests automatiques. Sur la machine, vérifier seulement à l'œil, en d�
 1. Bocal plein dans le porte-bocal, seau A vide sur le plateau.
 2. Lancer un dosage d'une couche depuis la page web (essai du module « mycelium »), vitesses de
    l'exemple. Regarder :
+   - au premier seau, bocal neuf : il est posé **manivelle en bas** (la manivelle ne monte qu'ensuite,
+     pour le demi-tour) ;
    - chariot au vidage (y 0,42), manivelle en haut, le bocal se retourne, manivelle en bas ;
    - le chariot va au poste (y 0,135), puis au dosage (y 0,155), la casse du bloc (5 s,
      200 tr/min), puis l'agitation ;

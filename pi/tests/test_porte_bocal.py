@@ -345,12 +345,13 @@ def test_simulateur_avec_le_vrai_porte_bocal():
     # Prise d'origine de la manivelle d'abord ; 2 bocaux : mors ouverts, bocal serré.
     assert textes[0] == "origine de la manivelle (tour lent)"
     assert textes.count("mors ouverts") == 2 and textes.count("bocal serré") == 2
-    # Demi-tour manivelle en haut ; elle redescend ensuite (l'attente). Au 1er bocal, elle est
-    # déjà en haut (pose du bocal).
+    # Pose du bocal manivelle en bas ; elle ne monte que pour le demi-tour, puis redescend
+    # (l'attente).
     debut = textes.index("bocal tête en bas")
-    assert textes[debut - 2 : debut + 2] == [
+    assert textes[debut - 3 : debut + 2] == [
         "mors ouverts",
         "bocal serré",
+        "manivelle en haut",
         "bocal tête en bas",
         "manivelle en bas",
     ]

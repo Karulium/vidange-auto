@@ -265,7 +265,13 @@ def remplissage_du_simulateur(
         return bocaux[-1]
 
     mycelium = Mycelium(
-        machine, agitateur, porte_bocal, remplissage, nouveau_bocal, horloge=horloge
+        machine,
+        agitateur,
+        porte_bocal,
+        remplissage,
+        nouveau_bocal,
+        horloge=horloge,
+        prehension_hors_zone=prehension.hors_zone_porte_bocal,
     )
     liste = simule.seaux if seaux_simules is None else seaux_simules
     seaux = {seau.seau: seau for seau in liste}

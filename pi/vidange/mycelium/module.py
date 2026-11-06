@@ -6,8 +6,8 @@ Les étapes se répètent (une couche, la suivante...) : `ensuite` dit laquelle 
                          n'est pas connue, puis manivelle en bas (l'attente)
     attendre_une_couche  une couche versée et tassée attend son mycélium (Mycelium.demander)
     ecarter_le_chariot   le chariot de remplissage à y ≥ 0,40 (il attend au vidage, y 0,42)
-    changer_de_bocal     bocal neuf (1er seau, ou bocal fini) : manivelle en haut, mors ouverts,
-                         bocal posé (Préhension, case vide), serré
+    changer_de_bocal     bocal neuf (1er seau, ou bocal fini) : manivelle en bas, mors ouverts,
+                         bocal posé (Préhension, case vide), serré (chariot reculé ou au poste)
     retourner_le_bocal   manivelle en haut, demi-tour du bocal tête en bas, manivelle en bas
     amener_le_seau       le chariot amène le seau au poste (spray, micropore), puis au dosage,
                          plateau à la hauteur du dosage
@@ -86,7 +86,6 @@ def module_mycelium(mycelium: Mycelium) -> Module:
                 "changer_de_bocal",
                 mycelium.geste_changer_de_bocal,
                 mycelium.apres_bocal,
-                entree=(ecarte,),
                 quoi_faire="Mettre un bocal neuf de la bonne variété dans le porte-bocal, puis "
                 "acquitter et donner le Go.",
             ),

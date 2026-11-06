@@ -136,80 +136,145 @@ def test_isolation_du_fut():
     assert refus(Pose(x=0.65, y=0.30, z=1.10, a=0)) is None
     assert "isolation du fût" in refus(Pose(x=0.65, y=0.30, z=1.0, a=0))
     assert refus(Pose(x=0.65, y=0.30, z=1.0, a=0), Contexte(panneau_rabattu=True)) is None
-    assert refus(Pose(x=0.75, y=0.30, z=1.0, a=0)) is None
+    assert refus(Pose(x=0.75, y=0.40, z=1.0, a=0)) is None
 
 
-# Manivelle du mycélium en haut : pose et reprise du bocal permises.
+# Manivelle du mycélium en bas : pose et reprise du bocal permises (décision du 05/11/2026).
+EN_BAS = Contexte(manivelle="bas")
 EN_HAUT = Contexte(manivelle="haut")
 PORTE_BOCAL = PREHENSION.porte_bocal
+ZONE = PREHENSION.zone_porte_bocal
+CONTACT = REGLES.contact_capsule_z
 # Tête en haut (approche à 1,10), à la verticale du bocal.
 SUR_LE_BOCAL = Pose(x=PORTE_BOCAL.x, y=PORTE_BOCAL.y, z=1.10, a=0)
+# Tête en haut, hors de la zone du porte-bocal, côté allée.
+DEVANT = Pose(x=PORTE_BOCAL.x, y=0.75, z=1.10, a=0)
 
 
 def test_porte_bocal_sur_l_agitateur_fixe():
     assert (PORTE_BOCAL.x, PORTE_BOCAL.y) == pytest.approx((0.925, 0.150))
-    assert PORTE_BOCAL.face_z == pytest.approx(1.05)
     assert MYCELIUM.bocal == pytest.approx((0.925, 0.150))
+    # Contact de la capsule selon la course de l'agitation (fiche Mycélium v10b) ; 10 cm par
+    # défaut.
+    assert PORTE_BOCAL.contact_capsule_z == pytest.approx({0.10: 1.047, 0.07: 1.077, 0.04: 1.108})
+    assert MYCELIUM.course_agitation_m == pytest.approx(0.10)
+    assert CONTACT == pytest.approx(1.047)
+    assert ZONE.x == pytest.approx((0.79, 1.08)) and ZONE.y == pytest.approx((-0.03, 0.27))
+    assert ZONE.z_haut == pytest.approx(1.21)
+
+
+def test_course_de_4_cm_refusee_au_demarrage(reglages):
+    remplacer(reglages / "machine.yaml", "course_agitation_m: 0.10", "course_agitation_m: 0.04")
+    message = erreur_de(reglages)
+    assert "mycelium → course_agitation_m : 0.04 m refusée, contact de la capsule à 1.108 m" in (
+        message
+    )
+    assert "la préhension ne peut pas poser le bocal" in message
+
+
+def test_course_de_7_cm_acceptee(reglages):
+    remplacer(reglages / "machine.yaml", "course_agitation_m: 0.10", "course_agitation_m: 0.07")
+    regles = ReglesPrehension(charger_reglages(reglages).machine)
+    assert regles.contact_capsule_z == pytest.approx(1.077)
+
+
+def test_course_absente_de_la_table_des_contacts(reglages):
+    remplacer(reglages / "machine.yaml", "0.10: 1.047, ", "")
+    message = erreur_de(reglages)
+    assert "contact_capsule_z : rien pour la course 0.1 m" in message
+
+
+def test_bocal_dans_la_zone_du_porte_bocal_verifie(reglages):
+    remplacer(
+        reglages / "machine.yaml",
+        "x: [0.79, 1.08], y: [-0.03, 0.27]",
+        "x: [0.79, 0.90], y: [-0.03, 0.27]",
+    )
+    assert "zone_porte_bocal : le bocal (0.925 ; 0.15) n'est pas dans la zone" in erreur_de(
+        reglages
+    )
 
 
 def test_porte_bocal_hors_de_l_isolation_du_fut_sans_exception():
     # x 0,925 : hors de l'isolation du fût (x < 0,71), panneau levé ou pas.
-    bas = SUR_LE_BOCAL.avec(z=PORTE_BOCAL.face_z)
-    assert refus(bas, EN_HAUT) is None
-    # Sous x 0,71 : l'isolation du fût revient, sans exception.
-    assert "isolation du fût" in refus(Pose(x=0.70, y=0.15, z=1.0, a=0), EN_HAUT)
+    bas = SUR_LE_BOCAL.avec(z=CONTACT)
+    assert refus(bas, EN_BAS) is None
+    # Sous x 0,71 (hors de la zone du porte-bocal) : l'isolation du fût revient, sans exception.
+    assert "isolation du fût" in refus(Pose(x=0.70, y=0.40, z=1.0, a=0), EN_BAS)
 
 
-def test_tete_au_dessus_du_bocal_seulement_pour_le_poser_ou_le_reprendre():
-    bas = SUR_LE_BOCAL.avec(z=PORTE_BOCAL.face_z)
-    # Au-dessus de la capsule (1,05 + 1 cm de marge) : la tête passe, manivelle arrêtée.
-    for manivelle in ("haut", "bas"):
-        assert refus(SUR_LE_BOCAL, Contexte(manivelle=manivelle)) is None
-        assert refus(SUR_LE_BOCAL.avec(x=0.95), Contexte(manivelle=manivelle)) is None
-    # Plus bas : seulement à la verticale du bocal, manivelle en haut.
-    assert "que pour le poser ou le reprendre" in refus(bas, PRODUCTION)
-    assert "que pour le poser ou le reprendre" in refus(bas.avec(x=0.95), EN_HAUT)
-    assert "que pour le poser ou le reprendre" in refus(bas.avec(x=0.95, z=1.059), PRODUCTION)
-    assert refus(bas.avec(x=0.95, z=1.061), PRODUCTION) is None
-    # Loin du bocal (plus que son rayon + celui de la tête + 1 cm) : rien.
-    assert refus(bas.avec(y=PORTE_BOCAL.y + 0.11), PRODUCTION) is None
-    # Avec un bocal tenu (0,17 sous la face), le bas du bocal compte, même tête en haut.
-    dessus = SUR_LE_BOCAL.avec(x=0.95)
-    assert "que pour le poser ou le reprendre" in refus(
-        dessus, Contexte(manivelle="bas", objet=BOCAL)
-    )
-    # Bocal tenu, mors ouverts : c'est celui du porte-bocal (posé ou repris), il s'en va.
-    tenu = Contexte(manivelle="haut", objet=BOCAL, mors="ouverts")
-    assert refus(dessus, tenu) is None
-    assert "que pour le poser" in refus(dessus, replace(tenu, mors="serres"))
-
-
-def test_manivelle_qui_bouge_la_tete_ne_passe_pas_au_dessus_du_bocal():
-    # Manivelle qui bouge, demi-tour, position inconnue : même en haut, pas au-dessus du bocal.
-    inconnue = Contexte(panneau_rabattu=True)
-    texte = refus(SUR_LE_BOCAL, inconnue)
-    assert "manivelle du mycélium qui bouge" in texte
-    assert "manivelle du mycélium qui bouge" in REGLES.refus_mouvement(
-        SUR_LE_BOCAL.avec(x=1.10), SUR_LE_BOCAL.avec(x=0.80), inconnue
-    )
-    # À côté du bocal (11 cm en y) : permis.
-    assert refus(SUR_LE_BOCAL.avec(y=PORTE_BOCAL.y + 0.11), inconnue) is None
+def test_zone_du_porte_bocal():
+    # Dans le rectangle (même tête en haut, la face ne monte pas au-dessus de 1,21) : refusé,
+    # sauf à la verticale du bocal, manivelle en bas.
+    assert "zone du porte-bocal" in refus(SUR_LE_BOCAL.avec(x=0.95), EN_BAS)
+    assert "zone du porte-bocal" in refus(Pose(x=1.0, y=0.05, z=1.10, a=0), EN_BAS)
+    assert refus(SUR_LE_BOCAL, EN_BAS) is None
+    assert refus(SUR_LE_BOCAL.avec(z=CONTACT), EN_BAS) is None
+    # Manivelle en haut, qui bouge (demi-tour) ou inconnue : même la verticale est refusée.
+    assert "manivelle en haut" in refus(SUR_LE_BOCAL, EN_HAUT)
+    texte = refus(SUR_LE_BOCAL, Contexte(panneau_rabattu=True))
+    assert "manivelle qui bouge, demi-tour, ou position inconnue" in texte
+    # Bord de la zone : rayon de la tête (0,045) + 1 cm, plus le rayon de l'objet tenu.
+    y_bord = ZONE.y[1] + PREHENSION.rayon_tete_m + ZONE.marge_m
+    assert refus(SUR_LE_BOCAL.avec(y=y_bord), EN_HAUT) is None
+    assert "zone du porte-bocal" in refus(SUR_LE_BOCAL.avec(y=y_bord - 0.001), EN_HAUT)
+    tenu = Contexte(manivelle="bas", objet=BOCAL)
+    assert "zone du porte-bocal" in refus(SUR_LE_BOCAL.avec(y=y_bord + 0.01), tenu)
+    assert refus(SUR_LE_BOCAL.avec(y=y_bord + BOCAL.rayon_m), tenu) is None
     # Une préhension sans Mycélium branché ne sait pas où est la manivelle.
     prehension = Prehension(MACHINE, None)  # type: ignore[arg-type]
     assert prehension.contexte().manivelle is None
 
 
-def test_prehension_sur_le_bocal_manivelle_en_bas_refusee():
-    # Préhension sur le bocal manivelle en bas : refusée (pose et reprise manivelle en haut).
-    bas = SUR_LE_BOCAL.avec(z=PORTE_BOCAL.face_z)
-    texte = REGLES.refus_mouvement(SUR_LE_BOCAL, bas, Contexte(manivelle="bas", mors="serres"))
-    assert "il faut la manivelle du mycélium en haut" in texte
+def test_trajet_en_ligne_droite_a_travers_la_zone_refuse():
+    # De part et d'autre de la zone, en passant dessus : refusé, manivelle en bas ou pas.
+    depart, arrivee = Pose(x=0.70, y=0.15, z=1.10, a=0), Pose(x=1.17, y=0.15, z=1.10, a=0)
+    for contexte in (EN_BAS, EN_HAUT, replace(EN_BAS, objet=BOCAL)):
+        texte = REGLES.refus_mouvement(depart, arrivee, replace(contexte, panneau_rabattu=True))
+        assert "zone du porte-bocal" in texte
+
+
+def test_trajet_qui_frole_la_zone_a_1_cm_pres_accepte():
+    # Le long de la zone, côté allée, à rayon de la tête + 1 cm de son bord : accepté.
+    y = ZONE.y[1] + PREHENSION.rayon_tete_m + ZONE.marge_m
+    depart, arrivee = Pose(x=0.75, y=y, z=1.10, a=0), Pose(x=0.95, y=y, z=1.10, a=0)
+    rabattu = Contexte(panneau_rabattu=True)
+    assert REGLES.refus_mouvement(depart, arrivee, rabattu) is None
+    # 1 mm plus près : refusé.
+    plus_pres = (depart.avec(y=y - 0.001), arrivee.avec(y=y - 0.001))
+    assert "zone du porte-bocal" in REGLES.refus_mouvement(*plus_pres, rabattu)
+
+
+def test_trajet_vers_la_verticale_du_bocal():
+    # En ligne droite d'un point hors de la zone à la verticale du bocal, face en haut, manivelle
+    # en bas : permis (et le retour aussi), même avec le bocal tenu.
+    for contexte in (EN_BAS, replace(EN_BAS, objet=BOCAL, mors="ouverts")):
+        assert REGLES.refus_mouvement(DEVANT, SUR_LE_BOCAL, contexte) is None
+        assert REGLES.refus_mouvement(SUR_LE_BOCAL, DEVANT, contexte) is None
+    # Manivelle en haut, ou qui bouge : refusé.
+    for contexte in (EN_HAUT, Contexte()):
+        assert "zone du porte-bocal" in REGLES.refus_mouvement(DEVANT, SUR_LE_BOCAL, contexte)
+    # Depuis un point de la zone (pas la verticale) : refusé.
+    dans = SUR_LE_BOCAL.avec(y=0.25)
+    assert "zone du porte-bocal" in REGLES.refus_mouvement(dans, SUR_LE_BOCAL, EN_BAS)
+    # De la verticale vers un autre point de la zone : refusé.
+    assert "zone du porte-bocal" in REGLES.refus_mouvement(SUR_LE_BOCAL, dans, EN_BAS)
+
+
+def test_pose_du_bocal_manivelle_en_haut_refusee():
+    # Pose et reprise manivelle EN BAS : manivelle en haut, la tête ne va même pas au-dessus.
+    bas = SUR_LE_BOCAL.avec(z=CONTACT)
+    tenu = Contexte(manivelle="haut", objet=BOCAL, mors="ouverts")
+    assert "manivelle du mycélium en bas" in REGLES.refus_mouvement(SUR_LE_BOCAL, bas, tenu)
+    assert "manivelle en haut" in REGLES.refus_mouvement(DEVANT, SUR_LE_BOCAL, tenu)
+    # Manivelle en bas : la pose est permise.
+    assert REGLES.refus_mouvement(SUR_LE_BOCAL, bas, replace(tenu, manivelle="bas")) is None
 
 
 def test_porte_bocal_camera_du_dosage_a_0_degre():
     # Point e) : caméra du dosage à 0° avant toute pose ou reprise du bocal.
-    bas = SUR_LE_BOCAL.avec(z=PORTE_BOCAL.face_z)
-    pivote = Contexte(manivelle="haut", mors="serres", camera_dosage_pivote=True)
+    bas = SUR_LE_BOCAL.avec(z=CONTACT)
+    pivote = Contexte(manivelle="bas", mors="serres", camera_dosage_pivote=True)
     assert "caméra du dosage à 0°" in REGLES.refus_mouvement(SUR_LE_BOCAL, bas, pivote)
     assert (
         REGLES.refus_mouvement(SUR_LE_BOCAL, bas, replace(pivote, camera_dosage_pivote=False))
@@ -218,10 +283,10 @@ def test_porte_bocal_camera_du_dosage_a_0_degre():
 
 
 def test_porte_bocal_mors():
-    bas = SUR_LE_BOCAL.avec(z=PORTE_BOCAL.face_z)
+    bas = SUR_LE_BOCAL.avec(z=CONTACT)
 
     def descente(**valeurs) -> str | None:
-        contexte = replace(EN_HAUT, **valeurs)
+        contexte = replace(EN_BAS, **valeurs)
         return REGLES.refus_mouvement(SUR_LE_BOCAL, bas, contexte)
 
     # Poser : bocal tenu, mors ouverts.
@@ -236,9 +301,9 @@ def test_porte_bocal_mors():
     capsule = Objet.depuis("capsule", OBJETS["capsule"])
     assert "que pour un bocal" in descente(objet=capsule, mors="serres")
     # Remonter est toujours permis (mors approchés après la pose).
-    assert REGLES.refus_mouvement(bas, SUR_LE_BOCAL, EN_HAUT) is None
+    assert REGLES.refus_mouvement(bas, SUR_LE_BOCAL, EN_BAS) is None
     # Loin du bocal (panneau rabattu), les mors ne comptent pas.
-    loin = Pose(x=0.65, y=0.30, z=1.10, a=0)
+    loin = Pose(x=0.65, y=0.40, z=1.10, a=0)
     rabattu = Contexte(panneau_rabattu=True)
     assert REGLES.refus_mouvement(loin, loin.avec(z=1.0), rabattu) is None
 
@@ -269,20 +334,21 @@ def test_boitier_de_la_camera_du_bocal():
     # La fiche dit x ≤ 1,16 : avec la boîte de machine.yaml (x ≤ 1,085), c'est 1,14 (question
     # de la PR de la tâche 37).
     assert x_max == pytest.approx(1.14)
-    assert refus(Pose(x=1.05, y=0.30, z=1.07, a=0)) is not None
-    assert refus(Pose(x=1.05, y=0.30, z=1.075, a=0)) is None
-    assert refus(Pose(x=1.05, y=0.34, z=1.0, a=0)) is None
+    # x 1,137 : hors de la zone du porte-bocal (x ≤ 1,08 + 5,5 cm), dans celle du boîtier.
+    assert "boîtier de la caméra du bocal" in refus(Pose(x=1.137, y=0.30, z=1.07, a=0))
+    assert refus(Pose(x=1.137, y=0.30, z=1.075, a=0)) is None
+    assert refus(Pose(x=1.137, y=0.34, z=1.0, a=0)) is None
     # Avec un bocal (rayon 0,0515, 0,17 sous la face) : zone plus large, et le bas du bocal compte.
     (x_min, _), y_max, _ = REGLES.zone_camera_bocal(BOCAL)
     assert x_min == pytest.approx(0.9835) and y_max == pytest.approx(0.3415)
-    assert "boîtier de la caméra du bocal" in refus(
-        Pose(x=1.05, y=0.30, z=1.10, a=0), Contexte(objet=BOCAL)
-    )
+    # Là, la zone du porte-bocal (plus large avec le bocal) refuse déjà.
+    assert refus(Pose(x=1.05, y=0.30, z=1.10, a=0), Contexte(objet=BOCAL)) is not None
 
 
 def test_camera_du_dosage():
     pivote = Contexte(manivelle="bas", camera_dosage_pivote=True, panneau_rabattu=True)
-    dans = Pose(x=0.80, y=0.30, z=1.05, a=0)
+    # y 0,33 : hors de la zone du porte-bocal (y ≤ 0,27 + 5,5 cm), dans la boîte de la caméra.
+    dans = Pose(x=0.80, y=0.33, z=1.05, a=0)
     assert refus(dans, Contexte(manivelle="bas", panneau_rabattu=True)) is None
     assert "la caméra du dosage pivote" in refus(dans, pivote)
     assert refus(dans.avec(z=1.10), pivote) is None
@@ -305,9 +371,8 @@ def test_pont_et_tete_jamais_ensemble_et_pont_tete_en_haut():
 
 
 def test_la_tete_ne_tourne_pas_entre_les_mors():
-    porte_bocal = PREHENSION.porte_bocal
-    rabattu = replace(EN_HAUT, panneau_rabattu=True)
-    dedans = Pose(x=porte_bocal.x, y=porte_bocal.y, z=porte_bocal.face_z, a=0)
+    rabattu = replace(EN_BAS, panneau_rabattu=True)
+    dedans = SUR_LE_BOCAL.avec(z=CONTACT)
     assert "ne tourne jamais entre les mors" in REGLES.refus_mouvement(
         dedans, dedans.avec(a=10), rabattu
     )
@@ -454,10 +519,23 @@ def axe_imaginaire(nom: str, valeur: float):
     return preparer
 
 
-def test_porte_bocal_manivelle_en_bas_au_simulateur():
-    planning, _, _ = jouer(preparer=axe_imaginaire("manivelle", 180.0))
+def test_porte_bocal_manivelle_en_haut_au_simulateur():
+    # Pose manivelle en haut refusée : la tête ne va même pas à la verticale du bocal.
+    planning, _, _ = jouer(preparer=axe_imaginaire("manivelle", 0.0))
     assert etapes(planning)[-1] == "poser_au_porte_bocal"
-    assert "il faut la manivelle du mycélium en haut" in planning.probleme
+    assert "zone du porte-bocal" in planning.probleme
+    assert "manivelle en haut" in planning.probleme
+
+
+def test_tete_dans_la_zone_vue_par_le_mycelium():
+    with Simulateur(REGLAGES, LISTE, "prehension") as simulation:
+        prehension = prehension_du_simulateur(simulation)
+        assert prehension.hors_zone_porte_bocal()
+        # Tête à la verticale du bocal : le Mycélium ne tourne pas la manivelle.
+        positions = simulation.etat_axes.positions
+        positions["pont_x"] = PORTE_BOCAL.x - PREHENSION.decalage_mat_x
+        positions["chariot_y"] = PORTE_BOCAL.y
+        assert not prehension.hors_zone_porte_bocal()
 
 
 def test_porte_bocal_camera_du_dosage_pivotee_au_simulateur():
@@ -475,8 +553,8 @@ def test_porte_bocal_mors_pas_ouverts_au_simulateur():
 
     planning, _, _ = jouer(preparer=preparer)
     assert etapes(planning)[-1] == "poser_au_porte_bocal"
-    # Mors serrés : le porte-bocal tient (peut-être) un bocal, le bocal tenu n'y va pas.
-    assert "mors pas ouverts" in planning.probleme
+    # Mors serrés : le porte-bocal tient (peut-être) un bocal, le bocal tenu n'y descend pas.
+    assert "pour poser le bocal, il faut les mors ouverts" in planning.probleme
 
 
 def test_vissage_au_dela_de_150_n():

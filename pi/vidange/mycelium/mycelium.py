@@ -16,7 +16,9 @@ Un « agitateur » FIXE porte le bocal au-dessus du poste de remplissage, toujou
    la couche est atteinte, toujours pile en bas (jamais entre le haut et le bas) ;
 5. le chariot repart au vidage ; manivelle en haut, bocal remis debout, manivelle en bas.
 Verrous (vidange.mycelium.regles) : demi-tour seulement manivelle en haut, chariot à y ≥ 0,40 et
-caméra du dosage à 0° ; la manivelle ne quitte « en bas » que chariot à y ≥ 0,40.
+caméra du dosage à 0° ; la manivelle ne quitte « en bas » que chariot à y ≥ 0,40. La manivelle ne
+tourne pas et le bocal ne se retourne pas pendant que la tête de préhension est dans la zone du
+porte-bocal (`prehension_hors_zone`).
 
 Avant tout, la manivelle prend son origine (tour lent, AgitateurFluidnc) : au premier geste, et
 à chaque geste tant qu'elle n'est pas connue.
@@ -29,8 +31,9 @@ Go), il repart de là où est l'agitateur ; la dose d'une couche est comptée de
 plateau avant sa 1re agitation.
 
 Le porte-bocal (vidange.porte_bocal, tâche 20) est derrière l'interface `PorteBocal` ; au
-changement de bocal (manivelle en haut, chariot à y ≥ 0,40), ses mors s'ouvrent, le bocal neuf est
-posé, puis serré.
+changement de bocal (MANIVELLE EN BAS, chariot de remplissage reculé ou au poste ; décision du
+05/11/2026), ses mors s'ouvrent (l'ancien bocal est repris), le bocal neuf est posé, puis serré.
+La manivelle ne remonte ensuite que pour le demi-tour.
 
 Les modules pas encore écrits sont des cases vides, derrière des interfaces simples :
 - chariot de remplissage (Remplissage, pas figé) : `ChariotRemplissage` ;
@@ -62,6 +65,10 @@ Geste = Generator[Pas, Resultat, None]
 QUOI_FAIRE = (
     "Regarder la vidéo du dosage : la manivelle est-elle bloquée, le bocal bien tenu ? Corriger, "
     "puis acquitter et donner le Go : le geste est refait depuis le début."
+)
+QUOI_FAIRE_TETE = (
+    "La tête de préhension est au-dessus du porte-bocal : attendre qu'elle ait fini de poser ou "
+    "de reprendre le bocal, ou la remonter et l'écarter, puis acquitter et donner le Go."
 )
 QUOI_FAIRE_VIDE = (
     "Le poids du seau ne monte plus : bocal vide ou couvercle bouché ? Le seau est marqué « pas "
@@ -175,11 +182,14 @@ class Mycelium:
         horloge: Callable[[], float] = time.monotonic,
         photo: Callable[[str], object] = lambda raison: None,
         camera: CameraDosage | None = None,
+        prehension_hors_zone: Callable[[], bool] = lambda: True,
     ) -> None:
         """`nouveau_bocal(variete)` : un bocal neuf de cette variété est mis dans le porte-bocal
         (gestes du Porte-bocal et de la Préhension, QR lu par la vision) ; il rend ce bocal.
         `photo(raison)` : photo de la caméra du dosage, notée avec l'alarme. `camera` : la caméra
-        du dosage, pour la photo du seau après chaque dose (None : pas de photo)."""
+        du dosage, pour la photo du seau après chaque dose (None : pas de photo).
+        `prehension_hors_zone` : la tête de préhension est hors de la zone du porte-bocal
+        (Prehension.hors_zone_porte_bocal ; sans préhension branchée : toujours vrai)."""
         assert machine.mycelium is not None and machine.griffe is not None
         self.reglages = machine.mycelium
         self.formats = machine.griffe.formats
@@ -192,6 +202,7 @@ class Mycelium:
         self._horloge = horloge
         self._photo = photo
         self.camera = camera
+        self._prehension_hors_zone = prehension_hors_zone
         # Dose (et cycle) dont le seau attend sa photo.
         self._a_photographier: tuple[Dose, int | None] | None = None
         self.plan = Plan()
@@ -380,11 +391,26 @@ class Mycelium:
             return
         self._envoyer(pas)
 
+    def _refus_tete(self, pas: Pas) -> str | None:
+        """La manivelle (et le demi-tour) ne bougent pas pendant que la tête de préhension est
+        dans la zone du porte-bocal. Les mors et les pesées ne comptent pas."""
+        if pas.porte_bocal in ("ouvrir", "serrer") or not (pas.bouge or pas.porte_bocal):
+            return None
+        if self._prehension_hors_zone():
+            return None
+        return (
+            f"mycélium, « {pas.texte} » refusé : la tête de préhension est dans la zone du "
+            "porte-bocal (ou sa position est inconnue)"
+        )
+
     def _envoyer(self, pas: Pas) -> None:
         self._pas = pas
         self._exige_ecart = False
         self._depuis = self._horloge()
         chariot = self.chariot.etat()
+        refus = self._refus_tete(pas)
+        if refus is not None:
+            raise ErreurEtape(refus, QUOI_FAIRE_TETE)
         if pas.origine:
             # Tour lent : la manivelle passe en haut.
             refus = self.regles.refus_manivelle(None, chariot)
@@ -407,9 +433,9 @@ class Mycelium:
             return
         if pas.porte_bocal is not None:
             # Les mors : pour la pose et la reprise du bocal par la préhension.
-            if not self.regles.en_haut(self.pose) or self.plan.tete_en_bas:
+            if not self.regles.en_bas(self.pose) or self.plan.tete_en_bas:
                 raise ErreurEtape(
-                    f"« {pas.texte} » refusé : les mors ne bougent que manivelle en haut, bocal "
+                    f"« {pas.texte} » refusé : les mors ne bougent que manivelle en bas, bocal "
                     "debout",
                     QUOI_FAIRE,
                 )
@@ -522,9 +548,10 @@ class Mycelium:
         yield from self._manivelle(bas=True)
 
     def geste_changer_de_bocal(self) -> Geste:
-        """Manivelle en haut (pose et reprise par la préhension) ; mors ouverts (l'ancien bocal
-        est repris), bocal neuf posé, serré. La manivelle reste en haut (demi-tour ensuite)."""
-        yield from self._manivelle(bas=False)
+        """Manivelle en bas (pose et reprise par la préhension, chariot de remplissage reculé ou
+        au poste) ; mors ouverts (l'ancien bocal est repris), bocal neuf posé, serré. La manivelle
+        reste en bas : elle ne remonte que pour le demi-tour."""
+        yield from self._manivelle(bas=True)
         yield Pas("mors ouverts", porte_bocal="ouvrir")
         self.changer_de_bocal()
         yield Pas("bocal serré", porte_bocal="serrer")

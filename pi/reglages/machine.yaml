@@ -648,8 +648,10 @@ mycelium:
   # Axe de la manivelle : pour mémoire.
   manivelle_z: 0.762
   # Course de l'agitation, choisie À LA MAIN (bielle dans un des 3 trous de la manivelle).
-  # Le Pi ne la change pas : la tenir à jour quand on change de trou. EXEMPLE : 7 cm.
-  course_agitation_m: 0.07
+  # Le Pi ne la détecte pas : la saisir quand on change le maneton de trou. Par défaut 10 cm ;
+  # 7 cm accepté ; 4 cm refusé au démarrage (contact de la capsule trop haut pour la préhension,
+  # prehension → porte_bocal → contact_capsule_z ; décision du 05/11/2026).
+  course_agitation_m: 0.10
   # Le chariot de remplissage (règles du 01/11) : demi-tour du bocal seulement manivelle en haut et
   # chariot à y ≥ 0,40 ; la manivelle ne quitte « en bas » que chariot à y ≥ 0,40 (sauf l'agitation
   # au dosage) ; au dosage, le seau est à y 0,155, plateau à min(0,78 − h ; 0,575) (h : hauteur du
@@ -661,9 +663,9 @@ mycelium:
     bord_seau_z: 0.78
     plateau_max_z: 0.575
     tolerance_plateau_m: 0.003
-  # Manivelle en haut à 0° (prise d'origine), en bas à 180°. EN HAUT pour la pose et la reprise du
-  # bocal par la préhension et pour le demi-tour ; EN BAS dès que le chariot de remplissage est
-  # au poste, et pour attendre. Courses possibles (fiche) : 4, 7 ou 10 cm. Jusqu'à 300 tr/min
+  # Manivelle en haut à 0° (prise d'origine), en bas à 180°. EN HAUT seulement pour le demi-tour ;
+  # EN BAS pour la pose et la reprise du bocal par la préhension (décision du 05/11/2026), dès que
+  # le chariot de remplissage est au poste, et pour attendre. Courses possibles (fiche) : 4, 7 ou 10 cm. Jusqu'à 300 tr/min
   # (fiche). Tolérance : EXEMPLE.
   manivelle:
     angle_haut_deg: 0
@@ -837,26 +839,32 @@ prehension:
     course_appui_m: 0.01
     angle_deg: 90
     descente_m: 0.002
-  # Porte-bocal, sur l'agitateur FIXE (= mycelium → bocal, fiche Mycélium v10 du 01/11) : face de
-  # la tête au contact de la capsule à 1,05 MANIVELLE EN HAUT, approche à 1,10 (la butée haute) ;
-  # chariot de remplissage reculé ou au poste : aucun contact. Tête orientée à ± 3° (méplats),
-  # bocal à sa hauteur exacte (± 0,5 mm), remontée d'au moins 5 mm avant le serrage (fiche).
-  # Orientation, zone des mors et délai des mors : EXEMPLES (à mesurer au montage).
+  # Porte-bocal, sur l'agitateur FIXE (= mycelium → bocal) : pose et reprise MANIVELLE EN BAS,
+  # chariot de remplissage reculé ou au poste (maquette, 05/11). Face de la tête au contact de la
+  # capsule selon la course de l'agitation (fiche Mycélium v10b) : 1,047 / 1,077 / 1,108 pour
+  # 10 / 7 / 4 cm ; approche à 1,10 (la butée haute), arrêt sur le contact de la tête. Une course
+  # dont le contact dépasse la face haute moins 1 cm est refusée au démarrage (4 cm). Tête
+  # orientée à ± 3° (méplats), bocal à sa hauteur exacte (± 0,5 mm), remontée d'au moins 5 mm
+  # avant le serrage (fiche). Orientation, zone des mors et délai des mors : EXEMPLES (à mesurer
+  # au montage).
   porte_bocal:
     x: 0.925
     y: 0.150
-    face_z: 1.05
+    contact_capsule_z: {0.10: 1.047, 0.07: 1.077, 0.04: 1.108}
+    marge_face_haute_m: 0.01
     orientation_deg: 0
     tolerance_orientation_deg: 3
     tolerance_hauteur_m: 0.0005
     remontee_min_m: 0.005
     rayon_zone_m: 0.06
     mors_max_s: 20
-    # x 0,925 est hors de l'isolation du fût (x < 0,71) : plus d'exception « zone du garage ». La
-    # tête ne passe au-dessus du bocal (sous face_z + marge, sur son rayon + celui de la tête +
-    # marge) que pour le poser ou le reprendre : à la verticale, manivelle en haut, caméra du
-    # dosage à 0°, mors ouverts pour poser, serrés pour prendre. Marge : EXEMPLE.
-    marge_bocal_m: 0.01
+  # Zone du porte-bocal (maquette v45.117, 05/11) : plus haut point 1,070 manivelle en bas, 1,170
+  # en haut, 1,208 pendant le demi-tour ; support de la glissière verticale jusqu'à 1,167 ; boîtier
+  # de la caméra du dosage jusqu'à 1,065. La tête et l'objet tenu (rayon de la tête + 1 cm + rayon
+  # de l'objet) ne vont jamais dans ce rectangle plus bas que z_haut + 1 cm : la face montant au
+  # plus à 1,10, les trajets le contournent. Seule exception : la verticale du bocal (0,925 ;
+  # 0,150) pour le poser ou le reprendre, manivelle en bas (et le trajet face en haut qui y mène).
+  zone_porte_bocal: {x: [0.79, 1.08], y: [-0.03, 0.27], z_haut: 1.21, marge_m: 0.01}
 
 # Lavage des seaux (fût de lavage, noyau, couronne, eau), module validé définitivement le
 # 25/10/2026 (fût de 44 cm) ; dossiers eau automatique, arrosage, chauffage, jet d'air du col ;
