@@ -43,6 +43,7 @@ from vidange.accelerometre.chargeur import ChargeurAccelerometre
 from vidange.accelerometre.liaison import SIGNAL as SIGNAL_ACCELEROMETRE
 from vidange.accelerometre.liaison import LiaisonAccelerometre, PortAccelerometre
 from vidange.accelerometre.liaison import ouvrir_port as ouvrir_port_accelerometre
+from vidange.angles_gardes import AnglesGardes
 from vidange.api import ServeurApi, Services, constats_api, creer_app
 from vidange.cameras import Cameras, Flux
 from vidange.chef import Carnet, Chef, ErreurChef, Module
@@ -107,6 +108,10 @@ RAISON_MISE_A_JOUR = "mise à jour du programme du Pi"
 DOSSIER_PI = Path(__file__).resolve().parent.parent
 NOM_CARNET = "etat-cycle.json"
 NOM_MODE = "mode.json"
+# Angles gardés au redémarrage (rotations de la griffe et de la tête de préhension).
+NOM_ANGLES = "angles.json"
+# Le compte-tours de la tête de préhension (docs/entrees-sorties.yaml).
+SIGNAL_COMPTE_TOURS = "compte_tours_tete"
 
 journal = donner_journal("demarrage")
 
@@ -570,8 +575,19 @@ def principal(
     try:
         for liaison in liaisons.values():
             liaison.demarrer()
+        compte_tours = None
+        if materiel is not None and SIGNAL_COMPTE_TOURS in entrees_sorties.signaux:
+            # Une erreur de lecture est vue par le portique : il demande alors une confirmation.
+            compte_tours = lambda: materiel.mesurer(SIGNAL_COMPTE_TOURS)  # noqa: E731
         _, erreur_reprise = preparer_chef(
-            chef, module_lieu_sur(reglages.machine, liaisons, reglages.fluidnc.cartes)
+            chef,
+            module_lieu_sur(
+                reglages.machine,
+                liaisons,
+                reglages.fluidnc.cartes,
+                garde=AnglesGardes(dossier_donnees / NOM_ANGLES),
+                compte_tours=compte_tours,
+            ),
         )
         chef.demarrer()
         cameras.demarrer()

@@ -59,8 +59,8 @@ def test_seaux_par_pile_et_cote_du_bord():
     ):
         for k in range(1, places.seaux_par_pile(MACHINE, format) + 1):
             assert places.bord_pile(MACHINE, format, k) == pytest.approx(0.496 + h + (k - 1) * pas)
-    # La face de la tête touche le fond intérieur du seau du haut.
-    assert places.contact_prise(MACHINE, "seau_a", 5) == pytest.approx(0.496 + 4 * 0.03 + 0.005)
+    # La face de la tête touche le fond intérieur du seau du haut (fond + 3 mm, PR n° 56, point 2).
+    assert places.contact_prise(MACHINE, "seau_a", 5) == pytest.approx(0.496 + 4 * 0.03 + 0.003)
 
 
 def test_places_de_fin_de_lot():
@@ -346,8 +346,9 @@ def test_boucle_ouverte_rien_ne_bouge():
     # Rester sur place : rien à refuser.
     assert refus(depart, depart, boucle=False) is None
     assert "boucle du stockage ouverte" in REGLES.refus_griffe(1.0, 1.2, False)
-    assert REGLES.refus_griffe(1.0, 2.30, True) is None
-    assert "x ≤ 2,325" in REGLES.refus_griffe(2.0, 2.33, True)
+    # Rails X +0,43 (PR n° 56, point 9) : mât de la griffe à x ≤ 2,738.
+    assert REGLES.refus_griffe(1.0, 2.73, True) is None
+    assert "x ≤ 2,738" in REGLES.refus_griffe(2.0, 2.74, True)
 
 
 def test_seau_jamais_au_dessus_d_une_pile_pleine():

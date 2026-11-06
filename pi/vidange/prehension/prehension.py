@@ -42,6 +42,7 @@ from collections.abc import Callable, Generator
 from dataclasses import asdict, dataclass
 from typing import Protocol
 
+from vidange.angles_gardes import AnglesGardes
 from vidange.chef import ErreurEtape
 from vidange.journal import donner_journal
 from vidange.prehension.regles import Contexte, Objet, Pose, ReglesPrehension
@@ -80,6 +81,8 @@ QUOI_FAIRE_PORTE_BOCAL = (
 
 # Écart sous lequel deux positions sont égales (m ou °).
 _EGAL = 1e-6
+# Nom de la rotation de la tête dans le fichier des angles gardés (vidange.angles_gardes).
+ROTATION = "prehension_a"
 
 
 @dataclass(frozen=True)
@@ -130,15 +133,20 @@ class Prehension:
         anse_levee: Callable[[], bool] = lambda: False,
         photo: Callable[[str], object] = lambda raison: None,
         manivelle: Callable[[], str | None] = lambda: None,
+        garde: AnglesGardes | None = None,
     ) -> None:
         """`panneau_rabattu`, `echange_fut` : PosteFut.panneau_vu_rabattu, echange_en_cours.
         `camera_dosage_pivote` : la caméra du dosage pivote (Vision, tâche 22). `anse_levee` :
         la caméra voit une anse levée dans le seau à prendre (tâche 22). `photo(raison)` :
         photo notée avec une alerte (choc). `manivelle` : ce que dit le Mycélium
         (Mycelium.etat_manivelle : « haut », « bas » ou None). Sans lui, la tête ne va jamais dans
-        la zone du porte-bocal (ni au bocal de l'agitateur)."""
+        la zone du porte-bocal (ni au bocal de l'agitateur). `garde` : l'angle cumulé de la
+        rotation y est noté à chaque arrêt (prise d'origine après une coupure, vidange.prehension
+        .origine)."""
         assert machine.prehension is not None and machine.griffe is not None
         self.reglages = machine.prehension
+        self.portique = machine.portique
+        self.garde = garde
         self.formats = machine.griffe.formats
         self.course_a = machine.axes["prehension_a"].course
         self.regles = ReglesPrehension(machine)
@@ -297,7 +305,24 @@ class Prehension:
             self._geste = self._pas = None
             raise ErreurEtape(f"préhension, « {pas.texte} » refusé : {refus}", QUOI_FAIRE)
         journal.debug("Préhension : %s", pas.texte)
+        if "x" in pas.cibles or "y" in pas.cibles:
+            self._regler_acceleration()
+        if self.garde is not None and "a" in pas.cibles:
+            self.garde.noter(ROTATION, self.pose.a, en_rotation=True)
         self.tete.executer(pas, cible, self.poids_porte_n)
+
+    def _regler_acceleration(self) -> None:
+        """Accélération X et Y du portique : réduite seau tenu (l'anse balance), et encore
+        multipliée par portique → facteur_acceleration_tete_basse quand la face est sous
+        tete_basse_z (le mât, plus long de 22 cm, est souple en travers)."""
+        assert self.pose is not None
+        seau = self.objet is not None and self.objet.sorte in ("seau", "seau_retourne")
+        facteur = 1.0
+        portique = self.portique
+        if portique is not None and portique.tete_basse_z is not None:
+            if self.pose.z < portique.tete_basse_z - _EGAL:
+                facteur = portique.facteur_acceleration_tete_basse
+        self.tete.acceleration_seau(seau, facteur)
 
     def geste_fini(self) -> bool:
         """Condition de fin des étapes : fait partir les pas l'un après l'autre."""
@@ -322,6 +347,8 @@ class Prehension:
                     return False
                 resultat = self.tete.resultat()
                 self.pose = resultat.pose
+                if self.garde is not None:
+                    self.garde.noter(ROTATION, self.pose.a)
             self._suivant(resultat)
         return True
 
@@ -386,20 +413,25 @@ class Prehension:
             self.pose.y, y, abs_tol=_EGAL
         ):
             return
-        if self.regles.sur_le_bocal(self.pose):
-            # Depuis la verticale du porte-bocal : d'abord tout droit côté fût, loin du boîtier
-            # de la caméra du bocal (à 7 cm), puis vers le but.
-            sortie = self.regles.y_approche_porte_bocal(self.objet)
+        if self.regles.sur_le_bocal(self.pose) and not math.isclose(self.pose.x, x, abs_tol=_EGAL):
+            # Depuis la verticale du porte-bocal : d'abord tout droit en +y jusqu'au départ du
+            # couloir (loin du boîtier de la caméra du bocal, à 7 cm), puis vers le but.
+            sortie = self._sortie_porte_bocal()
             if self.pose.y < sortie - _EGAL:
-                yield Pas("trajet", {"y": sortie}, choc=True)
+                yield Pas("sortie du couloir du porte-bocal", {"y": sortie}, choc=True)
         haut = self.regles.hauteur_trajet(self.objet, self.pose.y, y)
         if self.pose.z > haut + _EGAL:
-            # Seau tenu : plus bas au-dessus des piles que côté opérateur (règle 3).
+            # Seau tenu : plus bas au-dessus des piles que côté opérateur (règle 3) ; chaîne Z :
+            # plus bas au-delà de y 0,80.
             yield Pas("descendre à la hauteur du trajet", {"z": haut})
-        self.tete.acceleration_seau(
-            self.objet is not None and self.objet.sorte in ("seau", "seau_retourne")
-        )
         yield Pas("trajet", {"x": x, "y": y}, choc=True)
+
+    def _sortie_porte_bocal(self) -> float:
+        """Le y du départ du couloir d'accès au bocal (sans couloir : hors des zones)."""
+        couloir = self.reglages.porte_bocal.couloir
+        if couloir is not None:
+            return couloir.depart[1]
+        return self.regles.y_approche_porte_bocal(self.objet)
 
     def _orienter(self, angle: float) -> Geste:
         """Tête à l'angle voulu (à 360° près, le plus proche dans la course de la rotation)."""
@@ -651,24 +683,28 @@ class Prehension:
         yield Attente(texte, porte_bocal.fini, delai, f"{texte} : pas fini en {delai:g} s")
 
     def _au_dessus_du_porte_bocal(self) -> Geste:
-        """En haut au-dessus du porte-bocal (trajet en ligne droite vers sa verticale), tête
-        orientée (méplats, ± 3°)."""
+        """En haut au-dessus du porte-bocal, par le couloir d'accès (départ côté allée, puis en
+        −y jusqu'à sa verticale), tête orientée sur les méplats (± 3°)."""
         reglages = self.reglages.porte_bocal
         # Tête orientée avant d'arriver : au-dessus du bocal, elle peut déjà être « entre les
         # mors » (contact de la capsule à moins de descente → approche_m sous la face haute).
+        # Méplats tous les 120° : la plus proche, au plus 60° de rotation.
         yield from self._monter()
-        yield from self._orienter(reglages.orientation_deg)
-        # D'abord sur l'axe du bocal, côté fût (hors de la zone du boîtier de la caméra du
-        # bocal), puis tout droit jusqu'à sa verticale.
-        yield from self._aller(reglages.x, self.regles.y_approche_porte_bocal(self.objet))
+        assert self.pose is not None
+        voulu = self.regles.angle_meplats(self.pose.a)
+        if abs(self.pose.a - voulu) > _EGAL:
+            yield Pas("tête sur les méplats", {"a": voulu})
+        # D'abord au départ du couloir, sur l'axe du bocal côté allée (hors de la zone du
+        # porte-bocal et du boîtier de la caméra du bocal), puis tout droit en −y jusqu'à sa
+        # verticale.
+        yield from self._aller(reglages.x, self._sortie_porte_bocal())
         yield from self._aller(reglages.x, reglages.y)
         assert self.pose is not None
-        ecart = abs((self.pose.a - reglages.orientation_deg + 180) % 360 - 180)
+        ecart = abs(self.pose.a - voulu)
         if ecart > reglages.tolerance_orientation_deg:
             raise ErreurEtape(
-                f"préhension : tête orientée à {self.pose.a:.1f}°, il faut "
-                f"{reglages.orientation_deg:g} ± {reglages.tolerance_orientation_deg:g}° pour le "
-                "porte-bocal",
+                f"préhension : tête orientée à {self.pose.a:.1f}°, il faut {voulu:g} ± "
+                f"{reglages.tolerance_orientation_deg:g}° pour le porte-bocal (méplats)",
                 QUOI_FAIRE_PORTE_BOCAL,
             )
 
@@ -687,7 +723,14 @@ class Prehension:
         approche = contact + self.reglages.descente.approche_m
         if self.pose.z > approche + _EGAL:
             yield Pas("descente vers le porte-bocal", {"z": approche})
-        resultat = yield Pas("bocal à sa hauteur", {"z": contact}, vitesse="approche")
+        # Les derniers mm entre les mors (1,3 mm de jeu) : plus lents encore.
+        vitesse = "approche"
+        if reglages.descente_lente_pose_m > 0:
+            lente = contact + reglages.descente_lente_pose_m
+            if self.pose.z > lente + _EGAL:
+                yield Pas("bocal à l'entrée des mors", {"z": lente}, vitesse="approche")
+            vitesse = "pose_bocal"
+        resultat = yield Pas("bocal à sa hauteur", {"z": contact}, vitesse=vitesse)
         assert resultat is not None
         if abs(resultat.pose.z - contact) > reglages.tolerance_hauteur_m:
             raise ErreurEtape(

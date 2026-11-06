@@ -98,8 +98,8 @@ Dans les commandes ci-dessous, `vidange-fluidnc` et `vidange-lavage` veulent dir
 3. Regarder le seau : intérieur, fond, paroi, **bord** et **col** propres ? Sinon, régler les durées et les
    vitesses des passes (`brossage → passe_1`, `passe_2` ; les tours du seau doivent tenir dans la course
    de la tête, c'est vérifié au démarrage), le décalage du brossage par format (`decalage_brossage_m`,
-   vers +x) et, pour le jet d'air, le centre du seau devant la buse et la hauteur du bord (`jet_centre`,
-   `jet_bord_z`, par format).
+   vers +x) et, pour le jet d'air, le décalage du centre du seau devant la buse, en relatif au centre du fût
+   de lavage (`jet_decalage`, en m), et la hauteur du bord (`jet_bord_z`), par format.
 4. Recommencer avec un seau B, C et D (`seau_b`...), en mesurant leur `contact_z`. Noter le temps donné
    (« Seau lavé en … s ») : la fiche estime 60 à 70 s.
 5. Pendant un lavage, soulever le panneau du poste du fût **un peu** (sans l'ouvrir en grand) : la tête doit

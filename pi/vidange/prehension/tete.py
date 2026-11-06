@@ -155,7 +155,7 @@ class Tete(Protocol):
 
     def vide_kpa(self) -> float | None: ...
 
-    def acceleration_seau(self, reduite: bool) -> None: ...
+    def acceleration_seau(self, reduite: bool, facteur: float = 1.0) -> None: ...
 
     def pauser(self) -> None: ...
 
@@ -259,7 +259,7 @@ class TeteFluidnc:
         self._choc = False
         self._muette: str | None = None
         self._en_pause = False
-        self._acceleration_reduite: bool | None = None
+        self._acceleration_reduite: tuple[bool, float] | None = None
         self.pretes = Condition(
             f"cartes « {portique.nom} » et « {prehension.nom} » connectées et sans alarme",
             self._cartes_pretes,
@@ -388,18 +388,19 @@ class TeteFluidnc:
     def aimants(self, actifs: bool) -> None:
         self.signaux.sortie(AIMANTS, actifs)
 
-    def acceleration_seau(self, reduite: bool) -> None:
-        """Accélération réduite des axes X et Y du portique quand la tête tient un seau."""
-        if self._acceleration_reduite == reduite:
+    def acceleration_seau(self, reduite: bool, facteur: float = 1.0) -> None:
+        """Accélération réduite des axes X et Y du portique quand la tête tient un seau, et
+        multipliée par `facteur` (tête basse : portique → facteur_acceleration_tete_basse)."""
+        if self._acceleration_reduite == (reduite, facteur):
             return
         acceleration = self.reglages.acceleration
-        valeur = acceleration.seau_mm_s2 if reduite else acceleration.normale_mm_s2
+        valeur = (acceleration.seau_mm_s2 if reduite else acceleration.normale_mm_s2) * facteur
         for cle in ("x", "y"):
             lettre = (self._lettres[cle] or "").lower()
             commande = self.portique.envoyer(f"$/axes/{lettre}/acceleration_mm_per_sec2={valeur:g}")
             if commande.finie and commande.erreur is not None:
                 raise ErreurEtape(f"accélération du portique : {commande.erreur}")
-        self._acceleration_reduite = reduite
+        self._acceleration_reduite = (reduite, facteur)
 
     # ------------------------------------------------------------ mouvements
 

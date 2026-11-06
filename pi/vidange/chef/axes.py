@@ -57,8 +57,13 @@ class Axes:
         """Envoie chaque carte concernée vers la position, sans attendre (voir `arrive`)."""
         if position not in self._machine.positions:
             raise ErreurEtape(f"position « {position} » absente de machine.yaml")
+        self.aller_a(self._machine.positions[position], position)
+
+    def aller_a(self, valeurs: Mapping[str, float], position: str) -> None:
+        """Comme `aller`, vers des valeurs calculées depuis machine.yaml (nom d'axe → m ou °) ;
+        `position` : son nom pour le journal."""
         mots: dict[str, list[str]] = {}
-        for nom_axe, valeur in self._machine.positions[position].items():
+        for nom_axe, valeur in valeurs.items():
             axe = self._machine.axes[nom_axe]
             if axe.carte is None:
                 raise ErreurEtape(f"axe « {nom_axe} » : pas de carte FluidNC dans machine.yaml")

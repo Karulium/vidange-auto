@@ -356,7 +356,7 @@ def test_sans_reconnaissance_ou_en_desaccord_c_est_le_doute():
 # ---------------------------------------------------------------- plafond : photos
 
 
-def camera_plafond(image, inventaire=None, pont=2.495, controle=True, tmp_path=None):
+def camera_plafond(image, inventaire=None, pont=2.925, controle=True, tmp_path=None):
     p, source, horloge = photographe(tmp_path, image)
     vision = VISION
     if controle != VISION.plafond.controle_lave_bocal:
@@ -377,14 +377,15 @@ def camera_plafond(image, inventaire=None, pont=2.495, controle=True, tmp_path=N
 
 
 def test_photo_du_plafond_pont_au_bout_oppose():
-    # Fût et poste : pont à x 2,495 ; stockage : pont à x 0,233 (Portique, 01/11), à 5 mm près.
+    # Fût et poste : pont à x 2,925 ; stockage : pont à x 0,223 (PR n° 56, points 6 et 9), à 5 mm
+    # près.
     camera, position, _ = camera_plafond(scene(), Inventaire())
     assert camera.refus_photo("fut_poste") is None
-    assert "il faut x 0.233 m pour photographier « stockage »" in camera.refus_photo("stockage")
-    position[0] = 0.236
+    assert "il faut x 0.223 m pour photographier « stockage »" in camera.refus_photo("stockage")
+    position[0] = 0.226
     assert camera.refus_photo("stockage") is None
     assert "pont pas garé" in camera.refus_photo()
-    position[0] = 2.489
+    position[0] = 2.919
     assert "pont pas garé" in camera.refus_photo("fut_poste")
 
 

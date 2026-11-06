@@ -54,6 +54,9 @@ class Contexte:
     porte_spray_ouverte: bool = False
     dosage_en_cours: bool = False
     camera_dosage_pivote: bool = False
+    # Face de la tête de préhension (même chariot) ; None : inconnue, comptée en haut (chaîne Z
+    # de la préhension : mâts à y ≤ 0,80 quand sa plaque Z est haute).
+    prehension_face_z: float | None = None
 
 
 def _m(valeur: float) -> str:
@@ -76,6 +79,12 @@ class ReglesGriffe:
         self.boite_camera = machine.prehension.camera_dosage if machine.prehension else None
         # Bandes du pont où la tête ne tourne pas et reste à un angle permis (Portique).
         self.bouts_bloques = machine.portique.bouts_bloques_griffe if machine.portique else []
+        # Chaîne Z de la préhension (même chariot que la griffe) : le portique et la préhension.
+        self.portique = machine.portique
+        self.prehension_z = (
+            machine.axes["prehension_z"].course if "prehension_z" in machine.axes else None
+        )
+        self.prehension_haut_z = machine.prehension.haut_z if machine.prehension else None
 
     # ------------------------------------------------------------ outils
 
@@ -190,16 +199,12 @@ class ReglesGriffe:
                 f"godet fermé avec le mât à y {_m(pose.y)} m : il faut y ≥ "
                 f"{_m(g.mat_y_min_ferme)} m"
             )
-        for bout in self.bouts_bloques:
-            debut, fin = bout.pont_x
-            if debut + _EGAL < pont <= fin + _EGAL and not any(
-                ecart_angle(pose.a, angle) <= g.rotation.tolerance_deg for angle in bout.angles_deg
-            ):
-                angles = " ou ".join(f"{_m(angle)}°" for angle in bout.angles_deg)
-                return (
-                    f"pont à x {_m(pont)} m (au-delà de {_m(debut)}) : tête à {angles} "
-                    f"seulement (elle est à {_m(pose.a)}°)"
-                )
+        refus = self.refus_bout_bloque(pont, pose.z, pose.a)
+        if refus is not None:
+            return refus
+        refus = self._refus_chaine(pose.y, contexte)
+        if refus is not None:
+            return refus
         if classe:
             debut, fin = g.mat_y_grand_ouvert
             if not debut - _EGAL <= pose.y <= fin + _EGAL:
@@ -253,6 +258,60 @@ class ReglesGriffe:
         if refus is not None:
             return refus
         return self._refus_fut(pose, bas)
+
+    def refus_bout_bloque(self, pont: float, z: float, a: float) -> str | None:
+        """Bandes du pont (portique → bouts_bloques_griffe) : pont dans la bande (bornes
+        comprises : la plus sévère compte) et axes sous axes_z_max ⇒ tête à un angle permis
+        (aucun : interdit)."""
+        tolerance = self.griffe.rotation.tolerance_deg
+        for bout in self.bouts_bloques:
+            debut, fin = bout.pont_x
+            if not debut - _EGAL <= pont <= fin + _EGAL:
+                continue
+            if bout.axes_z_max is not None and z >= bout.axes_z_max - _EGAL:
+                continue
+            if any(ecart_angle(a, angle) <= tolerance for angle in bout.angles_deg):
+                continue
+            hauteur = (
+                "" if bout.axes_z_max is None else f" avec les axes sous {_m(bout.axes_z_max)} m"
+            )
+            if not bout.angles_deg:
+                return (
+                    f"pont à x {_m(pont)} m (bande {_m(debut)} à {_m(fin)}){hauteur} : interdit "
+                    "(la tête toucherait la traverse)"
+                )
+            angles = " ou ".join(f"{_m(angle)}°" for angle in bout.angles_deg)
+            return (
+                f"pont à x {_m(pont)} m (bande {_m(debut)} à {_m(fin)}){hauteur} : tête à "
+                f"{angles} seulement (elle est à {_m(a)}°)"
+            )
+        return None
+
+    def _refus_chaine(self, mats_y: float, contexte: Contexte) -> str | None:
+        """Chaîne Z de la préhension : sa plaque Z haute ⇒ mâts (même chariot) à y ≤ 0,80."""
+        if self.portique is None or self.prehension_z is None:
+            return None
+        face = contexte.prehension_face_z
+        if face is None:
+            face = self.prehension_haut_z if self.prehension_haut_z is not None else 0.0
+        refus = self.portique.refus_chaine(mats_y, face, self.prehension_z[0])
+        if refus is None:
+            return None
+        inconnue = (
+            " (position inconnue : comptée en haut)" if contexte.prehension_face_z is None else ""
+        )
+        return f"{refus}{inconnue}"
+
+    def au_point_demi_tour(self, pose: Pose) -> bool:
+        """La tête est-elle au point des demi-tours (mât, axes, godet fermé) ?"""
+        point = self.griffe.point_demi_tour
+        if point is None:
+            return False
+        return (
+            math.hypot(pose.x - point.x, pose.y - point.y) <= point.tolerance_m + _EGAL
+            and abs(pose.z - point.z) <= point.tolerance_m + _EGAL
+            and pose.b <= _EGAL
+        )
 
     def _longueur_au_niveau(self, pose: Pose, profondeur: float) -> float | None:
         """Demi-longueur de la tête jusqu'à `profondeur` sous les axes ; None : la tête entière."""
@@ -379,6 +438,9 @@ class ReglesGriffe:
                 f"pas de rotation de la tête quand le pont est au-delà de x "
                 f"{_m(self.griffe.rotation.pont_x_max)} m"
             )
+        refus = self._refus_demi_tour(depart, arrivee)
+        if refus is not None:
+            return refus
         longueur = max(
             math.dist((depart.x, depart.y, depart.z), (arrivee.x, arrivee.y, arrivee.z)),
             # La rotation et le godet comptent aussi : 1° ≈ 1 mm, godet entier ≈ 3 cm.
@@ -402,6 +464,23 @@ class ReglesGriffe:
             if refus is not None:
                 return refus
         return None
+
+    def _refus_demi_tour(self, depart: Pose, arrivee: Pose) -> str | None:
+        """Un demi-tour de la tête (plus d'un quart de tour) hors du fût ne se fait qu'au point
+        des demi-tours (griffe → point_demi_tour), godet fermé (fil Griffe, 03/11/2026)."""
+        point = self.griffe.point_demi_tour
+        if point is None or abs(arrivee.a - depart.a) <= 90 + self.griffe.rotation.tolerance_deg:
+            return None
+        if self.au_dessus_du_fut(depart.x, depart.y) and self.au_dessus_du_fut(
+            arrivee.x, arrivee.y
+        ):
+            return None
+        if self.au_point_demi_tour(depart) and self.au_point_demi_tour(arrivee):
+            return None
+        return (
+            f"demi-tour de la tête hors du fût : seulement au point ({_m(point.x)} ; "
+            f"{_m(point.y)}), axes à {_m(point.z)} m, godet fermé"
+        )
 
     def _refus_trajet(self, depart: Pose, arrivee: Pose) -> str | None:
         """Trajet fût ↔ poste de remplissage : jamais en diagonale."""

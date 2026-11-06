@@ -16,17 +16,29 @@
 #   X : le pont, DEUX moteurs (motor0 = X1, motor1 = X2, un par rail, même consigne), NEMA 17
 #       boucle fermée. Chacun a son fin de course côté fût (fdc_pont_x1, fdc_pont_x2) : à la prise
 #       d'origine, chaque moteur s'arrête sur le sien, ce qui remet le pont d'équerre (FluidNC le
-#       fait seul quand les 2 moteurs d'un axe ont chacun leur fin de course). Course 233 → 2 495
-#       mm (fiche) ; jamais sous 233. La position du pont sur les fins de course (mpos_mm) est un
-#       EXEMPLE, mesurée à la mise en service.
+#       fait seul quand les 2 moteurs d'un axe ont chacun leur fin de course). Course 223 → 2 925
+#       mm (décisions, « Portique, réponses à la PR n° 56 », points 6 et 9) ; jamais sous 223. La
+#       position du pont sur les fins de course (mpos_mm) est un EXEMPLE, mesurée à la mise en
+#       service.
 #   Y : le chariot, NEMA 17 boucle fermée. Position machine = y des DEUX MÂTS (centre du chariot
 #       − 40 mm) : 40 → 830 mm (fiche). Fin de course côté paroi (y bas, fdc_chariot_y). Place du
 #       fin de course et butées mécaniques : EXEMPLES, mesurées à la mise en service.
 #   Z : Z de la griffe, NEMA 23 boucle fermée à frein. Position machine = hauteur des axes de la
 #       tête : 375 → 1 290 mm (plaque Z de 1 288 à 2 203, fiche). Fin de course en haut de colonne
 #       (fdc_griffe_haut) = origine ; jamais au-dessus (hauteur sous le pont roulant).
-#   A et B : rotation de la tête et vis du godet de la griffe. Leur prise d'origine n'est pas dans
-#       les fiches : EXEMPLE (question de la PR de la tâche 36), faite APRÈS X.
+#   A et B : rotation de la tête et vis du godet de la griffe (fil Griffe, PR n° 56, point 4), 2
+#       capteurs inductifs M12 PNP NO sur le multiconducteur de la griffe.
+#       B : origine_godet_griffe, actif godet « fermé nominal » = B 0. « $HB » après X, Z en haut :
+#       vers FERMÉ, lent (seek = feed) ; si le capteur est déjà actif, FluidNC recule d'abord du
+#       recul (2 mm vers l'ouvert). Butées logicielles 0 à +36 mm. Godet bloqué avant le capteur :
+#       la recherche finit sans le trouver, alarme « godet bloqué, vider au-dessus d'un seau ».
+#       A : origine_rotation_griffe, un fanion de 180° (actionné pour A de −180° à 0°, libre de 0 à
+#       +180°). Sa broche est INVERSÉE : la carte voit « fin de course » quand le fanion est LIBRE,
+#       pour que « $HA » finisse toujours en tournant en + (approche finale lente). Avant « $HA », le
+#       Pi amène la tête du côté actionné (vidange.portique.rotations), au point de recherche, axes à
+#       1,075, godet fermé. Recherche limitée à 190° (max_travel_mm × seek_scaler) ; pas de butées
+#       logicielles sur la carte (le Pi garde ± 180°, machine.yaml → griffe_a).
+#       Ni A ni B ne sont dans un « $H » complet (cycle 0) : seulement « $HA », « $HB », du Pi.
 #   Frein du Z de la griffe : à manque de courant (le 24 V est coupé par l'arrêt d'urgence). Le Pi
 #       le desserre avant de bouger (M64 P0) et le serre à l'arrêt long (M65 P0) : sortie digital0.
 #   Alarmes des pilotes X1, X2, Y et Z : broches macro0 à macro3 SANS macro, lues par le Pi dans
@@ -37,7 +49,8 @@
 #
 # Prise d'origine : le Pi l'envoie axe par axe, dans l'ordre (vidange.portique) : « $HZ » ici et
 # sur la carte n° 4 (les deux Z, freins desserrés), puis « $HY », puis « $HX » (X1 et X2 ensemble),
-# puis « $HA » et « $HB ». Les cycles ci-dessous donnent le même ordre pour un « $H » complet.
+# puis « $HB », puis « $HA » au point de recherche. Les cycles ci-dessous donnent le même ordre
+# pour Z, Y et X dans un « $H » complet.
 # En vitesse d'approche (50 mm/s en X et Y, 20 mm/s en Z, fiche), recul de quelques mm.
 # Vitesses (fiche, 28/10) : X et Y 250 mm/s, Z 80 mm/s ; accélération 1 m/s² en X et Y à vide
 # (0,5 m/s² seau tenu : le Pi la change par « $/axes/x/acceleration_mm_per_sec2 »), 0,5 m/s² en Z.
@@ -69,15 +82,15 @@ axes:
     max_rate_mm_per_min: 15000
     # 1 m/s² à vide (fiche).
     acceleration_mm_per_sec2: 1000
-    # 2 495 − 233 (fiche).
-    max_travel_mm: 2262
+    # 2 925 − 223 (PR n° 56, points 6 et 9).
+    max_travel_mm: 2702
     soft_limits: true
     homing:
       cycle: 3
       # Vers le fût (vers les x petits).
       positive_direction: false
       # EXEMPLE : la place du pont sur les fins de course, mesurée à la mise en service.
-      mpos_mm: 233
+      mpos_mm: 223
       # Approche 50 mm/s (fiche), puis plus lent pour le contact (EXEMPLE).
       seek_mm_per_min: 3000
       feed_mm_per_min: 300
@@ -159,23 +172,33 @@ axes:
         disable_pin: NO_PIN
 
   a:
-    # Rotation de la tête de la griffe : EXEMPLE (origine pas dans les fiches).
+    # Rotation de la tête de la griffe (EXEMPLE de pas et de vitesses).
     steps_per_mm: 22.222
     max_rate_mm_per_min: 5400
     acceleration_mm_per_sec2: 360
-    # ± 370° (machine.yaml → griffe_a).
-    max_travel_mm: 740
-    soft_limits: true
+    # Recherche du bord du fanion : 190° au plus (seek_scaler 1).
+    max_travel_mm: 190
+    # Pas de butées sur la carte : le Pi garde la course (machine.yaml → griffe_a) et ± 180°.
+    soft_limits: false
     homing:
-      cycle: 4
-      positive_direction: false
-      mpos_mm: -370
-      seek_mm_per_min: 1800
-      feed_mm_per_min: 300
+      # Jamais dans un « $H » complet : « $HA » seulement, envoyé par le Pi (à VÉRIFIER à l'essai :
+      # FluidNC accepte « $HA » d'un axe du cycle 0).
+      cycle: 0
+      # Toujours en + : du côté actionné vers le côté libre (broche inversée).
+      positive_direction: true
+      # Le bord du fanion = A 0 : la position après le recul vaut −pulloff_mm (à VÉRIFIER à
+      # l'essai : tête bras le long du pont après « $HA » puis « A0 »).
+      mpos_mm: -2
+      seek_mm_per_min: 1200
+      # Approche finale lente.
+      feed_mm_per_min: 120
+      seek_scaler: 1.0
+      feed_scaler: 1.1
       settle_ms: 250
     motor0:
-      # EXEMPLE de broche : origine_rotation_griffe.
-      limit_neg_pin: gpio.32:low
+      # EXEMPLE de broche : origine_rotation_griffe, INVERSÉE (« :low » ou pas, à régler à l'essai
+      # pour que « Pn: » montre A quand le fanion est LIBRE).
+      limit_pos_pin: gpio.32:low
       hard_limits: false
       pulloff_mm: 2
       standard_stepper:
@@ -184,26 +207,32 @@ axes:
         disable_pin: NO_PIN
 
   b:
-    # Vis du godet de la griffe : EXEMPLE (origine pas dans les fiches). Jamais au-delà de
-    # « fermé » (0) : le capot du boîtier de tête n'a que 4 mm de garde.
+    # Vis du godet de la griffe (EXEMPLE de pas). Jamais au-delà de « fermé » (0) : le capot du
+    # boîtier de tête n'a que 4 mm de garde.
     steps_per_mm: 400
     max_rate_mm_per_min: 3000
     acceleration_mm_per_sec2: 200
-    max_travel_mm: 30
+    # Butées logicielles 0 à +36 mm (PR n° 56, point 4).
+    max_travel_mm: 36
     soft_limits: true
     homing:
-      cycle: 4
-      # Vers « grand ouvert » (fin de la course), jamais vers le capot.
-      positive_direction: true
-      mpos_mm: 30
-      seek_mm_per_min: 600
-      feed_mm_per_min: 120
+      # « $HB » seulement, envoyé par le Pi après X (Z en haut).
+      cycle: 0
+      # Vers FERMÉ (le capteur origine_godet_griffe), jamais vers le capot au-delà.
+      positive_direction: false
+      # Capteur = B 0 : la position après le recul (2 mm vers l'ouvert) vaut +pulloff_mm (à
+      # VÉRIFIER à l'essai).
+      mpos_mm: 2
+      # Lent tout du long (seek = feed) : le godet peut être plein de substrat. EXEMPLE.
+      seek_mm_per_min: 60
+      feed_mm_per_min: 60
+      seek_scaler: 1.1
       settle_ms: 250
     motor0:
-      # EXEMPLE de broche : origine_godet_griffe.
-      limit_pos_pin: gpio.17:low
+      # EXEMPLE de broche : origine_godet_griffe (actif = godet fermé).
+      limit_neg_pin: gpio.17:low
       hard_limits: false
-      pulloff_mm: 1
+      pulloff_mm: 2
       standard_stepper:
         step_pin: gpio.5
         direction_pin: gpio.18

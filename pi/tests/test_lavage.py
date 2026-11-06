@@ -40,10 +40,15 @@ def test_reglages_du_lavage_du_depot():
     assert LAVAGE.exemple
     assert LAVAGE.centre_fut == (0.35, 0.65) and LAVAGE.coude_couloir == (0.45, 0.74)
     assert LAVAGE.brossage.appui_n == 80
-    # Jet d'air du col (réponse du Lavage du 29/10) : centres du seau par format.
-    # x 0,362 depuis le pont ≥ 0,233 (Portique, 01/11).
-    assert LAVAGE.formats["seau_a"].jet_centre == (0.362, 0.6348)
-    assert LAVAGE.formats["seau_b"].jet_centre == (0.362, 0.6270)
+    # Jet d'air du col, relatif au centre du fût de lavage (PR n° 56, point 1) : A (+2 ; −15,2),
+    # B (+2 ; −23), C (+2 ; 0), D (+2 ; −11,5) mm ; brossage décalé de 2 mm : tête à x 0,352
+    # (pont jusqu'à 0,223, point 6).
+    assert LAVAGE.formats["seau_a"].jet_decalage == (0.002, -0.0152)
+    assert LAVAGE.formats["seau_b"].jet_decalage == (0.002, -0.023)
+    assert LAVAGE.formats["seau_c"].jet_decalage == (0.002, 0.0)
+    assert LAVAGE.formats["seau_d"].jet_decalage == (0.002, -0.0115)
+    assert all(f.decalage_brossage_m == 0.002 for f in LAVAGE.formats.values())
+    assert LAVAGE.couvercles.centre == (0.352, 0.65) and LAVAGE.lave_bocal.centre == (0.352, 0.65)
     assert LAVAGE.formats["seau_a"].jet_bord_z == 0.711
     # Passe 2 sans remontée ; rotation de la tête jusqu'à ± 500°.
     assert all(reglage.remontee_passe_2_m == 0 for reglage in LAVAGE.formats.values())
@@ -59,15 +64,15 @@ def test_reglages_du_lavage_du_depot():
 
 
 def test_positions_du_lavage_a_la_portee_de_la_tete(reglages):
-    # La tête ne va pas sous x 0,362 (pont ≥ 0,233, mât à pont + 0,129) : pas au centre exact.
+    # La tête ne va pas sous x 0,352 (pont ≥ 0,223, mât à pont + 0,129) : pas au centre exact.
     machine = reglages / "machine.yaml"
-    remplacer(machine, "jet_centre: [0.362, 0.650]", "jet_centre: [0.35, 0.650]")
-    remplacer(machine, "jet_centre: [0.362, 0.6385]", "jet_centre: [0.362, 3.5]")
-    remplacer(machine, "  verrou: {rayon_m: 0.05", "  verrou: {rayon_m: 0.005")
+    remplacer(machine, "jet_decalage: [0.002, 0.0]", "jet_decalage: [-0.001, 0.0]")
+    remplacer(machine, "jet_decalage: [0.002, -0.0115]", "jet_decalage: [0.002, 2.9]")
+    remplacer(machine, "  verrou: {rayon_m: 0.05", "  verrou: {rayon_m: 0.001")
     message = erreur_de(reglages)
-    assert "lavage → formats → seau_c → jet_centre : axe de la tête à x 0.35 m" in message
-    assert "hors de sa portée (0.362 à" in message
-    assert "seau_d → jet_centre : axe de la tête à y 3.5 m, hors de sa course" in message
+    assert "lavage → formats → seau_c → jet_decalage : axe de la tête à x 0.349 m" in message
+    assert "hors de sa portée (0.352 à" in message
+    assert "seau_d → jet_decalage : axe de la tête à y 3.55 m, hors de sa course" in message
     assert "seau_a → decalage_brossage_m : plus loin du centre que verrou → rayon_m" in message
 
 
@@ -326,13 +331,15 @@ def test_couloir_du_seau_retourne():
         for m in lavage.prehension.tete._etat.mouvements
         if m.position == "trajet" and "pont_x" in m.axes
     ]
-    # Pont + 0,129 = axe de la tête. Aller : coude (0,45 ; 0,74), puis le fût (0,362 ; 0,65).
+    # Pont + 0,129 = axe de la tête. Aller : coude (0,45 ; 0,74), puis le fût (0,352 ; 0,65),
+    # décalage du brossage 2 mm.
     decalage = MACHINE.prehension.decalage_mat_x  # type: ignore[union-attr]
     axes = [(m["pont_x"][1] + decalage, m["chariot_y"][1]) for m in trajets]
     assert axes[1] == pytest.approx((0.45, 0.74))
-    assert axes[2] == pytest.approx((0.362, 0.65))
-    # Jet d'air du seau A : centre (0,362 ; 0,6348), décalé en −y vers la buse ; retour au coude.
-    assert axes[3] == pytest.approx((0.362, 0.6348))
+    assert axes[2] == pytest.approx((0.352, 0.65))
+    # Jet d'air du seau A : (0,352 ; 0,6348) = centre du fût + (2 ; −15,2) mm, décalé en −y vers
+    # la buse ; retour au coude.
+    assert axes[3] == pytest.approx((0.352, 0.6348))
     assert axes[4] == pytest.approx((0.45, 0.74))
 
 

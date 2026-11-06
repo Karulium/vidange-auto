@@ -15,9 +15,13 @@ que des noms.
 - Le pont a deux moteurs (X1, X2) et deux fins de course côté fût : à la prise d'origine, chacun
   s'arrête sur le sien et le pont se remet d'équerre. FluidNC le fait seul (fluidnc/portique.yaml).
 - L'axe chariot_y donne le y des deux mâts ; le centre du chariot est à mâts − décalage.
-- Prise d'origine (portique → origine) : freins des Z desserrés, puis chaque groupe d'axes à son
-  tour (« $H » et leurs lettres sur chacune de leurs cartes) : les deux Z en haut, Y vers la
-  paroi, X1 et X2 ensemble vers le fût. Les cartes 2 à 4 gardent leurs propres origines.
+- Prise d'origine (portique → origine) : d'abord les contrôles (dernière rotation connue de la
+  griffe à 0° ou 180°, sinon Z ne monte pas ; tour de la tête de préhension sûr), puis freins des
+  Z desserrés, puis chaque groupe d'axes à son tour (« $H » et leurs lettres sur chacune de leurs
+  cartes) : les deux Z en haut, Y vers la paroi, X1 et X2 ensemble vers le fût, le godet de la
+  griffe ; enfin les rotations de la griffe et de la tête de préhension
+  (vidange.portique.rotations).
+  Les cartes 2 et 3 gardent leurs propres origines.
 - Les freins des Z (à manque de courant, 24 V coupé par l'arrêt d'urgence) sont desserrés avant de
   bouger, serrés à l'arrêt long (garage de repos).
 - Une alarme d'un des 5 pilotes (X1, X2, Y, Z griffe, Z préhension), lue dans « Pn: », arrête le
@@ -30,9 +34,11 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 
+from vidange.angles_gardes import AnglesGardes
 from vidange.chef import Axes, Condition, ErreurEtape, Etape, Module
 from vidange.fluidnc import Commande, ErreurFluidnc, Liaison, protocole
 from vidange.journal import donner_journal
+from vidange.portique.rotations import OriginesRotations
 from vidange.quoi_faire import ALARMES_FLUIDNC, CARTE_COUPEE
 from vidange.reglages import CarteFluidnc, Machine
 from vidange.reglages import Portique as ReglagesPortique
@@ -63,6 +69,11 @@ QUOI_FAIRE_PILOTE = (
     "ce qui bloque l'axe, sans desserrer le frein d'un Z. Dégager, couper puis remettre le "
     "courant du pilote (son voyant d'alarme s'éteint), puis acquitter et donner le Go : la prise "
     "d'origine du portique est refaite."
+)
+QUOI_FAIRE_GODET = (
+    "Le godet de la griffe n'a pas trouvé son capteur « fermé » (origine_godet_griffe) : il est "
+    "peut-être bloqué par du substrat. Vider le godet au-dessus d'un seau, regarder le voyant du "
+    "capteur et son câble (multiconducteur de la griffe), puis acquitter et donner le Go."
 )
 QUOI_FAIRE_FREIN = (
     "Le frein d'un Z n'a pas répondu : regarder la carte (câble USB) et le relais du frein, puis "
@@ -107,8 +118,12 @@ class Portique:
         cartes: Mapping[str, CarteFluidnc],
         liaisons: Mapping[str, Liaison],
         horloge: Callable[[], float] = time.monotonic,
+        garde: AnglesGardes | None = None,
+        compte_tours: Callable[[], float | None] | None = None,
     ) -> None:
-        """`cartes` : fluidnc.yaml → cartes ; `liaisons` : une par carte (par son nom)."""
+        """`cartes` : fluidnc.yaml → cartes ; `liaisons` : une par carte (par son nom) ;
+        `garde` : les angles gardés au redémarrage ; `compte_tours` : l'angle de la tête de
+        préhension lu au compte-tours (vidange.portique.rotations)."""
         if machine.portique is None:
             raise ValueError("machine.yaml n'a pas de partie « portique »")
         self.machine = machine
@@ -142,6 +157,10 @@ class Portique:
         # Les noms des cartes du portique (n° 1 et n° 4).
         self.cartes: list[str] = sorted(nom for nom in noms if nom is not None)
         self.axes = Axes(machine, {nom: self.liaisons[nom] for nom in self.cartes})
+        self.rotations = OriginesRotations(
+            machine, cartes, self.liaisons, self.axes, garde, compte_tours
+        )
+        self._quoi_faire_origine = QUOI_FAIRE_ORIGINE
         self._commandes: list[tuple[str, Commande]] = []
         self._arret_depuis: float | None = None
         self.freins_desserres = False
@@ -186,6 +205,11 @@ class Portique:
             debut, fin = self.machine.axes[nom].course
             if not debut - _EGAL <= valeur <= fin + _EGAL:
                 return f"{quoi} à {_m(valeur)} m, hors de la course ({_m(debut)} à {_m(fin)} m)"
+        if mats_y is not None and prehension_z is not None:
+            # La chaîne Z de la préhension (portique → chaine_prehension).
+            return self.reglages.refus_chaine(
+                mats_y, prehension_z, self.machine.axes["prehension_z"].course[0]
+            )
         return None
 
     def place_photo(self, zone: str) -> float:
@@ -271,7 +295,10 @@ class Portique:
         """Prise d'origine du groupe n° `numero` (à partir de 0) de portique → origine : « $H »
         et les lettres de ses axes, sur chacune de leurs cartes, en même temps."""
         lettres: dict[str, str] = {}
-        for nom in self.reglages.origine[numero]:
+        groupe = self.reglages.origine[numero]
+        # Le godet de la griffe : s'il ne trouve pas son capteur, il est sans doute bloqué.
+        self._quoi_faire_origine = QUOI_FAIRE_GODET if "griffe_b" in groupe else QUOI_FAIRE_ORIGINE
+        for nom in groupe:
             axe = self.machine.axes[nom]
             assert axe.carte is not None and axe.lettre is not None
             lettres[axe.carte] = lettres.get(axe.carte, "") + axe.lettre
@@ -290,7 +317,7 @@ class Portique:
                 raise ErreurEtape(
                     f"prise d'origine du portique, carte « {carte} », « {commande.ligne} » : "
                     f"{commande.erreur}",
-                    QUOI_FAIRE_ORIGINE if connectee else CARTE_COUPEE,
+                    self._quoi_faire_origine if connectee else CARTE_COUPEE,
                 )
         return all(commande.finie for _, commande in self._commandes)
 
@@ -314,27 +341,31 @@ class Portique:
         return self._horloge() - self._arret_depuis >= attente - _EGAL
 
     def etapes_origine(self) -> tuple[Etape, ...]:
-        """Freins desserrés, puis chaque groupe de portique → origine, dans l'ordre."""
+        """Contrôles des rotations, freins desserrés, chaque groupe de portique → origine dans
+        l'ordre, puis les rotations de la griffe et de la tête de préhension."""
         etapes = [
+            *self.rotations.etapes_controle(),
             Etape(
                 "portique_freins_desserres",
                 QUOI_FAIRE_FREIN,
                 action=self.desserrer_freins,
                 entree=(self.connectees,),
-            )
+            ),
         ]
         fin = Condition("prise d'origine du portique finie", self.origine_finie)
         for numero, groupe in enumerate(self.reglages.origine):
             etapes.append(
                 Etape(
                     f"portique_origine_{'_'.join(groupe)}",
-                    QUOI_FAIRE_ORIGINE,
+                    QUOI_FAIRE_GODET if "griffe_b" in groupe else QUOI_FAIRE_ORIGINE,
                     action=lambda numero=numero: self.lancer_origine(numero),
                     fin=fin,
                     delai_max=DELAI_ORIGINE,
                     entree=(self.pas_d_alarme,),
                 )
             )
+        etapes += self.rotations.etapes_griffe()
+        etapes += self.rotations.etapes_tete()
         return tuple(etapes)
 
     def etapes_garage(self) -> tuple[Etape, ...]:

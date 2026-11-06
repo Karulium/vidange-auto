@@ -9,14 +9,16 @@ Après une mise sous tension, une carte FluidNC ne sait pas où sont ses axes (a
 sa prise d'origine ($H) le lui rapprend. Une position sûre n'est demandée qu'une fois toutes
 les cartes prêtes (connectées, sans alarme).
 
-Le geste « portique: origine » fait la prise d'origine du portique dans son ordre (freins des Z
-desserrés, les deux Z en haut, Y, puis X1 et X2 ensemble) ; « portique: garage » le gare
+Le geste « portique: origine » fait la prise d'origine du portique dans son ordre (contrôles des
+rotations, freins des Z desserrés, les deux Z en haut, Y, puis X1 et X2 ensemble, le godet, puis
+les rotations de la griffe et de la tête de préhension) ; « portique: garage » le gare
 (vidange.portique). Une alarme d'un pilote du portique arrête alors le module.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 
+from vidange.angles_gardes import AnglesGardes
 from vidange.chef import Axes, Condition, ErreurEtape, Etape, Module
 from vidange.fluidnc import Commande, Liaison
 from vidange.portique import Portique
@@ -62,9 +64,12 @@ def module_lieu_sur(
     machine: Machine,
     liaisons: Mapping[str, Liaison],
     cartes: Mapping[str, CarteFluidnc] | None = None,
+    garde: AnglesGardes | None = None,
+    compte_tours: Callable[[], float | None] | None = None,
 ) -> Module | None:
     """Le module de retour en lieu sûr, ou None si machine.yaml n'a pas de « lieu_sur ».
-    `cartes` (fluidnc.yaml → cartes) : demandées par un geste du portique."""
+    `cartes` (fluidnc.yaml → cartes) : demandées par un geste du portique ; `garde` et
+    `compte_tours` : pour les rotations (vidange.portique.rotations)."""
     if not machine.lieu_sur:
         return None
     axes = Axes(machine, liaisons)
@@ -72,7 +77,7 @@ def module_lieu_sur(
     if any(geste.portique is not None for geste in machine.lieu_sur):
         if cartes is None:
             raise ValueError("lieu_sur : un geste du portique demande les cartes de fluidnc.yaml")
-        portique = Portique(machine, cartes, liaisons)
+        portique = Portique(machine, cartes, liaisons, garde=garde, compte_tours=compte_tours)
     # Pendant un déplacement, toutes les cartes doivent rester connectées et sans alarme.
     arrives = Condition(axes.arrives.texte, lambda: axes.surveillance.test() and axes.arrive())
     etapes = []

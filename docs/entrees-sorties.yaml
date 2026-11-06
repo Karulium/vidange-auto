@@ -189,8 +189,8 @@ cartes:
   fluidnc_portique:
     exemple: true
     description: Carte FluidNC n° 1 (portique), 6 axes, pilotes externes
-    # 12 entrées : 6 fins de course et origines, 4 alarmes de pilote, OK des chocs, 1 libre
-    # (EXEMPLE : à confirmer avec le choix de la carte).
+    # 12 entrées : 4 fins de course, 2 origines de la griffe (godet, rotation), 4 alarmes de
+    # pilote, OK des chocs, 1 libre (EXEMPLE : à confirmer avec le choix de la carte).
     entrees: 12
     sorties: 18
     tension_max: 24
@@ -249,7 +249,10 @@ cartes:
 #   pi/reglages/fluidnc.yaml ; vide_venturi est lu par l'ADS1115 de l'armoire) :
 #   contact_tete, fdc_prehension_haut, origine_rotation_tete, alarme_prehension_z,
 #   alarme_rotation_tete, moteur_prehension_z, moteur_rotation_tete, vanne_vide,
-#   electroaimants_capsule, vide_venturi.
+#   electroaimants_capsule, vide_venturi, compte_tours_tete (tâche 36 bis : le tour de la tête
+#   à la prise d'origine de sa rotation).
+# (tâche 36 bis, griffe : sur la carte FluidNC n° 1, lus dans son état) : origine_godet_griffe,
+#   origine_rotation_griffe.
 # (tâches 34, 34 bis et 34 quater, remplissage : sur la carte FluidNC n° 2 ; le Pi lit
 #   barriere_remplissage, alarme_barre_mur et alarme_barre_allee dans l'état de la carte : lettres
 #   dans pi/reglages/fluidnc.yaml ; la balance est pesee_plateau_remplissage, sur le bus des pesées) :
@@ -397,6 +400,24 @@ signaux:
     conversion:
       volts: [0.333, 3.0]
       valeurs: [0, -100]
+    tension: 3.3
+    module: prehension
+  # Compte-tours de la tête de préhension (décisions, « Origine de la rotation de la tête », 05/11,
+  # point 6) : potentiomètre multitour entraîné au rapport 3, tête à 0° = mi-course. Conversion
+  # EXEMPLE (potentiomètre de 10 tours sous 3,3 V : 3 600° du potentiomètre = 1 200° de la tête),
+  # à étalonner à la mise en service (pi/systeme/essai-prehension.md).
+  compte_tours_tete:
+    exemple: true
+    description: >-
+      Compte-tours de la rotation de la tête de préhension (potentiomètre multitour au rapport 3) :
+      angle cumulé de la tête, ± 3°
+    carte: ads1115
+    broche: A1
+    type: mesure
+    unite: deg
+    conversion:
+      volts: [0.0, 3.3]
+      valeurs: [-600, 600]
     tension: 3.3
     module: prehension
   ecran_nextion:
@@ -891,6 +912,30 @@ signaux:
     tension: 24
     repos: ferme
     module: portique
+  # Origines A et B de la griffe (fil Griffe, PR n° 56, point 4) : 2 capteurs inductifs M12 PNP NO
+  # (actifs à +24 V quand ils voient le métal), sur le multiconducteur de la griffe.
+  origine_godet_griffe:
+    exemple: true
+    description: >-
+      Origine du godet de la griffe (inductif M12 PNP NO) : actif godet « fermé nominal » (B = 0).
+      Sur le multiconducteur de la griffe
+    carte: fluidnc_portique
+    broche: E10
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: griffe
+  origine_rotation_griffe:
+    exemple: true
+    description: >-
+      Origine de la rotation de la tête de la griffe (inductif M12 PNP NO devant un fanion de
+      180°) : actif pour A de −180° à 0°, libre de 0° à +180°. Sur le multiconducteur de la griffe
+    carte: fluidnc_portique
+    broche: E11
+    type: pnp
+    tension: 24
+    repos: ouvert
+    module: griffe
   moteur_pont_x1:
     exemple: true
     description: Pas et sens du pilote du moteur X1 du pont (axe X, motor0)
@@ -965,7 +1010,9 @@ signaux:
     module: portique
   origine_rotation_tete:
     exemple: true
-    description: Origine de la rotation de la tête (référence à confirmer au câblage)
+    description: >-
+      Origine de la rotation de la tête : capteur Hall sous la poulie de 60 dents (il voit
+      l'aimant une fois par tour ; le tour vient de compte_tours_tete)
     carte: fluidnc_prehension
     broche: E3
     type: pnp

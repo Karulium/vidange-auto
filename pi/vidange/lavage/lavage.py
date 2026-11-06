@@ -344,7 +344,9 @@ class Lavage:
         # 6. Remontée selon le vide.
         yield from self._remonter(z_appui)
         # 7. Jet d'air du col, égouttage au-dessus du fût.
-        yield from self._jet_air(*reglage.jet_centre, reglage.jet_bord_z)
+        # Le centre du seau face à la buse, relatif au centre du fût de lavage.
+        dx, dy = reglage.jet_decalage
+        yield from self._jet_air(centre_x + dx, centre_y + dy, reglage.jet_bord_z)
         yield Pas("égoutter au-dessus du fût", attente_s=self.reglages.jet_air.egouttage_s)
         # 8. Retour au coude du couloir.
         yield from self._sortir()

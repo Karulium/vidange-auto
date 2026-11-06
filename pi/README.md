@@ -58,6 +58,8 @@ Pas encore de vrai module de la machine.
 | `vidange/mises_a_jour/` | Mises à jour : cartes ESP32 (esptool, console FluidNC, copies de la mémoire), programme du Pi (git), fausse carte ; commande `vidange-maj` |
 | `vidange/accelerometre/` | Accéléromètre du chariot Z : copie de `accelerometre.yaml` dans le programme du RP2040 (`accelerometre/`) ; liaison par le fil série unique (chocs notés au registre, réglages envoyés), mise à jour de son programme par ce fil (chargeur, `fichier_programme.py`), faux RP2040 ; commande `vidange-accelerometre` |
 | `vidange/mode.py` | Mode de la machine (production, lavage, UV-ozone), gardé dans un fichier, changé machine au repos |
+| `vidange/angles_gardes.py` | Angles gardés au redémarrage (rotation de la griffe, angle cumulé de la tête de préhension), dans `donnees/angles.json` |
+| `vidange/portique/` | Portique (cartes n° 1 et n° 4) : courses, chaîne Z, prise d'origine dans l'ordre, freins, garage, photos (`portique.py`), origines des rotations de la griffe (fanion) et de la tête de préhension (Hall, compte-tours) (`rotations.py`) ; commande `vidange-portique` |
 | `vidange/griffe/` | Griffe sur mât : règles de position (`regles.py`), doses apprises (`doses.py`), bras sur la carte du portique et sa pesée (`bras.py`), gestes (`griffe.py`), module « griffe » (`module.py`), griffe du simulateur (`simulation.py`) |
 | `vidange/porte_bocal/` | Porte-bocal (carte n° 3) : mors (serrage par palpage, ouverture), demi-tour du bocal (pont en H, verrou, inclinaison, photo de contrôle), signaux de la carte par leur nom (`signaux.py`), faux plateau et faux bocal (`faux.py`) ; commande `vidange-porte-bocal` |
 | `vidange/prehension/` | Préhension (cartes n° 1 et n° 4) : règles de mouvement (`regles.py`), tête sur ses deux cartes avec le vide et la force (`tete.py`), gestes : prendre, poser, porte-bocal, visser (`prehension.py`), scénario du simulateur (`module.py`, `simulation.py`) ; commande `vidange-prehension` |
@@ -612,7 +614,7 @@ vidange-stockage piles seau_a            # seaux par pile, bord du seau du haut 
   quinconce. Plus de place : le module du Remplissage attend (`verifier_place` → `vider_le_tiroir` : boucle
   vue ouverte puis refermée → `confirmer_tiroir_vide`, Go), les files repartent vides.
 - **Verrous** (`ReglesStockage`, branchés dans la préhension et la griffe) : boucle ouverte ⇒ aucun mouvement
-  du portique ; griffe x ≤ 2,325 ; seau tenu jamais au-dessus d'une pile qui a des seaux (sauf celle qu'il
+  du portique ; griffe x ≤ 2,738 ; seau tenu jamais au-dessus d'une pile qui a des seaux (sauf celle qu'il
   quitte ou rejoint, fond 3 cm au-dessus de son bord), fond ≥ 0,79 au-dessus du plateau, rail opérateur ;
   boîtes à capsules ; caméra du bocal.
 - **Cases vides** : bande du haut (désactivée, tâche 35 bis) ; gestes des bocaux et des boîtes (Entonnoir,
