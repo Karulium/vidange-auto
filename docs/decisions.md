@@ -237,6 +237,11 @@ si l'une pose problème, elle le dit dans sa PR.
   ajouter : pose manivelle en haut refusée ; pose chariot au poste acceptée (manivelle en bas) ; ordre complet d'un
   cycle dans le simulateur avec la pose en bas ; trajet en ligne droite à travers la zone refusé ; trajet qui la frôle
   à 1 cm près accepté.
+  Réponses à la correction (06/11, niveau 1) : (a) en attendant la Maquette, on garde le seul trajet d'accès écrit
+  par la session : en ligne droite d'un point hors de la zone à la verticale du bocal (ou retour), face en haut,
+  manivelle arrêtée en bas. Un « couloir d'accès » (départ, direction, largeur, tête seule et avec bocal) est demandé
+  à la Maquette le 06/11 ; il ira dans une tâche suivante comme réglage, tout autre trajet refusé. (b) Dans la zone
+  du porte-bocal, on garde la **somme** rayon de la tête + 1 cm + rayon de l'objet (plus prudent).
 - **Griffe : table « Y minimum du mât » avec l'agitateur fixe** (Maquette v45.111, 02/11/2026,
   `maquette/table-y-min-mat-griffe-v45.111.md` ; remplace les points 2 et 3 de la section du 01/11 ci-dessous).
   y du mât = repère du portique. Godet fermé / à moitié ouvert / grand ouvert, tête bras le long du pont. Bandes de x
