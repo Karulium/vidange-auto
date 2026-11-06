@@ -35,6 +35,7 @@ from collections.abc import Callable, Generator
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
+from vidange.angles_gardes import AnglesGardes
 from vidange.chef import ErreurEtape
 from vidange.griffe.bras import Bras, G, Pas, Resultat
 from vidange.griffe.doses import Doses, Lieu, Prise
@@ -131,12 +132,17 @@ class Griffe:
         tourner_seau: Callable[[bool], object] = lambda tourne: None,
         couche_finie: Callable[[int], object] = lambda couche: None,
         seau_fini: Callable[[int], object] = lambda numero: None,
+        prehension_face_z: Callable[[], float | None] = lambda: None,
+        garde: AnglesGardes | None = None,
     ) -> None:
         """`machouiller` : faux pour le maïs. `prochain_format` : format du seau suivant (None :
         celui par défaut). `tourner_seau` : faire tourner le seau du poste de remplissage
         (Remplissage, pas figé). `couche_finie` : une couche de substrat est vidée et tassée,
         le mycélium peut être versé dessus (Mycélium). `seau_fini` : un seau est plein (numéro
-        dans le fût). `camera_dosage_pivote` : la caméra du dosage pivote (Vision)."""
+        dans le fût). `camera_dosage_pivote` : la caméra du dosage pivote (Vision).
+        `prehension_face_z` : face de la tête de préhension (même chariot, chaîne Z ; None :
+        inconnue, comptée en haut). `garde` : la rotation de la tête y est notée à chaque arrêt
+        (prise d'origine après une coupure)."""
         assert machine.griffe is not None and machine.poste_fut is not None
         self.reglages = machine.griffe
         self.fut = machine.poste_fut
@@ -157,6 +163,8 @@ class Griffe:
         self.tourner_seau = tourner_seau
         self._couche_finie = couche_finie
         self._seau_fini = seau_fini
+        self._prehension_face_z = prehension_face_z
+        self.garde = garde
         self.plan = Plan(format=self.reglages.format_par_defaut)
         self.pose: Pose | None = None
         self._geste: Geste | None = None
@@ -164,7 +172,7 @@ class Griffe:
         self._depuis = 0.0
         self._points = self._points_des_couches()
         # Verrou du Stockage (Stockage.brancher_griffe, tâche 35) pour chaque pas : boucle du
-        # tiroir fermée, mât à x ≤ 2,325. Raison du refus, ou None. Sans stockage : rien.
+        # tiroir fermée, mât à x ≤ 2,738. Raison du refus, ou None. Sans stockage : rien.
         self.verrou_stockage: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
         # Verrou du chariot de remplissage (Remplissage.brancher_griffe, règle 14 : en mode
         # couvercles, la tête ne tourne que chariot à y ≥ 0,515). Sans remplissage : rien.
@@ -180,6 +188,7 @@ class Griffe:
             porte_spray_ouverte=self._porte_spray(),
             dosage_en_cours=self._dosage(),
             camera_dosage_pivote=self._camera_dosage_pivote(),
+            prehension_face_z=self._prehension_face_z(),
         )
 
     def tete_tourne(self) -> bool:
@@ -247,6 +256,8 @@ class Griffe:
         if refus is not None:
             raise ErreurEtape(f"griffe, « {pas.texte} » refusé : {refus}", QUOI_FAIRE)
         journal.debug("Griffe : %s", pas.texte)
+        if self.garde is not None and "a" in pas.cibles:
+            self.garde.noter("griffe_a", self.pose.a, en_rotation=True)
         self.bras.executer(pas, cible)
 
     def geste_fini(self) -> bool:
@@ -263,6 +274,8 @@ class Griffe:
                     return False
                 resultat = self.bras.resultat()
                 self.pose = resultat.pose
+                if self.garde is not None:
+                    self.garde.noter("griffe_a", self.pose.a)
             self._suivant(resultat)
         return True
 
@@ -326,8 +339,12 @@ class Griffe:
         ]
         if not candidats:
             raise ErreurEtape(f"orientation {cibles} hors de la course de la rotation de la tête")
-        sans_tour = [a for a in candidats if -180 - _EGAL <= a <= 180 + _EGAL]
-        return min(sans_tour or candidats, key=lambda a: abs(a - actuel))
+        # Sans demi-tour d'abord (plus d'un quart de tour : seulement au point des demi-tours,
+        # griffe → point_demi_tour, PR n° 56, point 4).
+        quart = 90 + self.reglages.rotation.tolerance_deg
+        proches = [a for a in candidats if abs(a - actuel) <= quart] or candidats
+        sans_tour = [a for a in proches if -180 - _EGAL <= a <= 180 + _EGAL]
+        return min(sans_tour or proches, key=lambda a: abs(a - actuel))
 
     def _vers_le_haut(self, pose: Pose) -> list[dict[str, float]]:
         """Godet fermé, tête bras le long du pont, puis axes à la hauteur des trajets."""

@@ -19,11 +19,16 @@ Les règles (verrous du logiciel : ils protègent la MACHINE, jamais les personn
    et l'objet tenu (rayon de la tête + marge + rayon de l'objet) ne vont jamais dans ce rectangle
    plus bas que z_haut + marge ; la face montant au plus à haut_z, les trajets le contournent.
    Seule exception, manivelle du mycélium arrêtée EN BAS : la verticale du bocal (axe sur le
-   bocal), pour le poser ou le reprendre, et le trajet du pont, face en haut, qui va en ligne
-   droite d'un point hors de la zone à cette verticale (ou en revient). Pour descendre sur le
-   bocal : caméra du dosage à 0°, mors ouverts pour poser un bocal, serrés pour le prendre.
+   bocal à x ± 1 mm, y −1 / +2 mm), pour le poser ou le reprendre, et le COULOIR d'accès
+   (`porte_bocal → couloir`, Maquette 06/11) : du départ (0,925 ; 0,40), face à 1,10, en −y
+   jusqu'à la verticale (et retour en +y), x dans la largeur permise (tête seule ± 0,06 ; avec
+   un bocal −0,06 / +0,04). Tout autre trajet dans la zone est refusé (côté mur, côtés en x). Pour
+   descendre sur le bocal : caméra du dosage à 0°, mors ouverts (fin de course) pour poser un
+   bocal, serrés pour le prendre.
 3. Seau tenu : son bord au plus à bord_max_operateur_z côté opérateur, à bord_max_piles_z
-   au-dessus des piles.
+   au-dessus des piles. Chaîne Z (portique → chaine_prehension) : plaque Z au-dessus de 2,02
+   (face au-dessus de 0,942) ⇒ mât à y ≤ 0,80 ; plus loin en y, la face « en haut » est plus
+   basse.
 4. Boîtier de la caméra du bocal (griffe → camera_bocal) : près de lui, la tête et l'objet tenu
    restent au-dessus de son haut + marge.
 5. Caméra du dosage : pendant qu'elle pivote, la tête n'entre pas dans sa boîte.
@@ -118,6 +123,7 @@ class ReglesPrehension:
         assert contact is not None
         self.contact_capsule_z = contact
         self.poste = machine.poste_fut
+        self.portique = machine.portique
         self.camera_bocal = machine.griffe.camera_bocal
         self.courses = {
             "pont": machine.axes["pont_x"].course,
@@ -152,7 +158,17 @@ class ReglesPrehension:
         haut = self.reglages.haut_z
         if objet is not None and objet.sorte == "seau":
             haut = min([haut, *(self.bord_max_seau(y) - objet.dessus_m for y in ys)])
+        for y in ys:
+            maximum = self.face_max_chaine(y)
+            if maximum is not None:
+                haut = min(haut, maximum)
         return max(haut, self.courses["z"][0])
+
+    def face_max_chaine(self, y: float) -> float | None:
+        """La face la plus haute permise par la chaîne Z, mât à y (None : pas de limite)."""
+        if self.portique is None:
+            return None
+        return self.portique.face_max_chaine(y, self.courses["z"][0])
 
     def en_haut(self, pose: Pose, objet: Objet | None, *ys: float) -> bool:
         hauteur = self.hauteur_trajet(objet, pose.y, *ys)
@@ -202,11 +218,57 @@ class ReglesPrehension:
         )
 
     def sur_le_bocal(self, pose: Pose) -> bool:
-        """L'axe de la tête est-il sur celui du bocal du porte-bocal (à la verticale) ?"""
+        """L'axe de la tête est-il sur celui du bocal du porte-bocal (à la verticale : x ±
+        tolerance_pose_x_m, y dans tolerance_pose_y_m) ?"""
+        porte_bocal = self.reglages.porte_bocal
+        moins, plus = porte_bocal.tolerance_pose_y_m
+        dy = pose.y - porte_bocal.y
+        return (
+            abs(pose.x - porte_bocal.x) <= porte_bocal.tolerance_pose_x_m + _EGAL
+            and moins - _EGAL <= dy <= plus + _EGAL
+        )
+
+    def angle_meplats(self, actuel: float) -> float:
+        """L'angle de pose au porte-bocal le plus proche de `actuel` : angle_meplats_deg + k ×
+        120° (méplats tous les 120°), dans la course de la rotation : au plus 60° de rotation."""
+        debut, fin = self.courses["a"]
+        base = self.reglages.angle_meplats_deg
+        k_min = math.ceil((debut - base) / 120 - 1e-9)
+        k_max = math.floor((fin - base) / 120 + 1e-9)
+        candidats = [base + 120 * k for k in range(k_min, k_max + 1)]
+        if not candidats:
+            raise ValueError("aucun angle des méplats dans la course de la rotation")
+        return min(candidats, key=lambda a: (abs(a - actuel), abs(a)))
+
+    def dans_le_couloir(self, pose: Pose, objet: Objet | None) -> bool:
+        """La tête est-elle dans le couloir d'accès au bocal (face à sa hauteur, entre le départ
+        et la verticale du bocal, x dans la largeur permise pour ce qu'elle tient) ?"""
+        porte_bocal = self.reglages.porte_bocal
+        couloir = porte_bocal.couloir
+        if couloir is None:
+            return False
+        if objet is None:
+            moins, plus = -couloir.demi_largeur_x_tete, couloir.demi_largeur_x_tete
+        elif objet.sorte == "bocal":
+            moins, plus = couloir.largeur_x_bocal
+        else:
+            return False
+        dx = pose.x - porte_bocal.x
+        return (
+            moins - _EGAL <= dx <= plus + _EGAL
+            and porte_bocal.y + porte_bocal.tolerance_pose_y_m[0] - _EGAL
+            <= pose.y
+            <= couloir.depart[1] + _EGAL
+            and abs(pose.z - couloir.face_z) <= self.reglages.tolerance_m + _EGAL
+        )
+
+    def pres_du_bocal(self, pose: Pose) -> bool:
+        """L'axe de la tête est-il près de celui du bocal (dans rayon_zone_m), à sa verticale ou
+        pas ?"""
         porte_bocal = self.reglages.porte_bocal
         return (
             math.hypot(pose.x - porte_bocal.x, pose.y - porte_bocal.y)
-            <= self.reglages.tolerance_m + _EGAL
+            <= porte_bocal.rayon_zone_m + _EGAL
         )
 
     def dans_zone_porte_bocal(self, pose: Pose, objet: Objet | None) -> bool:
@@ -243,6 +305,10 @@ class ReglesPrehension:
         refus = regles_poste.refus_pont(self.poste, contexte.echange_fut, pont)
         if refus is not None:
             return refus
+        if self.portique is not None:
+            refus = self.portique.refus_chaine(pose.y, pose.z, self.courses["z"][0])
+            if refus is not None:
+                return refus
         basse = pose.z < p.haut_z - p.tolerance_m
         if (
             not acces
@@ -295,11 +361,17 @@ class ReglesPrehension:
     # ------------------------------------------------------------ un mouvement
 
     def acces_porte_bocal(self, depart: Pose, arrivee: Pose, contexte: Contexte) -> bool:
-        """Le trajet du pont qui mène à la verticale du bocal (ou en revient) : en ligne droite,
-        depuis (ou vers) un point hors de la zone du porte-bocal, face en haut, manivelle en
-        bas."""
+        """Le trajet du pont qui mène à la verticale du bocal (ou en revient), manivelle en bas :
+        dans le couloir (porte_bocal → couloir), en y seulement ; sans couloir dans les
+        réglages, en ligne droite depuis (ou vers) un point hors de la zone, face en haut."""
         if contexte.manivelle != "bas" or abs(arrivee.z - depart.z) > _EGAL:
             return False
+        if self.reglages.porte_bocal.couloir is not None:
+            return (
+                abs(arrivee.x - depart.x) <= _EGAL
+                and self.dans_le_couloir(depart, contexte.objet)
+                and self.dans_le_couloir(arrivee, contexte.objet)
+            )
         if not self.en_haut(depart, contexte.objet, arrivee.y):
             return False
         if self.sur_le_bocal(arrivee) and not self.sur_le_bocal(depart):
@@ -327,14 +399,20 @@ class ReglesPrehension:
             self.entre_les_mors(depart) or self.entre_les_mors(arrivee)
         ):
             return "la tête ne tourne jamais entre les mors du porte-bocal"
-        if (
-            arrivee.z < depart.z - _EGAL
-            and arrivee.z < p.haut_z - p.tolerance_m
-            and self.sur_le_bocal(arrivee)
-        ):
+        descend = arrivee.z < depart.z - _EGAL and arrivee.z < p.haut_z - p.tolerance_m
+        if descend and self.sur_le_bocal(arrivee):
             refus = self.refus_descente_porte_bocal(contexte)
             if refus is not None:
                 return f"descente au porte-bocal refusée : {refus}"
+        elif descend and self.pres_du_bocal(arrivee):
+            porte_bocal = p.porte_bocal
+            moins, plus = porte_bocal.tolerance_pose_y_m
+            return (
+                f"descente au porte-bocal refusée : axe de la tête à "
+                f"({_m(arrivee.x)} ; {_m(arrivee.y)}), il faut x {_m(porte_bocal.x)} ± "
+                f"{porte_bocal.tolerance_pose_x_m * 1000:g} mm et y {_m(porte_bocal.y)} "
+                f"{moins * 1000:+g} / {plus * 1000:+g} mm (1,3 mm de jeu entre les mors)"
+            )
         longueur = max(
             math.dist((depart.x, depart.y, depart.z), (arrivee.x, arrivee.y, arrivee.z)),
             # 1° de rotation ≈ 1 mm.

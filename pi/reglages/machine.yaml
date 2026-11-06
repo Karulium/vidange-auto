@@ -37,9 +37,20 @@
 #     chaque barre au-delà de sa course, les 2 barres avec la même course, barres du retourneur dans
 #     leur course ;
 #   - portique : chariot et mâts d'accord avec la course de chariot_y, course de chaque plaque Z
-#     égale à celle de sa hauteur d'outil, prise d'origine dans l'ordre (les Z, puis Y, puis X),
-#     vitesses des outils au plus celles du portique, accélération de la préhension égale à la
-#     sienne, outils en haut de leur course, règle du plénum vraie sur toute la course ;
+#     égale à celle de sa hauteur d'outil, prise d'origine dans l'ordre (les Z, puis Y, puis X,
+#     puis le godet ; la rotation de la griffe n'y est pas, elle est faite par le Pi), vitesses des
+#     outils au plus celles du portique, accélération de la préhension égale à la sienne, outils en
+#     haut de leur course, règle du plénum vraie sur toute la course, chaîne Z de la préhension
+#     (seuil dans la course de sa plaque, positions nommées qui la respectent), tête basse dans la
+#     course, bandes du bout côté fût dans la course des axes de la griffe ;
+#   - griffe : point des demi-tours dans les courses, sous rotation → libre_z_max, mâts à y ≤
+#     chaine_prehension → mat_y_max ; capteurs d'origine (godet, fanion, Hall de la préhension)
+#     = fins de course de leur axe dans fluidnc.yaml ;
+#   - préhension : couloir d'accès au bocal (départ sur le bocal, hors de la zone, largeurs autour
+#     de 0, face dans la course), tolérances de la descente sur le bocal, descente lente avec sa
+#     vitesse, plage du compte-tours, avant_hall_deg > precision_compte_tours_deg ;
+#   - remplissage : face de la préhension à l'étape c) de la prise double (pose + face au-dessus
+#     du plateau − descente de la tête) dans la course de prehension_z ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
 
 exemple: true
@@ -69,12 +80,14 @@ axes:
   # « Portique », gelé le 28/10/2026 (partie « portique » plus bas) ; les longueurs de rail sont
   # des EXEMPLES. Régler FluidNC pour que la position machine de chaque axe soit celle d'ici, en
   # mm (fluidnc/portique.yaml).
-  # Pont : deux moteurs X1 et X2 (un par rail, même consigne), x 0,233 → 2,495 (0,223 + 1 cm de
-  # marge, plan de commande ; butée côté stockage à 2,495, rails HGR15). JAMAIS sous 0,233. Le
-  # mât de la griffe est à pont − 0,187 en x, celui de la préhension à pont + 0,129.
+  # Pont : deux moteurs X1 et X2 (un par rail, même consigne), x 0,223 → 2,925 (décisions,
+  # « Portique, réponses à la PR n° 56 » : limite 0,223 accordée par Karulium le 03/11, point 6 ;
+  # rails X allongés de 0,43, point 9). JAMAIS sous 0,223. Le mât de la griffe est à pont − 0,187
+  # en x (donc x ≤ 2,738), celui de la préhension à pont + 0,129 (x ≤ 3,054). Longueur du rail :
+  # EXEMPLE.
   pont_x:
-    longueur_rail: 2.6
-    course: [0.233, 2.495]
+    longueur_rail: 3.0
+    course: [0.223, 2.925]
     carte: portique
     lettre: X
   # Chariot Y : l'axe donne le y des DEUX MÂTS (griffe et préhension), qui sont à centre du
@@ -101,11 +114,12 @@ axes:
     course: [-370, 370]
     carte: portique
     lettre: A
-  # Vis à billes du godet (m) : le début de la course est « fermé », JAMAIS au-delà (le capot du
-  # boîtier de tête n'a que 4 mm de garde) ; la fin est « grand ouvert ». EXEMPLE : 30 mm de vis.
+  # Vis à billes du godet (m) : le début de la course est « fermé nominal » (0, le capteur
+  # origine_godet_griffe), JAMAIS au-delà (le capot du boîtier de tête n'a que 4 mm de garde) ;
+  # la fin est « grand ouvert ». Butées logicielles 0 à +36 mm (fil Griffe, PR n° 56, point 4).
   griffe_b:
-    longueur_rail: 0.03
-    course: [0.0, 0.03]
+    longueur_rail: 0.036
+    course: [0.0, 0.036]
     carte: portique
     lettre: B
   # L'axe de l'agitateur du Mycélium, sur la carte n° 3 (mycelium_lavage). L'agitateur est FIXE
@@ -132,10 +146,11 @@ axes:
   # pont et le même chariot que la griffe (pont_x, chariot_y). Régler FluidNC pour que sa
   # position machine Z soit la hauteur de la FACE de la tête, en mm.
   # Z : pignon-crémaillère avec frein ; « en haut » = face en butée haute à 1,10 (fiche).
-  # Course 0,650 (Portique, 01/11 : plaque Z de 1,308 à 1,958), donc face de 0,45 à 1,10.
+  # Préhension +22 cm (validée par Karulium le 04/11) : course 0,870 (plaque Z de 1,308 à 2,178),
+  # donc face de 0,23 à 1,10 (0,21 au tout bout du rail, sur la butée : jamais).
   prehension_z:
     longueur_rail: 1.15
-    course: [0.45, 1.10]
+    course: [0.23, 1.10]
     carte: prehension
     lettre: Z
   # Rotation de la tête (°). Visser = sens horaire vu d'en haut ; aucun axe inversé dans FluidNC.
@@ -245,18 +260,19 @@ positions:
     prehension_z: 1.10
     prehension_a: 0
   # Portique (partie « portique » plus bas) : les deux outils en haut ; garage de repos (pont au
-  # bout côté stockage, chariot au centre 0,50, donc mâts à 0,46) ; places du pont pour la photo
-  # du plafond, au bout opposé à la zone photographiée.
+  # bout côté stockage, 2,925, chariot au centre 0,50, donc mâts à 0,46) ; places du pont pour la
+  # photo du plafond, au bout opposé à la zone photographiée (2,925 pour le fût et le poste, 0,223
+  # pour le stockage : décisions, « Portique, réponses à la PR n° 56 », points 6 et 9).
   portique_outils_en_haut:
     griffe_z: 1.29
     prehension_z: 1.10
   portique_garage:
-    pont_x: 2.495
+    pont_x: 2.925
     chariot_y: 0.46
   portique_photo_fut_poste:
-    pont_x: 2.495
+    pont_x: 2.925
   portique_photo_stockage:
-    pont_x: 0.233
+    pont_x: 0.223
   # L'agitateur du mycélium en attente : manivelle en bas (simulateur).
   agitateur_attente:
     manivelle: 180
@@ -393,11 +409,13 @@ griffe:
     demi_longueur_haut: 0.117
     haut_sous_axes_ferme: 0.09
     profil_ouvert: [[0.03, 0.117], [0.045, 0.127], [0.06, 0.135], [0.075, 0.148], [0.105, 0.165]]
-  # Pont : x ≥ 0,233 (0,223 de la fiche + 1 cm, Portique 01/11).
-  pont_x_min: 0.233
+  # Pont : x ≥ 0,223 (limite accordée par Karulium le 03/11 ; au bout côté fût, voir portique →
+  # bouts_bloques_griffe).
+  pont_x_min: 0.223
   # Rotation de la tête (fiche) : libre si axes ≤ 1,075 ; de 1,075 à 1,11 libre godet fermé et
   # ±45° au plus godet ouvert ; au-dessus de 1,11 bloquée bras le long du pont, à 0° ou 180°.
-  # Pas de rotation quand le pont est au-delà de x 2,0.
+  # Pas de rotation quand le pont est au-delà de x 2,0 (le rail de la colonne gêne), sans limite
+  # d'angle (PR n° 56, point 3).
   rotation:
     libre_z_max: 1.075
     bloquee_z_min: 1.11
@@ -654,6 +672,20 @@ griffe:
   seau_remplissage: [0.925, 0.42]
   # Fût vide : le mât attend ici, pont hors de la zone du chariot du fût (choix du logiciel).
   attente: [0.86, 0.57]
+  # Point des demi-tours de la tête hors du fût et de la recherche de l'origine de A (fil
+  # Griffe, 03/11 ; un tour complet libre vérifié par la Maquette sur la v45.112) : mât en
+  # (0,86 ; 0,57), axes à 1,075, godet fermé. Un demi-tour hors du fût ne se fait qu'ici.
+  point_demi_tour: {x: 0.86, y: 0.57, z: 1.075}
+  # Prise d'origine de A et B (PR n° 56, points 4 et 7 ; 2 inductifs M12 PNP NO).
+  #   B : « $HB » vers FERMÉ, lent (fluidnc/portique.yaml) ; si le capteur est déjà actif,
+  #       FluidNC recule d'abord de 2 mm vers l'ouvert. Blocage vu par le codeur : alarme.
+  #   A : fanion de 180°, actionné pour A de −180° à 0°, libre de 0° à +180°. Fanion libre (tête
+  #       du côté +) : le Pi tourne d'abord en − jusqu'au fanion (au plus recherche_deg) ; puis
+  #       « $HA » : approche finale toujours en +, lente, au plus recherche_deg (fluidnc/) ;
+  #       origine = A 0. Vitesse de la recherche du Pi (°/s) : EXEMPLE.
+  #   Avant tout : la dernière position connue de A (fichier des angles gardés) doit être 0° ou
+  #   180° à tolerance_deg près (rotation → tolerance_deg) ; sinon pas de montée de Z, alarme.
+  origine_rotation: {recherche_deg: 190, vitesse_deg_s: 20}
 
 # Mycélium (dosage), module validé le 24/10/2026 (option B : tout le module relevé de 12 mm),
 # agitateur FIXE depuis le 01/11/2026 (fiche Mycélium v10, docs/decisions.md « Agitateur du
@@ -803,6 +835,8 @@ prehension:
     levee_lente: 0.01
     remontee_choc: 0.01
     vissage_deg_s: 30
+    # Descente du bocal sur les derniers mm entre les mors (porte_bocal → descente_lente_pose_m).
+    pose_bocal: 0.003
   # Descente lente sur les 3 derniers cm (EXEMPLE) ; contact à plus de 5 mm de la cote attendue :
   # arrêt et alerte (fiche).
   descente: {approche_m: 0.03, ecart_contact_max_m: 0.005}
@@ -863,20 +897,32 @@ prehension:
   # capsule selon la course de l'agitation (fiche Mycélium v10b) : 1,047 / 1,077 / 1,108 pour
   # 10 / 7 / 4 cm ; approche à 1,10 (la butée haute), arrêt sur le contact de la tête. Une course
   # dont le contact dépasse la face haute moins 1 cm est refusée au démarrage (4 cm). Tête
-  # orientée à ± 3° (méplats), bocal à sa hauteur exacte (± 0,5 mm), remontée d'au moins 5 mm
-  # avant le serrage (fiche). Orientation, zone des mors et délai des mors : EXEMPLES (à mesurer
-  # au montage).
+  # orientée à ± 3° (méplats : angle_meplats_deg plus bas), bocal à sa hauteur exacte (± 0,5 mm),
+  # remontée d'au moins 5 mm avant le serrage (fiche). Zone des mors et délai des mors : EXEMPLES
+  # (à mesurer au montage).
+  # Couloir d'accès (Maquette, 06/11, `mycelium/logiciel/acces-porte-bocal.md` ; décisions,
+  # « Agitateur fixe, réponses à la PR n° 64 », point (c)) : le SEUL trajet permis dans la zone du
+  # porte-bocal, côté allée : du départ (0,925 ; 0,40), face à 1,10, en −y jusqu'à la verticale du
+  # bocal (et retour en +y), manivelle en bas. Largeur en x autour du bocal : tête seule ± 0,06 ;
+  # avec un bocal −0,06 / +0,04 (caméra du dosage côté +x) jusqu'à l'entrée des mors, puis
+  # ± 0,005 dans le porte-bocal. Côté mur et côtés en x : interdits.
+  # Avant de descendre sur le bocal : mors ouverts (fin de course) pour poser, axe de la tête à
+  # x ± 1 mm, y −1 / +2 mm de la verticale ; les 23 derniers mm de la pose (1,3 mm de jeu entre
+  # les mors) à la vitesse vitesses → pose_bocal (EXEMPLE).
   porte_bocal:
     x: 0.925
     y: 0.150
     contact_capsule_z: {0.10: 1.047, 0.07: 1.077, 0.04: 1.108}
     marge_face_haute_m: 0.01
-    orientation_deg: 0
     tolerance_orientation_deg: 3
     tolerance_hauteur_m: 0.0005
     remontee_min_m: 0.005
     rayon_zone_m: 0.06
     mors_max_s: 20
+    couloir: {depart: [0.925, 0.40], face_z: 1.10, demi_largeur_x_tete: 0.06, largeur_x_bocal: [-0.06, 0.04], demi_largeur_x_mors: 0.005}
+    tolerance_pose_x_m: 0.001
+    tolerance_pose_y_m: [-0.001, 0.002]
+    descente_lente_pose_m: 0.023
   # Zone du porte-bocal (maquette v45.117, 05/11) : plus haut point 1,070 manivelle en bas, 1,170
   # en haut, 1,208 pendant le demi-tour ; support de la glissière verticale jusqu'à 1,167 ; boîtier
   # de la caméra du dosage jusqu'à 1,065. La tête et l'objet tenu (rayon de la tête + 1 cm + rayon
@@ -884,6 +930,23 @@ prehension:
   # plus à 1,10, les trajets le contournent. Seule exception : la verticale du bocal (0,925 ;
   # 0,150) pour le poser ou le reprendre, manivelle en bas (et le trajet face en haut qui y mène).
   zone_porte_bocal: {x: [0.79, 1.08], y: [-0.03, 0.27], z_haut: 1.21, marge_m: 0.01}
+  # Rotation de la tête (décisions, « Origine de la rotation de la tête de préhension », 05/11) :
+  # origine = capteur Hall sous la poulie de 60 dents (il voit l'aimant à CHAQUE tour). Le tour
+  # vient du compte-tours (potentiomètre multitour au rapport 3, compte_tours_tete sur l'ADS1115,
+  # ± 3°) ; l'angle cumulé de la tête, enregistré à chaque arrêt, sert de contrôle : écart de plus
+  # de ecart_compte_tours_max_deg, compte-tours hors de compte_tours_plage_deg, ou coupure
+  # pendant une rotation ⇒ pas de prise d'origine : l'écran demande de vérifier que le cordon
+  # n'est pas vrillé, et attend la confirmation (acquitter puis Go). Ensuite le Pi ramène la tête
+  # à avant_hall_deg AVANT le Hall (côté −), puis « $HA » : recherche lente, toujours en +, sur
+  # 60° au plus (fluidnc/prehension.yaml : bien moins d'un tour). Vitesse du retour près de 0 et
+  # marges : EXEMPLES.
+  # angle_meplats_deg : angle « méplats en face des mors en V » par rapport au Hall, EXEMPLE (à
+  # mesurer à la mise en service : pi/systeme/essai-prehension.md). Pose et prise au
+  # porte-bocal : la tête va sur la plus proche de angle_meplats_deg + k × 120° (dans la course
+  # ± 500°), donc au plus 60° de rotation, à tolerance_orientation_deg près.
+  angle_meplats_deg: 0
+  ecart_compte_tours_max_deg: 30
+  origine_rotation: {compte_tours_plage_deg: [-540, 540], precision_compte_tours_deg: 3, avant_hall_deg: 20, vitesse_deg_s: 30}
 
 # Lavage des seaux (fût de lavage, noyau, couronne, eau), module validé définitivement le
 # 25/10/2026 (fût de 44 cm) ; dossiers eau automatique, arrosage, chauffage, jet d'air du col ;
@@ -895,9 +958,8 @@ prehension:
 lavage:
   exemple: true
   # Centre du fût de lavage, inox, Ø intérieur 0,45 (pas celui du fût de production).
-  # ATTENTION : la tête ne va pas sous x 0,362 (pont ≥ 0,233 depuis le Portique du 01/11, mât à
-  # pont + 0,129) : elle est à 12 mm du centre en x (0,352 et 2 mm avant ; question de la PR de la
-  # tâche 36 : décaler le fût de lavage de 12 mm vers +x, ou accepter le décalage).
+  # Pont jusqu'à x 0,223 (Karulium, 03/11) : la tête atteint x 0,352 (mât à pont + 0,129), dans
+  # l'axe des brosses ; les places du lavage sont relatives à ce centre (PR n° 56, points 1 et 6).
   centre_fut: [0.35, 0.65]
   fut_diametre_interieur: 0.45
   # Couloir du seau retourné : de l'axe du fût en ligne droite jusqu'au coude (0,45 ; 0,74), puis
@@ -953,20 +1015,20 @@ lavage:
   rincage: {duree_s: 5, vidange_max_s: 60, remise_max_s: 60}
   # Jet d'air du col : 1 tour en ≈ 4 s ; égouttage au-dessus du fût (EXEMPLE).
   jet_air: {tour_s: 4, egouttage_s: 5}
-  # Par format : décalage fixe de la tête vers +x pendant le brossage (EXEMPLE ; 0,012 au moins
-  # depuis que la tête ne va plus sous 0,362) ; passe 2 sans remontée (réponse du Lavage du
-  # 29/10 : 0 pour tous) ; jet d'air du col : centre du seau (seau décalé en −y vers la buse) et
-  # bord à sa hauteur (réponse du Lavage du 29/10 : A (0,352 ; 0,6348), B (0,352 ; 0,6270), C
-  # (0,352 ; 0,650), D (0,352 ; 0,6385), x passé à 0,362 le 01/11 avec le pont ≥ 0,233 ; bords
-  # 0,711 / 0,698 / 0,714 / 0,712 ; à ajuster à l'essai).
+  # Par format, relatifs au centre du fût de lavage : décalage fixe de la tête vers +x pendant
+  # le brossage (0,002 : tête à x 0,352, dans l'axe des brosses ; PR n° 56, point 6) ; passe 2
+  # sans remontée (réponse du Lavage du 29/10 : 0 pour tous) ; jet d'air du col : centre du seau
+  # décalé de (dx ; dy) du centre du fût (seau décalé en −y vers la buse : A (+2 ; −15,2), B (+2 ;
+  # −23), C (+2 ; 0), D (+2 ; −11,5) mm, PR n° 56, point 1) et bord à sa hauteur (0,711 / 0,698 /
+  # 0,714 / 0,712 ; à ajuster à l'essai).
   formats:
-    seau_a: {decalage_brossage_m: 0.012, remontee_passe_2_m: 0, jet_centre: [0.362, 0.6348], jet_bord_z: 0.711}
-    seau_b: {decalage_brossage_m: 0.012, remontee_passe_2_m: 0, jet_centre: [0.362, 0.6270], jet_bord_z: 0.698}
-    seau_c: {decalage_brossage_m: 0.012, remontee_passe_2_m: 0, jet_centre: [0.362, 0.650], jet_bord_z: 0.714}
-    seau_d: {decalage_brossage_m: 0.012, remontee_passe_2_m: 0, jet_centre: [0.362, 0.6385], jet_bord_z: 0.712}
+    seau_a: {decalage_brossage_m: 0.002, remontee_passe_2_m: 0, jet_decalage: [0.002, -0.0152], jet_bord_z: 0.711}
+    seau_b: {decalage_brossage_m: 0.002, remontee_passe_2_m: 0, jet_decalage: [0.002, -0.023], jet_bord_z: 0.698}
+    seau_c: {decalage_brossage_m: 0.002, remontee_passe_2_m: 0, jet_decalage: [0.002, 0.0], jet_bord_z: 0.714}
+    seau_d: {decalage_brossage_m: 0.002, remontee_passe_2_m: 0, jet_decalage: [0.002, -0.0115], jet_bord_z: 0.712}
   # Couvercles de seau, dans le fût (tâche 21 bis) : la tête tient le couvercle face lavée vers
-  # le bas au-dessus du noyau, centre (0,362 ; 0,65) (pont à sa limite 0,233 ; 0,352 avant le
-  # 01/11). Avant la pose, le
+  # le bas au-dessus du noyau, centre (0,352 ; 0,65) (pont jusqu'à 0,223 depuis le 03/11). Avant
+  # la pose, le
   # repère (collé sur le dessus, près du bord) est mis à ≈ 60° de −X côté +Y ; photo. Plateau
   # flottant déclenché face au-dessus de 0,735 : arrêt, alerte. Appui ≈ 15 N, jamais plus (dépôts
   # secs : allonger le temps). Noyau 100 tr/min ≈ 5 s, couvercle tourné à 10-20 tr/min, centre
@@ -974,7 +1036,7 @@ lavage:
   # glisse (remontée de 2 mm, reprise) ; alerte au 2e glissement. Sens du repère, approche,
   # contrôle, égouttage : EXEMPLES.
   couvercles:
-    centre: [0.362, 0.65]
+    centre: [0.352, 0.65]
     repere_angle_deg: 60
     sens_repere: 1
     contact_trop_haut_z: 0.735
@@ -1019,7 +1081,7 @@ lavage:
   # qu'on appuie. Plateau ≈ 5 mm au-dessus de l'anneau de rive, à mesurer sur le produit acheté.
   # Tout : EXEMPLES (appui et temps à l'essai).
   lave_bocal:
-    centre: [0.362, 0.65]
+    centre: [0.352, 0.65]
     plateau_z: 0.74
     approche_m: 0.02
     appui_n: 20
@@ -1080,9 +1142,9 @@ remplissage:
   # barres vue de dessus (° depuis +x) : EXEMPLE.
   barres_direction_deg: 0
   anse_deg: 45
-  # Face de la tête de préhension au contact du fond intérieur d'un seau posé (au-dessus du
-  # dessus du plateau). EXEMPLE.
-  face_au_dessus_plateau_m: 0.005
+  # Face de la ventouse de la préhension au contact du fond intérieur d'un seau posé (au-dessus
+  # du dessus du plateau) : H + 0,003 (fil Remplissage avec la Préhension, PR n° 56, point 2).
+  face_au_dessus_plateau_m: 0.003
   # Positions interdites du chariot (règles du fichier des positions).
   verrous:
     # 1. (Anneaux du fût : règle périmée et SUPPRIMÉE le 31/10/2026. Une tôle fixe à x 0,655
@@ -1198,16 +1260,16 @@ remplissage:
       file_2: {y: 0.500, pousseur_m: 0.325}
       file_3: {y: 0.785, pousseur_m: 0.325}
     bande_haut: {y: 0.215, plateau_z: 0.4985, plateau_plage_z: [0.496, 0.501], pousseur_m: 0.325}
-  # Par format : plateau au contact d'un seul seau posé (seau B : 0,5125, fiche ; les autres :
-  # EXEMPLES, bord d'un seul seau 19 mm sous la barrière à 0,7315, comme le B, mesurés à l'essai ;
-  # A monté à 0,475 le 01/11 (bord 6,5 mm sous la barrière) : la tête de préhension ne descend
-  # plus sous 0,45 et la prise double c) l'y demande ; question de la PR de la tâche 36 pour D),
-  # barres au contact du corps (EXEMPLES).
+  # Par format : hauteur de pose VRAIE (dessus du plateau) d'un seul seau, H = 0,6875 − (h − col)
+  # (fil Remplissage avec la Préhension, PR n° 56, point 2) ; barres au contact du corps
+  # (EXEMPLES). Vérifié au démarrage : à l'étape c) de la prise double, la face (H + 0,003 −
+  # 0,028) reste dans la course de la préhension (face ≥ 0,23 depuis la Préhension +22 cm) : la
+  # prise double se fait sur le chariot pour les 4 formats (ordre a) à i)).
   formats:
-    seau_a: {pose_plateau_z: 0.475, centrage_hw_m: 0.125}
+    seau_a: {pose_plateau_z: 0.4675, centrage_hw_m: 0.125}
     seau_b: {pose_plateau_z: 0.5125, centrage_hw_m: 0.1195}
-    seau_c: {pose_plateau_z: 0.4775, centrage_hw_m: 0.135}
-    seau_d: {pose_plateau_z: 0.4475, centrage_hw_m: 0.128}
+    seau_c: {pose_plateau_z: 0.4925, centrage_hw_m: 0.135}
+    seau_d: {pose_plateau_z: 0.4625, centrage_hw_m: 0.128}
   # Mode couvercles (retourneur, tâche 21 bis) : chariot à y 0,50, plateau fixe à 0,459, sans
   # rotation ; barres 0,19 ↔ 0,30 (lavage → couvercles → retourneur) ; barrière surveillée.
   # Règle 14 (31/10/2026) : pendant les deux demi-tours de la tête de la griffe (axe y 0,68, axes
@@ -1359,8 +1421,8 @@ stockage:
   hublot: {x: 2.50, y: 0.22, fond_bocal_z: [0.70, 0.73]}
   # Trajets au-dessus du Stockage (verrous de la préhension et de la griffe).
   trajets:
-    # Griffe : axe du mât à x ≤ 2,325 (butée logicielle).
-    griffe_x_max: 2.325
+    # Griffe : axe du mât à x ≤ 2,738 (butée logicielle ; rails X +0,43, PR n° 56, point 9).
+    griffe_x_max: 2.738
     # Seau tenu au-dessus du plateau (x des panneaux) : fond à 0,79 au moins, jamais au-dessus
     # d'une pile qui a des seaux (sauf à la verticale de la pile qu'il quitte, où son fond reste
     # à 3 cm au moins au-dessus de la lèvre qui reste).
@@ -1399,19 +1461,33 @@ portique:
   chariot: {centre_y: [0.08, 0.87], mats_moins_centre_y: -0.040}
   # Centre de la plaque Z de chaque outil, du bas au haut (haut = fin de course = origine ; jamais
   # au-dessus : hauteur sous le pont roulant). Même course que la hauteur d'outil (vérifié) :
-  # plaque − axes de la griffe = 0,913 ; plaque − face de la préhension = 0,858.
+  # plaque − axes de la griffe = 0,913 ; plaque − face de la préhension = 1,078 (Préhension
+  # +22 cm, 04/11 : plaque de 1,308 à 2,178, face de 0,23 à 1,10).
   plaques_z:
     griffe: {axe: griffe_z, course: [1.288, 2.203]}
-    prehension: {axe: prehension_z, course: [1.308, 1.958]}
-  # Prise d'origine, dans l'ordre (fiche) : 1) les deux Z vers le haut (freins desserrés) jusqu'à
-  # leur fin de course ; 2) Y vers la paroi ; 3) X1 et X2 ensemble vers le fût, chacun sur son
-  # fin de course (le pont se remet d'équerre). En vitesse d'approche, recul de quelques mm
-  # (fluidnc/). 4) Rotation et godet de la griffe : EXEMPLE (pas dans les fiches).
+    prehension: {axe: prehension_z, course: [1.308, 2.178]}
+  # Chaîne Z de la préhension (PR n° 56, point 8) : plaque Z de la préhension au-dessus de 2,02 ⇒
+  # mâts à y ≤ 0,80 (sinon le brin de la chaîne touche le plénum du Nettoyage). Vérifié à chaque
+  # mouvement (préhension, griffe, portique) et au démarrage (positions nommées).
+  chaine_prehension: {plaque_z_min: 2.02, mat_y_max: 0.80}
+  # Mât de la préhension plus souple (≈ 4 mm pour 20 N) : face sous tete_basse_z ⇒ accélération
+  # X et Y multipliée par ce facteur, en plus de la règle « seau tenu » (choix du fil logiciel,
+  # EXEMPLES à régler aux essais).
+  tete_basse_z: 0.60
+  facteur_acceleration_tete_basse: 0.5
+  # Prise d'origine, dans l'ordre (fiche ; PR n° 56, point 4) : 0) la dernière position connue
+  # de la rotation de la griffe est 0° ou 180° (sinon : pas de montée de Z, alarme) ; 1) les deux
+  # Z vers le haut (freins desserrés) jusqu'à leur fin de course ; 2) Y vers la paroi ; 3) X1 et
+  # X2 ensemble vers le fût, chacun sur son fin de course (le pont se remet d'équerre). En
+  # vitesse d'approche, recul de quelques mm (fluidnc/). 4) Godet de la griffe (« $HB », Z en
+  # haut). Puis le Pi fait la rotation de la griffe (griffe → origine_rotation, au point
+  # griffe → point_demi_tour, puis les axes remontent) et celle de la tête de préhension
+  # (prehension → origine_rotation) : elles ne sont pas dans cette liste.
   origine:
     - [griffe_z, prehension_z]
     - [chariot_y]
     - [pont_x]
-    - [griffe_a, griffe_b]
+    - [griffe_b]
   # Vitesses (28/10) : X et Y 250 mm/s, approche 50 mm/s, 1 m/s² à vide, 0,5 m/s² seau tenu ;
   # les deux Z 80 mm/s, approche 20 mm/s, 0,5 m/s². Photos à l'arrêt après 0,3 s.
   vitesses:
@@ -1424,7 +1500,7 @@ portique:
     z_acceleration_m_s2: 0.5
     photo_apres_arret_s: 0.3
   outils_en_haut: portique_outils_en_haut
-  # Garage de repos (arrêt, nuit, ozone) : Z en haut, pont à 2,495, chariot au centre 0,50
+  # Garage de repos (arrêt, nuit, ozone) : Z en haut, pont à 2,925, chariot au centre 0,50
   # (proposition du fil Portique), freins serrés.
   garage: portique_garage
   # Photo du plafond : pont au bout OPPOSÉ à la zone photographiée, les deux outils en haut.
@@ -1434,13 +1510,17 @@ portique:
   # Pont à sa place de photo à 5 mm près. EXEMPLE.
   photo_tolerance_m: 0.005
   # Plénum du Nettoyage : préhension au-dessus de z 2,08 (centre de sa plaque Z) ⇒ chariot à
-  # y ≤ 0,93. Vrai sur toute la course (la plaque monte à 1,958 au plus) : vérifié au démarrage.
+  # y ≤ 0,93. Vrai sur toute la course (le chariot va au plus à 0,87) : vérifié au démarrage.
   plenum: {plaque_z_min: 2.08, chariot_centre_y_max: 0.93}
-  # Griffe : pas de rotation de la tête pont au-delà de x 2,0 (griffe → rotation → pont_x_max :
-  # le rail de la colonne gêne) ; là, tête à une orientation bloquée seulement (angles permis :
-  # EXEMPLE, bras le long du pont).
+  # Griffe, bout côté fût (fil Portique, PR n° 56, points 3 et 6) : pont dans la bande et axes
+  # de la tête sous axes_z_max ⇒ tête à l'un des angles permis seulement (aucun : interdit).
+  #   pont 0,223-0,233 : axes ≥ 1,05 obligatoires (à 180° il ne resterait que 5 mm devant la
+  #   traverse basse) ; pont 0,233-0,30 sous 1,05 : A = 180° seulement (à 0° la raclette, à ± 90°
+  #   les bras, en biais jusqu'à 0,143, touchent la traverse ; à 180° il reste 15 mm).
+  # Au-delà de x 2,0 : seulement « pas de rotation » (griffe → rotation → pont_x_max).
   bouts_bloques_griffe:
-    - {pont_x: [2.0, 2.495], angles_deg: [0, 180]}
+    - {pont_x: [0.223, 0.233], axes_z_max: 1.05, angles_deg: []}
+    - {pont_x: [0.233, 0.30], axes_z_max: 1.05, angles_deg: [180]}
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

@@ -31,6 +31,8 @@ GRIFFE = MACHINE.griffe
 assert GRIFFE is not None
 REGLES = ReglesGriffe(MACHINE)
 PRODUCTION = Contexte()
+# La tête de préhension basse (chaîne Z : mâts permis au-delà de y 0,80).
+PREHENSION_BASSE = Contexte(prehension_face_z=0.90)
 # Au-dessus du centre du fût, à la hauteur des trajets, tête bloquée, godet fermé.
 HAUT = Pose(x=0.29, y=0.57, z=1.29, a=0.0, b=0.0)
 
@@ -201,17 +203,29 @@ def test_boitier_de_la_camera_du_bocal():
 
 def test_poignee_du_volet():
     # Mât au bout de sa course (y 0,83, Portique du 01/11) : même tournée, la tête (rayon balayé
-    # 0,139) reste à y ≤ 0,97, sous la poignée (y ≥ 1,005).
+    # 0,139) reste à y ≤ 0,97, sous la poignée (y ≥ 1,005). Préhension basse (chaîne Z).
     pres = Pose(x=0.55, y=0.83, z=1.0, a=0, b=0)
-    assert refus(pres) is None
-    assert refus(pres.avec(a=45)) is None
+    assert refus(pres, PREHENSION_BASSE) is None
+    assert refus(pres.avec(a=45), PREHENSION_BASSE) is None
     assert "hors de la course (0,04 à 0,83)" in refus(pres.avec(y=0.884))
     # La poignée reste vérifiée (un mât plus loin, réglages d'essai).
     regles = ReglesGriffe(MACHINE)
     regles.courses["chariot_y"] = (0.04, 0.884)
     loin = Pose(x=0.55, y=0.884, z=1.0, a=0, b=0)
-    assert regles.refus_pose(loin, Contexte()) is None
-    assert "poignée du volet" in regles.refus_pose(loin.avec(a=45), Contexte())
+    assert regles.refus_pose(loin, PREHENSION_BASSE) is None
+    assert "poignée du volet" in regles.refus_pose(loin.avec(a=45), PREHENSION_BASSE)
+
+
+def test_chaine_z_de_la_prehension():
+    # Préhension +22 cm (PR n° 56, point 8) : plaque Z de la préhension au-dessus de 2,02 (face
+    # au-dessus de 0,942) ⇒ mâts (même chariot que la griffe) à y ≤ 0,80.
+    pose = Pose(x=0.55, y=0.80, z=1.0, a=0, b=0)
+    assert refus(pose) is None
+    # Position de la préhension inconnue : comptée en haut.
+    assert "chaîne Z de la préhension" in refus(pose.avec(y=0.81))
+    assert "position inconnue" in refus(pose.avec(y=0.81))
+    assert "chaîne Z" in refus(pose.avec(y=0.81), Contexte(prehension_face_z=1.10))
+    assert refus(pose.avec(y=0.81), Contexte(prehension_face_z=0.942)) is None
 
 
 def essuyage(nom_format: str, direction_deg: float) -> Pose:
@@ -273,14 +287,16 @@ def test_tete_godet_ouvert_s_elargit_sous_les_axes():
 def test_dans_le_fut():
     assert refus(Pose(x=0.29, y=0.57, z=0.5, a=0, b=1)) is None
     assert "au plus 0,197 m" in refus(Pose(x=0.29, y=0.80, z=0.5, a=0, b=0))
-    assert "côté −x" in refus(Pose(x=0.11, y=0.57, z=0.5, a=0, b=0))
+    # (A = 180° : le pont, à 0,297, est dans la bande du bout côté fût.)
+    assert "côté −x" in refus(Pose(x=0.11, y=0.57, z=0.5, a=180, b=0))
     # Mode lavage, volet relevé : pas de griffe au-dessus du fût.
     assert "volet est relevé" in refus(HAUT, Contexte(mode="lavage", volet_releve=True))
 
 
 def test_bout_cote_fut():
-    # Tête sous x 0,12, hors du fût : bas de la tête ≥ 0,85 (axes ≥ 1,063).
-    assert "hors du fût" in refus(Pose(x=0.10, y=0.15, z=1.0, a=0, b=0))
+    # Tête sous x 0,12, hors du fût : bas de la tête ≥ 0,85 (axes ≥ 1,063). (A = 180° : pont
+    # à 0,287, dans la bande du bout côté fût, portique → bouts_bloques_griffe.)
+    assert "hors du fût" in refus(Pose(x=0.10, y=0.15, z=1.0, a=180, b=0))
     assert refus(Pose(x=0.10, y=0.15, z=1.07, a=0, b=0)) is None
     # Le mât est à x 0,22, mais la raclette (côté −x) va jusqu'à 0,11 ; sa tête est au-dessus
     # de la paroi du fût. Raclette côté +x : la tête reste à x ≥ 0,135.
@@ -288,7 +304,7 @@ def test_bout_cote_fut():
     assert "tête sous x 0,12 m au-dessus de la paroi du fût" in refus(loin)
     assert refus(loin.avec(a=180)) is None
     # Mât hors du fût, mais la tête au-dessus de sa paroi : bas ≥ 1,05.
-    paroi = Pose(x=0.10, y=0.57 - 0.36, z=1.0, a=0, b=0)
+    paroi = Pose(x=0.10, y=0.57 - 0.36, z=1.0, a=180, b=0)
     assert "au-dessus de la paroi du fût" in refus(paroi)
     assert refus(paroi.avec(z=1.29)) is None
     # Mât au-dessus de l'intérieur du fût : les règles du fût comptent (prises côté −x).
@@ -541,8 +557,8 @@ def test_bras_va_a_une_pose():
         assert pose.x == pytest.approx(0.848) and pose.z == pytest.approx(1.0) and pose.b == 0
         banc.bras.executer(Pas("monter", {"z": 1.01}), pose.avec(z=1.01, b=0.5))
         assert banc.faux.lignes_recues[-1].startswith("$J=G53 X1035.000 Y570.000 Z1010.000 A0.000")
-        # Godet à moitié : 15 mm de vis.
-        assert "B15.000" in banc.faux.lignes_recues[-1]
+        # Godet à moitié : 18 mm de vis (butées logicielles 0 à 36 mm, PR n° 56, point 4).
+        assert "B18.000" in banc.faux.lignes_recues[-1]
         attendre(banc.bras.fini)
         assert banc.bras.resultat().pose.z == pytest.approx(1.01)
 

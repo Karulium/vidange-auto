@@ -9,7 +9,8 @@
 #   Z : pignon-crémaillère (module 1, 16 dents : 50,27 mm par tour), NEMA 23 boucle fermée à
 #       frein (maintien réduit à l'arrêt). Position machine = hauteur de la FACE de la tête. Prise
 #       d'origine en haut, sur le fin de course fdc_prehension_haut (NF) : face à 1100 mm (fiche).
-#       Course 650 mm (Portique, 01/11 : plaque Z de 1 308 à 1 958). Vitesses du Portique (28/10) :
+#       Course 870 mm (Préhension +22 cm, 04/11 : plaque Z de 1 308 à 2 178, face de 230 à 1 100).
+#       Vitesses du Portique (28/10) :
 #       80 mm/s, approche 20 mm/s, 0,5 m/s². Le Pi fait sa prise d'origine (« $HZ ») avec celle du
 #       Z de la griffe, avant Y et X de la carte n° 1 (vidange.portique).
 #       Frein à manque de courant : le Pi le desserre avant de bouger (sortie digital4,
@@ -17,7 +18,12 @@
 #       de « Pn: », sans macro) : arrêt et alerte.
 #   A : rotation de la tête, maintien plein (≈ 3 N·m pendant le brossage du lavage et le
 #       vissage, fiche). Visser = sens horaire vu d'en haut = A positif ; aucun axe inversé
-#       (fiche). Origine sur origine_rotation_tete (référence à confirmer au câblage).
+#       (fiche). Origine : origine_rotation_tete, capteur Hall sous la poulie de 60 dents (il voit
+#       l'aimant à CHAQUE tour). « $HA » seulement (cycle 0), envoyé par le Pi
+#       (vidange.portique.rotations) : il amène d'abord la tête 20° AVANT le Hall, d'après le
+#       compte-tours (le tour) et l'angle enregistré (contrôle) ; puis la recherche est lente,
+#       toujours en +, et limitée à 60° (bien moins d'un tour : jamais le Hall du tour suivant, le
+#       cordon spiralé ne se vrille pas). Pas de butées sur la carte : le Pi garde ± 500°.
 #   Contact de la tête (plateau flottant vu par un inductif M8 24 V) : c'est l'entrée « probe »
 #       de la carte, pour que la descente au contact (« G38.3 ») s'arrête tout de suite. Le Pi le
 #       lit dans « Pn: » (lettre P, pi/reglages/fluidnc.yaml).
@@ -55,7 +61,8 @@ axes:
     steps_per_mm: 31.83
     max_rate_mm_per_min: 4800
     acceleration_mm_per_sec2: 500
-    max_travel_mm: 650
+    # Face de 230 à 1 100 mm.
+    max_travel_mm: 870
     soft_limits: true
     homing:
       cycle: 1
@@ -79,19 +86,26 @@ axes:
     steps_per_mm: 22.222
     max_rate_mm_per_min: 5400
     acceleration_mm_per_sec2: 360
-    # ± 500° (machine.yaml → prehension_a, réponse de la Préhension du 29/10).
-    max_travel_mm: 1000
-    soft_limits: true
+    # Recherche du Hall : 60° au plus (seek_scaler 1). Le Pi garde ± 500° (machine.yaml →
+    # prehension_a, réponse de la Préhension du 29/10).
+    max_travel_mm: 60
+    soft_limits: false
     homing:
-      cycle: 2
-      positive_direction: false
-      mpos_mm: 0
-      feed_mm_per_min: 300
-      seek_mm_per_min: 1800
+      # « $HA » seulement, envoyé par le Pi (à VÉRIFIER à l'essai : FluidNC accepte « $HA » d'un
+      # axe du cycle 0).
+      cycle: 0
+      # Toujours en +.
+      positive_direction: true
+      # Hall = A 0 : la position après le recul vaut −pulloff_mm (à VÉRIFIER à l'essai).
+      mpos_mm: -2
+      seek_mm_per_min: 600
+      # Approche finale lente (répétabilité meilleure que 1°).
+      feed_mm_per_min: 120
+      seek_scaler: 1.0
       settle_ms: 250
     motor0:
-      # EXEMPLE de broche : origine_rotation_tete.
-      limit_neg_pin: gpio.39:low
+      # EXEMPLE de broche : origine_rotation_tete (Hall).
+      limit_pos_pin: gpio.39:low
       hard_limits: false
       pulloff_mm: 2
       standard_stepper:

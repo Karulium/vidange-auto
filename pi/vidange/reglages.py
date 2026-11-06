@@ -242,6 +242,26 @@ class RotationGriffe(Modele):
         return self
 
 
+class PointDemiTourGriffe(Modele):
+    """Point des demi-tours de la tête hors du fût et de la recherche de l'origine de A : mât en
+    (x, y), axes à z, godet fermé (fil Griffe, 03/11/2026)."""
+
+    x: float
+    y: float
+    z: float
+    # « Au point » à tant près (m).
+    tolerance_m: float = Field(default=0.001, gt=0)
+
+
+class OrigineRotationGriffe(Modele):
+    """Prise d'origine de la rotation de la tête (fanion de 180°, PR n° 56, point 4) : le Pi
+    tourne d'abord en − jusqu'au fanion s'il est libre (au plus recherche_deg, à vitesse_deg_s),
+    puis « $HA » (approche finale en +, lente)."""
+
+    recherche_deg: float = Field(gt=0, le=360)
+    vitesse_deg_s: float = Field(gt=0)
+
+
 class TrajetGriffe(Modele):
     """Trajet fût ↔ poste de remplissage : jamais en diagonale."""
 
@@ -596,6 +616,10 @@ class Griffe(Modele):
     camera_bocal: CameraBocalGriffe
     bout_cote_fut: BoutCoteFutGriffe
     porte_spray: PorteSprayGriffe
+    # Demi-tours hors du fût et recherche de l'origine de A (None : pas de point).
+    point_demi_tour: PointDemiTourGriffe | None = None
+    # Prise d'origine de la rotation (None : pas de prise d'origine de A par le Pi).
+    origine_rotation: OrigineRotationGriffe | None = None
     # Dans le fût (bas du godet sous le bord) : mât à au plus fut_rayon_mat_max_m de l'axe du
     # fût, et côté −x au plus fut_moins_x_max_m.
     fut_rayon_mat_max_m: float = Field(gt=0)
@@ -917,6 +941,8 @@ class VitessesPrehension(Modele):
     levee_lente: float = Field(gt=0)
     remontee_choc: float = Field(gt=0)
     vissage_deg_s: float = Field(gt=0)
+    # Derniers mm de la pose du bocal entre les mors (porte_bocal → descente_lente_pose_m).
+    pose_bocal: float | None = Field(default=None, gt=0)
 
 
 class DescentePrehension(Modele):
@@ -1005,6 +1031,19 @@ class VissagePrehension(Modele):
         return self
 
 
+class CouloirPorteBocal(Modele):
+    """Couloir d'accès au bocal (Maquette, 06/11/2026 ; décisions, « Agitateur fixe, réponses à
+    la PR n° 64 », point (c)) : du départ, face à face_z, en −y jusqu'à la verticale du bocal (et
+    retour en +y). Largeur en x autour de l'axe du bocal (m) : tête seule ± demi_largeur_x_tete ;
+    avec un bocal largeur_x_bocal (−, +) ; dans le porte-bocal ± demi_largeur_x_mors."""
+
+    depart: tuple[float, float]
+    face_z: float
+    demi_largeur_x_tete: float = Field(gt=0)
+    largeur_x_bocal: Intervalle
+    demi_largeur_x_mors: float = Field(gt=0)
+
+
 class PorteBocalPrehension(Modele):
     """Pose et reprise du bocal dans le porte-bocal, sur l'agitateur fixe, MANIVELLE EN BAS
     (décisions, « Agitateur fixe, réponses à la PR n° 64 », point 2)."""
@@ -1019,8 +1058,8 @@ class PorteBocalPrehension(Modele):
     # Le contact doit rester au moins tant sous la face haute (prehension → haut_z, m) : sinon
     # la pose est impossible et le démarrage refuse cette course.
     marge_face_haute_m: float = Field(ge=0)
-    # Orientation de la tête (°, grâce aux méplats) et écart permis.
-    orientation_deg: float
+    # Écart permis sur l'orientation de la tête (°, grâce aux méplats : prehension →
+    # angle_meplats_deg).
     tolerance_orientation_deg: float = Field(gt=0)
     # Écart permis sur la hauteur du bocal (m), remontée avant le serrage (m).
     tolerance_hauteur_m: float = Field(gt=0)
@@ -1030,6 +1069,15 @@ class PorteBocalPrehension(Modele):
     rayon_zone_m: float = Field(gt=0)
     # Attente maximale d'un geste des mors (s).
     mors_max_s: float = Field(gt=0)
+    # Le seul trajet permis dans la zone du porte-bocal (None : en ligne droite d'un point hors
+    # de la zone, ancienne règle).
+    couloir: CouloirPorteBocal | None = None
+    # Avant de descendre sur le bocal : axe de la tête à x ± tolerance_pose_x_m et y dans
+    # tolerance_pose_y_m (−, +) de la verticale (m).
+    tolerance_pose_x_m: float = Field(default=0.001, gt=0)
+    tolerance_pose_y_m: Intervalle = (-0.001, 0.001)
+    # Les derniers mm de la pose du bocal, à la vitesse vitesses → pose_bocal (m ; 0 : rien).
+    descente_lente_pose_m: float = Field(default=0.0, ge=0)
 
     def contact_z(self, course_m: float) -> float | None:
         """Face de la tête au contact de la capsule pour cette course de l'agitation (None : pas
@@ -1056,6 +1104,30 @@ class ZonePorteBocalPrehension(Modele):
     def _verifier(self) -> "ZonePorteBocalPrehension":
         if self.x[0] >= self.x[1] or self.y[0] >= self.y[1]:
             raise ValueError("x et y : du plus petit au plus grand")
+        return self
+
+
+class OrigineRotationTete(Modele):
+    """Prise d'origine de la rotation de la tête (capteur Hall, compte-tours ; décisions,
+    « Origine de la rotation de la tête de préhension », 05/11/2026)."""
+
+    # Compte-tours lu hors de cette plage (°) : potentiomètre hors plage ou débranché.
+    compte_tours_plage_deg: Intervalle
+    # Précision du compte-tours (°).
+    precision_compte_tours_deg: float = Field(gt=0)
+    # Avant « $HA », la tête est ramenée à tant de degrés AVANT le Hall (côté −) : la recherche
+    # en + le trouve sans faire un tour de plus.
+    avant_hall_deg: float = Field(gt=0, lt=180)
+    # Vitesse du retour près de 0 (°/s).
+    vitesse_deg_s: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "OrigineRotationTete":
+        if self.avant_hall_deg <= self.precision_compte_tours_deg:
+            raise ValueError(
+                "avant_hall_deg doit dépasser precision_compte_tours_deg (sinon la recherche "
+                "pourrait partir après le Hall et faire un tour de trop)"
+            )
         return self
 
 
@@ -1095,6 +1167,13 @@ class Prehension(Modele):
     vissage: VissagePrehension
     porte_bocal: PorteBocalPrehension
     zone_porte_bocal: ZonePorteBocalPrehension
+    # Angle « méplats en face des mors en V » par rapport au Hall (°) : la tête se pose au
+    # porte-bocal à angle_meplats_deg + k × 120°.
+    angle_meplats_deg: float = 0.0
+    # Écart permis entre l'angle enregistré et le compte-tours (°).
+    ecart_compte_tours_max_deg: float = Field(default=30.0, gt=0)
+    # Prise d'origine de la rotation (None : pas de prise d'origine de A par le Pi).
+    origine_rotation: OrigineRotationTete | None = None
 
     @model_validator(mode="after")
     def _verifier(self) -> "Prehension":
@@ -1139,9 +1218,9 @@ class FormatLavage(Modele):
     decalage_brossage_m: float = Field(ge=0)
     # Passe 2 (le bord) : remontée de la tête depuis l'appui de la passe 1 (0 : même hauteur).
     remontee_passe_2_m: float = Field(ge=0)
-    # Jet d'air du col : centre du seau (axe de la tête, x, y) face à la buse, son bord arrêté à
-    # jet_bord_z.
-    jet_centre: tuple[float, float]
+    # Jet d'air du col : centre du seau (axe de la tête) décalé de (dx, dy) du centre du fût de
+    # lavage, face à la buse, son bord arrêté à jet_bord_z.
+    jet_decalage: tuple[float, float]
     jet_bord_z: float
 
 
@@ -1896,10 +1975,20 @@ class PlenumPortique(Modele):
 
 
 class BoutBloqueGriffe(Modele):
-    """Pont dans cette bande de x : tête de la griffe à l'un de ces angles seulement."""
+    """Pont dans cette bande de x (et axes de la tête sous axes_z_max, s'il est donné) : tête
+    de la griffe à l'un de ces angles seulement (aucun : interdit)."""
 
     pont_x: Intervalle
-    angles_deg: list[float] = Field(min_length=1)
+    axes_z_max: float | None = None
+    angles_deg: list[float] = Field(default_factory=list)
+
+
+class ChainePrehension(Modele):
+    """Chaîne Z de la préhension : plaque Z au-dessus de plaque_z_min ⇒ mâts à y ≤ mat_y_max
+    (sinon le brin de la chaîne touche le plénum du Nettoyage ; Préhension +22 cm, 04/11)."""
+
+    plaque_z_min: float
+    mat_y_max: float
 
 
 class Portique(Modele):
@@ -1926,8 +2015,41 @@ class Portique(Modele):
     # Écart permis entre le pont et sa place de photo (m).
     photo_tolerance_m: float = Field(gt=0)
     plenum: PlenumPortique
+    # Chaîne Z de la préhension (None : pas de règle).
+    chaine_prehension: ChainePrehension | None = None
+    # Face de la préhension sous tete_basse_z ⇒ accélération X et Y × ce facteur (mât souple),
+    # en plus de la règle « seau tenu ». None : pas de réduction.
+    tete_basse_z: float | None = None
+    facteur_acceleration_tete_basse: float = Field(default=1.0, gt=0, le=1)
     # Griffe : bandes du pont où la tête reste à un angle permis (pas de rotation).
     bouts_bloques_griffe: list[BoutBloqueGriffe] = Field(default_factory=list)
+
+    def face_max_chaine(self, mats_y: float, bas_face_z: float) -> float | None:
+        """La face de la préhension la plus haute permise par la chaîne Z, mâts à mats_y
+        (bas_face_z : le bas de la course de la face, qui va avec le bas de la plaque Z) ; None :
+        pas de limite."""
+        chaine = self.chaine_prehension
+        plaque = self.plaques_z.get("prehension")
+        if chaine is None or plaque is None or mats_y <= chaine.mat_y_max + 1e-6:
+            return None
+        return chaine.plaque_z_min - plaque.course[0] + bas_face_z
+
+    def refus_chaine(self, mats_y: float, face_z: float, bas_face_z: float) -> str | None:
+        """Raison du refus de la chaîne Z (face de la préhension à face_z, mâts à mats_y ;
+        bas_face_z : le bas de la course de la face), ou None."""
+        maximum = self.face_max_chaine(mats_y, bas_face_z)
+        if maximum is None:
+            return None
+        if face_z <= maximum + 1e-6:
+            return None
+        chaine = self.chaine_prehension
+        assert chaine is not None
+        return (
+            f"chaîne Z de la préhension : face à {face_z:.3f} m (plaque Z au-dessus de "
+            f"{chaine.plaque_z_min:g}) avec les mâts à y {mats_y:.3f} m : il faut y ≤ "
+            f"{chaine.mat_y_max:g} m, ou la face au plus à {maximum:.3f} m (le brin de la chaîne "
+            "toucherait le plénum du Nettoyage)"
+        )
 
     @model_validator(mode="after")
     def _verifier(self) -> "Portique":
@@ -2121,16 +2243,31 @@ class Machine(Modele):
                 groupe_de.setdefault(nom, numero)
         verticaux = [plaque.axe for plaque in portique.plaques_z.values()]
         ordre = [*verticaux, "chariot_y", "pont_x"]
+        paires = [(z, "chariot_y") for z in verticaux] + [("chariot_y", "pont_x")]
+        if "griffe_b" in groupe_de:
+            # Le godet après le portique (Z en haut, PR n° 56, point 4).
+            paires.append(("pont_x", "griffe_b"))
         manquent = [nom for nom in ordre if nom not in groupe_de]
         if manquent:
             erreurs.append(f"portique → origine : il manque {', '.join(manquent)}")
         else:
-            for avant, apres in [(z, "chariot_y") for z in verticaux] + [("chariot_y", "pont_x")]:
+            for avant, apres in paires:
                 if groupe_de[avant] >= groupe_de[apres]:
                     erreurs.append(
                         f"portique → origine : « {avant} » doit avoir fini sa prise d'origine "
-                        f"avant « {apres} » (les Z en haut, puis Y, puis X)"
+                        f"avant « {apres} » (les Z en haut, puis Y, puis X, puis le godet)"
                     )
+        if self.griffe is not None and self.griffe.origine_rotation is not None:
+            if "griffe_a" in groupe_de:
+                erreurs.append(
+                    "portique → origine : « griffe_a » n'y va pas : sa prise d'origine est faite "
+                    "par le Pi (griffe → origine_rotation), au point de demi-tour"
+                )
+            if self.griffe.point_demi_tour is None:
+                erreurs.append("griffe → origine_rotation : il faut aussi griffe → point_demi_tour")
+            if "griffe_b" not in groupe_de:
+                # La recherche se fait godet fermé : le godet a déjà fait sa prise d'origine.
+                erreurs.append("portique → origine : il manque « griffe_b » (le godet)")
         # Vitesses : celles des outils au plus celles du portique ; accélération de la
         # préhension = celle du portique (à vide, seau tenu).
         v = portique.vitesses
@@ -2207,6 +2344,34 @@ class Machine(Modele):
                 f"{plenum.plaque_z_min:g}) et le chariot va à y {chariot.centre_y[1]:g} m (plus "
                 f"de {plenum.chariot_centre_y_max:g}) : la tête toucherait le plénum du Nettoyage"
             )
+        # Chaîne Z de la préhension : seuil dans la course de la plaque ; aucune position nommée
+        # (ni le garage, outils en haut) ne la met en défaut.
+        chaine = portique.chaine_prehension
+        if chaine is not None and plaque is not None:
+            if not plaque.course[0] < chaine.plaque_z_min < plaque.course[1]:
+                erreurs.append(
+                    f"portique → chaine_prehension : plaque_z_min {chaine.plaque_z_min:g} hors de "
+                    f"la course de la plaque Z de la préhension ({plaque.course[0]:g} à "
+                    f"{plaque.course[1]:g})"
+                )
+            bas_face = self.axes[plaque.axe].course[0]
+            places = {nom: dict(valeurs) for nom, valeurs in self.positions.items()}
+            if portique.garage in places and en_haut is not None:
+                places[portique.garage].setdefault("prehension_z", en_haut["prehension_z"])
+            for nom, valeurs in places.items():
+                if "chariot_y" in valeurs and "prehension_z" in valeurs:
+                    refus = portique.refus_chaine(
+                        valeurs["chariot_y"], valeurs["prehension_z"], bas_face
+                    )
+                    if refus is not None:
+                        erreurs.append(f"position « {nom} » : {refus}")
+        if portique.tete_basse_z is not None:
+            debut, fin = self.axes["prehension_z"].course
+            if not debut <= portique.tete_basse_z <= fin:
+                erreurs.append(
+                    f"portique → tete_basse_z ({portique.tete_basse_z:g}) hors de la course de "
+                    f"prehension_z ({debut:g} à {fin:g})"
+                )
         # Bouts du pont où la tête de la griffe ne tourne pas.
         if portique.bouts_bloques_griffe and self.griffe is None:
             erreurs.append("portique → bouts_bloques_griffe : il faut aussi la partie « griffe »")
@@ -2217,6 +2382,17 @@ class Machine(Modele):
                     f"portique → bouts_bloques_griffe n° {numero} : {bout.pont_x[0]:g} à "
                     f"{bout.pont_x[1]:g} m doit aller du plus petit au plus grand, dans la "
                     f"course du pont ({pont[0]:g} à {pont[1]:g} m)"
+                )
+            z_debut, z_fin = self.axes["griffe_z"].course if "griffe_z" in self.axes else (0, 0)
+            if bout.axes_z_max is not None and not z_debut < bout.axes_z_max <= z_fin:
+                erreurs.append(
+                    f"portique → bouts_bloques_griffe n° {numero} : axes_z_max "
+                    f"{bout.axes_z_max:g} hors de la course de griffe_z ({z_debut:g} à {z_fin:g})"
+                )
+            if bout.axes_z_max is None and not bout.angles_deg:
+                erreurs.append(
+                    f"portique → bouts_bloques_griffe n° {numero} : sans axes_z_max ni angle "
+                    "permis, la griffe ne pourrait jamais y aller : donner l'un ou l'autre"
                 )
         return erreurs
 
@@ -2252,6 +2428,26 @@ class Machine(Modele):
         pont = self.axes["pont_x"].course
         if pont[0] < griffe.pont_x_min:
             erreurs.append(f"pont_x : la course doit commencer à x ≥ {griffe.pont_x_min:g} m")
+        point = griffe.point_demi_tour
+        if point is not None:
+            hauteur("point_demi_tour", point.z)
+            if point.z > griffe.rotation.libre_z_max + 1e-9:
+                erreurs.append(
+                    f"griffe → point_demi_tour : axes à {point.z:g} m, au-dessus de rotation → "
+                    f"libre_z_max ({griffe.rotation.libre_z_max:g}) : la tête n'y tourne pas"
+                )
+            if not pont[0] <= point.x - griffe.decalage_mat_x <= pont[1]:
+                erreurs.append("griffe → point_demi_tour : x hors de la course du pont")
+            debut, fin = self.axes["chariot_y"].course
+            if not debut - 1e-9 <= point.y <= fin + 1e-9:
+                erreurs.append("griffe → point_demi_tour : y hors de la course de chariot_y")
+            chaine = None if self.portique is None else self.portique.chaine_prehension
+            if chaine is not None and point.y > chaine.mat_y_max + 1e-9:
+                # La prise d'origine y va préhension en haut.
+                erreurs.append(
+                    f"griffe → point_demi_tour : y {point.y:g} au-delà de chaine_prehension → "
+                    f"mat_y_max ({chaine.mat_y_max:g}) : la préhension y est en haut"
+                )
         return erreurs
 
     def _verifier_mycelium(self) -> list[str]:
@@ -2414,6 +2610,41 @@ class Machine(Modele):
                     f"prehension → porte_bocal : ({porte_bocal.x:g} ; {porte_bocal.y:g}), pas "
                     f"sur le bocal du mycélium (mycelium → bocal : ({x:g} ; {y:g}))"
                 )
+        couloir = porte_bocal.couloir
+        if couloir is not None:
+            # Le départ, sur l'axe du bocal côté allée, hors de la zone (tête, bocal tenu) ; face
+            # dans la course ; la tête seule et le bocal dans le couloir.
+            if abs(couloir.depart[0] - porte_bocal.x) > 1e-9 or couloir.depart[1] <= porte_bocal.y:
+                erreurs.append(
+                    "prehension → porte_bocal → couloir → depart : sur l'axe du bocal en x, "
+                    "côté allée (y plus grand que celui du bocal)"
+                )
+            bocal = prehension.objets.get("bocal")
+            autour = prehension.rayon_tete_m + zone.marge_m + (bocal.rayon_m if bocal else 0.0)
+            if couloir.depart[1] < zone.y[1] + autour - 1e-9:
+                erreurs.append(
+                    f"prehension → porte_bocal → couloir → depart : y {couloir.depart[1]:g} m dans "
+                    f"la zone du porte-bocal (il faut y ≥ {zone.y[1] + autour:.3f} m)"
+                )
+            if not debut <= couloir.face_z <= fin:
+                erreurs.append("prehension → porte_bocal → couloir → face_z hors de la course de Z")
+            moins, plus = couloir.largeur_x_bocal
+            if not moins < 0 < plus or couloir.demi_largeur_x_mors > min(-moins, plus):
+                erreurs.append(
+                    "prehension → porte_bocal → couloir : largeur_x_bocal (−, +) autour de 0, "
+                    "plus large que demi_largeur_x_mors"
+                )
+            if porte_bocal.tolerance_pose_x_m > couloir.demi_largeur_x_mors:
+                erreurs.append(
+                    "prehension → porte_bocal → tolerance_pose_x_m : plus large que le couloir "
+                    "dans les mors (couloir → demi_largeur_x_mors)"
+                )
+        if not porte_bocal.tolerance_pose_y_m[0] <= 0 <= porte_bocal.tolerance_pose_y_m[1]:
+            erreurs.append("prehension → porte_bocal → tolerance_pose_y_m : (−, +) autour de 0")
+        if porte_bocal.descente_lente_pose_m > 0 and prehension.vitesses.pose_bocal is None:
+            erreurs.append(
+                "prehension → porte_bocal → descente_lente_pose_m : il faut vitesses → pose_bocal"
+            )
         if self.griffe.camera_bocal.z_haut is None:
             erreurs.append("griffe → camera_bocal : il faut « z_haut » pour la préhension")
         if self.porte_bocal is None or self.porte_bocal.approche is None:
@@ -2486,7 +2717,11 @@ class Machine(Modele):
             hors_portee(
                 f"formats → {nom} → decalage_brossage_m", centre_x + reglage.decalage_brossage_m
             )
-            hors_portee(f"formats → {nom} → jet_centre", *reglage.jet_centre)
+            hors_portee(
+                f"formats → {nom} → jet_decalage",
+                centre_x + reglage.jet_decalage[0],
+                lavage.centre_fut[1] + reglage.jet_decalage[1],
+            )
             if reglage.decalage_brossage_m > lavage.verrou.rayon_m:
                 erreurs.append(
                     f"lavage → formats → {nom} → decalage_brossage_m : plus loin du centre que "
@@ -2690,6 +2925,21 @@ class Machine(Modele):
                 reglage.pose_plateau_z - r.pose_seau.plateau_sous_pose_m,
             )
             dans(f"formats → {nom} (plateau d'approche de la pose)", "plateau_z", approche_z)
+            # Prise double, étape c) : la face de la préhension (pose + face au-dessus du plateau
+            # − descente de la tête) reste dans sa course (PR n° 56, points 1 et 2).
+            if "prehension_z" in self.axes:
+                face_c = (
+                    reglage.pose_plateau_z
+                    + r.face_au_dessus_plateau_m
+                    - r.prise_double.descente_tete_m
+                )
+                bas_face = self.axes["prehension_z"].course[0]
+                if face_c < bas_face - 1e-9:
+                    erreurs.append(
+                        f"remplissage → formats → {nom} : à l'étape c) de la prise double, la "
+                        f"face de la préhension irait à {face_c:.4f} m, sous le bas de sa course "
+                        f"({bas_face:g} m)"
+                    )
             # Pose et prise double : les barres restent sous les joues de l'élévateur (elles
             # ne les traversent que plateau ≤ 0,48, avant la pose), et sous l'approche.
             levre = max(seau.rayon_haut + r.barres.jeu_rainure_m / 2, self.axes["barres"].course[0])
@@ -4218,6 +4468,28 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
                 for nom in noms
                 if nom not in connus
             ]
+    # Capteurs d'origine des rotations (tâche 36 bis) : chacun est le fin de course de son axe
+    # (« $HA », « $HB »), donc sur sa carte, avec la lettre de l'axe.
+    origines_capteurs: list[tuple[str, str]] = []
+    if machine.prehension is not None and machine.prehension.origine_rotation is not None:
+        origines_capteurs.append(("origine_rotation_tete", "prehension_a"))
+    if machine.griffe is not None and machine.griffe.origine_rotation is not None:
+        origines_capteurs += [
+            ("origine_rotation_griffe", "griffe_a"),
+            ("origine_godet_griffe", "griffe_b"),
+        ]
+    for signal, nom_axe in origines_capteurs:
+        axe = machine.axes.get(nom_axe)
+        if axe is None or axe.carte is None:
+            continue
+        carte = fluidnc.cartes.get(axe.carte)
+        lettre = None if carte is None else carte.entrees.get(signal)
+        if carte is not None and lettre != axe.lettre:
+            erreurs.append(
+                f"fluidnc.yaml, cartes → {axe.carte} → entrees → {signal} : doit être la lettre "
+                f"de l'axe {nom_axe} (« {axe.lettre} »), c'est son fin de course"
+                + ("" if lettre is None else f", pas « {lettre} »")
+            )
     if machine.lavage is not None:
         # Chaque signal du lavage est sur une seule carte (n° 3 ou n° 4 : le plan de câblage
         # choisit) ; le code ne connaît que son nom.

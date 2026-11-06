@@ -1,11 +1,14 @@
 """Outil « vidange-portique » : essayer le portique (cartes n° 1 et n° 4).
 
   vidange-portique etat              positions, centre du chariot, fins de course, alarmes
-  vidange-portique origine           freins desserrés, prise d'origine : les Z, puis Y, puis X
+  vidange-portique origine           contrôles, freins desserrés, prise d'origine : les Z, Y, X,
+                                     godet, rotations de la griffe et de la tête de préhension
   vidange-portique garage            outils en haut, pont au garage, freins serrés
   vidange-portique photo stockage    outils en haut, pont au bout opposé (fut_poste, stockage)
   vidange-portique freins serrer     serrer (ou desserrer) les freins des deux Z
   ... --faux                         avec de faux FluidNC (essai de l'outil)
+  ... --confirmer                    tête de la griffe remise à 0° à la main, cordon de la tête
+                                     de préhension vérifié : les contrôles passent
 
 Les gestes sont ceux du programme (vidange.portique), dans l'ordre de machine.yaml (portique →
 origine). Procédure complète : pi/systeme/essai-portique.md. À ne lancer que programme principal
@@ -14,20 +17,27 @@ arrêté (une seule liaison par carte), arrêt d'urgence à portée de main.
 
 import argparse
 import sys
+import tempfile
 import time
 from collections.abc import Callable, Iterable
 from contextlib import ExitStack
+from pathlib import Path
 
+from vidange.angles_gardes import AnglesGardes
 from vidange.chef import ErreurEtape, Etape
 from vidange.demarrage import DOSSIER_PI, _chemin
+from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.fluidnc import FauxFluidnc, Liaison
 from vidange.fluidnc.ports import ErreurFluidnc
 from vidange.journal import configurer_journal
+from vidange.materiel import ErreurMateriel, Materiel
 from vidange.portique.portique import Portique
 from vidange.reglages import ErreurReglages, Machine, charger_reglages
 
 # Attente de la première réponse des cartes (s).
 CONNEXION_S = 10
+# Le compte-tours de la tête de préhension (docs/entrees-sorties.yaml).
+COMPTE_TOURS = "compte_tours_tete"
 # Les fins de course lus dans « Pn: » (lettre de l'axe sur sa carte).
 FINS_DE_COURSE = {
     "pont_x": "pont (X1 ou X2)",
@@ -46,8 +56,12 @@ def _faux(machine: Machine) -> dict[str, Callable[[], object]]:
         if axe.carte is None or axe.lettre is None:
             continue
         cartes[axe.carte] = cartes.get(axe.carte, "") + axe.lettre
-        fin = axe.course[1] if nom.endswith("_z") else axe.course[0]
-        origines.setdefault(axe.carte, {})[axe.lettre] = fin * (1000 if axe.unite == "m" else 1)
+        if axe.unite == "deg":
+            # Une rotation : son origine est 0 (fanion, Hall).
+            fin = 0.0
+        else:
+            fin = (axe.course[1] if nom.endswith("_z") else axe.course[0]) * 1000
+        origines.setdefault(axe.carte, {})[axe.lettre] = fin
     for carte, lettres in cartes.items():
         # Comme une vraie carte, le rapport donne les axes depuis X jusqu'au dernier défini.
         dernier = max("XYZABC".index(lettre) for lettre in lettres)
@@ -107,6 +121,15 @@ def main(arguments: list[str] | None = None) -> int:
     lecteur = argparse.ArgumentParser(prog="vidange-portique", description=__doc__.split("\n")[0])
     lecteur.add_argument("--reglages", help="dossier des réglages (défaut : pi/reglages)")
     lecteur.add_argument("--faux", action="store_true", help="avec de faux FluidNC")
+    lecteur.add_argument(
+        "--entrees-sorties", help="liste des signaux (défaut : docs/entrees-sorties.yaml)"
+    )
+    lecteur.add_argument("--donnees", help="dossier des données (défaut : pi/donnees)")
+    lecteur.add_argument(
+        "--confirmer",
+        action="store_true",
+        help="tête de la griffe remise à 0° à la main, cordon de la préhension vérifié",
+    )
     lecteur.add_argument("commande", choices=["etat", "origine", "garage", "photo", "freins"])
     lecteur.add_argument("valeur", nargs="?", help="zone de la photo ; serrer ou desserrer")
     options = lecteur.parse_args(arguments)
@@ -129,11 +152,20 @@ def main(arguments: list[str] | None = None) -> int:
     ouvrir = _faux(machine) if options.faux else {}
     with ExitStack() as pile:
         try:
+            garde, compte_tours = _angles(options, pile)
             liaisons = {}
             for nom in noms:
                 liaison = Liaison(nom, reglages.fluidnc, ouvrir=ouvrir.get(nom))  # type: ignore[arg-type]
                 liaisons[nom] = pile.enter_context(liaison)
-            portique = Portique(machine, reglages.fluidnc.cartes, liaisons)
+            portique = Portique(
+                machine,
+                reglages.fluidnc.cartes,
+                liaisons,
+                garde=garde,
+                compte_tours=compte_tours,
+            )
+            if options.confirmer:
+                portique.rotations.confirmer()
             for nom in portique.cartes:
                 liaisons[nom].attendre_connexion(CONNEXION_S)
             if options.commande == "etat":
@@ -151,10 +183,38 @@ def main(arguments: list[str] | None = None) -> int:
             # Le temps d'un rapport d'état de chaque carte après le dernier geste.
             time.sleep(0.5)
             _etat(portique, machine)
-        except (ErreurEtape, ErreurFluidnc, ValueError) as erreur:
+        except (ErreurEtape, ErreurFluidnc, ErreurMateriel, ErreurReglages, ValueError) as erreur:
             print(f"ERREUR : {erreur}", file=sys.stderr)
+            quoi_faire = getattr(erreur, "quoi_faire", "")
+            if quoi_faire:
+                print(f"Quoi faire : {quoi_faire}", file=sys.stderr)
             return 1
     return 0
+
+
+def _angles(
+    options: argparse.Namespace, pile: ExitStack
+) -> tuple[AnglesGardes, Callable[[], float | None] | None]:
+    """Les angles gardés et le compte-tours de la tête : les vrais (fichier du programme,
+    ADS1115), ou de faux (griffe et tête à 0°, essai de l'outil)."""
+    if options.faux:
+        dossier = Path(pile.enter_context(tempfile.TemporaryDirectory()))
+        garde = AnglesGardes(dossier / "angles.json")
+        garde.noter("griffe_a", 0.0)
+        garde.noter("prehension_a", 0.0)
+        return garde, lambda: 0.0
+    donnees = _chemin(options.donnees, "VIDANGE_DONNEES", DOSSIER_PI / "donnees")
+    garde = AnglesGardes(donnees / "angles.json")
+    chemin = _chemin(
+        options.entrees_sorties,
+        "VIDANGE_ENTREES_SORTIES",
+        DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml",
+    )
+    liste = charger_entrees_sorties(chemin)
+    if COMPTE_TOURS not in liste.signaux:
+        return garde, None
+    materiel = pile.enter_context(Materiel(liste, None, {COMPTE_TOURS}))
+    return garde, lambda: materiel.mesurer(COMPTE_TOURS)
 
 
 def lancer() -> None:

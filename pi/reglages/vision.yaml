@@ -90,8 +90,8 @@ aruco:
 # vieille que 5 s refusée.
 plafond:
   photo_age_max_s: 5
-  # Pont garé : ses places sont celles du Portique (machine.yaml → portique → photo : x 2,495
-  # pour le fût et le poste, 0,233 pour le stockage, à photo_tolerance_m près).
+  # Pont garé : ses places sont celles du Portique (machine.yaml → portique → photo : x 2,925
+  # pour le fût et le poste, 0,223 pour le stockage, à photo_tolerance_m près).
   # Règle 9 : nouvelle photo toutes les 5 min.
   attente_s: 300
   # Contrôle du lave-bocal avant chaque geste dangereux pour lui (lever un seau dans le fût de

@@ -147,8 +147,8 @@ ZONE = PREHENSION.zone_porte_bocal
 CONTACT = REGLES.contact_capsule_z
 # Tête en haut (approche à 1,10), à la verticale du bocal.
 SUR_LE_BOCAL = Pose(x=PORTE_BOCAL.x, y=PORTE_BOCAL.y, z=1.10, a=0)
-# Tête en haut, hors de la zone du porte-bocal, côté allée.
-DEVANT = Pose(x=PORTE_BOCAL.x, y=0.75, z=1.10, a=0)
+# Tête en haut, au départ du couloir d'accès (hors de la zone du porte-bocal, côté allée).
+DEVANT = Pose(x=PORTE_BOCAL.x, y=0.40, z=1.10, a=0)
 
 
 def test_porte_bocal_sur_l_agitateur_fixe():
@@ -246,19 +246,101 @@ def test_trajet_qui_frole_la_zone_a_1_cm_pres_accepte():
 
 
 def test_trajet_vers_la_verticale_du_bocal():
-    # En ligne droite d'un point hors de la zone à la verticale du bocal, face en haut, manivelle
-    # en bas : permis (et le retour aussi), même avec le bocal tenu.
+    # Par le couloir, du départ à la verticale du bocal, face en haut, manivelle en bas : permis
+    # (et le retour aussi), même avec le bocal tenu.
     for contexte in (EN_BAS, replace(EN_BAS, objet=BOCAL, mors="ouverts")):
         assert REGLES.refus_mouvement(DEVANT, SUR_LE_BOCAL, contexte) is None
         assert REGLES.refus_mouvement(SUR_LE_BOCAL, DEVANT, contexte) is None
     # Manivelle en haut, ou qui bouge : refusé.
     for contexte in (EN_HAUT, Contexte()):
         assert "zone du porte-bocal" in REGLES.refus_mouvement(DEVANT, SUR_LE_BOCAL, contexte)
-    # Depuis un point de la zone (pas la verticale) : refusé.
-    dans = SUR_LE_BOCAL.avec(y=0.25)
+    # Depuis un point de la zone hors du couloir (10 cm à côté en x) : refusé.
+    dans = SUR_LE_BOCAL.avec(x=PORTE_BOCAL.x + 0.10, y=0.25)
     assert "zone du porte-bocal" in REGLES.refus_mouvement(dans, SUR_LE_BOCAL, EN_BAS)
     # De la verticale vers un autre point de la zone : refusé.
     assert "zone du porte-bocal" in REGLES.refus_mouvement(SUR_LE_BOCAL, dans, EN_BAS)
+
+
+def test_couloir_d_acces_au_bocal():
+    # Couloir (Agitateur fixe, PR n° 64, point c) : du départ (0,925 ; 0,40) à la verticale du
+    # bocal, en −y seulement, face à 1,10, x dans la largeur permise.
+    tenu = replace(EN_BAS, objet=BOCAL, mors="ouverts")
+    assert REGLES.refus_mouvement(DEVANT, SUR_LE_BOCAL, tenu) is None
+    # Arrivée côté mur (depuis y 0,06, sous le bocal) : refusée.
+    mur = SUR_LE_BOCAL.avec(y=0.06)
+    assert "zone du porte-bocal" in REGLES.refus_mouvement(mur, SUR_LE_BOCAL, EN_BAS)
+    # Arrivée par +x (en x à la hauteur du bocal) : refusée.
+    cote = SUR_LE_BOCAL.avec(x=PORTE_BOCAL.x + 0.10)
+    assert "zone du porte-bocal" in REGLES.refus_mouvement(cote, SUR_LE_BOCAL, EN_BAS)
+    # À x 0,925 + 0,05 : tête seule acceptée (± 0,06), bocal tenu refusé (−0,06 à +0,04).
+    decale = DEVANT.avec(x=PORTE_BOCAL.x + 0.05)
+    plus_loin = decale.avec(y=0.20)
+    assert REGLES.refus_mouvement(decale, plus_loin, EN_BAS) is None
+    assert "zone du porte-bocal" in REGLES.refus_mouvement(decale, plus_loin, tenu)
+    # Face plus basse que 1,10 dans le couloir : refusée.
+    bas = (DEVANT.avec(z=1.0), SUR_LE_BOCAL.avec(z=1.0))
+    assert REGLES.refus_mouvement(*bas, EN_BAS) is not None
+
+
+def test_descente_sur_le_bocal_a_1_mm_pres():
+    # Avant de descendre : axe de la tête à x ± 1 mm, y −1 / +2 mm de la verticale.
+    tenu = replace(EN_BAS, objet=BOCAL, mors="ouverts")
+
+    def descente(dx: float, dy: float) -> str | None:
+        haut = SUR_LE_BOCAL.avec(x=PORTE_BOCAL.x + dx, y=PORTE_BOCAL.y + dy)
+        return REGLES.refus_mouvement(haut, haut.avec(z=CONTACT), tenu)
+
+    assert descente(0.0, 0.0) is None
+    assert descente(0.001, 0.002) is None
+    assert descente(-0.001, -0.001) is None
+    # Bocal décalé de 2 mm en x : descente refusée.
+    assert "descente au porte-bocal refusée" in descente(0.002, 0.0)
+    assert "descente au porte-bocal refusée" in descente(0.0, -0.002)
+    assert "descente au porte-bocal refusée" in descente(0.0, 0.003)
+
+
+def test_tete_alignee_sur_les_meplats():
+    # Plus proche de angle_meplats_deg (0) + k × 120° : au plus 60° de rotation.
+    assert PREHENSION.angle_meplats_deg == 0
+    for actuel, voulu in ((0, 0), (59, 0), (61, 120), (490, 480), (-70, -120)):
+        assert REGLES.angle_meplats(actuel) == pytest.approx(voulu), actuel
+
+
+def test_chaine_z_vue_par_la_prehension():
+    # Plaque Z de la préhension au-dessus de 2,02 (face au-dessus de 0,942) ⇒ mâts à y ≤ 0,80.
+    haut = Pose(x=1.6, y=0.80, z=1.10, a=0)
+    assert refus(haut, Contexte()) is None
+    assert "chaîne Z de la préhension" in refus(haut.avec(y=0.81), Contexte())
+    assert refus(haut.avec(y=0.83, z=0.94), Contexte()) is None
+    # Hauteur des trajets : limitée à 0,942 au-delà de y 0,80.
+    assert REGLES.hauteur_trajet(None, 0.6) == 1.10
+    assert REGLES.hauteur_trajet(None, 0.6, 0.83) == pytest.approx(0.942)
+
+
+def test_acceleration_reduite_tete_basse():
+    # Face sous portique → tete_basse_z (0,60) : accélération X et Y × 0,5, en plus du seau.
+    with Simulateur(REGLAGES, LISTE, "prehension") as simulation:
+        prehension = prehension_du_simulateur(simulation)
+        prehension.pose = Pose(x=1.6, y=0.6, z=0.59, a=0)
+        prehension._regler_acceleration()
+        assert prehension.tete.accelerations[-1] == (False, 0.5)
+        prehension.pose = prehension.pose.avec(z=0.61)
+        prehension._regler_acceleration()
+        assert prehension.tete.accelerations[-1] is False
+
+
+def test_tete_acceleration_tete_basse_sur_la_carte():
+    with BancTete() as banc:
+        banc.tete.acceleration_seau(True, 0.5)
+
+        def lignes() -> list[str]:
+            return [ligne for ligne in banc.portique.lignes_recues if "acceleration" in ligne]
+
+        attendre(lambda: len(lignes()) == 2)
+        assert lignes() == [
+            "$/axes/x/acceleration_mm_per_sec2=250",
+            "$/axes/y/acceleration_mm_per_sec2=250",
+        ]
 
 
 def test_pose_du_bocal_manivelle_en_haut_refusee():
@@ -418,7 +500,8 @@ def etapes(planning) -> list[str]:
     return [ligne.etape for ligne in planning.lignes]
 
 
-def test_tous_les_gestes_au_simulateur():
+def test_tous_les_gestes_au_simulateur(caplog):
+    caplog.set_level("DEBUG", logger="vidange.prehension")
     planning, prehension, simulation = jouer()
     assert planning.fini, planning.probleme
     assert etapes(planning)[-1] == "visser_la_capsule"
@@ -429,6 +512,8 @@ def test_tous_les_gestes_au_simulateur():
     assert tete.accelerations[:3] == [False, True, False]
     assert prehension.objet is None
     assert simulation.etat_axes.positions["prehension_z"] == pytest.approx(1.10)
+    # Pose du bocal : approche jusqu'à 23 mm du contact, puis lente (vitesses → pose_bocal).
+    assert "bocal à l'entrée des mors" in caplog.text
 
 
 def test_simulateur_en_ligne_de_commande(capsys):

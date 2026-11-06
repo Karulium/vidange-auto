@@ -50,6 +50,29 @@ POSTE = Pose(y=0.135, z=0.175, a=0.0, barres=0.30, pousseur=0.0)
 # ---------------------------------------------------------------- réglages
 
 
+def test_hauteurs_de_pose_vraies():
+    # Tâche 36 bis, point 1 : hauteurs de pose vraies des 4 formats ; face = H + 0,003.
+    poses = {nom: f.pose_plateau_z for nom, f in REMPLISSAGE.formats.items()}
+    assert poses == {"seau_a": 0.4675, "seau_b": 0.5125, "seau_c": 0.4925, "seau_d": 0.4625}
+    assert REMPLISSAGE.face_au_dessus_plateau_m == 0.003
+
+
+def test_face_de_la_prise_double_dans_la_course_verifiee(reglages):
+    # Étape c) de la prise double : face = pose + 0,003 − 0,028 ≥ bas de la course de la face.
+    # Seau D : 0,4625 + 0,003 − 0,028 = 0,4375 ; avec une course qui commencerait à 0,44 : refusé.
+    remplacer(
+        reglages / "machine.yaml",
+        "    longueur_rail: 1.15\n    course: [0.23, 1.10]",
+        "    longueur_rail: 1.15\n    course: [0.44, 1.10]",
+    )
+    texte = erreur_de(reglages)
+    assert (
+        "formats → seau_d : à l'étape c) de la prise double, la face de la préhension irait à"
+        in (texte)
+    )
+    assert "0.4375 m, sous le bas de sa course (0.44 m)" in texte
+
+
 def test_reglages_du_remplissage():
     r = REMPLISSAGE
     # Tâche 34 quater : recul pour l'agitateur à y 0,40 (31/10 ; avant : 0,375). Tâche 19 ter :
@@ -92,7 +115,7 @@ def test_reglages_du_remplissage():
 def test_un_format_sans_reglage_du_remplissage_est_refuse(reglages):
     remplacer(
         reglages / "machine.yaml",
-        "    seau_d: {pose_plateau_z: 0.4475, centrage_hw_m: 0.128}\n",
+        "    seau_d: {pose_plateau_z: 0.4625, centrage_hw_m: 0.128}\n",
         "",
     )
     assert "remplissage : il faut « formats → seau_d »" in erreur_de(reglages)

@@ -96,7 +96,7 @@ class TeteSimulee:
         self.traction_n = 0.0
         # Ce qui a été fait, pour les tests.
         self.sorties: list[str] = []
-        self.accelerations: list[bool] = []
+        self.accelerations: list[bool | tuple[bool, float]] = []
         self.pretes = Condition("cartes simulées prêtes", lambda: True)
         self.surveillance = Condition("cartes simulées sans alarme", lambda: True)
 
@@ -218,8 +218,12 @@ class TeteSimulee:
     def vide_kpa(self) -> float | None:
         return self._vide_prise if self._vanne and self._vide else 0.0
 
-    def acceleration_seau(self, reduite: bool) -> None:
-        self.accelerations.append(reduite)
+    def acceleration_seau(self, reduite: bool, facteur: float = 1.0) -> None:
+        # Comme la vraie tête : seuls les changements sont envoyés (et notés ici) ; « (réduite,
+        # facteur) » quand la tête basse la réduit encore.
+        valeur = reduite if facteur == 1.0 else (reduite, facteur)
+        if not self.accelerations or self.accelerations[-1] != valeur:
+            self.accelerations.append(valeur)
 
     def pauser(self) -> None:
         self._etat.pauser()

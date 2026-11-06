@@ -177,7 +177,7 @@ def _plafond(options, reglages: Reglages, photographe) -> int:
         photo = photo_depuis_image("plafond", _image(options, None, "plafond"), time.monotonic())
     else:
         photo = photographe.mesure("plafond")
-    # L'outil ne lit pas la position du pont : le garer soi-même au bout opposé (x 2,495).
+    # L'outil ne lit pas la position du pont : le garer soi-même au bout opposé (x 2,925).
     places = places_photo(reglages.machine)
     tolerance = reglages.machine.portique.photo_tolerance_m if reglages.machine.portique else 0
     plafond = CameraPlafond(

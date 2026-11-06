@@ -531,7 +531,7 @@ class Stockage:
         prehension.verrou_stockage = self.refus_prehension(prehension)
 
     def brancher_griffe(self, griffe: "Griffe") -> None:
-        """La griffe : boucle fermée, axe du mât à x ≤ 2,325."""
+        """La griffe : boucle fermée, axe du mât à x ≤ 2,738."""
         griffe.verrou_stockage = lambda depart, arrivee: self.regles.refus_griffe(
             depart.x, arrivee.x, self.boucle_fermee()
         )

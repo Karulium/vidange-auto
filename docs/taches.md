@@ -1009,7 +1009,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   accélération réduite seau tenu, places de photo, garage de repos, rotation de la tête refusée au-delà de x 2,0,
   alarme d'un pilote. Outil d'essai et procédure sur le vrai matériel (sens des axes, équerre, fins de course) ;
   « testé sur le vrai matériel : non ».
-- [ ] **36 bis. Portique : corrections après la PR n° 56** — Modèle : Opus, effort moyen. **À faire après la tâche
+- [x] **36 bis. Portique : corrections après la PR n° 56** — Modèle : Opus, effort moyen. **À faire après la tâche
   19 ter.** Source : `docs/decisions.md`, « Portique, réponses à la PR n° 56 » (03/11/2026), et ci-dessous (fils
   Griffe et Portique, 03/11). Repère des angles du logiciel partout : A = 0 bras le long du pont (axe y), raclette
   vers −x (côté fût), A positif = sens trigonométrique vu de dessus.
