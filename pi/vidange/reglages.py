@@ -2208,8 +2208,6 @@ class OzoneNettoyage(Modele):
     journal_s: float = Field(gt=0)
     # Au moins cette valeur (ppm) lue dedans pendant le contact, sinon « mesure incohérente ».
     attendu_min_ppm: float = Field(gt=0)
-    # Contact du panneau du poste du fût demandé pour la nuit : levé (fermé) ou rabattu.
-    panneau_poste_fut: Literal["leve", "rabattu"]
 
     @model_validator(mode="after")
     def _verifier(self) -> "OzoneNettoyage":

@@ -330,8 +330,9 @@ scenarios:
         attente_s: 360
         capteur: boucle_stockage
         actionne: true
-  # Nettoyage (tâche 38). Store ouvert au départ, panneau long du poste du fût levé (comme le veut
-  # machine.yaml → nettoyage → ozone → panneau_poste_fut), porte du spray fermée.
+  # Nettoyage (tâche 38). Store ouvert au départ, porte du spray fermée, panneau long du poste du fût
+  # levé (contact fermé, la position normale ; ce n'est pas une condition de la nuit : la fuite part
+  # panneau rabattu, contact ouvert, pour le montrer).
   # Karulium referme le store (le reed rebondit), purge au plein jusqu'à ses 3 conditions (au moins
   # 7 min), puis il rouvre le store.
   fermeture_purge:
@@ -344,9 +345,10 @@ scenarios:
   # contact, retour sous 0,1 ppm stable 15 min ; le store se rouvre ensuite.
   nuit_uv_ozone:
     capteurs_actionnes: [reed_panneau_poste_fut]
-  # La nuit part ; 30 s après le début de la génération, le capteur du dehors lit 0,4 ppm.
+  # Panneau du poste rabattu (contact ouvert) : la nuit part quand même ; 30 s après le début de
+  # la génération, le capteur du dehors lit 0,4 ppm.
   fuite_ozone:
-    capteurs_actionnes: [reed_panneau_poste_fut]
+    capteurs_actionnes: []
     evenements:
       - apres: nettoyage_fuite.generation
         attente_s: 30

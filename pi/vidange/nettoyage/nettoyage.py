@@ -36,8 +36,10 @@ particules dehors stable `stabilite_particules_s`, ET pression ≥ `pression_fin
 Store rouvert : purge remise à zéro. Capteur absent ou muet : sa condition n'est jamais vraie.
 
 La nuit UV-ozone (mode « uv_ozone ») : conditions de départ (store fermé, verrous remis, porte du
-spray fermée, panneau du poste du fût comme réglé, aucun cycle, capteur d'ozone dedans lu, pas de
-fuite). À l'heure réglée ou tout de suite : ventilateur de l'enceinte, compresseur et ventilateur
+spray fermée, aucun cycle, capteur d'ozone dedans lu, pas de fuite). Le panneau long du poste du
+fût n'est PAS une condition : levé (contact fermé, la position normale) ou rabattu, il est noté au
+journal au départ ; on n'exige jamais « rabattu » (avec un fût, il ne peut pas se rabattre).
+À l'heure réglée ou tout de suite : ventilateur de l'enceinte, compresseur et ventilateur
 de l'armoire coupés ; générateur en marche `t_generation_s`, contact jusqu'à `t_contact_s`,
 `ozone_dedans` noté au registre ; retour : ozone dedans sous le seuil, stable `stabilite_retour_s`.
 Alors le compresseur et les ventilateurs sont de nouveau permis ; le store reste verrouillé
@@ -188,6 +190,9 @@ class EtatNettoyage:
     nuit_erreur: str
     ozone_dedans: str
     ozone_dehors: str
+    # Panneau long du poste du fût : « levé (position normale) », « rabattu »... (pas une
+    # condition de la nuit).
+    panneau: str
     # Contact de l'alarme d'ozone câblée, s'il est dans la liste (None : absent ou illisible).
     ozone_securite_ok: bool | None
     fuite: bool
@@ -688,17 +693,6 @@ class Nettoyage:
                 return "porte du spray illisible"
             if porte:
                 return "porte du spray ouverte"
-            if self._existe(PANNEAU):
-                panneau = self._lire(PANNEAU)
-                voulu = self.reglages.ozone.panneau_poste_fut == "leve"
-                if panneau is None:
-                    return "contact du panneau du poste du fût illisible"
-                if panneau != voulu:
-                    return (
-                        "panneau long du poste du fût pas levé"
-                        if voulu
-                        else "panneau long du poste du fût pas rabattu"
-                    )
             if self._ozone_dedans is None:
                 return "capteur d'ozone du dedans muet"
             if self._fuite:
@@ -745,9 +739,22 @@ class Nettoyage:
                 nuit.cycle = self.registre.commencer_cycle(MODULE, remarque="nuit UV-ozone")
             except ErreurRegistre as erreur:
                 journal.error("Nettoyage : registre : %s", erreur)
-        journal.warning("Nettoyage : nuit UV-ozone, génération d'ozone")
-        self._dire("Nuit UV-ozone : génération d'ozone.")
+        panneau = self.texte_panneau()
+        journal.warning(
+            "Nettoyage : nuit UV-ozone, génération d'ozone ; panneau du poste : %s", panneau
+        )
+        self._dire(f"Nuit UV-ozone : génération d'ozone (panneau du poste du fût {panneau}).")
         self._garder()
+
+    def texte_panneau(self) -> str:
+        """Le panneau long du poste du fût, pour le journal et l'affichage (jamais une condition) :
+        « levé » (contact fermé) est la position normale."""
+        if not self._existe(PANNEAU):
+            return "absent de la liste"
+        panneau = self._lire(PANNEAU)
+        if panneau is None:
+            return "illisible"
+        return "levé (position normale)" if panneau else "rabattu"
 
     def _couper_generation(self) -> None:
         """Le générateur s'arrête (store, porte, fuite) : la nuit passe à l'attente du retour."""
@@ -1090,6 +1097,7 @@ class Nettoyage:
                 nuit_erreur=nuit.erreur,
                 ozone_dedans=self._texte_ozone(self._ozone_dedans),
                 ozone_dehors=self._texte_ozone(self._ozone_dehors, OZONE_DEHORS),
+                panneau=self.texte_panneau(),
                 ozone_securite_ok=securite,
                 fuite=self._fuite,
                 refus_ouverture=self.refus_ouverture(),

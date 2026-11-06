@@ -1,5 +1,6 @@
 """Nettoyage (tâche 38) : store, purge après fermeture, nuit UV-ozone, fuite, mode maïs."""
 
+import logging
 from datetime import datetime, timedelta
 
 import pytest
@@ -471,10 +472,6 @@ def test_nuit_refusee_si_les_conditions_manquent(b):
     with pytest.raises(ErreurNettoyage, match="porte du spray ouverte"):
         b.n.programmer_nuit("essai")
     b.faux.actionner("porte_spray", False)
-    b.faux.actionner("reed_panneau_poste_fut", False)
-    with pytest.raises(ErreurNettoyage, match="panneau"):
-        b.n.programmer_nuit("essai")
-    b.faux.actionner("reed_panneau_poste_fut", True)
     b.cycle = True
     with pytest.raises(ErreurNettoyage, match="cycle"):
         b.n.programmer_nuit("essai")
@@ -756,6 +753,7 @@ def test_simulation_nuit_uv_ozone_complete():
     assert simulation.enceinte.ozone_max_ppm > 10
     assert simulation.enceinte.ozone_ppm < OZONE.seuil_ouverture_ppm
     assert any("Nuit UV-ozone finie" in texte for texte in faits(planning))
+    assert any("panneau du poste du fût levé (position normale)" in t for t in faits(planning))
     assert simulation.nettoyage.etat().store == OUVERT
 
 
@@ -763,6 +761,8 @@ def test_simulation_fuite_d_ozone_dehors():
     planning, simulation = simuler_nettoyage("nettoyage_fuite")
     assert planning.fini, planning.probleme
     assert "mesure « ozone_dehors » : 0.4" in faits(planning)
+    # Panneau du poste rabattu dans ce scénario : la nuit part quand même (pas une condition).
+    assert any("panneau du poste du fût rabattu" in texte for texte in faits(planning))
     assert any("FUITE D'OZONE" in texte for texte in faits(planning))
     n = simulation.nettoyage
     assert n.etat().fuite and not n.commande("generateur_ozone")
@@ -842,3 +842,20 @@ def test_constats_de_la_check_list(b):
     assert all(constat.niveau != "bloquant" for constat in sans_capteurs.constats())
     b.store(True)
     assert [(c.niveau, c.texte) for c in b.n.constats()] == [("ok", "store fermé")]
+
+
+@pytest.mark.parametrize("leve", [True, False])
+def test_panneau_du_poste_pas_une_condition_de_la_nuit(b, leve, caplog, monkeypatch):
+    """Levé (contact fermé, normal) ou rabattu : la nuit part, la position est notée au journal."""
+    # Le journal « vidange » ne remonte pas au journal général : on le fait remonter pour lire.
+    monkeypatch.setattr(logging.getLogger("vidange"), "propagate", True)
+    b.preparer_nuit()
+    b.faux.actionner("reed_panneau_poste_fut", leve)
+    b.avancer(1)
+    attendu = "levé (position normale)" if leve else "rabattu"
+    assert b.n.refus_nuit() is None and b.n.etat().panneau == attendu
+    with caplog.at_level("WARNING", logger="vidange"):
+        b.n.programmer_nuit("essai", tout_de_suite=True)
+    assert f"panneau du poste : {attendu}" in caplog.text
+    assert b.n.etat().nuit == GENERATION
+    assert f"(panneau du poste du fût {attendu})" in b.n.etat().messages[-1]

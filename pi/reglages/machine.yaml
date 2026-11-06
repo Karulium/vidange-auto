@@ -1643,9 +1643,8 @@ nettoyage:
     # Pendant le contact, au moins 1 ppm lu dedans, sinon « mesure incohérente » (générateur en
     # panne ou capteur faux ?). EXEMPLE.
     attendu_min_ppm: 1
-    # Contact du panneau du poste du fût demandé pour la nuit (« leve » = contact fermé, comme en
-    # production ; « rabattu » = contact ouvert). EXEMPLE : à confirmer par le Poste du fût.
-    panneau_poste_fut: leve
+    # Le panneau long du poste du fût n'est pas une condition de départ (fil Poste du fût, 06/11) :
+    # levé (contact fermé, position normale) ou rabattu, il est seulement noté au journal.
   # Lampe UV-C des têtes : garage UV après le bain des têtes, 5 + 5 min (figé). Le geste est celui
   # du bain des têtes ; le Pi ne permet la lampe que store fermé.
   uv_tetes:

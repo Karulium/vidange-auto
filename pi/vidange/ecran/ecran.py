@@ -110,6 +110,9 @@ def ligne_nettoyage(etat: EtatNettoyage) -> str:
         if etat.nuit_depart_prevu:
             texte += f" à {etat.nuit_depart_prevu[11:16]}"
         return texte
+    if etat.mode == "uv_ozone":
+        # Pas une condition de la nuit : seulement dit (« levé » est la position normale).
+        return f"Panneau du poste : {etat.panneau}"
     return f"Ventilateur : {etat.ventilateur}"
 
 

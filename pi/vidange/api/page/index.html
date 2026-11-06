@@ -443,6 +443,8 @@ function afficherNettoyage(n) {
         + (n.nuit_depart_prevu ? " à " + n.nuit_depart_prevu.slice(11, 16) : "")
         + (n.nuit_depuis_s !== null && n.nuit !== "fini" ? ", depuis " + Math.round(n.nuit_depuis_s / 60) + " min" : "")
         + (n.nuit_erreur ? " — " + n.nuit_erreur : "")),
+      (n.mode === "uv_ozone" || n.nuit) && el("div", { classe: "doux" },
+        "Panneau long du poste du fût : " + n.panneau + " (pas une condition de la nuit)."),
       n.refus_ouverture && el("div", { classe: "doux" }, "Ouverture du store : " + n.refus_ouverture + "."),
       ...n.messages.slice(-3).map((m) => el("div", { classe: "doux" }, m)),
       el("div", {},

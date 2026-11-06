@@ -93,8 +93,10 @@ Générateur d'ozone **débranché de sa prise** (on écoute le relais et on mes
 **Seulement si l'étape 4 est bonne, les 2 capteurs d'ozone essayés (`pi/systeme/essai-ozone.md`), personne dans
 l'enceinte ni dans le conteneur fermé, et un détecteur d'ozone à part dehors.**
 
-1. Générateur rebranché. Store fermé, purge finie ou passée outre, porte du spray fermée, panneau long du poste du
-   fût **levé** (réglage `panneau_poste_fut`).
+1. Générateur rebranché. Store fermé, purge finie ou passée outre, porte du spray fermée. Le panneau long du poste
+   du fût n'est **pas** une condition : levé (contact fermé, la position normale) ou rabattu, la nuit part. Vérifier
+   que la page « ENCEINTE » et le journal (`journalctl -u vidange | grep -i panneau`) disent sa position au départ.
+   Ne jamais forcer « rabattu » : avec un fût sur le plateau, il ne peut pas se rabattre.
 2. Mode « UV-ozone ». Page « ENCEINTE », bouton « NUIT 22:00 » puis « MAINTENANT », confirmer (« Oui »).
 3. Attendu : ventilateur de l'enceinte, compresseur et ventilateur de l'armoire coupés ; générateur 2 min ; l'ozone
    dedans monte (« ≥ 10 ppm » au plafond), puis redescend.

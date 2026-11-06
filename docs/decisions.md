@@ -857,7 +857,9 @@ regelé le 04/11/2026 ; lot validé par Karulium les 27/10, 31/10, 01/11 et 04/1
      transmise au fil Nettoyage, à qui revient le choix des pièces.
   3. Alarme d'ozone câblée : question posée à Karulium par le fil Nettoyage ; si elle a un contact sec, le Pi le lit
      seulement pour l'afficher (`ozone_securite_ok`).
-  4. Panneau long du poste du fût pendant la nuit : **levé** en EXEMPLE, question posée au fil Poste du fût.
+  4. Panneau long du poste du fût pendant la nuit : pas une condition de départ ; les deux positions sont acceptées
+     et notées au journal, « levé » (contact fermé) est la position normale ; jamais exiger « rabattu » (avec un fût,
+     il ne peut pas se rabattre). Réponse du fil Poste du fût, 06/11.
   5. Store ouvert pendant un cycle : pause de toute la machine (le portique est déjà arrêté par le câblage). Oui.
   6. Pi qui démarre store déjà fermé : purge lancée. Oui.
   7. Compresseur et ventilateur de l'armoire coupés par le Pi pendant la nuit (pas une sécurité de personne). Oui.
