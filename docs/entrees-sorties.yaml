@@ -236,9 +236,9 @@ cartes:
 #     (GPIO 4/5 = /dev/ttyAMA2, avec « dtoverlay=uart2-pi5 » : voir pi/systeme/essai-ecran.md).
 # (tâche 17, poste du fût) :
 #   chariot_fut_en_place, reed_panneau_poste_fut, pesee_fut, bouton_pret_fut, voyant_pret_fut.
-# (tâche 19, mycélium : tous sur la carte FluidNC n° 3, lus par FluidNC) :
-#   fdc_agitateur_garage, fdc_agitateur_dosage, origine_manivelle, alarme_glissiere_agitateur,
-#   alarme_manivelle, moteur_glissiere_agitateur, moteur_manivelle.
+# (tâche 19, mycélium : tous sur la carte FluidNC n° 3, lus par FluidNC ; agitateur fixe depuis la
+#   tâche 19 ter, plus de glissière) :
+#   origine_manivelle, alarme_manivelle, moteur_manivelle.
 # (tâche 20, porte-bocal : sur la carte FluidNC n° 3 ; le Pi lit origine_manivelle,
 #   verrou_plateau_engage et inclinaison_bocal dans l'état de la carte, et commande les 3 sorties
 #   du demi-tour par elle : leurs lettres et numéros sont dans pi/reglages/fluidnc.yaml) :
@@ -502,26 +502,8 @@ signaux:
     type: pesee
     tension: 3.3
     module: poste_fut
-  # Mycélium (fiche du module, validé le 24/10/2026 ; carte n° 3). Les arrêts entre le garage et
-  # le dosage (demi-tour) se font au codeur. Repères et types : EXEMPLES (plan de câblage).
-  fdc_agitateur_garage:
-    exemple: true
-    description: Fin de course de la glissière de l'agitateur, au garage (prise d'origine)
-    carte: fluidnc_mycelium_lavage
-    broche: E1
-    type: pnp
-    tension: 24
-    repos: ouvert
-    module: mycelium
-  fdc_agitateur_dosage:
-    exemple: true
-    description: Fin de course de la glissière de l'agitateur, au dosage (butée de la machine)
-    carte: fluidnc_mycelium_lavage
-    broche: E2
-    type: pnp
-    tension: 24
-    repos: ouvert
-    module: mycelium
+  # Mycélium (fiche du module v10 du 01/11/2026, agitateur FIXE ; carte n° 3). La glissière, son
+  # pilote et ses 2 fins de course sont retirés. Repères et types : EXEMPLES (plan de câblage).
   # Capteur inductif M8 PNP (fiche des pièces v9, décision du 29/10/2026). Il voit du MÉTAL
   # (actionné) quand la manivelle n'est PAS en haut, et rien sur ≈ ± 95° autour du haut : la
   # prise d'origine (faite par le Pi) prend le milieu de cette zone. Jamais une butée.
@@ -534,15 +516,6 @@ signaux:
     tension: 24
     repos: ouvert
     module: mycelium
-  alarme_glissiere_agitateur:
-    exemple: true
-    description: Alarme du pilote boucle fermée de la glissière (NEMA 17, codeur 1000 lignes)
-    carte: fluidnc_mycelium_lavage
-    broche: E4
-    type: npn
-    tension: 24
-    repos: ouvert
-    module: mycelium
   alarme_manivelle:
     exemple: true
     description: Alarme du pilote HBS86H de la manivelle (NEMA 34 à codeur, 48 V)
@@ -551,14 +524,6 @@ signaux:
     type: npn
     tension: 24
     repos: ouvert
-    module: mycelium
-  moteur_glissiere_agitateur:
-    exemple: true
-    description: Pas et sens du pilote de la glissière de l'agitateur (axe X de la carte n° 3)
-    carte: fluidnc_mycelium_lavage
-    broche: [S1, S2]
-    type: logique
-    tension: 5
     module: mycelium
   moteur_manivelle:
     exemple: true

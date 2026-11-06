@@ -410,9 +410,9 @@ chef.lancer(module_griffe(griffe, seau_pret=..., pont_libre=...))
 
 ## Mycélium (tâche 19)
 
-L'agitateur porte le bocal de semence sur sa glissière ; tête en bas au-dessus du seau, la manivelle le
-secoue et la balance du chariot de remplissage pèse ce qui tombe (module validé le 24/10/2026). Tous les
-chiffres sont dans `reglages/machine.yaml` (partie `mycelium`, axes `agitateur_x` et `manivelle`, et
+L'agitateur porte le bocal de semence, FIXE au-dessus du poste (en (0,925 ; 0,150), plus de glissière depuis la
+tâche 19 ter) ; tête en bas au-dessus du seau, la manivelle le secoue et la balance du chariot de remplissage
+pèse ce qui tombe. Tous les chiffres sont dans `reglages/machine.yaml` (partie `mycelium`, axe `manivelle`, et
 `hauteur`, `mycelium_kg`, `seaux_par_bocal` des formats) ; ceux marqués EXEMPLE sont à mesurer
 (`systeme/essai-mycelium.md`).
 
@@ -438,16 +438,20 @@ mycelium.demander(Demande("S1293", "seau_a", couche=1, variete="pleurote_grise",
 - **Origine de la manivelle** (tâche 20) : le capteur voit du métal quand la manivelle n'est **pas** en haut ;
   le Pi fait un tour lent et prend le milieu de la zone sans métal (+ décalage), contrôle sa largeur (± 10°)
   et le nombre de bords, sinon alarme « capteur manivelle ». Faite au début, et refaite si la carte redémarre.
-- **Une couche** : chariot écarté, au demi-tour manivelle en bas, bocal tête en bas, manivelle en haut,
-  dosage, manivelle en bas, seau sous le bocal (plateau à la hauteur du dosage), casse du bloc (1re agitation
-  d'un bocal), agitation jusqu'à la dose, arrêt **pile en bas**, chariot qui repart, manivelle en haut,
-  demi-tour (manivelle en bas, bocal debout, photo de contrôle, manivelle en haut), garage.
-- **Changement de bocal** : mors ouverts, bocal neuf posé (Préhension, case vide), serré (palpage : diamètre
-  hors plage = bocal absent, cassé ou mal posé → alarme avec photo).
-- **Verrous** (`ReglesMycelium`) : l'agitateur ne roule que chariot écarté (y ≥ 0,40, depuis le 31/10) et manivelle en haut ;
-  `mycelium.refus_chariot()` dit au chariot de remplissage s'il peut rouler (agitateur au garage manivelle en
-  haut, ou au dosage manivelle en bas) ; au garage, pas de rotation avec la course de 10 cm ;
-  `mycelium.camera_peut_pivoter()` pour la caméra du dosage ; `mycelium.dosage_en_cours()` pour la griffe.
+- **Une couche** : le seau vide attend au vidage (y 0,42) ; manivelle en haut, bocal tête en bas, manivelle
+  en bas ; le chariot amène le seau au poste (y 0,135, bord ≤ 0,68 : spray, micropore) puis au dosage
+  (y 0,155, plateau à la hauteur du dosage) ; casse du bloc (1re agitation d'un bocal), agitation jusqu'à la
+  dose, arrêt **pile en bas** ; le chariot repart au vidage ; manivelle en haut, bocal remis debout (photo de
+  contrôle), manivelle en bas (l'attente).
+- **Changement de bocal** : **manivelle en bas** (chariot reculé ou au poste), mors ouverts (l'ancien bocal
+  est repris), bocal neuf posé (Préhension, case vide), serré (palpage : diamètre hors plage = bocal absent,
+  cassé ou mal posé → alarme avec photo). La manivelle ne remonte ensuite que pour le demi-tour.
+- **Verrous** (`ReglesMycelium`) : demi-tour seulement manivelle en haut, chariot à y ≥ 0,40 et caméra du
+  dosage à 0° ; la manivelle ne quitte « en bas » que chariot à y ≥ 0,40 (sauf l'agitation, seau au dosage) ;
+  `mycelium.refus_chariot()` : le chariot ne roule près du poste que manivelle en bas, arrêtée ;
+  `mycelium.camera_peut_pivoter()` (pas pendant le demi-tour) ; `mycelium.etat_manivelle()` pour la
+  préhension ; `mycelium.dosage_en_cours()` pour la griffe ; ni manivelle ni demi-tour tant que la tête de
+  préhension est dans la zone du porte-bocal (`prehension_hors_zone=prehension.hors_zone_porte_bocal`).
 - **Surveillance** : saut de poids (bocal cassé ou tombé) → arrêt, alarme, photo ; poids qui ne monte plus au
   bout du temps maximal → alarme ; dans les deux cas le seau est marqué « pas bon » (`seaux.defaut`).
 - **Registre** : chaque dose avec sa couche (`doses_mycelium.couche`) et son bocal, la variété du bocal
@@ -576,10 +580,10 @@ vidange-remplissage --faux etat          # l'outil d'essai, sur un faux FluidNC
   `geste_poser_seau` (joué par la préhension : la tête descend le seau, le plateau monte au contact lu par
   la balance, centrage ; barrière coupée → prise double séparée dans l'ordre a) à i), barres toujours sous
   0,235, la tête garde le seau du dessus), `geste_orienter_anse` (QR du flanc, oreilles à 45° des barres), `geste_centrer` (en
-  position ; l'alarme ALM d'une barre arrête le geste), `geste_ramener_au_poste`, `tourner_seau` (griffe),
+  position ; l'alarme ALM d'une barre arrête le geste), `geste_ramener_au_vidage` (y 0,42), `tourner_seau` (griffe),
   `geste_ranger` (plateau en bas), `geste_mode_couvercles`, `geste_mode_inspection`.
 - **Pour les autres** : `etat`, `ecarter`, `amener_au_dosage` (Mycélium) ; `regler_barres`, `ecart_barres`,
-  `chariot_en_place`, `barriere_coupee` (retourneur du Lavage) ; `seau_au_poste`, `tourner_seau` (Griffe) ;
+  `chariot_en_place`, `barriere_coupee` (retourneur du Lavage) ; `seau_au_vidage`, `tourner_seau` (Griffe) ;
   `refus_bras_galet` (tâche 41), `refus_bras_spray` (39), `refus_prehension` (Préhension).
 - **Registre** : au rangement, le type du seau et son poids plein (`mesures`, `poids_seau_plein`) ; les doses
   et la variété viennent du Mycélium.

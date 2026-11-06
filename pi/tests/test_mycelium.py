@@ -39,10 +39,12 @@ MYCELIUM = MACHINE.mycelium
 assert MYCELIUM is not None and MACHINE.griffe is not None
 REGLES = ReglesMycelium(MACHINE)
 FORMATS = MACHINE.griffe.formats
-GARAGE = PoseAgitateur(x=0.565, angle=0.0)
-DOSAGE_BAS = PoseAgitateur(x=0.925, angle=180.0)
+EN_HAUT = PoseAgitateur(angle=0.0)
+EN_BAS = PoseAgitateur(angle=180.0)
 ECARTE = EtatChariot(y=0.40, plateau_z=0.53)
+AU_VIDAGE = EtatChariot(y=0.42, plateau_z=0.53)
 AU_DOSAGE = EtatChariot(y=0.155, plateau_z=0.53)
+AU_POSTE = EtatChariot(y=0.135, plateau_z=0.43)
 
 
 # ---------------------------------------------------------------- réglages
@@ -50,16 +52,32 @@ AU_DOSAGE = EtatChariot(y=0.155, plateau_z=0.53)
 
 def test_reglages_du_mycelium_du_depot():
     assert MYCELIUM.exemple
-    assert (MYCELIUM.garage_x, MYCELIUM.demi_tour_x, MYCELIUM.dosage_x) == (0.565, 0.865, 0.925)
+    # Agitateur fixe (01/11/2026) : bocal toujours en (0,925 ; 0,150), plus de glissière.
+    assert MYCELIUM.bocal == pytest.approx((0.925, 0.150))
+    assert MYCELIUM.manivelle_z == pytest.approx(0.762)
+    assert "agitateur_x" not in MACHINE.axes
     assert MACHINE.axes["manivelle"].unite == "deg"
+    assert MYCELIUM.chariot.y_ecarte_min == pytest.approx(0.40)
     assert FORMATS["seau_b"].seaux_par_bocal == 2 and FORMATS["seau_a"].seaux_par_bocal == 1
     # Plateau pendant le dosage : min(0,78 − h ; 0,575).
     assert REGLES.plateau_dosage(FORMATS["seau_a"]) == pytest.approx(0.53)
     assert REGLES.plateau_dosage(FORMATS["seau_b"]) == pytest.approx(0.575)
 
 
+def test_glissiere_retiree_des_entrees_sorties_et_de_fluidnc():
+    for nom in (
+        "moteur_glissiere_agitateur",
+        "alarme_glissiere_agitateur",
+        "fdc_agitateur_garage",
+        "fdc_agitateur_dosage",
+    ):
+        assert nom not in LISTE.signaux
+    texte = (DOSSIER_PI.parent / "fluidnc" / "mycelium_lavage.yaml").read_text()
+    assert "\n  x:\n" not in texte and "\n  y:\n" in texte and "\n  a:\n" in texte
+
+
 def test_course_de_l_agitation_verifiee(reglages):
-    remplacer(reglages / "machine.yaml", "course_agitation_m: 0.07", "course_agitation_m: 0.08")
+    remplacer(reglages / "machine.yaml", "course_agitation_m: 0.10", "course_agitation_m: 0.08")
     message = erreur_de(reglages)
     assert (
         "course_agitation_m : 0.08 n'est pas un trou de la manivelle (0.04, 0.07, 0.1)" in message
@@ -77,11 +95,6 @@ def test_reglages_du_mycelium_verifies(reglages):
     assert "durees → mycelium_agitation_max doit dépasser" in message
 
 
-def test_glissiere_verifiee(reglages):
-    remplacer(reglages / "machine.yaml", "  dosage_x: 0.925", "  dosage_x: 0.95")
-    assert "mycelium → dosage_x : x 0.95 hors de la course de agitateur_x" in erreur_de(reglages)
-
-
 def test_seaux_du_simulateur_verifies(reglages):
     remplacer(reglages / "simulateur.yaml", "format: seau_a, variete", "format: seau_z, variete")
     assert "mycelium → seaux : format « seau_z » absent de machine.yaml" in erreur_de(reglages)
@@ -90,59 +103,55 @@ def test_seaux_du_simulateur_verifies(reglages):
 # ---------------------------------------------------------------- verrous
 
 
-def test_agitateur_ne_roule_que_chariot_ecarte():
-    assert REGLES.refus_glissiere(GARAGE, 0.865, ECARTE) is None
-    refus = REGLES.refus_glissiere(GARAGE, 0.865, EtatChariot(y=0.30, plateau_z=0.53))
-    assert "chariot de remplissage est à y ≥ 0,4 m (il est à y 0,3 m)" in refus
-    # Recul à y 0,40 depuis le 31/10 (tâche 34 quater) : refusé à 0,39, permis à 0,40.
-    refus = REGLES.refus_glissiere(GARAGE, 0.865, EtatChariot(y=0.39, plateau_z=0.53))
-    assert refus is not None and "il est à y 0,39 m" in refus
-    assert REGLES.refus_glissiere(GARAGE, 0.865, EtatChariot(y=0.40, plateau_z=0.53)) is None
-    assert "inconnu" in REGLES.refus_glissiere(GARAGE, 0.865, None)
-    # Toujours manivelle en haut ; jamais hors de la course.
-    assert "manivelle en haut" in REGLES.refus_glissiere(GARAGE.avec(angle=180), 0.865, ECARTE)
-    assert "hors de sa course" in REGLES.refus_glissiere(GARAGE, 0.95, ECARTE)
+def test_demi_tour_seulement_manivelle_en_haut_et_chariot_a_0_40():
+    assert REGLES.refus_demi_tour(EN_HAUT, ECARTE) is None
+    assert REGLES.refus_demi_tour(EN_HAUT, AU_VIDAGE) is None
+    # Manivelle en bas : refusé.
+    assert "manivelle en haut" in REGLES.refus_demi_tour(EN_BAS, ECARTE)
+    # Chariot à 0,39 : refusé ; inconnu : refusé.
+    texte = REGLES.refus_demi_tour(EN_HAUT, EtatChariot(y=0.39, plateau_z=0.53))
+    assert "chariot de remplissage à y ≥ 0,4 m" in texte
+    assert "chariot" in REGLES.refus_demi_tour(EN_HAUT, None)
+    # Caméra du dosage pas à 0° : le demi-tour ne démarre pas (point 6 c).
+    assert "caméra du dosage à 0°" in REGLES.refus_demi_tour(EN_HAUT, ECARTE, camera_pivote=True)
 
 
-def test_chariot_ne_roule_que_si_l_agitateur_le_permet():
-    assert REGLES.refus_chariot(GARAGE, en_mouvement=False) is None
-    assert REGLES.refus_chariot(DOSAGE_BAS, en_mouvement=False) is None
-    assert "bouge" in REGLES.refus_chariot(GARAGE, en_mouvement=True)
-    # Au dosage manivelle en haut, au demi-tour, au garage manivelle en bas : refusé.
-    for pose in (
-        DOSAGE_BAS.avec(angle=0),
-        PoseAgitateur(x=0.865, angle=0),
-        GARAGE.avec(angle=180),
-        DOSAGE_BAS.avec(angle=90),
-    ):
-        assert "le chariot de remplissage ne roule qu'" in REGLES.refus_chariot(pose, False)
+def test_manivelle_ne_quitte_le_bas_que_chariot_a_0_40():
+    # Chariot à y ≥ 0,40 : tout est permis (aller en haut, prise d'origine).
+    assert REGLES.refus_manivelle(EN_HAUT, ECARTE) is None
+    assert REGLES.refus_manivelle(None, ECARTE) is None
+    # Chariot au poste : manivelle en haut refusée (et la prise d'origine aussi).
+    assert "il doit être à y ≥ 0,4 m" in REGLES.refus_manivelle(EN_HAUT, AU_POSTE)
+    assert "prise d'origine" in REGLES.refus_manivelle(None, AU_POSTE)
+    assert "inconnue" in REGLES.refus_manivelle(EN_HAUT, None)
+    # Aller en bas : permis chariot arrêté, jamais pendant qu'il roule.
+    assert REGLES.refus_manivelle(EN_BAS, AU_POSTE) is None
+    en_route = EtatChariot(y=0.25, plateau_z=0.53, immobile=False)
+    assert "pendant que le chariot" in REGLES.refus_manivelle(EN_BAS, en_route)
+
+
+def test_agitation_seulement_seau_au_dosage():
+    assert REGLES.refus_manivelle(EN_BAS.avec(angle=180 + 360 * 5), AU_DOSAGE, True) is None
+    assert REGLES.refus_manivelle(EN_BAS, ECARTE, True) is None
+    assert "l'agitation ne se fait que seau au dosage" in REGLES.refus_manivelle(
+        EN_BAS, AU_POSTE, True
+    )
+    # Une agitation s'arrête toujours pile en bas.
+    assert "l'agitation" in REGLES.refus_manivelle(EN_HAUT, AU_DOSAGE, True)
+
+
+def test_chariot_ne_roule_pres_du_poste_que_manivelle_en_bas():
+    assert REGLES.refus_chariot(EN_BAS, en_mouvement=False) is None
+    assert "bouge" in REGLES.refus_chariot(EN_BAS, en_mouvement=True)
+    for pose in (EN_HAUT, EN_BAS.avec(angle=90)):
+        assert "que manivelle en bas" in REGLES.refus_chariot(pose, False)
     assert "inconnue" in REGLES.refus_chariot(None, False)
 
 
-def test_manivelle_au_garage_pas_avec_10_cm(reglages):
-    assert REGLES.refus_manivelle(GARAGE, ECARTE) is None
-    remplacer(reglages / "machine.yaml", "course_agitation_m: 0.07", "course_agitation_m: 0.10")
-    regles = ReglesMycelium(charger_reglages(reglages).machine)
-    assert "course de 10 cm" in regles.refus_manivelle(GARAGE, ECARTE)
-    # Ailleurs, la course de 10 cm est permise.
-    assert regles.refus_manivelle(DOSAGE_BAS, AU_DOSAGE) is None
-
-
-def test_manivelle_au_dosage_jamais_chariot_en_route():
-    assert REGLES.refus_manivelle(DOSAGE_BAS, ECARTE) is None
-    assert REGLES.refus_manivelle(DOSAGE_BAS, AU_DOSAGE) is None
-    en_route = EtatChariot(y=0.25, plateau_z=0.53, immobile=False)
-    assert "pendant que le chariot" in REGLES.refus_manivelle(DOSAGE_BAS, en_route)
-    assert "qu'au garage, au demi-tour ou au dosage" in REGLES.refus_manivelle(
-        PoseAgitateur(x=0.7, angle=0), ECARTE
-    )
-
-
-def test_camera_ne_pivote_qu_agitateur_gare():
-    assert REGLES.camera_peut_pivoter(GARAGE)
-    assert REGLES.camera_peut_pivoter(GARAGE.avec(x=0.62))
-    assert not REGLES.camera_peut_pivoter(GARAGE.avec(x=0.63))
-    assert not REGLES.camera_peut_pivoter(None)
+def test_plateau_verifie():
+    assert REGLES.refus_plateau(FORMATS["seau_a"], AU_DOSAGE) is None
+    refus = REGLES.refus_plateau(FORMATS["seau_b"], AU_DOSAGE)
+    assert "plateau du chariot de remplissage à z 0,53 m, il faut 0,575 m" in refus
 
 
 def test_angles_de_la_manivelle():
@@ -156,12 +165,6 @@ def test_angles_de_la_manivelle():
     assert REGLES.bas_suivant(200, 1) == pytest.approx(540)
     assert REGLES.bas_suivant(200, -1) == pytest.approx(180)
     assert REGLES.bas_suivant(-1000, 1) == pytest.approx(-900)
-
-
-def test_plateau_verifie():
-    assert REGLES.refus_plateau(FORMATS["seau_a"], AU_DOSAGE) is None
-    refus = REGLES.refus_plateau(FORMATS["seau_b"], AU_DOSAGE)
-    assert "plateau du chariot de remplissage à z 0,53 m, il faut 0,575 m" in refus
 
 
 # ---------------------------------------------------------------- au simulateur
@@ -201,9 +204,110 @@ def test_simulateur_un_seau_a_puis_deux_petits_seaux_avec_un_bocal():
     # Bocal retourné tête en bas puis remis debout à chaque couche (8 fois).
     gestes = mycelium.materiel_porte_bocal.gestes
     assert gestes == ["tete_en_bas", "debout"] * 8
-    # La manivelle ne s'arrête jamais entre le haut et le bas, et reste près de 0.
+    # La manivelle ne s'arrête jamais entre le haut et le bas, et reste près de 0 ; elle
+    # attend en bas.
     angle = mycelium.agitateur.position().angle
-    assert REGLES.en_haut(mycelium.agitateur.position()) and abs(angle) <= 360 * 200
+    assert REGLES.en_bas(mycelium.agitateur.position()) and abs(angle) <= 360 * 200
+
+
+def test_cycle_au_simulateur_pose_du_bocal_manivelle_en_bas():
+    # Ordre complet (décision du 05/11/2026) : pose manivelle en bas → chariot à y ≥ 0,40 →
+    # manivelle en haut → demi-tour → manivelle en bas → dosage ; au retour : chariot à y ≥ 0,40 →
+    # manivelle en haut → bocal remis debout → manivelle en bas ; reprise manivelle en bas.
+    with Simulateur(REGLAGES, LISTE, "dosage_mycelium") as simu:
+        mycelium = mycelium_du_simulateur(simu)
+        suite: list[str] = []
+        envoyer, nouveau = mycelium._envoyer, mycelium._nouveau_bocal
+        chariot = mycelium.chariot
+        ecarter, amener = chariot.ecarter, chariot.amener_au_dosage
+
+        def manivelle() -> str:
+            return "en bas" if REGLES.en_bas(mycelium.agitateur.position()) else "PAS EN BAS"
+
+        def noter(pas):
+            if pas.porte_bocal in ("ouvrir", "serrer"):
+                suite.append(f"{pas.texte} (manivelle {manivelle()})")
+            elif pas.porte_bocal is not None or pas.texte in (
+                "manivelle en haut",
+                "manivelle en bas",
+            ):
+                suite.append(pas.texte)
+            envoyer(pas)
+
+        def poser(variete):
+            suite.append(f"pose du bocal (manivelle {manivelle()})")
+            return nouveau(variete)
+
+        def ecarte():
+            ecarter()
+            suite.append("chariot à y ≥ 0,40")
+
+        def au_dosage(plateau_z):
+            amener(plateau_z)
+            suite.append("seau au dosage")
+
+        mycelium._envoyer, mycelium._nouveau_bocal = noter, poser
+        chariot.ecarter, chariot.amener_au_dosage = ecarte, au_dosage
+        planning = simu.jouer([module_mycelium(mycelium)])
+    assert planning.fini, planning.probleme
+    assert suite[:8] == [
+        "chariot à y ≥ 0,40",
+        "mors ouverts (manivelle en bas)",
+        "pose du bocal (manivelle en bas)",
+        "bocal serré (manivelle en bas)",
+        "manivelle en haut",
+        "bocal tête en bas",
+        "manivelle en bas",
+        "seau au dosage",
+    ]
+    retour = suite.index("chariot à y ≥ 0,40", 8)
+    assert suite[retour : retour + 4] == [
+        "chariot à y ≥ 0,40",
+        "manivelle en haut",
+        "bocal remis debout",
+        "manivelle en bas",
+    ]
+    # 2e bocal : l'ancien est repris (mors ouverts) et le neuf posé, toujours manivelle en bas.
+    mors = [ligne for ligne in suite if "(manivelle" in ligne]
+    assert len(mors) == 6 and all(ligne.endswith("(manivelle en bas)") for ligne in mors)
+
+
+def test_pose_du_bocal_chariot_au_poste_acceptee():
+    with Simulateur(REGLAGES, LISTE, "dosage_mycelium") as simu:
+        mycelium = mycelium_du_simulateur(simu, faux_porte_bocal=True)
+        # Chariot de remplissage au poste (y 0,135), manivelle en bas : mors ouverts permis.
+        mycelium.chariot._trajet.arrivee = AU_POSTE
+        mycelium.lancer(mycelium.geste_changer_de_bocal)
+        assert mycelium._pas is not None and mycelium._pas.porte_bocal == "ouvrir"
+        # Manivelle en haut : les mors ne bougent pas (pose manivelle en haut refusée).
+        mycelium.arreter()
+        simu.etat_axes.positions["manivelle"] = 0.0
+        mycelium.chariot._trajet.arrivee = AU_VIDAGE
+        with pytest.raises(ErreurEtape, match="les mors ne bougent que manivelle en bas"):
+            mycelium.lancer(lambda: iter([Pas("mors ouverts", porte_bocal="ouvrir")]))
+
+
+def test_manivelle_immobile_tete_de_prehension_dans_la_zone():
+    with Simulateur(REGLAGES, LISTE, "dosage_mycelium") as simu:
+        dedans = [True]
+        mycelium = mycelium_du_simulateur(
+            simu, faux_porte_bocal=True, prehension_hors_zone=lambda: not dedans[0]
+        )
+        # Tête de préhension dans la zone du porte-bocal : ni manivelle, ni demi-tour.
+        with pytest.raises(ErreurEtape, match="tête de préhension est dans la zone"):
+            mycelium.lancer(mycelium.geste_retourner_le_bocal)
+        simu.etat_axes.positions["manivelle"] = 0.0
+        with pytest.raises(ErreurEtape, match="tête de préhension est dans la zone"):
+            mycelium.lancer(mycelium.geste_retourner_le_bocal)
+        # Les mors, eux, bougent (c'est la pose ou la reprise du bocal).
+        simu.etat_axes.positions["manivelle"] = 180.0
+        mycelium.lancer(mycelium.geste_changer_de_bocal)
+        assert mycelium._pas is not None and mycelium._pas.porte_bocal == "ouvrir"
+        # Tête sortie : le demi-tour part.
+        mycelium.arreter()
+        dedans[0] = False
+        mycelium.lancer(mycelium.geste_retourner_le_bocal)
+        assert mycelium._pas is not None and mycelium._pas.texte == "manivelle en haut"
 
 
 def test_casse_du_bloc_seulement_au_premier_seau_du_bocal():
@@ -258,32 +362,56 @@ def test_verrou_du_chariot_au_simulateur():
     with Simulateur(REGLAGES, LISTE, "dosage_mycelium") as simu:
         mycelium = mycelium_du_simulateur(simu)
         chariot = mycelium.chariot
-        # Au garage manivelle en haut : le chariot peut rouler.
-        chariot.ecarter()
-        # Agitateur au demi-tour : le chariot refuse de rouler.
-        simu.etat_axes.positions["agitateur_x"] = 0.865
+        chariot.duree_s = 0
+        # Manivelle en bas (l'attente) : le chariot peut rouler près du poste.
+        assert mycelium.refus_chariot() is None
+        chariot.amener_au_dosage(0.53)
+        # Manivelle en haut : le chariot refuse de rouler.
+        simu.etat_axes.positions["manivelle"] = 0.0
         with pytest.raises(ErreurEtape, match="chariot de remplissage refusé"):
-            chariot.amener_au_dosage(0.53)
-        assert mycelium.dosage_en_cours() and not mycelium.camera_peut_pivoter()
+            chariot.ecarter()
+        # La caméra du dosage n'a pas de condition sur la manivelle (seulement le demi-tour).
+        assert mycelium.camera_peut_pivoter()
 
 
-def test_position_de_l_agitateur_pour_la_prehension():
+def test_manivelle_pour_la_prehension():
     with Simulateur(REGLAGES, LISTE, "dosage_mycelium") as simu:
         mycelium = mycelium_du_simulateur(simu)
-        # Au garage, manivelle en haut, arrêté.
-        assert mycelium.x_agitateur() == pytest.approx(0.565)
-        assert not mycelium.manivelle_en_bas()
-        simu.etat_axes.positions["agitateur_x"] = 0.865
-        assert mycelium.x_agitateur() == pytest.approx(0.865)
+        # En attente : manivelle en bas, arrêtée.
+        assert mycelium.etat_manivelle() == "bas" and not mycelium.dosage_en_cours()
+        simu.etat_axes.positions["manivelle"] = 0.0
+        assert mycelium.etat_manivelle() == "haut" and mycelium.dosage_en_cours()
+        simu.etat_axes.positions["manivelle"] = 90.0
+        assert mycelium.etat_manivelle() is None
 
 
-def test_agitateur_refuse_de_rouler_chariot_pas_ecarte():
+def test_demi_tour_refuse_au_simulateur():
     with Simulateur(REGLAGES, LISTE, "dosage_mycelium") as simu:
-        mycelium = mycelium_du_simulateur(simu)
+        mycelium = mycelium_du_simulateur(simu, faux_porte_bocal=True)
         mycelium.chariot.duree_s = 0
-        mycelium.chariot._trajet.arrivee = EtatChariot(y=0.2, plateau_z=0.53)
-        with pytest.raises(ErreurEtape, match="l'agitateur ne roule que si le chariot"):
-            mycelium.lancer(mycelium.geste_aller_doser)
+        # Chariot à y 0,39 : la manivelle ne monte pas (donc pas de demi-tour).
+        mycelium.chariot._trajet.arrivee = EtatChariot(y=0.39, plateau_z=0.53)
+        with pytest.raises(ErreurEtape, match="il doit être à y ≥ 0,4 m"):
+            mycelium.lancer(mycelium.geste_retourner_le_bocal)
+        # Manivelle en haut mais chariot à 0,39 : le demi-tour lui-même est refusé.
+        simu.etat_axes.positions["manivelle"] = 0.0
+        with pytest.raises(ErreurEtape, match="chariot de remplissage à y ≥ 0,4 m"):
+            mycelium.lancer(mycelium.geste_retourner_le_bocal)
+        # Chariot à 0,40, caméra du dosage pas à 0° : refusé aussi.
+        mycelium.chariot._trajet.arrivee = EtatChariot(y=0.40, plateau_z=0.53)
+
+        class CameraPivotee:
+            def pivote(self) -> bool:
+                return True
+
+        mycelium.camera = CameraPivotee()  # type: ignore[assignment]
+        with pytest.raises(ErreurEtape, match="caméra du dosage à 0°"):
+            mycelium.lancer(mycelium.geste_retourner_le_bocal)
+        # Pendant un demi-tour, la caméra du dosage ne pivote pas.
+        mycelium.camera = None
+        mycelium.lancer(mycelium.geste_retourner_le_bocal)
+        assert mycelium._pas is not None and mycelium._pas.porte_bocal == "tete_en_bas"
+        assert not mycelium.camera_peut_pivoter()
 
 
 def test_outil_simulateur_mycelium(capsys):
@@ -303,13 +431,13 @@ def machine_rapide(**origine) -> Machine:
 
 
 class BancAgitateur:
-    """Le vrai agitateur sur un faux FluidNC (glissière X, manivelle A), avec une fausse balance
+    """Le vrai agitateur sur un faux FluidNC (manivelle A), avec une fausse balance
     et un faux capteur de la manivelle : du métal partout sauf à ± `demi_zone` degrés du haut
     (`haut` : angle du moteur)."""
 
     def __init__(self, haut: float = 37.0, demi_zone: float = 95.0, **origine) -> None:
         self.faux = FauxFluidnc(axes="XYZA")
-        self.faux.positions.update(X=925.0, A=180.0 + haut)
+        self.faux.positions.update(A=180.0 + haut)
         self.haut, self.demi_zone = haut, demi_zone
         self.faux.monde = self._capteur
         self.balance = FausseForce(5.0 * G)
@@ -333,7 +461,7 @@ class BancAgitateur:
 
     def prendre_origine(self) -> None:
         """Prise d'origine de la manivelle, puis manivelle remise en bas pile (180°)."""
-        attendre(lambda: self.agitateur.glissiere_x() == pytest.approx(0.925), ignorer=ErreurEtape)
+        attendre(lambda: "A" in self.liaison.etat.positions)
         self.agitateur.executer(Pas("origine", origine=True), None)
         attendre(self.agitateur.fini, 5)
         haut = self.agitateur.angle_haut_moteur
@@ -361,16 +489,13 @@ def attendre(condition, delai: float = DELAI, ignorer=()) -> None:
 def test_agitateur_va_a_une_pose():
     with BancAgitateur() as banc:
         # Pas de position de la manivelle avant sa prise d'origine.
-        attendre(lambda: banc.agitateur.glissiere_x() == pytest.approx(0.925), ignorer=ErreurEtape)
+        attendre(lambda: "A" in banc.liaison.etat.positions)
         with pytest.raises(ErreurEtape, match="origine de la manivelle pas faite"):
             banc.agitateur.position()
         banc.prendre_origine()
         pose = banc.agitateur.position()
-        assert pose.x == 0.925 and pose.angle == pytest.approx(180, abs=0.01)
-        banc.agitateur.executer(Pas("vers le demi-tour", x=0.9), pose.avec(x=0.9))
-        assert banc.faux.lignes_recues[-1] == "$J=G53 X900.000 F6000"
-        attendre(banc.agitateur.fini)
-        banc.agitateur.executer(Pas("manivelle", angle=0, tr_min=20), pose.avec(x=0.9, angle=0))
+        assert pose.angle == pytest.approx(180, abs=0.01)
+        banc.agitateur.executer(Pas("manivelle", angle=0, tr_min=20), pose.avec(angle=0))
         # 20 tr/min = 7200 °/min ; l'angle envoyé est celui du moteur.
         haut = banc.agitateur.angle_haut_moteur
         assert banc.faux.lignes_recues[-1] == f"$J=G53 A{haut:.3f} F7200"

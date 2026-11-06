@@ -4,6 +4,7 @@ Mycélium, chariot sur un faux FluidNC, outil d'essai."""
 
 import threading
 import time
+from dataclasses import replace
 
 import pytest
 
@@ -40,7 +41,6 @@ REGLES = ReglesRemplissage(MACHINE)
 PERMIS = Contexte(
     chariot_fut_en_place=True,
     refus_mycelium=None,
-    agitateur_au_garage=True,
     bras_galet_range=True,
 )
 # Au poste, plateau en bas, barres ouvertes, pousseur rentré.
@@ -52,8 +52,11 @@ POSTE = Pose(y=0.135, z=0.175, a=0.0, barres=0.30, pousseur=0.0)
 
 def test_reglages_du_remplissage():
     r = REMPLISSAGE
-    # Tâche 34 quater : recul pour l'agitateur à y 0,40 (31/10 ; avant : 0,375).
+    # Tâche 34 quater : recul pour l'agitateur à y 0,40 (31/10 ; avant : 0,375). Tâche 19 ter :
+    # vidage par la griffe à y 0,42, bord du seau ≤ 0,68 au poste, spray min(0,50 ; 0,68 − h).
     assert (r.poste_y, r.dosage_y, r.ecarte_y, r.pose_y) == (0.135, 0.155, 0.40, 0.50)
+    assert r.vidage_y == 0.42 and MACHINE.griffe.seau_remplissage == (0.925, 0.42)
+    assert r.verrous.poste_bord_max_z == 0.68 and r.verrous.spray_bord_max_z == 0.68
     assert MACHINE.axes["plateau_z"].course == (0.175, 0.575)
     assert MACHINE.axes["barres"].course == (0.1195, 0.305)
     # Tâche 35 bis : plus de règle des anneaux du fût (31/10).
@@ -216,7 +219,7 @@ def test_regle_12_poussee_a_toute_hauteur():
     assert "pousseur sorti" in REGLES.refus_pose(sorti.avec(z=0.175, barres=0.25), PERMIS)
     # Bras de fermeture (galet) pas rangé, ou pas connu : refusé, même plateau en bas.
     for bras, etat in ((False, "pas rangé"), (None, "pas connu")):
-        contexte = Contexte(True, None, True, bras)
+        contexte = Contexte(True, None, bras)
         assert etat in REGLES.refus_pose(sorti.avec(z=0.175), contexte)
     # Le plateau monte et descend pousseur sorti (plusieurs seaux à la suite).
     assert REGLES.refus_mouvement(sorti, sorti.avec(z=0.30), PERMIS) is None
@@ -243,25 +246,27 @@ def test_le_pousseur_rentre_a_son_zero_et_pousse_vers_le_stockage():
 def test_regle_5_bras_du_galet():
     pose = POSTE.avec(y=0.50, z=0.30)
     assert "bras du galet pas connu" in REGLES.refus_pose(pose, Contexte(chariot_fut_en_place=True))
-    assert "pas rangé" in REGLES.refus_pose(pose, Contexte(True, None, True, False))
+    assert "pas rangé" in REGLES.refus_pose(pose, Contexte(True, None, False))
     assert REGLES.refus_pose(pose.avec(z=0.26), Contexte(chariot_fut_en_place=True)) is None
     assert REGLES.refus_bras_galet(pose) is not None
     assert REGLES.refus_bras_galet(pose.avec(z=0.25)) is None
 
 
 def test_regle_6_bras_du_spray():
-    pose = POSTE.avec(y=0.50, z=0.45, barres=0.30)
-    # Seau A (h 0,25) : plateau ≤ min(0,50 ; 0,46).
+    pose = POSTE.avec(y=0.50, z=0.43, barres=0.30)
+    # Seau A (h 0,25) : plateau ≤ min(0,50 ; 0,68 − 0,25) = 0,43 (0,71 avant l'agitateur fixe).
     assert REGLES.refus_bras_spray(pose, 0.25) is None
-    assert "plateau ≤ 0,46" in REGLES.refus_bras_spray(pose.avec(z=0.47), 0.25)
+    assert "plateau ≤ 0,43" in REGLES.refus_bras_spray(pose.avec(z=0.44), 0.25)
+    # Petit seau (h 0,15) : 0,50 au plus.
+    assert "plateau ≤ 0,5" in REGLES.refus_bras_spray(pose.avec(z=0.51), 0.15)
     assert "entraxe" in REGLES.refus_bras_spray(pose.avec(barres=0.25), 0.25)
     # Entraxe = somme des 2 barres.
     assert REGLES.refus_bras_spray(pose.avec(barres=0.25, barre_allee=0.2505), 0.25) is None
     assert "0,4995 d'entraxe" in REGLES.refus_bras_spray(
         pose.avec(barres=0.25, barre_allee=0.2495), 0.25
     )
-    contexte = Contexte(True, None, True, True, bras_spray_sorti=True, hauteur_seau=0.25)
-    assert "bras du spray" in REGLES.refus_pose(pose.avec(z=0.47), contexte)
+    contexte = Contexte(True, None, True, bras_spray_sorti=True, hauteur_seau=0.25)
+    assert "bras du spray" in REGLES.refus_pose(pose.avec(z=0.44), contexte)
 
 
 def test_regle_7_chariot_du_fut_absent():
@@ -275,23 +280,41 @@ def test_regle_7_chariot_du_fut_absent():
     assert REGLES.refus_pose(POSTE.avec(y=0.785), PERMIS) is None
 
 
-def test_regle_8_ordre_avec_l_agitateur():
-    refuse = Contexte(True, "agitateur du mycélium à x 0,7 m", False, True)
+def test_regle_8_manivelle_en_bas_pres_du_poste():
+    refuse = Contexte(True, "manivelle du mycélium à 0°", True)
     # Rouler près du poste : refusé ; loin du poste (0,50 → 0,785) : permis.
-    assert "agitateur du mycélium" in REGLES.refus_mouvement(POSTE, POSTE.avec(y=0.40), refuse)
-    # Recul à y 0,40 (tâche 34 quater) : à 0,39, le chariot gêne encore l'agitateur.
+    assert "manivelle du mycélium" in REGLES.refus_mouvement(POSTE, POSTE.avec(y=0.40), refuse)
+    # Recul à y 0,40 : à 0,39, le chariot est encore sous le bocal.
     recule = POSTE.avec(y=0.40)
     assert REGLES.refus_mouvement(recule, recule.avec(y=0.50), refuse) is None
-    assert "agitateur du mycélium" in REGLES.refus_mouvement(recule, POSTE.avec(y=0.39), refuse)
+    assert "manivelle du mycélium" in REGLES.refus_mouvement(recule, POSTE.avec(y=0.39), refuse)
     loin = POSTE.avec(y=0.50)
     assert REGLES.refus_mouvement(loin, loin.avec(y=0.785), refuse) is None
-    # Le plateau ne monte au poste qu'agitateur au garage, sauf pour le dosage.
-    garage_inconnu = Contexte(True, None, False, True)
+    # Le plateau ne monte près du poste que manivelle en bas (dosage compris) ; au vidage, si.
     au_dosage = POSTE.avec(y=0.155)
-    assert "agitateur du mycélium au garage" in REGLES.refus_mouvement(
-        au_dosage, au_dosage.avec(z=0.53), garage_inconnu
+    assert "le plateau ne monte pas près du poste" in REGLES.refus_mouvement(
+        au_dosage, au_dosage.avec(z=0.53), refuse
     )
-    assert REGLES.refus_mouvement(au_dosage, au_dosage.avec(z=0.53), garage_inconnu, True) is None
+    assert REGLES.refus_mouvement(au_dosage, au_dosage.avec(z=0.53), PERMIS) is None
+    au_vidage = POSTE.avec(y=0.42)
+    assert REGLES.refus_mouvement(au_vidage, au_vidage.avec(z=0.53), refuse) is None
+
+
+def test_regle_8_bord_du_seau_au_poste():
+    # Au poste (y 0,135) : bord du seau ≤ 0,68 TOUJOURS. Seau A (h 0,25) : plateau ≤ 0,43.
+    seau_a = replace(PERMIS, hauteur_seau=0.25)
+    assert REGLES.refus_pose(POSTE.avec(z=0.43), seau_a) is None
+    texte = REGLES.refus_pose(POSTE.avec(z=0.44), seau_a)
+    assert "bord du seau ≤ 0,68 toujours (il serait à 0,69)" in texte
+    # Au dosage (y 0,155), le bord monte à 0,78 ; au vidage aussi.
+    assert REGLES.refus_pose(POSTE.avec(y=0.155, z=0.53), seau_a) is None
+    assert REGLES.refus_pose(POSTE.avec(y=0.42, z=0.53), seau_a) is None
+    # Du dosage au poste, plateau à la hauteur du dosage : refusé.
+    assert "bord du seau" in REGLES.refus_mouvement(
+        POSTE.avec(y=0.155, z=0.53), POSTE.avec(z=0.53), seau_a
+    )
+    # Sans seau sur le plateau : le plateau seul (≤ 0,575) est toujours sous 0,68.
+    assert REGLES.refus_pose(POSTE.avec(z=0.575), PERMIS) is None
 
 
 def test_regle_9_descente_de_la_prehension():
@@ -332,7 +355,6 @@ class Banc:
         valeurs = {
             "chariot_fut_en_place": lambda: True,
             "refus_mycelium": lambda: None,
-            "agitateur_au_garage": lambda: True,
             "bras_galet_range": lambda: True,
             "micropore_rentre": lambda: True,
             "photo": self.photos.append,
@@ -394,19 +416,20 @@ def test_aller_a_la_pose_passe_par_les_bons_detours():
     assert (banc.pose.barres, banc.pose.z) == (0.30, 0.5125)
 
 
-def test_ramener_au_poste_puis_ranger():
+def test_ramener_au_vidage_puis_ranger():
     banc = Banc()
     remplissage = banc.remplissage
     banc.jouer(lambda: remplissage.geste_aller_a_la_pose("seau_a"))
     remplissage.seau = SeauPlateau("seau_a", "S1", angle_anse=12.0)
-    banc.jouer(remplissage.geste_ramener_au_poste)
-    assert (banc.pose.y, banc.pose.z) == (0.135, pytest.approx(0.53))
+    banc.jouer(remplissage.geste_ramener_au_vidage)
+    # La griffe vide le seau à y 0,42 (agitateur fixe), bord du seau à 0,78.
+    assert (banc.pose.y, banc.pose.z) == (0.42, pytest.approx(0.53))
     # Plus de règle des anneaux : le chariot roule plateau haut.
     assert "plateau en bas" not in banc.pas()
-    assert remplissage.seau_au_poste()
+    assert remplissage.seau_au_vidage()
     # Le seau tourne pendant les versements, puis revient à l'angle de l'anse (modulo 90°).
     remplissage.tourner_seau(True)
-    assert not remplissage.seau_au_poste()
+    assert not remplissage.seau_au_vidage()
     banc.temps[0] += 10
     remplissage.tourner_seau(False)
     assert banc.pose.a == pytest.approx(600, abs=1)
@@ -565,29 +588,42 @@ def test_ecart_des_barres_arrete_le_geste():
         banc.jouer(lambda: banc.remplissage.geste_plateau(0.25))
 
 
-def test_le_chariot_attend_l_agitateur_pres_du_poste():
-    banc = Banc(refus_mycelium=lambda: "agitateur du mycélium à x 0,7 m")
+def test_le_chariot_attend_la_manivelle_en_bas_pres_du_poste():
+    banc = Banc(refus_mycelium=lambda: "manivelle du mycélium à 0°")
     with pytest.raises(ErreurEtape, match="ne roule pas près du poste"):
         banc.jouer(lambda: banc.remplissage.geste_aller(0.50))
-    banc = Banc(agitateur_au_garage=lambda: False)
     banc.remplissage.seau = SeauPlateau("seau_a", "S1", angle_anse=0.0)
-    with pytest.raises(ErreurEtape, match="qu'agitateur du mycélium au garage"):
-        banc.jouer(banc.remplissage.geste_ramener_au_poste)
+    with pytest.raises(ErreurEtape, match="ne roule pas près du poste"):
+        banc.jouer(banc.remplissage.geste_ramener_au_vidage)
 
 
-def test_le_mycelium_mene_le_chariot_au_dosage():
+def test_le_mycelium_mene_le_chariot_par_le_poste_au_dosage():
     banc = Banc()
     remplissage = banc.remplissage
-    banc.jouer(lambda: remplissage.geste_plateau(0.53))
+    remplissage.seau = SeauPlateau("seau_a", "S1", angle_anse=0.0)
+    # Le seau vide attend au vidage (y 0,42) : écarter ne bouge rien.
+    banc.jouer(remplissage.geste_ramener_au_vidage)
     remplissage.ecarter()
-    etat = remplissage.etat()
-    assert etat is not None and not etat.immobile and etat.y == 0.135
     banc.finir()
-    # Le plateau reste où il est (plus de règle des anneaux).
-    assert remplissage.etat() == remplissage.etat().__class__(0.40, 0.53, True)  # type: ignore[union-attr]
+    assert remplissage.etat() == remplissage.etat().__class__(0.42, 0.53, True)  # type: ignore[union-attr]
+    # Au dosage par le poste : plateau descendu (bord 0,68), poste (spray, micropore), dosage,
+    # plateau remonté (bord 0,78).
     remplissage.amener_au_dosage(0.53)
     banc.finir()
     assert (banc.pose.y, banc.pose.z, banc.pose.barres) == (0.155, 0.53, 0.30)
+    assert banc.pas()[-4:] == [
+        "plateau à la hauteur du poste",
+        "seau au poste (spray, micropore)",
+        "seau sous le bocal du mycélium",
+        "plateau à la hauteur du dosage",
+    ]
+    assert banc.etat.mouvements[-4].axes["plateau_z"][1] == pytest.approx(0.43)
+    # Retour au vidage (y 0,42), plateau où il est.
+    remplissage.ecarter()
+    etat = remplissage.etat()
+    assert etat is not None and not etat.immobile and etat.y == 0.155
+    banc.finir()
+    assert (banc.pose.y, banc.pose.z) == (0.42, 0.53)
 
 
 def test_mode_couvercles_pour_le_retourneur():
@@ -672,10 +708,11 @@ def test_la_prehension_applique_la_regle_9():
             if not poste.echange_en_cours:
                 break
             simulation.temps += 0.5
-        prehension.lancer(lambda: prehension.geste_aller(REMPLISSAGE.axe_x, 0.135))
+        # Au-dessus du chariot au poste, mais hors de la zone du porte-bocal (y ≤ 0,27 + 5,5 cm).
+        prehension.lancer(lambda: prehension.geste_aller(REMPLISSAGE.axe_x, 0.35))
         while not prehension.geste_fini():
             simulation.temps += 0.25
-        cible = PosePrehension(REMPLISSAGE.axe_x, 0.135, 0.60, 0.0)
+        cible = PosePrehension(REMPLISSAGE.axe_x, 0.35, 0.60, 0.0)
         assert prehension.refus_manuel(cible) is None
         remplissage.lancer(lambda: remplissage.geste_barres(0.2))
         assert "il bouge" in prehension.refus_manuel(cible)
@@ -698,7 +735,6 @@ def test_le_vrai_chariot_remplace_le_faux_retourneur():
             horloge=lambda: simulation.temps,
             chariot_fut_en_place=lambda: True,
             refus_mycelium=lambda: None,
-            agitateur_au_garage=lambda: True,
             bras_galet_range=lambda: True,
         )
         # Le chariot va au retourneur avant le lavage des couvercles.
@@ -740,6 +776,39 @@ def test_scenario_remplissage_va_au_bout():
     assert scenario.plan.faits == ["S0101", "S0102"]
     assert [dose.seau for dose in scenario.mycelium.doses] == ["S0101"] * 4 + ["S0102"] * 2
     assert scenario.remplissage.seau is None and not scenario.remplissage.seau_du_dessus
+
+
+def test_scenario_un_seau_dans_l_ordre_du_point_5():
+    # Agitateur fixe (tâche 19 ter) : vidage par la griffe à y 0,42 → poste (y 0,135 : spray,
+    # micropore) → dosage (y 0,155) → retour au vidage ; demi-tour du bocal chariot à y ≥ 0,40.
+    textes: list[tuple[str, float]] = []
+
+    def regler(scenario):
+        executer = scenario.chariot.executer
+
+        def noter(pas, cible):
+            if "y" in pas.cibles or pas.texte == "le seau tourne (versement)":
+                textes.append((pas.texte, cible.y))
+            executer(pas, cible)
+
+        scenario.chariot.executer = noter
+
+    planning, scenario = jouer_scenario(regler)
+    assert planning.fini, planning.probleme
+    debut = next(i for i, (texte, _) in enumerate(textes) if texte == "retour au vidage")
+    couche = [texte for texte, _ in textes[debut : debut + 5]]
+    assert couche == [
+        "retour au vidage",
+        "le seau tourne (versement)",
+        "seau au poste (spray, micropore)",
+        "seau sous le bocal du mycélium",
+        "retour au vidage",
+    ]
+    assert [y for _, y in textes[debut : debut + 5]] == pytest.approx(
+        [0.42, 0.42, 0.135, 0.155, 0.42]
+    )
+    # Bocal retourné puis remis debout à chaque couche (4 + 2).
+    assert scenario.mycelium.porte_bocal.gestes == ["tete_en_bas", "debout"] * 6
 
 
 POSE_SIMPLE = [

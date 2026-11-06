@@ -8,9 +8,9 @@
   vidange-porte-bocal debout        demi-tour du bocal, retour debout
   ... --faux                        avec un faux FluidNC et un faux porte-bocal (essai de l'outil)
 
-Un demi-tour fait d'abord la prise d'origine de la manivelle, vérifie que l'agitateur est au
-demi-tour, met la manivelle en bas, retourne le bocal, puis remet la manivelle en haut. Le chariot
-de remplissage n'est pas encore écrit : vérifier soi-même qu'il est écarté (y ≥ 0,40).
+Un demi-tour fait d'abord la prise d'origine de la manivelle, met la manivelle en haut, retourne
+le bocal, puis remet la manivelle en bas (agitateur fixe depuis le 01/11/2026). Le chariot de
+remplissage n'est pas lu : vérifier soi-même qu'il est écarté (y ≥ 0,40).
 Procédure complète : pi/systeme/essai-porte-bocal.md. À ne lancer que programme principal arrêté
 (une seule liaison par carte).
 """
@@ -53,7 +53,7 @@ def _faux(reglages: Reglages) -> Callable[[], object]:
     """Un faux FluidNC, avec un faux porte-bocal (bocal posé) et un faux capteur de manivelle."""
     machine = reglages.machine
     carte = FauxFluidnc(axes="XYZA")
-    carte.positions.update(X=machine.mycelium.demi_tour_x * 1000, A=200.0)  # type: ignore[union-attr]
+    carte.positions.update(A=200.0)
     materiel = FauxMaterielPorteBocal(
         carte, machine, reglages.fluidnc.cartes[CARTE], 2.3, time.monotonic
     )
@@ -156,9 +156,6 @@ def _faire(
     assert machine.mycelium is not None
     # Le chariot de remplissage n'est pas écrit : on le croit écarté (Karulium l'a vérifié).
     ecarte = EtatChariot(y=machine.mycelium.chariot.y_ecarte_min, plateau_z=0)
-    pose = agitateur.position()
-    if not regles.au_demi_tour(pose):
-        raise ErreurEtape(f"agitateur à x {pose.x:.3f} m : l'amener au demi-tour d'abord")
 
     def manivelle(bas: bool) -> None:
         pose = agitateur.position()
@@ -166,15 +163,15 @@ def _faire(
         agitateur.executer(Pas("manivelle", angle=cible.angle), cible)
         _attendre(agitateur.fini, delai)
 
-    manivelle(bas=True)
+    manivelle(bas=False)
     porte_bocal.verrou = lambda: regles.refus_demi_tour(agitateur.position(), ecarte)
     if commande == "tete-en-bas":
         porte_bocal.retourner_tete_en_bas()
     else:
         porte_bocal.remettre_debout()
     _attendre(porte_bocal.fini, delai)
-    manivelle(bas=False)
-    print(f"Bocal {'tête en bas' if commande == 'tete-en-bas' else 'debout'}, manivelle en haut.")
+    manivelle(bas=True)
+    print(f"Bocal {'tête en bas' if commande == 'tete-en-bas' else 'debout'}, manivelle en bas.")
     return 0
 
 

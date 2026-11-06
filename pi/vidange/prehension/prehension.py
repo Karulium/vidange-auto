@@ -129,17 +129,14 @@ class Prehension:
         camera_dosage_pivote: Callable[[], bool] = lambda: False,
         anse_levee: Callable[[], bool] = lambda: False,
         photo: Callable[[str], object] = lambda raison: None,
-        agitateur_x: Callable[[], float | None] = lambda: None,
-        manivelle_en_bas: Callable[[], bool] = lambda: False,
-        griffe_en_butee_haute: Callable[[], bool] = lambda: False,
+        manivelle: Callable[[], str | None] = lambda: None,
     ) -> None:
         """`panneau_rabattu`, `echange_fut` : PosteFut.panneau_vu_rabattu, echange_en_cours.
         `camera_dosage_pivote` : la caméra du dosage pivote (Vision, tâche 22). `anse_levee` :
         la caméra voit une anse levée dans le seau à prendre (tâche 22). `photo(raison)` :
-        photo notée avec une alerte (choc). `agitateur_x`, `manivelle_en_bas` : ce que dit le
-        Mycélium (Mycelium.x_agitateur, en_bas : où est son bocal sur la glissière) ;
-        `griffe_en_butee_haute` : ce que dit la griffe. Sans eux, la tête ne descend jamais au
-        porte-bocal et ne passe jamais au-dessus de la glissière de l'agitateur."""
+        photo notée avec une alerte (choc). `manivelle` : ce que dit le Mycélium
+        (Mycelium.etat_manivelle : « haut », « bas » ou None). Sans lui, la tête ne va jamais dans
+        la zone du porte-bocal (ni au bocal de l'agitateur)."""
         assert machine.prehension is not None and machine.griffe is not None
         self.reglages = machine.prehension
         self.formats = machine.griffe.formats
@@ -153,9 +150,7 @@ class Prehension:
         self._camera_dosage_pivote = camera_dosage_pivote
         self._anse_levee = anse_levee
         self._photo = photo
-        self._agitateur_x = agitateur_x
-        self._manivelle_en_bas = manivelle_en_bas
-        self._griffe_en_butee_haute = griffe_en_butee_haute
+        self._manivelle = manivelle
         # Verrou du noyau et de la couronne du lavage (vidange.lavage) : raison du refus, ou
         # None. Sans lavage, les brosses ne tournent jamais.
         self.verrou_brosses: Callable[[Pose], str | None] = lambda pose: "pas de lavage"
@@ -183,10 +178,8 @@ class Prehension:
             camera_dosage_pivote=self._camera_dosage_pivote(),
             echange_fut=self._echange_fut(),
             objet=self.objet,
-            agitateur_x=self._agitateur_x(),
-            manivelle_en_bas=self._manivelle_en_bas(),
+            manivelle=self._manivelle(),
             mors=self._mors_etat(),
-            griffe_en_butee_haute=self._griffe_en_butee_haute(),
         )
 
     def _mors_etat(self) -> str | None:
@@ -213,6 +206,15 @@ class Prehension:
         except ErreurEtape:
             return False
         return not self.regles.dans_boite_camera_dosage(pose, self.objet)
+
+    def hors_zone_porte_bocal(self) -> bool:
+        """Pour le Mycélium : la manivelle ne bouge pas et le bocal ne se retourne pas pendant que
+        la tête (ou ce qu'elle tient) est dans la zone du porte-bocal (ou position inconnue)."""
+        try:
+            pose = self.tete.position()
+        except ErreurEtape:
+            return False
+        return not self.regles.dans_zone_porte_bocal(pose, self.objet)
 
     def refus_manuel(self, cible: Pose) -> str | None:
         """Pour le mode manuel du téléphone : les mêmes verrous que les gestes."""
@@ -643,10 +645,14 @@ class Prehension:
         yield Attente(texte, porte_bocal.fini, delai, f"{texte} : pas fini en {delai:g} s")
 
     def _au_dessus_du_porte_bocal(self) -> Geste:
-        """En haut au-dessus du porte-bocal, tête orientée (méplats, ± 3°)."""
+        """En haut au-dessus du porte-bocal (trajet en ligne droite vers sa verticale), tête
+        orientée (méplats, ± 3°)."""
         reglages = self.reglages.porte_bocal
-        yield from self._aller(reglages.x, reglages.y)
+        # Tête orientée avant d'arriver : au-dessus du bocal, elle peut déjà être « entre les
+        # mors » (contact de la capsule à moins de descente → approche_m sous la face haute).
+        yield from self._monter()
         yield from self._orienter(reglages.orientation_deg)
+        yield from self._aller(reglages.x, reglages.y)
         assert self.pose is not None
         ecart = abs((self.pose.a - reglages.orientation_deg + 180) % 360 - 180)
         if ecart > reglages.tolerance_orientation_deg:
@@ -658,23 +664,25 @@ class Prehension:
             )
 
     def geste_poser_bocal(self) -> Geste:
-        """Poser le bocal tenu dans le porte-bocal : mors grands ouverts, bocal à sa hauteur
-        exacte, mors à « Ø 98 » à faible courant, lâcher, remonter, puis serrer le bocal."""
+        """Poser le bocal tenu dans le porte-bocal (manivelle en bas) : mors grands ouverts, bocal
+        à sa hauteur exacte (face au contact de la capsule pour la course de l'agitation), mors à
+        « Ø 98 » à faible courant, lâcher, remonter, puis serrer le bocal."""
         reglages = self.reglages.porte_bocal
+        contact = self.regles.contact_capsule_z
         porte_bocal = self._porte_bocal()
         if self.objet is None or self.objet.sorte != "bocal":
             raise ErreurEtape("préhension : la tête ne tient pas de bocal")
         yield from self._mors("ouverture des mors", porte_bocal.ouvrir_mors)
         yield from self._au_dessus_du_porte_bocal()
         assert self.pose is not None
-        approche = reglages.face_z + self.reglages.descente.approche_m
+        approche = contact + self.reglages.descente.approche_m
         if self.pose.z > approche + _EGAL:
             yield Pas("descente vers le porte-bocal", {"z": approche})
-        resultat = yield Pas("bocal à sa hauteur", {"z": reglages.face_z}, vitesse="approche")
+        resultat = yield Pas("bocal à sa hauteur", {"z": contact}, vitesse="approche")
         assert resultat is not None
-        if abs(resultat.pose.z - reglages.face_z) > reglages.tolerance_hauteur_m:
+        if abs(resultat.pose.z - contact) > reglages.tolerance_hauteur_m:
             raise ErreurEtape(
-                f"préhension : bocal à {_m(resultat.pose.z)} m, il faut {_m(reglages.face_z)} m "
+                f"préhension : bocal à {_m(resultat.pose.z)} m, il faut {_m(contact)} m "
                 f"± {reglages.tolerance_hauteur_m * 1000:g} mm",
                 QUOI_FAIRE_PORTE_BOCAL,
             )
@@ -684,16 +692,16 @@ class Prehension:
         yield from self._lacher_ici()
         yield Pas(
             "remonter avant le serrage",
-            {"z": reglages.face_z + reglages.remontee_min_m},
+            {"z": contact + reglages.remontee_min_m},
             vitesse="approche",
         )
         yield from self._mors("serrage du bocal", porte_bocal.serrer_bocal)
         yield from self._monter()
 
     def geste_reprendre_bocal(self) -> Geste:
-        """Reprendre le bocal serré dans le porte-bocal : descente lente entre les mors, prise,
-        mors ouverts, remontée."""
-        reglages = self.reglages.porte_bocal
+        """Reprendre le bocal serré dans le porte-bocal (manivelle en bas) : descente lente entre
+        les mors, arrêt sur le contact de la capsule, prise, mors ouverts, remontée."""
+        contact = self.regles.contact_capsule_z
         porte_bocal = self._porte_bocal()
         if self.objet is not None:
             raise ErreurEtape(f"préhension : la tête tient déjà un(e) {self.objet.sorte}")
@@ -703,12 +711,12 @@ class Prehension:
             )
         yield from self._au_dessus_du_porte_bocal()
         self.tete.tarer()
-        yield from self._descendre(reglages.face_z, "reprendre le bocal")
+        yield from self._descendre(contact, "reprendre le bocal")
 
         def ouvrir() -> Geste:
             yield from self._mors("ouverture des mors", porte_bocal.ouvrir_mors)
 
-        yield from self._prendre_ici(self.objet_par_nom("bocal"), reglages.face_z, ouvrir)
+        yield from self._prendre_ici(self.objet_par_nom("bocal"), contact, ouvrir)
 
     def geste_visser(self, x: float, y: float, contact_z: float, devisser: bool = False) -> Geste:
         """Visser la capsule tenue (électroaimants) sur le bocal sous (x, y), ou la dévisser

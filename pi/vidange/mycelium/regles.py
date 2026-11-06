@@ -1,14 +1,24 @@
-"""Verrous du Mycélium avec le chariot de remplissage et la caméra du dosage (24/10/2026).
+"""Verrous du Mycélium avec le chariot de remplissage et la caméra du dosage (agitateur FIXE
+au-dessus du poste depuis le 01/11/2026, docs/decisions.md « Agitateur du mycélium FIXE »).
 
     regles = ReglesMycelium(reglages.machine)
-    regles.refus_glissiere(pose, x, chariot)        # raison du refus, ou None
-    regles.refus_manivelle(pose, chariot)
-    regles.refus_demi_tour(pose, chariot)            # le bocal peut-il se retourner ?
-    regles.refus_chariot(pose, en_mouvement)        # le chariot de remplissage peut-il rouler ?
-    regles.camera_peut_pivoter(pose)
+    regles.refus_manivelle(cible, chariot, agitation)   # raison du refus, ou None
+    regles.refus_demi_tour(pose, chariot, camera_pivote)  # le bocal peut-il se retourner ?
+    regles.refus_chariot(pose, en_mouvement)             # le chariot de remplissage peut-il rouler
+                                                         # près du poste ?
 
-Une PoseAgitateur dit où est l'agitateur : x sur sa glissière (m), angle de la manivelle (°).
-Le chariot de remplissage est décrit par EtatChariot (son module n'est pas encore écrit).
+Une PoseAgitateur dit où est la manivelle (°). Le bocal est toujours au même endroit
+(`mycelium → bocal`). Le chariot de remplissage est décrit par EtatChariot.
+Les règles :
+1. Manivelle EN HAUT seulement pour le demi-tour ; EN BAS pour la pose et la reprise du bocal par
+   la préhension (décision du 05/11/2026), dès que le chariot de remplissage est au poste, et pour
+   attendre. La manivelle ne quitte
+   « en bas » (aller en haut, prise d'origine) que chariot à y ≥ y_ecarte_min (0,40) ; chariot
+   plus près du poste, elle ne fait qu'aller en bas (chariot arrêté), ou secouer au dosage (seau
+   au dosage, arrêtée pile en bas).
+2. Demi-tour du bocal seulement manivelle en haut, chariot à y ≥ 0,40, caméra du dosage à 0°.
+3. Le chariot de remplissage ne roule près du poste (et son plateau n'y monte) que manivelle en
+   bas, agitateur arrêté (le Remplissage vérifie ses propres règles : bord du seau ≤ 0,68...).
 
 Tous les chiffres viennent de machine.yaml (`mycelium`, formats de la griffe). Ces verrous ne
 protègent que la MACHINE : la sécurité des personnes reste câblée.
@@ -25,7 +35,6 @@ _EGAL = 1e-6
 
 @dataclass(frozen=True)
 class PoseAgitateur:
-    x: float  # glissière (m)
     angle: float  # manivelle (°)
 
     def avec(self, **valeurs: float) -> "PoseAgitateur":
@@ -57,21 +66,8 @@ class ReglesMycelium:
         assert machine.mycelium is not None and machine.griffe is not None
         self.reglages = machine.mycelium
         self.formats = machine.griffe.formats
-        self.course_x = machine.axes["agitateur_x"].course
 
-    # ------------------------------------------------------------ où est l'agitateur
-
-    def _a(self, x: float, cible: float) -> bool:
-        return abs(x - cible) <= self.reglages.tolerance_x_m + _EGAL
-
-    def au_garage(self, pose: PoseAgitateur) -> bool:
-        return self._a(pose.x, self.reglages.garage_x)
-
-    def au_demi_tour(self, pose: PoseAgitateur) -> bool:
-        return self._a(pose.x, self.reglages.demi_tour_x)
-
-    def au_dosage(self, pose: PoseAgitateur) -> bool:
-        return self._a(pose.x, self.reglages.dosage_x)
+    # ------------------------------------------------------------ la manivelle
 
     def en_haut(self, pose: PoseAgitateur) -> bool:
         manivelle = self.reglages.manivelle
@@ -124,80 +120,64 @@ class ReglesMycelium:
             )
         return None
 
+    def _y_ecarte(self) -> str:
+        return _m(self.reglages.chariot.y_ecarte_min)
+
     # ------------------------------------------------------------ les verrous
 
-    def refus_glissiere(
-        self, depart: PoseAgitateur, x: float, chariot: EtatChariot | None
+    def refus_manivelle(
+        self, cible: PoseAgitateur | None, chariot: EtatChariot | None, agitation: bool = False
     ) -> str | None:
-        """L'agitateur ne roule que chariot de remplissage écarté, manivelle en haut."""
-        debut, fin = self.course_x
-        if not debut - _EGAL <= x <= fin + _EGAL:
-            return f"agitateur à x {_m(x)} m, hors de sa course ({_m(debut)} à {_m(fin)} m)"
-        if not self.chariot_ecarte(chariot):
-            y = "inconnu" if chariot is None else f"à y {_m(chariot.y)} m"
-            return (
-                f"l'agitateur ne roule que si le chariot de remplissage est à y ≥ "
-                f"{_m(self.reglages.chariot.y_ecarte_min)} m (il est {y})"
-            )
-        if not self.en_haut(depart):
-            return "l'agitateur ne roule que manivelle en haut"
-        return None
-
-    def refus_manivelle(self, pose: PoseAgitateur, chariot: EtatChariot | None) -> str | None:
-        """La manivelle ne tourne qu'au garage, au demi-tour ou au dosage ; au garage, pas avec
-        la course de 10 cm ; au dosage, chariot écarté ou seau au dosage (jamais en route)."""
-        reglages = self.reglages
-        if self.au_garage(pose):
-            if reglages.course_agitation_m > reglages.manivelle.course_max_garage_m + _EGAL:
-                return (
-                    f"au garage, la manivelle ne tourne pas avec une course de "
-                    f"{_m(reglages.course_agitation_m * 100)} cm (le fond du bocal toucherait la "
-                    f"marche du poste du fût) : {_m(reglages.manivelle.course_max_garage_m * 100)}"
-                    " cm au plus"
-                )
+        """La manivelle va à `cible` (None : prise d'origine, un tour lent). Chariot de
+        remplissage à y ≥ 0,40 : tout est permis. Plus près du poste : seulement aller en bas,
+        chariot arrêté, ou secouer au dosage (seau au dosage, arrêt pile en bas)."""
+        if self.chariot_ecarte(chariot):
             return None
-        if self.au_demi_tour(pose):
-            return None
-        if self.au_dosage(pose):
-            if self.chariot_ecarte(chariot) or self.chariot_au_dosage(chariot):
+        if chariot is None:
+            return "position du chariot de remplissage inconnue"
+        if not chariot.immobile:
+            return "la manivelle ne tourne pas pendant que le chariot de remplissage roule"
+        if agitation:
+            if self.chariot_au_dosage(chariot) and cible is not None and self.en_bas(cible):
                 return None
             return (
-                "au dosage, la manivelle ne tourne pas pendant que le chariot de remplissage roule"
+                f"l'agitation ne se fait que seau au dosage (chariot de remplissage à y "
+                f"{_m(self.reglages.chariot.y_dosage)} m) ou chariot à y ≥ {self._y_ecarte()} m"
             )
-        return "la manivelle ne tourne qu'au garage, au demi-tour ou au dosage"
+        if cible is not None and self.en_bas(cible):
+            return None
+        quoi = "la prise d'origine (tour lent)" if cible is None else "la manivelle hors du bas"
+        return (
+            f"{quoi} : chariot de remplissage à y {_m(chariot.y)} m, il doit être à y ≥ "
+            f"{self._y_ecarte()} m (manivelle en bas dès que le chariot est au poste)"
+        )
 
-    def refus_demi_tour(self, pose: PoseAgitateur, chariot: EtatChariot | None) -> str | None:
-        """Le bocal ne se retourne qu'agitateur au demi-tour, manivelle en bas (page du Mycélium
-        du 24/10), chariot de remplissage écarté."""
-        if not self.au_demi_tour(pose):
-            return "l'agitateur n'est pas au demi-tour"
-        if not self.en_bas(pose):
-            return "le demi-tour du bocal ne se fait que manivelle en bas"
+    def refus_demi_tour(
+        self, pose: PoseAgitateur, chariot: EtatChariot | None, camera_pivote: bool = False
+    ) -> str | None:
+        """Le bocal ne se retourne que manivelle en haut, chariot de remplissage à y ≥ 0,40,
+        caméra du dosage à 0° (tournée vers le bocal)."""
+        if not self.en_haut(pose):
+            return "le demi-tour du bocal ne se fait que manivelle en haut"
         if not self.chariot_ecarte(chariot):
             return (
                 f"le demi-tour du bocal ne se fait que chariot de remplissage à y ≥ "
-                f"{_m(self.reglages.chariot.y_ecarte_min)} m"
+                f"{self._y_ecarte()} m"
             )
+        if camera_pivote:
+            return "le demi-tour du bocal ne démarre que caméra du dosage à 0° (vers le bocal)"
         return None
 
     def refus_chariot(self, pose: PoseAgitateur | None, en_mouvement: bool) -> str | None:
-        """Le chariot de remplissage ne roule que si l'agitateur est au garage manivelle en haut,
-        ou au dosage manivelle en bas (et ne bouge pas)."""
+        """Le chariot de remplissage ne roule près du poste (et son plateau n'y monte) que
+        manivelle en bas, agitateur arrêté."""
         if pose is None:
-            return "position de l'agitateur du mycélium inconnue"
+            return "position de la manivelle du mycélium inconnue"
         if en_mouvement:
             return "l'agitateur du mycélium bouge"
-        if self.au_garage(pose) and self.en_haut(pose):
-            return None
-        if self.au_dosage(pose) and self.en_bas(pose):
+        if self.en_bas(pose):
             return None
         return (
-            f"agitateur du mycélium à x {_m(pose.x)} m, manivelle à {pose.angle % 360:.0f}° : le "
-            "chariot de remplissage ne roule qu'agitateur au garage manivelle en haut, ou au "
-            "dosage manivelle en bas"
+            f"manivelle du mycélium à {pose.angle % 360:.0f}° : près du poste, le chariot de "
+            "remplissage ne roule (et son plateau ne monte) que manivelle en bas"
         )
-
-    def camera_peut_pivoter(self, pose: PoseAgitateur | None) -> bool:
-        """La caméra du dosage ne pivote vers le seau que si l'agitateur est garé (règle 2 ;
-        la condition de la griffe et de la préhension est vérifiée par la tâche Vision)."""
-        return pose is not None and pose.x <= self.reglages.camera_x_max + _EGAL

@@ -48,7 +48,7 @@ def test_reglages_de_la_griffe_du_depot():
 def test_reglages_de_la_griffe_verifies(reglages):
     machine = reglages / "machine.yaml"
     remplacer(machine, "format_par_defaut: seau_a", "format_par_defaut: seau_99l")
-    remplacer(machine, "seau_remplissage: [0.925, 0.14]", "seau_remplissage: [0.70, 0.14]")
+    remplacer(machine, "seau_remplissage: [0.925, 0.42]", "seau_remplissage: [0.70, 0.42]")
     message = erreur_de(reglages)
     assert "format_par_defaut : « seau_99l » absent de formats" in message
     assert "seau_remplissage : mât à x 0.7, il faut x ≥ trajet → mat_x_min_pour_y" in message
@@ -211,13 +211,11 @@ def essuyage(nom_format: str, direction_deg: float) -> Pose:
     )
 
 
-def test_essuyage_contre_le_boitier_de_la_camera():
-    # Mât à +x du seau (fiche) : la tête toucherait le boîtier pour les seaux A et B.
-    for nom in ("seau_a", "seau_b"):
-        assert "caméra du bocal" in refus(essuyage(nom, 0))
-    for nom in ("seau_c", "seau_d"):
+def test_essuyage_au_vidage_loin_du_boitier_de_la_camera():
+    # Seau au vidage (y 0,42, agitateur fixe) : côté +x ne touche plus le boîtier de la caméra du
+    # bocal (décision du 02/11, point 5) ; on garde le côté allée (+y).
+    for nom in GRIFFE.formats:
         assert refus(essuyage(nom, 0)) is None
-    # Réglage en attendant la réponse : mât côté allée (+y), tête tournée d'un quart de tour.
     assert GRIFFE.essuyage.direction_deg == 90
     for nom in GRIFFE.formats:
         assert refus(essuyage(nom, 90)) is None

@@ -202,6 +202,46 @@ si l'une pose problème, elle le dit dans sa PR.
   5. Conséquence : la table « Y minimum du mât » du 01/11 ci-dessous (faite avec l'agitateur garé à 0,565) est
      **périmée** ; une nouvelle table, agitateur fixe à 0,925, est demandée au projet mécanique. Les points 1 (essuyage),
      6 (boîtier de la caméra du dosage) et 7 (caméra du plafond) de cette section restent bons.
+- **Agitateur fixe, réponses à la PR n° 64** (tâche 19 ter, 05/11/2026, niveau 1, fil logiciel) :
+  1. Prise d'origine de la manivelle après une coupure, chariot de remplissage au poste : on garde la règle
+     prudente (prise d'origine seulement chariot à y ≥ 0,40). Après une coupure, chariot au poste : l'écran dit de
+     reculer le chariot à la main, puis on donne le Go. C'est rare, et on ne devine jamais la position de la
+     manivelle.
+  2. **Pose et reprise du bocal MANIVELLE EN BAS** (Maquette, 05/11, `mycelium/logiciel/hauteur-bocal-tete-en-bas.md`) :
+     « manivelle en haut » dans la fiche v10 et dans la décision du 01/11 était une **erreur de recopie** (manivelle
+     en haut, la capsule est à 1,147 : la face de la préhension, au plus à 1,10, ne l'atteint pas). La maquette a
+     validé la pose manivelle en bas, chariot de remplissage reculé (y 0,40) **ou au poste** (y 0,135). On ne remonte
+     pas la manivelle après la pose, sauf pour un demi-tour. Ordre : pose (manivelle en bas) → la tête s'en va →
+     chariot à y ≥ 0,40 → manivelle en haut → demi-tour → manivelle en bas → dosage. Au retour : chariot à
+     y ≥ 0,40 → manivelle en haut → bocal remis debout → manivelle en bas → reprise. Demi-tour inchangé (manivelle en
+     haut, chariot à y ≥ 0,40, caméra à 0°, tête de préhension hors de la zone du point 3).
+     Hauteur de contact de la capsule (fiche Mycélium v10b, 05/11, d'accord avec la maquette) : manivelle en bas, elle
+     dépend du trou du maneton : **1,047 / 1,077 / 1,108 pour une course de 10 / 7 / 4 cm** (manivelle en haut :
+     1,147, jamais atteinte). Réglage `prehension → porte_bocal → contact_capsule_z: {0.10: 1.047, 0.07: 1.077,
+     0.04: 1.108}`, choisi avec `mycelium → course_agitation_m` (vérifié au démarrage : la course réglée doit être
+     dans la table) ; arrêt sur le contact de la tête comme pour les autres prises. La face de la préhension monte au
+     plus à 1,10 : approche à 1,10. **Course de 4 cm (contact 1,108) : pose impossible** ; le démarrage refuse une
+     course dont le contact dépasse la face haute moins 1 cm. Réponse du fil Mycélium (05/11, niveau 1) : la course
+     de 4 cm ne sert pas au cycle automatique (le trou reste dans la manivelle, le logiciel le refuse) ; **course par
+     défaut 10 cm** (`mycelium → course_agitation_m: 0.10`, saisie par l'opérateur quand il change le maneton de
+     trou ; la machine ne la détecte pas) ; 7 cm reste accepté.
+  3. Hauteur du porte-bocal (Maquette, 05/11, v45.117) : **l'hypothèse « rien au-dessus de 1,05 » est fausse**.
+     Plus haut point : 1,070 manivelle en bas, 1,170 manivelle en haut, **1,208 pendant le demi-tour** ; support fixe
+     de la glissière verticale jusqu'à 1,167 (x 0,84-1,01, y −0,027-0,016) ; boîtier de la caméra du dosage jusqu'à
+     1,065 (x 1,04-1,08, y 0,20-0,26). Règle : nouvelle zone `prehension → zone_porte_bocal: {x: [0.79, 1.08],
+     y: [-0.03, 0.27], z_haut: 1.21}`. Tête plus objet tenu (rayon de la tête + 1 cm + rayon de l'objet) jamais dans
+     ce rectangle plus bas que `z_haut` + la marge ; la face montant au plus à 1,10, les trajets le **contournent**.
+     Seule exception : descente et remontée verticales en (0,925 ; 0,150) pour poser ou reprendre le bocal. Remplace
+     la règle « au-dessus du bocal, plus bas que la capsule ».
+  **Les points 2 et 3 sont à corriger dans la PR n° 64 elle-même** (session de correction, même branche). Tests à
+  ajouter : pose manivelle en haut refusée ; pose chariot au poste acceptée (manivelle en bas) ; ordre complet d'un
+  cycle dans le simulateur avec la pose en bas ; trajet en ligne droite à travers la zone refusé ; trajet qui la frôle
+  à 1 cm près accepté.
+  Réponses à la correction (06/11, niveau 1) : (a) en attendant la Maquette, on garde le seul trajet d'accès écrit
+  par la session : en ligne droite d'un point hors de la zone à la verticale du bocal (ou retour), face en haut,
+  manivelle arrêtée en bas. Un « couloir d'accès » (départ, direction, largeur, tête seule et avec bocal) est demandé
+  à la Maquette le 06/11 ; il ira dans une tâche suivante comme réglage, tout autre trajet refusé. (b) Dans la zone
+  du porte-bocal, on garde la **somme** rayon de la tête + 1 cm + rayon de l'objet (plus prudent).
 - **Griffe : table « Y minimum du mât » avec l'agitateur fixe** (Maquette v45.111, 02/11/2026,
   `maquette/table-y-min-mat-griffe-v45.111.md` ; remplace les points 2 et 3 de la section du 01/11 ci-dessous).
   y du mât = repère du portique. Godet fermé / à moitié ouvert / grand ouvert, tête bras le long du pont. Bandes de x

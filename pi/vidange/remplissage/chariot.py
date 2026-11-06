@@ -69,8 +69,6 @@ class Pas:
     vitesse: Literal["centrage", "contact"] | None = None
     # Le plateau monte jusqu'à ce que la balance gagne tant de kg (contact du fond d'un seau).
     contact_kg: float | None = None
-    # Le plateau monte pour le dosage du mycélium (verrou : bocal au-dessus).
-    dosage: bool = False
     # Attente après le mouvement (s), puis pesée (médiane des dernières lectures).
     attente_s: float = 0.0
     pesee: bool = False

@@ -27,8 +27,8 @@ Dans les commandes ci-dessous, `vidange-fluidnc` et `vidange-porte-bocal` veulen
 
 ## Étape 1 : ce que FluidNC sait faire (console)
 
-1. `vidange-fluidnc console mycelium_lavage`, puis `$H` : la glissière va au garage ; ni la manivelle
-   ni les mors ne doivent bouger.
+1. `vidange-fluidnc console mycelium_lavage` (plus de `$H` : l'agitateur est fixe, plus de glissière ;
+   la manivelle et les mors ne prennent pas leur origine par `$H`).
 2. Envoyer `?` plusieurs fois en tournant la manivelle **à la main**, très lentement (moteur coupé ou
    pilote désactivé) : quand le contrepoids passe devant le capteur, la lettre `A` doit apparaître dans
    `Pn:` ; manivelle en haut (± 95°), elle doit disparaître. Si FluidNC refuse ensuite de bouger la
@@ -92,8 +92,8 @@ Agitateur **au demi-tour** (console : `$J=G53 X865 F3000`), bocal vide serré, c
 3. `vidange-porte-bocal debout` : retour, dans l'autre sens.
 4. Pannes, une à une : débrancher le contact « verrou engagé » pendant un demi-tour → arrêt du moteur et
    alarme au bout de `delai_max_s` ; débrancher le capteur d'inclinaison → alarme « capteur d'inclinaison ».
-5. Agitateur au garage : `vidange-porte-bocal tete-en-bas` doit être **refusé** (« l'amener au
-   demi-tour d'abord »).
+5. L'outil fait le demi-tour **manivelle en haut** puis remet la manivelle en bas : vérifier que rien ne
+   touche, chariot de remplissage à y ≥ 0,40 (l'outil ne le lit pas).
 
 ## Ce qu'il faut renvoyer
 

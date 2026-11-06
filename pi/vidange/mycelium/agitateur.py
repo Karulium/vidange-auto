@@ -1,4 +1,4 @@
-"""L'agitateur du mycélium : glissière et manivelle (carte n° 3), et la balance du chariot.
+"""L'agitateur du mycélium (fixe) : sa manivelle (carte n° 3), et la balance du chariot.
 
     agitateur = AgitateurFluidnc(reglages.machine, liaison_mycelium_lavage, balance, carte)
     agitateur.demarrer(arret)        # lit la balance 80 fois par seconde, en fond
@@ -39,7 +39,7 @@ from typing import Literal, Protocol
 from vidange.chef import Condition, ErreurEtape
 from vidange.fiabilite.constats import lancer_boucle
 from vidange.fluidnc import Liaison
-from vidange.griffe.bras import MM_PAR_M, TOLERANCE_ARRIVEE, CapteurForce, G
+from vidange.griffe.bras import TOLERANCE_ARRIVEE, CapteurForce, G
 from vidange.journal import donner_journal
 from vidange.mycelium.regles import PoseAgitateur
 from vidange.quoi_faire import pour_carte
@@ -110,26 +110,25 @@ def trouver_origine(echantillons: list[tuple[float, bool]], reglages: OrigineMan
 
 @dataclass(frozen=True)
 class Pas:
-    """Un mouvement de l'agitateur (seuls les axes cités bougent), ou un geste du porte-bocal."""
+    """Un mouvement de la manivelle, ou un geste du porte-bocal."""
 
     texte: str
-    x: float | None = None
     angle: float | None = None
-    # Vitesse de la manivelle (tr/min) ; la glissière va à sa vitesse (machine.yaml).
+    # Vitesse de la manivelle (tr/min).
     tr_min: float | None = None
     # Agitation : arrêt dès que le plateau pèse tant (kg) : poids d'avant la couche + dose.
     jusqu_a_kg: float | None = None
     # Attente après le mouvement (s), puis pesée (médiane de plusieurs lectures).
     attente_s: float = 0.0
     pesee: bool = False
-    # Geste du porte-bocal (tâche 20) : demi-tour (au demi-tour), mors (au garage).
+    # Geste du porte-bocal (tâche 20) : demi-tour, mors.
     porte_bocal: Literal["tete_en_bas", "debout", "ouvrir", "serrer"] | None = None
     # Prise d'origine de la manivelle (tour lent).
     origine: bool = False
 
     @property
     def bouge(self) -> bool:
-        return self.x is not None or self.angle is not None or self.origine
+        return self.angle is not None or self.origine
 
 
 @dataclass(frozen=True)
@@ -146,10 +145,6 @@ class Agitateur(Protocol):
     surveillance: Condition
 
     def position(self) -> PoseAgitateur: ...
-
-    def glissiere_x(self) -> float:
-        """Où est la glissière (m), même avant la prise d'origine de la manivelle."""
-        ...
 
     @property
     def angle_haut_moteur(self) -> float | None:
@@ -199,7 +194,7 @@ class AgitateurFluidnc:
         self.liaison = liaison
         self.balance = balance
         self._horloge = horloge
-        self._lettres = {nom: machine.axes[nom].lettre for nom in ("agitateur_x", "manivelle")}
+        self._lettre = machine.axes["manivelle"].lettre
         self._verrou = threading.Lock()
         # Lectures récentes de la balance : (heure, kg).
         self._lectures: deque[tuple[float, float]] = deque(maxlen=400)
@@ -241,7 +236,7 @@ class AgitateurFluidnc:
         if pas is None or not pas.origine or self._fin_mouvement is not None:
             return
         etat = self.liaison.etat
-        angle = etat.positions.get(self._lettres["manivelle"])
+        angle = etat.positions.get(self._lettre)
         if etat.rapports_recus == self._rapport_echantillon or angle is None:
             return
         self._rapport_echantillon = etat.rapports_recus
@@ -296,19 +291,13 @@ class AgitateurFluidnc:
 
     # ------------------------------------------------------------ mouvements
 
-    def _facteur(self, nom: str) -> float:
-        return MM_PAR_M if nom == "agitateur_x" else 1
-
-    def _lire(self, nom: str) -> float:
+    def _lire(self) -> float:
         try:
-            return self.liaison.etat.positions[self._lettres[nom]]
+            return self.liaison.etat.positions[self._lettre]
         except KeyError as manque:
             raise ErreurEtape(
                 f"position de l'axe {manque} inconnue (carte pas encore lue)"
             ) from None
-
-    def glissiere_x(self) -> float:
-        return self._lire("agitateur_x") / MM_PAR_M
 
     @property
     def angle_haut_moteur(self) -> float | None:
@@ -322,40 +311,30 @@ class AgitateurFluidnc:
         return self._zero is not None
 
     def position(self) -> PoseAgitateur:
-        """Où est l'agitateur ; l'angle compte depuis « manivelle en haut »."""
-        x = self.glissiere_x()
+        """Où est la manivelle ; l'angle compte depuis « manivelle en haut »."""
+        angle = self._lire()
         if not self.origine_connue():
             raise ErreurEtape(
                 "origine de la manivelle pas faite, ou perdue (la carte a redémarré)",
                 QUOI_FAIRE_ORIGINE,
             )
         assert self._zero is not None
-        return PoseAgitateur(x=x, angle=self._lire("manivelle") - self._zero)
+        return PoseAgitateur(angle=angle - self._zero)
 
     def executer(self, pas: Pas, cible: PoseAgitateur | None) -> None:
         if pas.origine:
             # Tour lent dans le sens +, assez long pour voir toute la zone sans métal.
             origine = self.reglages.manivelle.origine
-            positions = {
-                self._lettres["manivelle"]: self._lire("manivelle") + origine.balayage_deg()
-            }
+            positions = {self._lettre: self._lire() + origine.balayage_deg()}
             with self._verrou:
                 self._echantillons = []
             self._partir(pas, positions, origine.vitesse_deg_s * 60)
             return
         assert cible is not None
-        depart = self.position()
         assert self._zero is not None
-        positions = {}
-        if pas.x is not None:
-            positions[self._lettres["agitateur_x"]] = cible.x * MM_PAR_M
-        if pas.angle is not None:
-            positions[self._lettres["manivelle"]] = cible.angle + self._zero
-        # Un seul axe bouge à la fois : F est sa vitesse (mm/min, ou °/min pour la manivelle).
-        if pas.angle is not None and abs(cible.angle - depart.angle) > TOLERANCE_ARRIVEE:
-            f = (pas.tr_min or self.reglages.vitesses.placement_tr_min) * 360
-        else:
-            f = self.reglages.vitesses.glissiere_m_s * 60 * MM_PAR_M
+        positions = {self._lettre: cible.angle + self._zero}
+        # F : la vitesse de la manivelle, en °/min.
+        f = (pas.tr_min or self.reglages.vitesses.placement_tr_min) * 360
         self._partir(pas, positions, f)
 
     def _partir(self, pas: Pas, positions: dict[str, float], f: float) -> None:

@@ -27,8 +27,8 @@ la machine : garder la main sur l'arrêt d'urgence, et les doigts loin des barre
 
 Dans les commandes ci-dessous, `vidange-fluidnc`, `vidange-pesees` et `vidange-remplissage` veulent dire
 `sudo -u vidange /opt/vidange-auto/pi/.venv/bin/vidange-fluidnc` (et de même pour les autres).
-Les options `--agitateur-au-garage --galet-range --micropore-rentre` de `vidange-remplissage` disent qu'on a
-**vu** l'agitateur au garage manivelle en haut, le bras du galet rangé et la tête du micropore rentrée (ces
+Les options `--manivelle-en-bas --galet-range --micropore-rentre` de `vidange-remplissage` disent qu'on a
+**vu** la manivelle du mycélium en bas (agitateur fixe depuis le 01/11), le bras du galet rangé et la tête du micropore rentrée (ces
 modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
 
 ## Étape 1 : ce que la carte n° 2 sait faire (console)
@@ -87,10 +87,12 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
    - `vidange-remplissage --galet-range aller 0.25` avec le plateau en haut : le chariot roule **plateau en
      haut** (la règle des anneaux du fût est supprimée depuis le 31/10 : une tôle fixe à x 0,655 sépare le
      fût du chariot). Regarder qu'il ne touche rien, fût présent puis absent, panneau levé puis rabattu ;
-   - `vidange-remplissage --galet-range aller 0.5` sans `--agitateur-au-garage` → **refusé** (le chariot ne
+   - `vidange-remplissage --galet-range aller 0.5` sans `--manivelle-en-bas` → **refusé** (le chariot ne
      roule pas près du poste) ;
-   - au poste, `vidange-remplissage --galet-range --agitateur-au-garage plateau 0.53` : les barres
+   - au vidage (y 0,42), `vidange-remplissage --galet-range --manivelle-en-bas plateau 0.53` : les barres
      s'ouvrent d'abord (au-dessus de 0,515) ;
+   - au poste (y 0,135), sans seau sur le plateau : le plateau monte ; avec un seau, son bord ne monte
+     jamais au-dessus de **0,68** (règle C2 du Remplissage : à 0,70 il touche le bocal manivelle en bas) ;
    - `vidange-remplissage --galet-range barres 0.20` avec le plateau à 0,53 : le plateau **descend** sous
      0,48 (joues de l'élévateur), les barres passent, et il reste à 0,48 (barres fermées : pas au-dessus
      de 0,515) ;
@@ -98,19 +100,18 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
      plateau bouge** (règle 12 : poussée à toute hauteur, barres ouvertes, bras de fermeture rangé). Sans
      `--galet-range` : **refusé** (bras de fermeture pas connu). Barres à 0,20 : elles s'ouvrent d'abord.
      `vidange-remplissage --galet-range pousseur 0` : il rentre, à toute hauteur.
-4. Passage de l'agitateur (31/10 : recul à y **0,40**, le moteur de la barre côté mur touche un support
-   SK12 à 0,375) : `vidange-remplissage --galet-range aller 0.40` (agitateur vu au garage), puis faire
-   rouler l'agitateur à la main, lentement, du garage au dosage : rien ne touche, il reste au moins
-   quelques mm entre le moteur de la barre côté mur et le support. `vidange-remplissage etat` à y 0,39 :
-   le Mycélium doit refuser de rouler (essai-mycelium.md).
-5. Chariot du fût sorti (pas « en place ») : `vidange-remplissage --agitateur-au-garage aller 0.50` →
+4. Demi-tour du bocal (agitateur fixe, 01/11 : recul à y **0,40**) : `vidange-remplissage --galet-range
+   --manivelle-en-bas aller 0.40`, puis faire le demi-tour du bocal à la main, lentement, manivelle en
+   haut : rien ne touche. `vidange-remplissage etat` à y 0,39 : le Mycélium doit refuser le demi-tour
+   (essai-mycelium.md).
+5. Chariot du fût sorti (pas « en place ») : `vidange-remplissage --manivelle-en-bas aller 0.50` →
    **refusé** (« axe du plateau ≤ 0,475 ») ; `aller 0.47` → permis. Mesurer, chariot à y 0,47, où est son
    bout côté allée (le point le plus loin : renvoi d'angle et moteur de montée) : la fiche dit 0,396 de
    l'axe, `remplissage → verrous → bout_y_m` = 0,40. Il doit rester à y ≤ 0,875.
 
 ## Étape 3 : un seau vide posé à la main
 
-1. `vidange-remplissage --galet-range --agitateur-au-garage pose seau_a` : chariot à y 0,50, barres **à
+1. `vidange-remplissage --galet-range --manivelle-en-bas pose seau_a` : chariot à y 0,50, barres **à
    l'approche** (hw 0,225), plateau **sous** la hauteur de pose (0,4625 − 0,05 pour le seau A). Si le plateau
    était au-dessus de 0,48, il doit descendre **avant** que les barres bougent (elles traversent les joues
    de l'élévateur, hw 0,235-0,255). Vérifier que les barres à 0,225 ne touchent aucun seau : c'est
@@ -129,18 +130,18 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
    petit jeu. Si une barre force trop, son pilote lève ALM : l'outil dit « alarme du pilote de la barre
    côté mur » (ou côté allée) et s'arrête ; c'est le comportement voulu (réduire `centrage_hw_m` d'un cran trop serré, ou augmenter le
    jeu).
-4. `vidange-remplissage --galet-range --agitateur-au-garage poste seau_a` : le plateau descend, le chariot
-   va au poste (y 0,135), le plateau remonte : le bord du seau doit être à **0,78** (0,775 pour le 5 L).
+4. `vidange-remplissage --galet-range --manivelle-en-bas vidage seau_a` : le plateau descend, le chariot
+   va au vidage (y 0,42), le plateau remonte : le bord du seau doit être à **0,78** (0,775 pour le 5 L).
 
 ## Étape 4 : ranger un seau
 
 1. Les places des files viennent du Stockage (tâche 35). En attendant, régler `rangement → files` pour une
    file réelle : `y` du chariot devant la file, `pousseur_m` (fin de la poussée vers le stockage, 0,325 au
    plus).
-2. Seau au poste (étape 3), `vidange-remplissage --galet-range --agitateur-au-garage ranger seau_a file_1` :
+2. Seau au vidage (étape 3), `vidange-remplissage --galet-range --manivelle-en-bas ranger seau_a file_1` :
    le plateau descend **en bas**, le chariot va à la file, le seau est pesé, le pousseur le pousse vers le
    stockage et rentre à son zéro. Le seau doit glisser droit, sans basculer.
-3. Bande du haut (tâche 35 bis) : `vidange-remplissage --galet-range --agitateur-au-garage ranger seau_a
+3. Bande du haut (tâche 35 bis) : `vidange-remplissage --galet-range --manivelle-en-bas ranger seau_a
    bande_haut`. Attendu, dans l'ordre : barres ouvertes, chariot à y 0,215, pesée, plateau à **0,4985**,
    poussée, pousseur rentré, plateau en bas. Mesurer le dessus du plateau au moment de la poussée : entre
    **0,496 et 0,501** (jamais sous la tôle du stockage à 0,496). Le seau doit passer sur la tôle du
@@ -187,11 +188,11 @@ soir). À faire d'abord sur la maquette. **Main sur l'arrêt d'urgence.**
 
 ## Étape 6 : modes couvercles et inspection, règle 9 de la préhension
 
-1. `vidange-remplissage --galet-range --agitateur-au-garage couvercles` : chariot à y 0,50, plateau à 0,459,
+1. `vidange-remplissage --galet-range --manivelle-en-bas couvercles` : chariot à y 0,50, plateau à 0,459,
    barres ouvertes ; le bac inox posé sur le plateau, la tige du retourneur sur sa barre. Puis
    `vidange-remplissage --galet-range barres 0.19` et `barres 0.30` : la tige ne touche rien. (Le lavage des
    couvercles avec le vrai chariot sera essayé quand les modules seront assemblés dans le programme.)
-2. `vidange-remplissage --galet-range --agitateur-au-garage inspection` : plateau à 0,575, barres ouvertes,
+2. `vidange-remplissage --galet-range --manivelle-en-bas inspection` : plateau à 0,575, barres ouvertes,
    un arrêt de 45°.
 3. Règle 9 (quand les modules seront assemblés dans le programme) : barres fermées (`barres 0.20`), mode
    des seaux, la tête de préhension au-dessus du plateau : sa descente sous 0,84 doit être **refusée**

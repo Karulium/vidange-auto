@@ -2,19 +2,18 @@
 
 Les étapes se répètent (une couche, la suivante...) : `ensuite` dit laquelle vient après.
 
-    origine_manivelle    prise d'origine de la manivelle (tour lent) si elle n'est pas connue,
-                         puis manivelle en haut
+    origine_manivelle    prise d'origine de la manivelle (tour lent, chariot à y ≥ 0,40) si elle
+                         n'est pas connue, puis manivelle en bas (l'attente)
     attendre_une_couche  une couche versée et tassée attend son mycélium (Mycelium.demander)
-    changer_de_bocal     bocal neuf (1er seau, ou bocal fini) : mors ouverts, bocal posé
-                         (Préhension, case vide), serré
-    ecarter_le_chariot   le chariot de remplissage s'écarte (y ≥ 0,40)
-    aller_doser          demi-tour du bocal tête en bas (manivelle en bas), glissière au dosage,
-                         manivelle en bas
-    amener_le_seau       le chariot revient avec le seau, plateau à la hauteur du dosage
+    ecarter_le_chariot   le chariot de remplissage à y ≥ 0,40 (il attend au vidage, y 0,42)
+    changer_de_bocal     bocal neuf (1er seau, ou bocal fini) : manivelle en bas, mors ouverts,
+                         bocal posé (Préhension, case vide), serré (chariot reculé ou au poste)
+    retourner_le_bocal   manivelle en haut, demi-tour du bocal tête en bas, manivelle en bas
+    amener_le_seau       le chariot amène le seau au poste (spray, micropore), puis au dosage,
+                         plateau à la hauteur du dosage
     agiter               casse du bloc (1re agitation d'un bocal), agitation jusqu'à la dose
-    liberer_le_seau      le chariot repart (vers la griffe ou le stockage)
-    rentrer              manivelle en haut, demi-tour du bocal debout (manivelle en bas),
-                         garage
+    liberer_le_seau      le chariot repart au vidage (y 0,42)
+    rentrer              manivelle en haut, demi-tour du bocal debout, manivelle en bas
     photographier_le_seau  la caméra du dosage pivote vers le seau dosé, photo notée avec sa
                          dose, retour au bocal (sauté si son verrou l'interdit)
     fin                  plus de couche à doser (simulateur, essais)
@@ -40,7 +39,7 @@ def module_mycelium(mycelium: Mycelium) -> Module:
     fin = Condition("geste du mycélium fini", mycelium.geste_fini)
     y_ecarte = f"{mycelium.reglages.chariot.y_ecarte_min:g}".replace(".", ",")
     ecarte = Condition(f"chariot de remplissage écarté (y ≥ {y_ecarte})", mycelium.chariot_ecarte)
-    garage = Condition("agitateur au garage, manivelle en haut, bocal debout", mycelium.au_garage)
+    attente = Condition("manivelle du mycélium en bas, bocal debout", mycelium.en_attente)
 
     def geste(
         nom: str, fabrique, ensuite=None, delai: str = GESTE, entree=(), quoi_faire=QUOI_FAIRE
@@ -76,22 +75,21 @@ def module_mycelium(mycelium: Mycelium) -> Module:
                 entree=(Condition("une couche attend son mycélium", mycelium.couche_ou_fin),),
                 ensuite=mycelium.apres_attente,
             ),
-            geste(
-                "changer_de_bocal",
-                mycelium.geste_changer_de_bocal,
-                mycelium.apres_bocal,
-                entree=(garage,),
-                quoi_faire="Mettre un bocal neuf de la bonne variété dans le porte-bocal, puis "
-                "acquitter et donner le Go.",
-            ),
             chariot(
                 "ecarter_le_chariot",
                 mycelium.ecarter_le_chariot,
                 ecarte,
                 ensuite=mycelium.apres_ecart,
-                entree=(garage,),
+                entree=(attente,),
             ),
-            geste("aller_doser", mycelium.geste_aller_doser, entree=(ecarte,)),
+            geste(
+                "changer_de_bocal",
+                mycelium.geste_changer_de_bocal,
+                mycelium.apres_bocal,
+                quoi_faire="Mettre un bocal neuf de la bonne variété dans le porte-bocal, puis "
+                "acquitter et donner le Go.",
+            ),
+            geste("retourner_le_bocal", mycelium.geste_retourner_le_bocal, entree=(ecarte,)),
             chariot(
                 "amener_le_seau",
                 mycelium.amener_le_seau,
@@ -100,7 +98,7 @@ def module_mycelium(mycelium: Mycelium) -> Module:
                 ),
                 entree=(
                     Condition(
-                        "agitateur au dosage, manivelle en bas, bocal tête en bas",
+                        "manivelle du mycélium en bas, bocal tête en bas",
                         mycelium.pret_pour_le_seau,
                     ),
                 ),
@@ -115,7 +113,7 @@ def module_mycelium(mycelium: Mycelium) -> Module:
                 action=mycelium.photographier_le_seau,
                 fin=Condition("caméra du dosage revenue au bocal", mycelium.photo_du_seau_finie),
                 delai_max=GESTE,
-                entree=(garage,),
+                entree=(attente,),
                 ensuite=mycelium.apres_retour,
             ),
             Etape("fin", "Rien à faire : plus de couche à doser.", ensuite=lambda: None),
@@ -123,7 +121,8 @@ def module_mycelium(mycelium: Mycelium) -> Module:
         surveillances=(
             agitateur.surveillance,
             Condition(
-                "chariot de remplissage écarté pendant que l'agitateur roule",
+                f"chariot de remplissage à y ≥ {y_ecarte} pendant le demi-tour (et manivelle hors "
+                "du bas)",
                 mycelium.surveiller_chariot,
             ),
         ),

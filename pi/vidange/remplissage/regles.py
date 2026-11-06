@@ -24,12 +24,13 @@ chaque barre ; deux barres écartées de plus de `barres → ecart_max_m` : tout
    rangé ; plusieurs seaux peuvent être poussés à la suite (le pousseur est côté allée, il ne
    passe plus sous la tête du micropore) ;
 5. plateau au-dessus de 0,26 seulement bras du galet rangé ;
-6. bras du spray sorti : plateau ≤ min(0,50 ; 0,71 − h), entraxe des barres > 0,50 ;
+6. bras du spray sorti : plateau ≤ min(0,50 ; 0,68 − h), entraxe des barres > 0,50 ;
 7. chariot du fût pas en place : bout du chariot côté allée (axe + 0,40) à y ≤ 0,875, donc axe
    du plateau à y ≤ 0,475 ;
-8. le chariot ne roule près du poste (y < recul de l'agitateur) que si le Mycélium le permet
-   (agitateur au garage manivelle en haut, ou au dosage manivelle en bas) ; et le plateau ne
-   monte au poste qu'agitateur au garage, sauf pour le dosage (son bocal est au-dessus) ;
+8. agitateur du mycélium FIXE au-dessus du poste (01/11/2026) : en deçà du dosage (y <
+   dosage_y, le poste), bord du seau (plateau + h) ≤ 0,68 TOUJOURS ; près du poste (y <
+   ecarte_y, 0,40), le chariot ne roule et son plateau ne monte que si le Mycélium le permet
+   (manivelle en bas, arrêtée) ;
 9. la préhension ne descend sous ≈ 0,84 au-dessus du chariot qu'avec barres ouvertes et tête du
    micropore rentrée (sauf en mode couvercles et pendant la pose d'un seau vide, barres à
    l'approche : vidange.remplissage.remplissage).
@@ -96,9 +97,9 @@ class Contexte:
     """Ce que disent les autres modules (cases vides : valeurs prudentes par défaut)."""
 
     chariot_fut_en_place: bool = False
-    # Raison pour laquelle le Mycélium interdit de rouler près du poste (None : permis).
-    refus_mycelium: str | None = "position de l'agitateur du mycélium inconnue"
-    agitateur_au_garage: bool = False
+    # Raison pour laquelle le Mycélium interdit de rouler (ou de monter le plateau) près du poste
+    # (None : permis).
+    refus_mycelium: str | None = "position de la manivelle du mycélium inconnue"
     # Bras du galet (tâche 41) rangé ; None : pas connu.
     bras_galet_range: bool | None = None
     # Bras du spray (tâche 39) sorti, et hauteur du seau sur le plateau (m).
@@ -132,8 +133,12 @@ class ReglesRemplissage:
         return pose.barres_les_plus_serrees >= self.verrous.barres_ouvertes_min - _EGAL
 
     def pres_du_poste(self, y: float) -> bool:
-        """Là où le chariot gêne l'agitateur du mycélium (en deçà du recul)."""
+        """Là où le chariot est sous le bocal du mycélium (en deçà du recul)."""
         return y < self.reglages.ecarte_y - self.reglages.tolerance_y_m
+
+    def au_poste(self, y: float) -> bool:
+        """En deçà du dosage : le bord du seau reste ≤ poste_bord_max_z (règle 8)."""
+        return y < self.reglages.dosage_y - self.reglages.tolerance_y_m
 
     def a(self, y: float, cible: float) -> bool:
         return abs(y - cible) <= self.reglages.tolerance_y_m + _EGAL
@@ -201,6 +206,13 @@ class ReglesRemplissage:
             refus = self.refus_bras_spray(pose, contexte.hauteur_seau)
             if refus is not None:
                 return refus
+        if self.au_poste(pose.y):
+            bord = pose.z + (contexte.hauteur_seau or 0.0)
+            if bord > v.poste_bord_max_z + _EGAL:
+                return (
+                    f"au poste (y {_m(pose.y)}, sous le bocal du mycélium) : bord du seau ≤ "
+                    f"{_m(v.poste_bord_max_z)} toujours (il serait à {_m(bord)})"
+                )
         if not contexte.chariot_fut_en_place:
             bout = pose.y + v.bout_y_m
             if bout > self.bout_max_y + _EGAL:
@@ -213,11 +225,8 @@ class ReglesRemplissage:
 
     # ------------------------------------------------------------ un mouvement
 
-    def refus_mouvement(
-        self, depart: Pose, arrivee: Pose, contexte: Contexte, dosage: bool = False
-    ) -> str | None:
-        """Le mouvement de `depart` à `arrivee` (tous les axes ensemble, en ligne droite).
-        `dosage` : le plateau monte au dosage du mycélium (bocal au-dessus, manivelle en bas)."""
+    def refus_mouvement(self, depart: Pose, arrivee: Pose, contexte: Contexte) -> str | None:
+        """Le mouvement de `depart` à `arrivee` (tous les axes ensemble, en ligne droite)."""
         refus = self.refus_pose(arrivee, contexte)
         if refus is not None:
             return refus
@@ -226,9 +235,8 @@ class ReglesRemplissage:
             if contexte.refus_mycelium is not None:
                 return f"le chariot ne roule pas près du poste : {contexte.refus_mycelium}"
         monte = arrivee.z > depart.z + _EGAL and arrivee.z > self.reglages.plateau_en_bas_z
-        if monte and self.pres_du_poste(arrivee.y) and not dosage:
-            if not contexte.agitateur_au_garage:
-                return "le plateau ne monte au poste qu'agitateur du mycélium au garage"
+        if monte and self.pres_du_poste(arrivee.y) and contexte.refus_mycelium is not None:
+            return f"le plateau ne monte pas près du poste : {contexte.refus_mycelium}"
         refus = self.refus_ecart_barres(depart)
         if refus is not None:
             # Une barre a glissé ou a été bougée seule : rien ne bouge avant la prise d'origine.
@@ -267,7 +275,7 @@ class ReglesRemplissage:
 
     def refus_bras_spray(self, pose: Pose, hauteur_seau: float | None) -> str | None:
         """Pendant le pivot du bras du spray et la pulvérisation (tâche 39, règle 6) : plateau
-        ≤ min(0,50 ; 0,71 − h) ; le bras ne bouge que barres ouvertes à plus de 0,50 d'entraxe."""
+        ≤ min(0,50 ; 0,68 − h) ; le bras ne bouge que barres ouvertes à plus de 0,50 d'entraxe."""
         v = self.verrous
         entraxe = pose.barres + pose.barre_allee
         if entraxe <= v.spray_entraxe_min_m + _EGAL:

@@ -7,7 +7,7 @@ faux FluidNC (faux plateau, faux bocal : vidange.porte_bocal.faux), faux chariot
 `faux_porte_bocal=True` remplace le vrai porte-bocal par un faux tout simple (FauxPorteBocal :
 chaque geste dure `demi_tour_s`), pour les essais du Mycélium seul.
 
-Quand la manivelle tourne, bocal tête en bas au dosage et seau dessous, les grains tombent dans
+Quand la manivelle tourne, bocal tête en bas et seau au dosage dessous, les grains tombent dans
 le seau tant que le bocal n'est pas vide (`debit_kg_s` à la vitesse d'agitation, moins quand elle
 tourne plus lentement) : le faux chariot en porte le poids.
 Le faux chariot vérifie le verrou du mycélium avant chaque trajet : s'il est refusé, alarme.
@@ -117,7 +117,8 @@ class FauxChariot:
         self._trajet = _Trajet(self.etat(), EtatChariot(y, plateau_z), self._horloge())
 
     def ecarter(self) -> None:
-        self._aller(self.reglages.y_ecarte_min, self.etat().plateau_z)
+        if self.etat().y < self.reglages.y_ecarte_min:
+            self._aller(self.reglages.y_ecarte_min, self.etat().plateau_z)
 
     def amener_au_dosage(self, plateau_z: float) -> None:
         self._aller(self.reglages.y_dosage, plateau_z)
@@ -155,23 +156,14 @@ class AgitateurSimule:
         self.surveillance = Condition("cartes simulées sans alarme", lambda: True)
 
     def position(self) -> PoseAgitateur:
-        return PoseAgitateur(
-            x=self._etat.positions["agitateur_x"], angle=self._etat.positions["manivelle"]
-        )
-
-    def glissiere_x(self) -> float:
-        return self._etat.positions["agitateur_x"]
+        return PoseAgitateur(angle=self._etat.positions["manivelle"])
 
     def origine_connue(self) -> bool:
         return self._origine_connue
 
     def _verse(self, pose: PoseAgitateur) -> bool:
         """Les grains tombent dans le seau quand la manivelle tourne à cette pose."""
-        return (
-            self.tete_en_bas()
-            and self.regles.au_dosage(pose)
-            and self.regles.chariot_au_dosage(self.chariot.etat())
-        )
+        return self.tete_en_bas() and self.regles.chariot_au_dosage(self.chariot.etat())
 
     def executer(self, pas: Pas, cible: PoseAgitateur | None) -> None:
         if pas.origine:
@@ -201,9 +193,7 @@ class AgitateurSimule:
             self.bocal_kg -= tombe
             self.chariot.poids_kg += tombe
         self._arrivees = self._etat.aller_vers(
-            pas.texte,
-            {"agitateur_x": cible.x, "manivelle": cible.angle},
-            {"agitateur_x": self.vitesses.glissiere_m_s, "manivelle": vitesse},
+            pas.texte, {"manivelle": cible.angle}, {"manivelle": vitesse}
         )
         if pas.attente_s:
             self._arrivees = self._etat.attendre(CARTE, pas.attente_s)
@@ -245,8 +235,8 @@ def mycelium_du_simulateur(
     **options: Any,
 ) -> Mycelium:
     """Le mycélium sur la machine imaginaire, avec les seaux de simulateur.yaml (chaque couche
-    de leur format, dans l'ordre, dans ce cycle du registre). Le bocal attend au garage
-    (position agitateur_garage). `controle` : réponse de la photo de contrôle du bocal.
+    de leur format, dans l'ordre, dans ce cycle du registre). Le bocal attend manivelle en bas
+    (position agitateur_attente). `controle` : réponse de la photo de contrôle du bocal.
     `origine_connue=False` : la prise d'origine de la manivelle est rejouée aussi.
     `options` : registre, photo..."""
     reglages = simulateur.reglages
@@ -256,8 +246,8 @@ def mycelium_du_simulateur(
         raise ErreurSimulation("simulateur.yaml ou machine.yaml n'a pas de partie « mycelium »")
     horloge = lambda: simulateur.temps  # noqa: E731
     etat = simulateur.etat_axes
-    if "agitateur_garage" in machine.positions:
-        etat.positions.update(machine.positions["agitateur_garage"])
+    if "agitateur_attente" in machine.positions:
+        etat.positions.update(machine.positions["agitateur_attente"])
     porte_bocal: PorteBocal
     materiel: FauxMaterielPorteBocal | None = None
     if faux_porte_bocal or machine.porte_bocal is None:
