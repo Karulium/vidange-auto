@@ -1072,7 +1072,10 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
      `prehension → porte_bocal → couloir: {depart: [0.925, 0.40], face_z: 1.10, demi_largeur_x_tete: 0.06,
      largeur_x_bocal: [-0.06, 0.04], demi_largeur_x_mors: 0.005}`. Seul trajet permis dans la zone : du départ à la
      verticale du bocal en −y (et retour en +y), face à 1,10, manivelle en bas, x dans la largeur permise (tête seule
-     ou avec bocal). Tests : arrivée côté mur refusée ; arrivée par +x refusée ; bocal tenu à x 0,925 + 0,05 refusé ;
+     ou avec bocal). Avant de descendre sur le bocal : mors ouverts (fin de course) et axe de la tête à
+     x ± 0,001 / y −0,001 +0,002 de la verticale (réglages `tolerance_pose_x_m`, `tolerance_pose_y_m`) ; vitesse
+     lente sur les `descente_lente_pose_m: 0.023` derniers mètres (EXEMPLE de vitesse). Tests : bocal décalé de 2 mm
+     en x ⇒ descente refusée ; arrivée côté mur refusée ; arrivée par +x refusée ; bocal tenu à x 0,925 + 0,05 refusé ;
      tête seule à x 0,925 + 0,05 acceptée ; trajet du départ à la verticale accepté.
   Tests de chaque point ; `vidange --verifier` et le simulateur passent.
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**

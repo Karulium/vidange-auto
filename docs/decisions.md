@@ -247,9 +247,11 @@ si l'une pose problème, elle le dit dans sa PR.
      contact de la capsule (et le même chemin au retour). Côté mur : moteur du demi-tour et support de la glissière ;
      côtés en x : plaques des mors et pièces en V : interdits. Largeur : tête seule x 0,925 ± 0,06 ; avec un bocal
      −0,06 / +0,04 jusqu'à l'entrée des mors (caméra du dosage côté +x), puis ± 0,005 dans le porte-bocal. Le
-     chariot de remplissage ne gêne pas (au poste ou reculé). **Réserve** : la pièce en V du haut recoupe la capsule
-     du bocal tenu à 1,10 (mors ouverts de 20 mm, pièces v10d) ; question posée au fil Porte-bocal. D'ici là, pose
-     seulement mors grands ouverts (déjà le cas). Côté logiciel : tâche 36 bis, point 8.
+     chariot de remplissage ne gêne pas (au poste ou reculé). Réserve **levée** (fil Porte-bocal, CAO v10f, 06/11) :
+     mors ouverts de 20 mm chacun (fin de course), le bocal passe capsule à 1,10 avec au moins 9 mm de jeu ; sur les
+     **23 derniers mm de la descente** (capsule sous ≈ 1,07), il ne reste que 1,3 mm de jeu : bocal centré à
+     **x ± 1 mm et y −1 / +2 mm**, descente verticale et lente. Ordre : mors ouverts (fin de course), couloir côté
+     allée à 1,10, descente verticale centrée, serrage. Côté logiciel : tâche 36 bis, point 8.
 - **Griffe : table « Y minimum du mât » avec l'agitateur fixe** (Maquette v45.111, 02/11/2026,
   `maquette/table-y-min-mat-griffe-v45.111.md` ; remplace les points 2 et 3 de la section du 01/11 ci-dessous).
   y du mât = repère du portique. Godet fermé / à moitié ouvert / grand ouvert, tête bras le long du pont. Bandes de x
