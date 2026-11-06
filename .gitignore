@@ -17,3 +17,10 @@ accelerometre/build*/
 
 # Programme des cartes de pesée fabriqué (pesee/README.md)
 pesee/build*/
+
+# Programmes des ESP32-C3 du poste du fût fabriqués (poste_fut_radio/README.md)
+poste_fut_radio/build*/
+poste_fut_radio/*/build*/
+poste_fut_radio/*/sdkconfig
+poste_fut_radio/*/sdkconfig.old
+poste_fut_radio/*/dependencies.lock

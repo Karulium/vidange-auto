@@ -11,7 +11,7 @@ from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.griffe.bras import CapteurForce, G
 from vidange.materiel import ErreurMateriel, FausseFabrique, Materiel, PeseeMuette
 from vidange.materiel.carte_pesee import MesureCarte, decoder, encoder
-from vidange.pesees import entete, outil
+from vidange.pesees import entete, entete_radio, outil
 from vidange.pesees.tour import TourPesees
 from vidange.pesees.verification import verifier_avec_liste
 from vidange.reglages import ErreurReglages, charger_reglages
@@ -283,6 +283,91 @@ def test_fabrication_arretee_par_des_reglages_faux(reglages, entrees_sorties, tm
     assert "la broche 2 est prise deux fois" in capsys.readouterr().err
     assert not (tmp_path / "reglages_genere.h").exists()
     assert entete.main([]) == 2
+
+
+# ------------------------- réglages des 2 ESP32-C3 du poste du fût (tâche 17 ter)
+
+
+def test_reglages_copies_dans_les_programmes_du_poste_du_fut(tmp_path):
+    entete_radio.ecrire(
+        DOSSIER_PI / "reglages" / "pesees.yaml",
+        DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml",
+        tmp_path,
+    )
+    texte = (tmp_path / "reglages_radio.h").read_text(encoding="utf-8")
+    # L'adresse de la boîte sur le bus vient de entrees-sorties.yaml (pesee_fut).
+    assert "#define REGLAGE_ADRESSE 4\n" in texte
+    assert "#define REGLAGE_VITESSE_BAUDS 115200" in texte
+    assert "#define REGLAGE_DELAI_AVANT_REPONSE_US 100" in texte
+    assert "#define REGLAGE_EXEMPLE 1" in texte
+    assert "#define REGLAGE_ADRESSE_PLATEAU {0x02, 0x50, 0x46, 0x00, 0x00, 0x01}" in texte
+    assert '#define REGLAGE_ADRESSE_BOITE_TEXTE "02:50:46:00:00:02"' in texte
+    assert "#define REGLAGE_PLATEAU_SOMMEIL_APRES_MS 30000" in texte
+    assert "#define REGLAGE_PLATEAU_RAPPORT_PONT_MILLIEMES 2000" in texte
+    assert "#define REGLAGE_PLATEAU_COURBE_POINTS 10" in texte
+    assert "#define REGLAGE_PLATEAU_COURBE_PCT {0, 5, 20, 30, 45, 60, 72, 83, 93, 100}" in texte
+    assert "#define REGLAGE_BOITE_RADIO_MUETTE_MS 2000" in texte
+    assert "#define REGLAGE_BOITE_BROCHE_RS485_SENS 10" in texte
+    # Une broche absente vaut -1.
+    reglages = charger_reglages(DOSSIER_PI / "reglages").pesees
+    assert reglages.poste_fut_radio is not None
+    sans_voyant = reglages.poste_fut_radio.boite.broches.model_copy(update={"voyant": None})
+    assert entete_radio._broches("BOITE", sans_voyant.model_dump())["BOITE_BROCHE_VOYANT"] == -1
+
+
+def test_fabrication_du_poste_du_fut_arretee_par_des_reglages_faux(
+    reglages, entrees_sorties, tmp_path, capsys
+):
+    remplacer(reglages / "pesees.yaml", "      reed: 3", "      reed: 7")
+    arguments = [str(reglages / "pesees.yaml"), str(entrees_sorties), str(tmp_path)]
+    assert entete_radio.main(arguments) == 1
+    erreur = capsys.readouterr().err
+    assert "la broche 7 est prise deux fois (hx711_sck et reed)" in erreur
+    assert "seules les broches 0 à 5 réveillent" in erreur
+    assert not (tmp_path / "reglages_radio.h").exists()
+    assert entete_radio.main([]) == 2
+
+
+@pytest.mark.parametrize(
+    ("ancien", "nouveau", "message"),
+    [
+        (
+            'adresse_boite: "02:50:46:00:00:02"',
+            'adresse_boite: "02:50:46:00:00:01"',
+            "adresse_plateau et adresse_boite sont les mêmes",
+        ),
+        (
+            'adresse_plateau: "02:50:46:00:00:01"',
+            'adresse_plateau: "03:50:46:00:00:01"',
+            "adresse de groupe",
+        ),
+        ('adresse_plateau: "02:50:46:00:00:01"', 'adresse_plateau: "02:50:46"', "adresse_plateau"),
+        ("      accu: 4", "      accu: 5", "entrée analogique ADC1"),
+        (
+            "      usb_5v: 10",
+            "      usb_5v: 18",
+            "usb_5v (18) : broche de l'ESP32-C3 réservée (USB)",
+        ),
+        ("      rs485_tx: 21", "      rs485_tx: 12", "réservée (mémoire flash)"),
+        ("    sans_mesure_ms: 500", "    sans_mesure_ms: 200", "au moins 3 fois le temps"),
+        ("      - [3600, 30]", "      - [3400, 30]", "les tensions (mV) doivent aller en montant"),
+        (
+            "      - [3600, 30]",
+            "      - [3600, 15]",
+            "les niveaux (%) ne doivent jamais redescendre",
+        ),
+        ("    radio_muette_ms: 2000", "    radio_muette_ms: 900", "radio_muette_ms (900)"),
+    ],
+)
+def test_reglages_du_poste_du_fut_verifies(reglages, ancien, nouveau, message):
+    remplacer(reglages / "pesees.yaml", ancien, nouveau)
+    assert message in erreur_de(reglages)
+
+
+def test_la_boite_du_poste_demande_ses_programmes(reglages_pesees, liste):
+    sans = reglages_pesees.model_copy(update={"poste_fut_radio": None})
+    erreurs = "\n".join(verifier_avec_liste(sans, liste))
+    assert "il manque « poste_fut_radio »" in erreurs
 
 
 # ------------------------------------------------------------------- l'outil

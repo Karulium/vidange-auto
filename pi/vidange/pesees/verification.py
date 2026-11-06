@@ -66,6 +66,16 @@ def verifier_avec_liste(reglages: ReglagesPesees, liste: EntreesSorties) -> list
         erreurs.append(
             "pesees.yaml : il manque « accu_plateau_fut » (seuils de l'accu du plateau du fût)"
         )
+    if boites and reglages.poste_fut_radio is None:
+        erreurs.append(
+            "pesees.yaml : il manque « poste_fut_radio » (programmes des 2 ESP32-C3 du poste du "
+            "fût : adresses radio, broches, délais)"
+        )
+    if len(boites) > 1:
+        erreurs.append(
+            "entrees-sorties.yaml : une seule boîte du poste du fût est prévue "
+            f"(il y en a {len(boites)} : {', '.join(boites)})"
+        )
     bus = {liste.signaux[nom].carte for nom in cartes}
     if len(bus) > 1:
         erreurs.append(

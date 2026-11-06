@@ -1210,7 +1210,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   absente ; une seule alerte pour une longue absence ; retour de la pesée sans redémarrer ; seuils de l'accu ;
   plateau 10 min sans recharge ⇒ alerte ; la griffe garde ses 80 mesures par seconde avec `pesee_fut` dans le tour.
   `vidange --verifier` passe.
-- [ ] **17 ter. Programmes des 2 ESP32-C3 du poste du fût (plateau et boîte du poste)** — Modèle : Opus, effort
+- [x] **17 ter. Programmes des 2 ESP32-C3 du poste du fût (plateau et boîte du poste)** — Modèle : Opus, effort
   moyen. **À faire après la tâche 17 bis.** Vrai matériel : procédure d'essai pas à pas, « testé sur le vrai
   matériel : non ».
   Sources : la même décision que 17 bis, et `poste-fut-pour-logiciel.md` (programmes). Dans un dossier
@@ -1219,10 +1219,10 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   - **Plateau** : dort, se réveille sur le reed ; lit le HX711 à 10 mesures par seconde (RATE à la masse), moyenne
     de 5, une trame ESP-NOW toutes les 0,5 s (brut, numéro, HX711 muet, tension et %, recharge, USB-C de secours) ;
     tension de l'accu par pont diviseur ; se rendort 30 s après l'ouverture du reed.
-  - **Recharge** (réponse de Karulium à la PR n° 77, `docs/decisions.md`) : le bit 1 (valeur 2) du registre 8 veut
-    dire « **5 V de la recharge sans contact présent** », **pas** « en charge » : il reste vrai quand l'accu est
-    plein (sinon l'alerte « recharge sans contact en panne ? » viendrait à chaque accu plein). Le plateau le met
-    dans la trame, la boîte le recopie tel quel.
+  - **Recharge** (tranché par Claude, réponses à la PR n° 77, `docs/decisions.md`) : le bit 1 (valeur 2) du
+    registre 8 veut dire « **5 V de la recharge sans contact présent** », **pas** « en charge » : il reste vrai
+    quand l'accu est plein (sinon l'alerte « recharge sans contact en panne ? » viendrait à chaque accu plein). Le
+    plateau le met dans la trame, la boîte le recopie tel quel.
   - **Boîte du poste** : toujours alimentée ; reçoit les trames (seulement de l'adresse radio du plateau, dans les
     réglages, jamais dans le code) ; répond en Modbus RTU à 115 200 bauds, 8N1, registres 0 à 12 et signature
     0x5046 de 17 bis ; bit « radio muette » si rien depuis 2 s ; MAX3485 avec DE/RE. Reprendre le code Modbus de

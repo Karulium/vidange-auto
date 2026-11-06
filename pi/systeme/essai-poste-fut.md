@@ -90,7 +90,8 @@ Dans les commandes ci-dessous, `vidange-es` veut dire
    Si le journal dit « signature 0x5053 » : c'est une carte de pesée RP2040 qui a cette adresse.
 5. **Si « ÉCHEC : pesée absente : radio du plateau muette »** : la boîte répond mais n'entend pas le
    plateau. Plateau bien au fond ? Accu chargé (brancher l'USB-C de secours) ? Voyant de la carte du
-   plateau ? Adresse radio du plateau bien recopiée dans les réglages de la boîte (tâche 17 ter) ?
+   plateau ? Les 2 cartes chargées avec les programmes du même zip (mêmes adresses radio :
+   `poste_fut_radio/essai-materiel.md`, étape 5) ?
 6. **Si « PAS DE 5 V DE RECHARGE »** plateau au fond : les bobines de la recharge sans contact ne sont pas face à
    face, ou le récepteur est en panne. Le noter.
 

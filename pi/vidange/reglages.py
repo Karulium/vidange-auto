@@ -4157,6 +4157,203 @@ class AccuPlateauFut(Modele):
         return self
 
 
+# Broches de l'ESP32-C3 (numéros GPIO, de 0 à 21) que les programmes du poste du fût ne prennent
+# jamais : celles de la mémoire flash (11 à 17 sur beaucoup de cartes) et celles de l'USB (18, 19 :
+# le câble des mises à jour et de la fenêtre texte).
+BROCHES_INTERDITES_ESP32C3 = {
+    **{broche: "mémoire flash" for broche in range(11, 18)},
+    18: "USB",
+    19: "USB",
+}
+# Seules les broches 0 à 5 réveillent l'ESP32-C3 endormi ; 0 à 4 sont les entrées analogiques ADC1
+# (l'ADC2 ne marche pas quand la radio est allumée).
+BROCHES_REVEIL_ESP32C3 = range(0, 6)
+BROCHES_ADC1_ESP32C3 = range(0, 5)
+# Points de la courbe de l'accu au plus (taille du tableau dans le programme du plateau).
+POINTS_COURBE_ACCU_MAX = 16
+
+BrocheEsp32c3 = Annotated[int, Field(ge=0, le=21)]
+AdresseRadio = Annotated[
+    str, StringConstraints(pattern=r"^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$", to_upper=True)
+]
+
+
+def _verifier_broches_esp32c3(broches: dict[str, int | None]) -> list[str]:
+    erreurs = []
+    deja_vues: dict[int, str] = {}
+    for nom, broche in broches.items():
+        if broche is None:
+            continue
+        if broche in BROCHES_INTERDITES_ESP32C3:
+            erreurs.append(
+                f"{nom} ({broche}) : broche de l'ESP32-C3 réservée "
+                f"({BROCHES_INTERDITES_ESP32C3[broche]})"
+            )
+        autre = deja_vues.setdefault(broche, nom)
+        if autre != nom:
+            erreurs.append(f"la broche {broche} est prise deux fois ({autre} et {nom})")
+    return erreurs
+
+
+class RadioPosteFut(Modele):
+    """ESP-NOW entre le plateau et la boîte du poste : chaque carte prend son adresse d'ici."""
+
+    adresse_plateau: AdresseRadio
+    adresse_boite: AdresseRadio
+    # Canal radio, le même pour les deux cartes.
+    canal: int = Field(ge=1, le=13)
+    # Puissance d'émission maximale (dBm).
+    puissance_dbm: int = Field(ge=2, le=20)
+
+    @model_validator(mode="after")
+    def _adresses(self) -> "RadioPosteFut":
+        erreurs = []
+        for nom in ("adresse_plateau", "adresse_boite"):
+            adresse = getattr(self, nom)
+            premier = int(adresse[:2], 16)
+            if premier & 1:
+                erreurs.append(
+                    f"{nom} ({adresse}) : adresse de groupe (premier octet impair), il faut "
+                    "l'adresse d'une seule carte (exemple : 02:50:46:00:00:01)"
+                )
+            if adresse == "00:00:00:00:00:00":
+                erreurs.append(f"{nom} : l'adresse 00:00:00:00:00:00 n'est pas permise")
+        if self.adresse_plateau == self.adresse_boite:
+            erreurs.append(
+                f"adresse_plateau et adresse_boite sont les mêmes ({self.adresse_plateau})"
+            )
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class BrochesPlateauFut(Modele):
+    hx711_dt: BrocheEsp32c3
+    hx711_sck: BrocheEsp32c3
+    # Contact reed de réveil, entre la broche et le 0 V (fermé = au poste).
+    reed: BrocheEsp32c3
+    # Pont diviseur de l'accu (entrée analogique).
+    accu: BrocheEsp32c3
+    # 5 V de la recharge sans contact et 5 V de l'USB-C de secours, par un pont diviseur
+    # (1 = présent).
+    recharge_5v: BrocheEsp32c3
+    usb_5v: BrocheEsp32c3
+    voyant: BrocheEsp32c3 | None = None
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "BrochesPlateauFut":
+        erreurs = _verifier_broches_esp32c3(self.model_dump())
+        if self.reed not in BROCHES_REVEIL_ESP32C3:
+            erreurs.append(
+                f"reed ({self.reed}) : seules les broches 0 à 5 réveillent l'ESP32-C3 endormi"
+            )
+        if self.accu not in BROCHES_ADC1_ESP32C3:
+            erreurs.append(
+                f"accu ({self.accu}) : il faut une entrée analogique ADC1 (broche 0 à 4)"
+            )
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class PlateauFut(Modele):
+    """Programme de l'ESP32-C3 du plateau de pesée (poste_fut_radio/plateau)."""
+
+    broches: BrochesPlateauFut
+    # Voyant allumé quand sa broche est à 0 (cas de beaucoup de petites cartes).
+    voyant_actif_bas: bool = False
+    # Cadence du HX711, choisie sur sa carte par la broche RATE (à la masse : 10). Sert à vérifier
+    # les autres chiffres.
+    mesures_par_seconde_hx711: Literal[10, 80]
+    # Une trame radio toutes les ... (ms), avec la moyenne des « moyenne_de » dernières mesures.
+    periode_trame_ms: int = Field(ge=100, le=10000)
+    moyenne_de: int = Field(ge=1, le=16)
+    # Plus de mesure du HX711 depuis ce temps (ms) : « HX711 muet ».
+    sans_mesure_ms: int = Field(ge=50, le=10000)
+    # Reed ouvert depuis ce temps (s) : la carte s'endort.
+    sommeil_apres_s: float = Field(ge=1, le=3600)
+    # Pont diviseur de l'accu : tension de l'accu / tension sur la broche.
+    rapport_pont_accu: float = Field(gt=1, le=10)
+    # Niveau de l'accu : points (tension en mV, %), tension croissante.
+    courbe_accu: list[tuple[int, int]] = Field(min_length=2, max_length=POINTS_COURBE_ACCU_MAX)
+    chien_de_garde_ms: int = Field(ge=100, le=60000)
+    periode_affichage_ms: int = Field(ge=100, le=600000)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "PlateauFut":
+        erreurs = []
+        periode_mesure_ms = 1000 / self.mesures_par_seconde_hx711
+        if self.sans_mesure_ms < 3 * periode_mesure_ms:
+            erreurs.append(
+                f"sans_mesure_ms ({self.sans_mesure_ms}) doit valoir au moins 3 fois le temps "
+                f"entre deux mesures du HX711 ({periode_mesure_ms:g} ms)"
+            )
+        if self.moyenne_de * periode_mesure_ms > self.periode_trame_ms * 4:
+            erreurs.append(
+                f"moyenne_de ({self.moyenne_de}) : la moyenne prendrait plus de 4 trames de "
+                "mesures (trop lente)"
+            )
+        if self.sommeil_apres_s * 1000 < 2 * self.periode_trame_ms:
+            erreurs.append("sommeil_apres_s doit laisser passer au moins 2 trames")
+        tensions = [mv for mv, _ in self.courbe_accu]
+        niveaux = [pct for _, pct in self.courbe_accu]
+        if any(b <= a for a, b in zip(tensions, tensions[1:], strict=False)):
+            erreurs.append("courbe_accu : les tensions (mV) doivent aller en montant")
+        if any(b < a for a, b in zip(niveaux, niveaux[1:], strict=False)):
+            erreurs.append("courbe_accu : les niveaux (%) ne doivent jamais redescendre")
+        if any(not 0 <= pct <= 100 for pct in niveaux):
+            erreurs.append("courbe_accu : un niveau doit aller de 0 à 100 %")
+        if any(not 1000 <= mv <= 6000 for mv in tensions):
+            erreurs.append("courbe_accu : une tension doit aller de 1000 à 6000 mV")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class BrochesBoiteFut(Modele):
+    # L'émetteur-récepteur RS485 3,3 V (MAX3485) : DI, RO, et DE et /RE reliées (1 = parler).
+    rs485_tx: BrocheEsp32c3
+    rs485_rx: BrocheEsp32c3
+    rs485_sens: BrocheEsp32c3
+    voyant: BrocheEsp32c3 | None = None
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "BrochesBoiteFut":
+        erreurs = _verifier_broches_esp32c3(self.model_dump())
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class BoiteFut(Modele):
+    """Programme de l'ESP32-C3 de la boîte du poste (poste_fut_radio/boite)."""
+
+    broches: BrochesBoiteFut
+    voyant_actif_bas: bool = False
+    # Rien reçu du plateau depuis ce temps (ms) : bit « radio muette » (registre 4, valeur 4).
+    radio_muette_ms: int = Field(ge=200, le=60000)
+    chien_de_garde_ms: int = Field(ge=100, le=60000)
+    periode_affichage_ms: int = Field(ge=100, le=600000)
+
+
+class PosteFutRadio(Modele):
+    """Programmes des 2 ESP32-C3 du poste du fût (tâche 17 ter, dossier poste_fut_radio/)."""
+
+    radio: RadioPosteFut
+    plateau: PlateauFut
+    boite: BoiteFut
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "PosteFutRadio":
+        if self.boite.radio_muette_ms < 2 * self.plateau.periode_trame_ms:
+            raise ValueError(
+                f"boite → radio_muette_ms ({self.boite.radio_muette_ms}) doit valoir au moins "
+                f"2 fois plateau → periode_trame_ms ({self.plateau.periode_trame_ms}) : sinon "
+                "une seule trame perdue dirait « radio muette »"
+            )
+        return self
+
+
 class ReglagesPesees(Modele):
     """pesees.yaml : les pesées du bus RS485 des pesées (cartes RP2040 + HX711, et la boîte du
     poste du fût)."""
@@ -4178,6 +4375,8 @@ class ReglagesPesees(Modele):
     etalonnage: dict[Nom, EtalonnagePesee] = Field(min_length=1)
     # Accu du plateau du poste du fût (seulement s'il y a une boîte du poste sur le bus).
     accu_plateau_fut: AccuPlateauFut | None = None
+    # Programmes des 2 ESP32-C3 du poste du fût (seulement s'il y a une boîte du poste).
+    poste_fut_radio: PosteFutRadio | None = None
 
     @model_validator(mode="after")
     def _verifier_cartes(self) -> "ReglagesPesees":

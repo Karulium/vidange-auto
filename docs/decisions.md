@@ -686,6 +686,17 @@ si l'une pose problème, elle le dit dans sa PR.
      la vidange, ni le seau suivant n'attendent leur acquittement (la pesée n'arrête jamais la machine). Vérifié dans
      le code (le chef ne lit pas les alarmes du registre ; la check-list les dit « attention », jamais « bloquant ») et
      par deux tests (`test_alarmes_du_poste_ne_bloquent_jamais`, `test_alarmes_du_poste_ne_bloquent_pas_la_vidange`).
+- **Cartes radio du poste du fût, réponses à la PR n° 78** (tâche 17 ter, 06/11/2026, niveau 1, tranché par Claude) :
+  1. **Carte** : ESP32-C3 SuperMini pour le plateau et pour la boîte (petite, peu chère, USB-C, voyant sur GPIO8).
+     Une autre carte ESP32-C3 ne change que `pesees.yaml → poste_fut_radio`.
+  2. **Consommation** : radio allumée sans économie d'énergie (≈ 70 à 90 mA au lieu de 40 mA). Gardé : ça ne
+     compte que si la recharge sans contact est en panne (≈ 15 à 25 fûts au lieu de 30 à 50). À mesurer à l'essai ;
+     économie d'énergie de la radio seulement si c'est utile.
+  3. **Petits composants** (pont diviseur 2 × 220 kΩ + 100 nF pour l'accu, 10 kΩ + 15 kΩ pour chaque détection de
+     5 V, tirage 100 kΩ du reed, 10 kΩ de DE/RE vers le 0 V) : acceptés, à mettre dans le plan de câblage du poste
+     du fût (demandé au fil mécanique). Broches et valeurs : `pesees.yaml`, EXEMPLES.
+  4. **Puissance radio** 8 dBm (≈ 1 m entre plateau et boîte) : gardée ; à monter seulement si l'essai montre des
+     trames perdues ou un signal sous −85 dBm. Pas de chiffrement (une clé serait un secret de plus pour une pesée).
 - **Portique, réponses à la PR n° 75** (tâche 36 bis, 06/11/2026, niveau 1, fil logiciel) :
   1. Le pilote boucle fermée du godet ne laisse pas FluidNC baisser son courant : prise d'origine du godet **lente**,
      et les sorties d'alarme des pilotes A et B de la griffe vont **en parallèle sur l'entrée libre E12 de la carte

@@ -3,7 +3,9 @@
 # (adaptateur « rs485_pesee » de docs/entrees-sorties.yaml), en Modbus RTU.
 # La pesée du poste du fût (tâche 17 bis) est sur le même bus : la boîte du poste reçoit par radio
 # les mesures du plateau et répond comme une carte (pesee_fut). Elle n'est pas une carte RP2040 :
-# les sections « carte », « broches » et « programme » ne la concernent pas (tâche 17 ter).
+# les sections « carte » et « broches » ne la concernent pas ; ses programmes (2 ESP32-C3, tâche
+# 17 ter, dossier poste_fut_radio/) prennent la section « poste_fut_radio », plus
+# « programme → delai_avant_reponse_us » (une affaire de l'adaptateur du Pi, la même pour tous).
 #
 # Le programme des cartes est dans pesee/ (pesee/README.md). Les sections « carte », « broches »
 # et « programme » y sont copiées quand on le fabrique : les changer = refabriquer et recharger
@@ -106,3 +108,88 @@ accu_plateau_fut:
   # Plateau au poste depuis plus de 10 min sans le « 5 V de la recharge sans contact présent »
   # (vrai aussi accu plein) : alerte « recharge sans contact en panne ? ».
   sans_recharge_max_s: 600
+
+# Programmes des 2 ESP32-C3 du poste du fût (tâche 17 ter, poste_fut_radio/README.md) : le plateau
+# de pesée (HX711, accu, radio) et la boîte du poste (radio, bus RS485). Copié dans les 2
+# programmes quand on les fabrique : le changer = refabriquer et recharger les 2 cartes. L'adresse
+# de la boîte sur le bus et la vitesse du bus viennent de entrees-sorties.yaml (pesee_fut).
+# EXEMPLES : les broches dépendent de la carte ESP32-C3 achetée (ici une « ESP32-C3 SuperMini »).
+poste_fut_radio:
+  # Radio ESP-NOW, directe, sans Wi-Fi ni réseau. Chaque carte PREND l'adresse écrite ici (rien à
+  # relever sur les cartes) : le plateau n'envoie qu'à l'adresse de la boîte, la boîte n'écoute que
+  # celle du plateau. Une carte changée : recharger le même programme, c'est tout.
+  radio:
+    adresse_plateau: "02:50:46:00:00:01"
+    adresse_boite: "02:50:46:00:00:02"
+    # Canal radio (1 à 13), le même pour les deux. À changer si un Wi-Fi voisin gêne.
+    canal: 1
+    # Puissance d'émission (dBm, 2 à 20). 8 suffit pour 1 m, use moins l'accu, et beaucoup de
+    # petites cartes ESP32-C3 émettent mal à pleine puissance.
+    puissance_dbm: 8
+
+  plateau:
+    # Broches de l'ESP32-C3 du plateau (numéros GPIO). Jamais 11 à 17 (mémoire) ni 18, 19 (USB).
+    broches:
+      # Le HX711 (alimenté en 3,3 V, broche RATE à la masse : 10 mesures par seconde).
+      hx711_dt: 6
+      hx711_sck: 7
+      # Contact reed de réveil (l'aimant de la boîte du poste), entre la broche et le 0 V :
+      # fermé = au poste. Une broche de 0 à 5 (seules elles réveillent la carte endormie).
+      reed: 3
+      # Pont diviseur de l'accu (deux résistances égales de 220 kΩ, 100 nF vers le 0 V) : une
+      # entrée analogique, broche 0 à 4.
+      accu: 4
+      # Le 5 V de la recharge sans contact, et celui de l'USB-C de secours, chacun par un pont
+      # diviseur (10 kΩ côté 5 V, 15 kΩ vers le 0 V : 5 V → 3 V) : 1 = présent.
+      recharge_5v: 5
+      usb_5v: 10
+      # Petit voyant de la carte (un éclair à chaque trame reçue par la boîte). null : aucun.
+      voyant: 8
+    # Voyant allumé quand sa broche est à 0 (le bleu de l'ESP32-C3 SuperMini).
+    voyant_actif_bas: true
+    # Cadence du HX711 (sa broche RATE à la masse : 10). Sert à vérifier les chiffres d'en dessous.
+    mesures_par_seconde_hx711: 10
+    # Une trame radio toutes les 500 ms, avec la moyenne des 5 dernières mesures.
+    periode_trame_ms: 500
+    moyenne_de: 5
+    # Plus de mesure du HX711 depuis ce temps (ms) : « HX711 muet ». Au réveil, le HX711 met
+    # environ 400 ms pour sa première mesure.
+    sans_mesure_ms: 500
+    # Reed ouvert (plateau sorti du poste) depuis ce temps (s) : la carte s'endort.
+    sommeil_apres_s: 30
+    # Pont diviseur de l'accu : tension de l'accu / tension sur la broche (2 résistances égales :
+    # 2). À corriger à l'essai avec un voltmètre (poste_fut_radio/essai-materiel.md).
+    rapport_pont_accu: 2.0
+    # Niveau de l'accu Li-ion 18650 : (tension en mV, %), à vide, tension croissante. Le plateau
+    # calcule le % entre deux points (registre 10). Les seuils des alertes sont plus haut
+    # (accu_plateau_fut, en volts) : 3,3 V ≈ 5 %, 3,5 V ≈ 20 %.
+    courbe_accu:
+      - [3000, 0]
+      - [3300, 5]
+      - [3500, 20]
+      - [3600, 30]
+      - [3700, 45]
+      - [3800, 60]
+      - [3900, 72]
+      - [4000, 83]
+      - [4100, 93]
+      - [4200, 100]
+    # Chien de garde (ms) : programme figé plus longtemps = la carte redémarre.
+    chien_de_garde_ms: 2000
+    # Fenêtre texte sur le câble USB (essais) : une ligne d'état tous les ... (ms).
+    periode_affichage_ms: 1000
+
+  boite:
+    # Broches de l'ESP32-C3 de la boîte du poste. L'émetteur-récepteur RS485 3,3 V (MAX3485) :
+    # DI ← rs485_tx, RO → rs485_rx, DE et /RE reliées ensemble ← rs485_sens (1 = parler).
+    broches:
+      rs485_tx: 21
+      rs485_rx: 20
+      rs485_sens: 10
+      # Voyant : allumé = trames du plateau reçues ; clignote = radio muette. null : aucun.
+      voyant: 8
+    voyant_actif_bas: true
+    # Rien reçu du plateau depuis ce temps (ms) : bit « radio muette » (registre 4, valeur 4).
+    radio_muette_ms: 2000
+    chien_de_garde_ms: 1000
+    periode_affichage_ms: 1000
