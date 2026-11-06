@@ -24,7 +24,10 @@ chaque barre ; deux barres écartées de plus de `barres → ecart_max_m` : tout
    rangé ; plusieurs seaux peuvent être poussés à la suite (le pousseur est côté allée, il ne
    passe plus sous la tête du micropore) ;
 5. plateau au-dessus de 0,26 seulement bras du galet rangé ;
-6. bras du spray sorti : plateau ≤ min(0,50 ; 0,68 − h), entraxe des barres > 0,50 ;
+6. bras du spray sorti : plateau ≤ min(0,50 ; 0,68 − h), entraxe des barres > 0,50 ; et
+   (tâche 39) tant que la carte du spray n'a pas redit « bras rangé » (carte muette comprise),
+   le chariot ne bouge ni en hauteur, ni ses barres, ni en y, ni son pousseur : seule la
+   rotation du seau est permise ;
 7. plateau du fût pas en place : bout du chariot côté allée (axe + 0,40) à y ≤ 0,875, donc axe
    du plateau à y ≤ 0,475 ;
 8. agitateur du mycélium FIXE au-dessus du poste (01/11/2026) : en deçà du dosage (y <
@@ -227,6 +230,9 @@ class ReglesRemplissage:
 
     def refus_mouvement(self, depart: Pose, arrivee: Pose, contexte: Contexte) -> str | None:
         """Le mouvement de `depart` à `arrivee` (tous les axes ensemble, en ligne droite)."""
+        refus = self.refus_bras_spray_sorti(depart, arrivee, contexte)
+        if refus is not None:
+            return refus
         refus = self.refus_pose(arrivee, contexte)
         if refus is not None:
             return refus
@@ -289,6 +295,23 @@ class ReglesRemplissage:
         if pose.z > limite + _EGAL:
             return f"bras du spray : plateau ≤ {_m(limite)} (il est à {_m(pose.z)})"
         return None
+
+    @staticmethod
+    def refus_bras_spray_sorti(depart: Pose, arrivee: Pose, contexte: Contexte) -> str | None:
+        """Règle 6, tâche 39 : bras du spray pas vu rangé ⇒ seule la rotation du seau bouge."""
+        if not contexte.bras_spray_sorti:
+            return None
+        bougent = [
+            AXES[cle]
+            for cle in ("y", "z", "barres", "barre_allee", "pousseur")
+            if abs(getattr(arrivee, cle) - getattr(depart, cle)) > _EGAL
+        ]
+        if not bougent:
+            return None
+        return (
+            "bras du spray pas vu rangé par sa carte : le chariot reste immobile "
+            f"({', '.join(bougent)} refusés), seule la rotation du seau est permise"
+        )
 
     def au_dessus_du_chariot(self, x: float, y: float, pose: Pose | None) -> bool:
         """L'axe de la tête de préhension (x, y) est au-dessus du chariot qui est à `pose`

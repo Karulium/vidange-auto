@@ -17,7 +17,7 @@ arrête la simulation, et le planning dit pourquoi.
 
 Les modules sont écrits comme pour la vraie machine ; ils reçoivent des axes imaginaires
 (`simulateur.axes()`) à la place des vrais, et un poste du fût sur le faux matériel
-(`simulateur.poste_fut()`).
+(`simulateur.poste_fut()`), et la fausse carte n° 5 du spray (`simulateur.carte_spray()`).
 
 Ce qui tourne en fond sur la vraie machine (le Nettoyage relit store et capteurs chaque seconde)
 tourne ici à chaque instant simulé : `simulateur.ajouter_fond(nettoyage.observer)`.
@@ -33,7 +33,7 @@ from vidange.chef import Chef, Condition, Etape, EtatChef, Module
 from vidange.chef.chef import ATTENTE_GO
 from vidange.entrees_sorties import EntreesSorties
 from vidange.materiel import FausseFabrique, Materiel
-from vidange.materiel.faux import FausseBoitePosteFut
+from vidange.materiel.faux import FausseBoitePosteFut, FausseCarteSpray
 from vidange.pesees.tour import TourPesees
 from vidange.poste_fut import PeseePlateau, PosteFut
 from vidange.poste_fut.pesee import SIGNAL as PESEE_FUT
@@ -70,6 +70,13 @@ class Simulateur:
         self.temps = 0.0
         self.fabrique = FausseFabrique(liste)
         self.materiel = Materiel(liste, self.fabrique)
+        # La fausse carte du spray, à l'heure du simulateur, avec les réglages de machine.yaml
+        # (comme le programme de la carte à sa fabrication).
+        spray = reglages.machine.spray
+        if spray is not None and spray.signal in self.fabrique.branchements:
+            carte = self.fabrique.carte_spray(spray.signal)
+            carte.regler_horloge(self._horloge)
+            carte.appliquer(spray)
         # Le tour des pesées du bus, à l'heure du simulateur (la pesée du poste du fût).
         self.pesees = TourPesees(reglages.pesees, self.materiel, horloge=self._horloge)
         self._axes = EtatAxes(reglages.machine, self._reglages, horloge=self._horloge)
@@ -119,6 +126,13 @@ class Simulateur:
                 pesees=self.pesees,
             )
         return self._poste
+
+    def carte_spray(self) -> FausseCarteSpray:
+        """La fausse carte n° 5 du spray (balances, bras, pompes ; `debranche` : carte muette)."""
+        spray = self._machine.spray
+        if spray is None:
+            raise ErreurSimulation("machine.yaml n'a pas de partie « spray »")
+        return self.fabrique.carte_spray(spray.signal)
 
     def boite_poste_fut(self) -> FausseBoitePosteFut:
         """La fausse boîte du poste du fût (et le plateau qu'elle entend)."""

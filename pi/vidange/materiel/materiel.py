@@ -11,6 +11,8 @@
         materiel.ambiance("sht31_armoire")       # Ambiance(temperature_c, humidite_pct)
         materiel.peser("pesee_griffe")            # mesure brute d'une pesée du bus RS485
         materiel.lire_carte_pesee("pesee_griffe") # tout ce qu'elle dit (MesureCarte)
+        materiel.lire_spray("carte_spray")        # carte du spray : son état (EtatSpray)
+        materiel.ecrire_spray("carte_spray", 101, [2, 724, 0, 7])  # registres (ordre, battement)
 
 Pour les tests et le simulateur : `Materiel(liste, FausseFabrique(liste))`.
 
@@ -37,6 +39,7 @@ from vidange.entrees_sorties import (
     CAPTEUR_OZONE,
     CAPTEUR_PARTICULES,
     CAPTEUR_PRESSION,
+    CARTE_SPRAY,
     ENTREES,
     PESEES_DU_BUS,
     SORTIES,
@@ -47,8 +50,9 @@ from vidange.entrees_sorties import (
     SortiePwm,
 )
 from vidange.journal import donner_journal
-from vidange.materiel import carte_pesee
+from vidange.materiel import carte_pesee, carte_spray
 from vidange.materiel.carte_pesee import MesureCarte
+from vidange.materiel.carte_spray import EtatSpray
 from vidange.materiel.consigne import PwmLinux
 from vidange.materiel.modbus import ClientModbus, PortSerie
 from vidange.materiel.ozone import LecteurOzone, MesureOzone
@@ -98,6 +102,7 @@ class Branchement:
         "particules",
         "pression",
         "consigne",
+        "spray",
     ]
     ressource: Ressource
     # Broche tout-ou-rien (GPIO17, P0...) ou voie de l'ADS1115 (A0...).
@@ -139,6 +144,8 @@ def tracer_branchements(liste: EntreesSorties) -> dict[str, Branchement]:
                 branchements[nom] = Branchement(nom, "particules", ("serie", signal.carte))
             elif signal.appareil in PESEES_DU_BUS:
                 branchements[nom] = Branchement(nom, "pesee", ("serie", signal.carte))
+            elif signal.appareil == CARTE_SPRAY:
+                branchements[nom] = Branchement(nom, "spray", ("serie", signal.carte))
             continue
         if signal.appareil == CAPTEUR_PARTICULES and signal.fichier is not None:
             branchements[nom] = Branchement(nom, "particules", ("uart", signal.fichier))
@@ -514,6 +521,32 @@ class Materiel:
         )
         decoder = carte_pesee.decoder_boite if boite else carte_pesee.decoder
         return self._au_nom_de(nom, lambda: decoder(registres))
+
+    def lire_spray(self, nom: str) -> EtatSpray:
+        """Tout ce que dit la carte du spray (spray/README.md), en une question.
+
+        Lève ErreurMateriel si elle ne répond pas, si ce n'est pas elle, ou si sa table de
+        registres n'est pas celle du Pi."""
+        self._branchement(nom, "spray")
+        client, adresse = self._client_spray(nom)
+        registres = self._au_nom_de(
+            nom,
+            lambda: client.lire_registres(
+                adresse, carte_spray.FONCTION_LECTURE, 0, carte_spray.NB_REGISTRES
+            ),
+        )
+        return self._au_nom_de(nom, lambda: carte_spray.decoder(registres))
+
+    def ecrire_spray(self, nom: str, registre: int, valeurs: list[int]) -> None:
+        """Écrit des registres de la carte du spray (fonction 16) : un ordre, un battement."""
+        self._branchement(nom, "spray")
+        client, adresse = self._client_spray(nom)
+        self._au_nom_de(nom, lambda: client.ecrire_registres(adresse, registre, valeurs))
+
+    def _client_spray(self, nom: str) -> tuple[ClientModbus, int]:
+        signal = self.liste.signaux[nom]
+        assert signal.adresse is not None
+        return self._clients[signal.carte], signal.adresse
 
     def unite(self, nom: str) -> str:
         signal = self.liste.signaux[nom]

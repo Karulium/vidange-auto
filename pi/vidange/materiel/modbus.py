@@ -1,6 +1,6 @@
-"""Modbus RTU sur RS485 : lecture de registres (cartes de pesée).
+"""Modbus RTU sur RS485 : lecture de registres (fonctions 3 et 4 : cartes de pesée, carte du
+spray) et écriture de plusieurs registres (fonction 16 : ordres à la carte du spray).
 
-Seule la lecture est écrite (fonctions 3 et 4) : le Pi ne fait qu'afficher ces mesures.
 Une trame : adresse, fonction, données, puis une somme de contrôle (CRC-16 Modbus).
 """
 
@@ -40,6 +40,25 @@ def demande_lecture(adresse: int, fonction: int, registre: int, nombre: int) -> 
     return trame + crc_modbus(trame)
 
 
+FONCTION_ECRITURE = 16
+
+
+def demande_ecriture(adresse: int, registre: int, valeurs: list[int]) -> bytes:
+    """Fonction 16 : écrire plusieurs registres de suite, en une trame."""
+    donnees = b"".join((v & 0xFFFF).to_bytes(2, "big") for v in valeurs)
+    trame = bytes(
+        [
+            adresse,
+            FONCTION_ECRITURE,
+            *registre.to_bytes(2, "big"),
+            *len(valeurs).to_bytes(2, "big"),
+            len(donnees),
+        ]
+    )
+    trame += donnees
+    return trame + crc_modbus(trame)
+
+
 # Codes d'exception Modbus les plus courants, en clair.
 EXCEPTIONS = {
     1: "fonction non comprise par l'appareil",
@@ -70,6 +89,51 @@ class ClientModbus:
             except OSError as erreur:
                 self.fermer()
                 raise ErreurMateriel(f"{self.nom} : port série en panne ({erreur})") from None
+
+    def ecrire_registres(self, adresse: int, registre: int, valeurs: list[int]) -> None:
+        """Écrit `valeurs` à partir de `registre` (fonction 16) ; ErreurMateriel si l'appareil
+        ne confirme pas."""
+        if not 1 <= len(valeurs) <= 123:
+            raise ValueError("Modbus : de 1 à 123 registres par écriture")
+        with self._verrou:
+            try:
+                if self._port is None:
+                    self._port = self._ouvrir()
+                self._ecrire(self._port, adresse, registre, valeurs)
+            except OSError as erreur:
+                self.fermer()
+                raise ErreurMateriel(f"{self.nom} : port série en panne ({erreur})") from None
+
+    def _ecrire(self, port: PortSerie, adresse: int, registre: int, valeurs: list[int]) -> None:
+        port.reset_input_buffer()
+        port.write(demande_ecriture(adresse, registre, valeurs))
+        appareil = f"{self.nom}, appareil {adresse}"
+        debut = port.read(3)
+        if len(debut) < 3:
+            raise ErreurMateriel(
+                f"{appareil} : pas de réponse (débranché, pas alimenté, mauvaise adresse "
+                "ou mauvaise vitesse ?)"
+            )
+        if debut[1] == FONCTION_ECRITURE | 0x80:
+            reste = port.read(2)
+            trame = debut + reste
+            if len(reste) == 2 and crc_modbus(trame[:3]) == trame[3:]:
+                cause = EXCEPTIONS.get(debut[2], f"code {debut[2]}")
+                raise ErreurMateriel(f"{appareil} : écriture refusée ({cause})")
+            raise ErreurMateriel(f"{appareil} : réponse abîmée")
+        trame = debut + port.read(5)
+        attendu = bytes(
+            [
+                adresse,
+                FONCTION_ECRITURE,
+                *registre.to_bytes(2, "big"),
+                *len(valeurs).to_bytes(2, "big"),
+            ]
+        )
+        if len(trame) < 8 or crc_modbus(trame[:6]) != trame[6:8]:
+            raise ErreurMateriel(f"{appareil} : réponse abîmée (somme de contrôle fausse)")
+        if trame[:6] != attendu:
+            raise ErreurMateriel(f"{appareil} : réponse inattendue ({trame.hex(' ')})")
 
     def _echanger(
         self, port: PortSerie, adresse: int, fonction: int, registre: int, nombre: int

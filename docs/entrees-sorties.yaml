@@ -207,6 +207,22 @@ cartes:
       vitesse_bauds: 115200
       parite: aucune
       delai_reponse_s: 0.02
+  # Adaptateur USB-RS485 du bus du spray, à lui seul (une panne du spray ne coupe pas les pesées ;
+  # docs/decisions.md, « Électronique du chariot et liaison du spray », 06/11). Au bout : la carte
+  # ESP32 n° 5 de la boîte du spray (MAX3485 3,3 V avec DE/RE), câble c_spray : paire torsadée A/B
+  # + 0 V, 120 Ω aux 2 bouts, polarisation de repos sur l'adaptateur. Table des registres :
+  # spray/README.md. Vitesse et délai : EXEMPLES (à confirmer avec le programme, tâche 39 bis).
+  rs485_spray:
+    exemple: true
+    description: Adaptateur USB-RS485 du bus du spray (carte ESP32 n° 5)
+    tension_max: 5
+    isolee: false
+    liaison:
+      type: usb_serie
+      numero_serie_usb: "EXEMPLE-RS485-SPRAY"
+      vitesse_bauds: 115200
+      parite: aucune
+      delai_reponse_s: 0.05
   # Carte FluidNC n° 3 (axes du mycélium et du lavage) : le Pi ne la lit pas lui-même (pas de
   # « liaison ») ; ses fins de course et alarmes de pilotes vont à FluidNC, qui les dit au Pi.
   # Entrées 24 V optocouplées (docs/decisions.md, PR n° 3). Repères : EXEMPLES, en attendant le
@@ -276,7 +292,9 @@ cartes:
 #     carte_pesee (carte RP2040 + HX711 du bus des pesées, lue en Modbus : pesee/README.md),
 #     boite_poste_fut (boîte du poste du fût sur le bus des pesées : elle reçoit par radio les
 #       mesures du plateau de pesée ; lue en Modbus, signature 0x5046 ; son programme n'est pas
-#       fait par pesee/ : tâche 17 ter).
+#       fait par pesee/ : tâche 17 ter),
+#     carte_spray (carte ESP32 n° 5 du spray, seule sur son bus RS485, en Modbus, signature
+#       0x5350 : spray/README.md).
 #   fichier : pour un bus sur les broches du Pi, le fichier de Linux qui y donne accès
 #     (I2C des GPIO2/3 : /dev/i2c-1).
 #   pwm : pour un signal de type pwm qui est une consigne 0-10 V : sa sortie PWM matérielle
@@ -345,6 +363,14 @@ cartes:
 #   pesee_griffe, pesee_prehension, pesee_plateau_remplissage : leur « adresse » est celle de la
 #   carte sur le bus ; elle est copiée dans le programme de chaque carte (pesee/README.md).
 #   Étalonnage et ordre de lecture : pi/reglages/pesees.yaml.
+# (tâche 39, spray) :
+#   carte_spray : la carte ESP32 n° 5, lue et commandée en Modbus (spray/README.md). Ses propres
+#     signaux ne passent pas par le Pi (il ne les voit qu'à travers elle) : pompe_spray_1 à _4,
+#     moteur_bras_spray (TMC2209 en UART, 1,2 A), bras_spray_range (inductif M8 PNP NO 24 V par un
+#     optocoupleur PC817 : bras rangé = GPIO à 0), balance_spray_1 à _4 (HX711), ev_buse_spray,
+#     ev_chasse_spray, agitateurs_spray (PWM, une seule sortie pour les 4),
+#     pompe_nettoyage_spray. Leurs broches : réglages du programme de la carte (tâche 39 bis,
+#     EXEMPLES en attendant l'Implantation).
 signaux:
   reed_panneau_poste_fut:
     exemple: true
@@ -367,6 +393,16 @@ signaux:
     repos: ferme
     module: spray
     au_demarrage: repos
+  carte_spray:
+    exemple: true
+    description: Carte ESP32 n° 5 du spray (pompes, balances, bras de la buse), en Modbus RTU
+    carte: rs485_spray
+    broche: [A, B]
+    type: serie
+    tension: 3.3
+    adresse: 1
+    module: spray
+    appareil: carte_spray
   fdc_stockage_haut:
     exemple: true
     description: Fin de course stockage haut

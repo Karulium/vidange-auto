@@ -1343,7 +1343,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   (`pression_enceinte`), module PWM → 0-10 V sur GPIO 19 pour `consigne_ventilateur`. Remplacer les cases vides de la tâche 38
   par les vrais pilotes (protocoles à vérifier sur les notices, dans la PR), avec faux et tests (trame fausse, capteur
   muet ⇒ condition de purge jamais vraie). Procédure d'essai ; « testé sur le vrai matériel : non ».
-- [ ] **39. Spray, côté Pi** — Modèle : Opus, effort moyen. À faire après la tâche 38.
+- [x] **39. Spray, côté Pi** — Modèle : Opus, effort moyen. À faire après la tâche 38.
   Source, recopiée ici le 06/11/2026 : `pulverisation/logiciel/spray-pour-logiciel.md` du projet mécanique. C'est la
   fiche v5.8 du module gelé ; elle donne les gestes a) à d), les signaux, les chiffres et le câblage. Choix
   électriques : `docs/decisions.md`, « Électronique du chariot et liaison du spray » (06/11/2026).

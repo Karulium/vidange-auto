@@ -327,6 +327,14 @@ durees:
   nettoyage_store_max: 120
   nettoyage_purge_max: 1500
   nettoyage_nuit_max: 25200
+  # Spray (tâche 39) : prise d'origine du bras ou sortie/rentrée (la carte s'arrête seule à
+  # spray → bras → temps_max_s ; le Pi refait « ranger » une seule fois), une dose (air, pompage
+  # au plus 15 s, chasse, air), un nettoyage des tubes, l'attente des agitateurs avant la dose.
+  # EXEMPLES.
+  spray_bras_max: 10
+  spray_dose_max: 40
+  spray_nettoyage_max: 60
+  spray_preparation_max: 120
 
 # Poste du fût. Ces chiffres-là sont VRAIS (fiche du module « Poste du fût », validée le
 # 23/10/2026, et plan de commande v221), sauf la partie « pesee » (à étalonner, voir plus bas).
@@ -482,8 +490,9 @@ griffe:
   # les règles du fût qui comptent.
   bout_cote_fut: {x_max: 0.12, bas_min_hors_fut: 0.85, bas_min_paroi: 1.05}
   # Porte du coffret du spray ouverte : griffe (tête comprise) interdite en x < 0,50 et
-  # y < 0,33 (fiche).
-  porte_spray: {x_max: 0.50, y_max: 0.33}
+  # y < 0,40 (Maquette du 31/10, boîte du spray de 200 de profondeur ; y < 0,33 avant), et jamais
+  # au « Bain des têtes » (fiche du spray v5.8 ; à brancher avec le geste du bain des têtes).
+  porte_spray: {x_max: 0.50, y_max: 0.40}
   # Dans le fût : côté −x, le mât ne va qu'à 0,17 de l'axe du fût ; ailleurs au plus 0,197
   # (prises le long de la paroi, fiche).
   fut_rayon_mat_max_m: 0.197
@@ -1649,6 +1658,69 @@ nettoyage:
   # du bain des têtes ; le Pi ne permet la lampe que store fermé.
   uv_tetes:
     garage_s: [300, 300]
+
+# Spray (fiche v5.8 du 01/11/2026, module gelé ; tâche 39, source
+# pulverisation/logiciel/spray-pour-logiciel.md recopiée le 06/11). Une carte ESP32 n° 5 fait le
+# travail fin (pompes jusqu'au poids perdu, électrovannes, bras) ; le Pi lui parle en Modbus sur son
+# bus à elle (signal « carte_spray », spray/README.md). Ces réglages sont aussi copiés dans le
+# programme de la carte quand on le fabrique (tâche 39 bis) : bras, dose (durées), nettoyage,
+# liaison → silence_max_s. Le spray ne protège personne. Plateau et barres pendant que le bras est
+# sorti : remplissage → verrous (règle 6). Les chiffres marqués EXEMPLE sont à régler aux essais
+# (pi/systeme/essai-spray.md) ; les autres sont figés.
+spray:
+  exemple: true
+  signal: carte_spray
+  bras:
+    axe_xy: [0.717, 0.190]          # figé (v5.8)
+    course_deg: [0, 110]            # 0 = rangé (capteur) ; 110 = butée logicielle (figé)
+    # Angle du bras au-dessus de chaque format (Maquette v45.103, figé). Règle pour un format
+    # nouveau : buse à r = r_bas − 0,030 de l'axe du seau, bornée 0,058 à 0,100.
+    angles: {seau_a: 64.3, seau_b: 72.4, seau_c: 59.4, seau_d: 62.2}
+    tolerance_deg: 1.0              # EXEMPLE
+    vitesse_deg_s: 90               # EXEMPLE (moteur sans codeur : rester lent)
+    temps_max_s: 3                  # EXEMPLE : pour sortir, ranger ou prendre l'origine
+    courant_a: 1.2                  # pilote TMC2209 en UART (figé)
+  dose:
+    # ≈ 10 ml pour 10 L (Karulium 25/09) ; en g, densité ≈ 1 : proportionnelle au volume du seau
+    # (A 10,8 L, B 5 L, C 10 L, D 10 L). EXEMPLES (à régler aux essais).
+    par_format_g: {seau_a: 11, seau_b: 5, seau_c: 10, seau_d: 10}
+    # Un seul flacon par seau ; l'emplacement de chaque format en attendant la règle du logiciel
+    # de culture (tranché à la tâche 39). EXEMPLE : emplacement 1 pour tous.
+    emplacement_par_format: {seau_a: 1, seau_b: 1, seau_c: 1, seau_d: 1}
+    tolerance_trop_forte_g: 1       # au-delà : « dose trop forte » (alerte simple). EXEMPLE
+    temps_max_pompage_s: 15         # EXEMPLE (débit de la pompe à mesurer)
+    air_avant_s: 0.5                # air de la buse avant le liquide. EXEMPLE
+    chasse_s: 4.5                   # chasse d'air après chaque dose (4 à 5 s). EXEMPLE
+    air_apres_s: 1                  # air de la buse fermé 1 s après la chasse. EXEMPLE
+    rotation_seau_deg: 200          # le seau tourne pendant le spray. EXEMPLE
+    # Dose d'amorce, ajoutée à la première dose après un changement de flacon (tube neuf vide),
+    # notée à part dans le registre (tranché à la tâche 39). EXEMPLE.
+    amorce_g: 1
+  flacons:
+    contenu_max_g: 500              # flacon GL45 de 500 ml (figé)
+    # Poids de chaque flacon vide (g) : tare à enregistrer (pi/systeme/essai-spray.md). EXEMPLES.
+    vide_g: {1: 120, 2: 120, 3: 120, 4: 120}
+    reserve_g: 20                   # pas de dose sous « vide + 20 g ». EXEMPLE
+    alerte_doses_restantes: 5       # « cartouche bientôt vide ». EXEMPLE
+    # Le poids d'un emplacement monte d'au moins ça : le Pi propose « nouvelle cartouche ? ».
+    # EXEMPLE (choix de la tâche 39).
+    changement_min_g: 50
+  agitateurs:
+    vitesse_pct: 60                 # du PWM, une seule sortie pour les 4. EXEMPLE
+    # 30 s avant chaque dose, puis 1 min toutes les 15 min (tranché à la tâche 39). EXEMPLES.
+    avant_dose_s: 30
+    periode_s: 900
+    duree_s: 60
+  nettoyage:
+    pompe_s: 5                      # petite pompe, ≈ 10 ml d'alcool. EXEMPLE (débit à mesurer)
+    sechage_s: 15                   # chasse de séchage. EXEMPLE
+    alcool_par_nettoyage_ml: 10     # figé (choix du 23/10)
+    flacon_alcool_ml: 250           # ≈ 25 nettoyages (figé)
+    alerte_nettoyages_restants: 3   # « alcool à remettre » avant qu'il soit vide. EXEMPLE
+  liaison:
+    battement_s: 0.5                # le Pi bat au moins toutes les 0,5 s pendant un geste
+    silence_max_s: 2                # la carte s'arrête seule au-delà (pompe, air, bras). EXEMPLE
+    muette_s: 1.5                   # plus de réponse depuis 1,5 s : carte « muette ». EXEMPLE
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

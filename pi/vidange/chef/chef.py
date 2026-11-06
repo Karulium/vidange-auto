@@ -66,6 +66,8 @@ GESTES_PROTEGES = {
     "dosage_semence": "dosage de la semence",
     "ouverture_capsule": "ouverture d'une capsule",
     "versement_seau_ouvert": "versement dans un seau ouvert",
+    # Tâche 39 : spray de culture dans le seau ouvert (vidange.spray).
+    "spray_seau": "spray de culture dans un seau ouvert",
 }
 
 

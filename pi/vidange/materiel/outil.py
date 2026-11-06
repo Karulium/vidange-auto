@@ -39,6 +39,12 @@ def valeur(materiel: Materiel, nom: str) -> str:
             mesure = materiel.lire_ozone(nom)
             texte = texte_ppm(mesure, reglage.plafond_ppm)
             return f"{texte} ({mesure.trames_ignorees} trames ignorées)"
+        if sorte == "spray":
+            etat = materiel.lire_spray(nom)
+            return (
+                f"carte du spray, {etat.demarrages} démarrages, bras à {etat.angle_deg:g}° "
+                f"({'rangé' if etat.bras_range else 'PAS RANGÉ'}) (voir vidange-spray)"
+            )
         if sorte == "consigne":
             return "consigne 0-10 V (se règle avec « vidange-es consigne NOM VOLTS »)"
         if sorte == "ambiance":

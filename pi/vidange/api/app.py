@@ -43,6 +43,7 @@ from vidange.nettoyage import ErreurNettoyage, Nettoyage
 from vidange.poste_fut import ErreurPoste, PosteFut
 from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import ReglagesApi
+from vidange.spray import Spray
 
 journal = donner_journal("api")
 
@@ -69,6 +70,8 @@ class Services:
     poste: PosteFut | None = None
     # Nettoyage : store, purge, nuit UV-ozone (None : pas de nettoyage).
     nettoyage: Nettoyage | None = None
+    # Spray : carte n° 5, flacons, bras (None : pas de spray).
+    spray: Spray | None = None
 
 
 class Tenir(BaseModel):
@@ -271,6 +274,37 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             raise HTTPException(404, f"ordre inconnu « {ordre} » ({', '.join(ordres)})")
         ordres[ordre]()
         return nettoyage.etat().en_dict()
+
+    # ------------------------------------------------------------ spray
+
+    def le_spray() -> Spray:
+        if services.spray is None:
+            raise HTTPException(404, "pas de spray (machine.yaml → spray)")
+        return services.spray
+
+    @app.get("/api/spray", dependencies=protege)
+    def spray_etat() -> dict[str, Any]:
+        return le_spray().en_dict()
+
+    @app.post("/api/spray/{ordre}", dependencies=protege)
+    def spray_ordre(ordre: str, requete: Request, emplacement: int | None = None) -> dict[str, Any]:
+        """sans_spray (choix après une erreur), cartouche (?emplacement=N : nouvelle cartouche
+        confirmée), alcool_rempli (plein du flacon d'alcool fait)."""
+        spray = le_spray()
+        journal.info("Spray : « %s » demandé par la %s", ordre, _qui(requete))
+        if ordre == "sans_spray":
+            spray.continuer_sans_spray()
+        elif ordre == "cartouche":
+            if emplacement is None or not 1 <= emplacement <= 4:
+                raise HTTPException(422, "cartouche : emplacement de 1 à 4 (?emplacement=N)")
+            spray.confirmer_cartouche(emplacement)
+        elif ordre == "alcool_rempli":
+            spray.alcool_rempli()
+        else:
+            raise HTTPException(
+                404, f"ordre inconnu « {ordre} » (sans_spray, cartouche, alcool_rempli)"
+            )
+        return spray.en_dict()
 
     # ------------------------------------------------------------ alarmes
 
