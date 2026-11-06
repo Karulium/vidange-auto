@@ -850,3 +850,17 @@ regelé le 04/11/2026 ; lot validé par Karulium les 27/10, 31/10, 01/11 et 04/1
   ajouté aux modes ; une fuite part tout de suite par la file d'envoi (cycle « nettoyage » à elle).
 - **Cases vides** (pièces pas choisies, pas de pilote réel) : capteurs de particules (PMS5003 ou SPS30, UART),
   pression différentielle, convertisseur de la consigne 0-10 V du ventilateur (`vidange/nettoyage/capteurs.py`).
+- **Réponses à la PR n° 80** (06/11/2026, niveau 1, tranché par Claude) :
+  1. Consigne 0-10 V du ventilateur : module PWM → 0-10 V sur une GPIO du Pi (EXEMPLE GPIO19), plutôt qu'une carte
+     GP8403 en I2C ; choix signalé au fil Nettoyage (pièce à ajouter à sa fiche).
+  2. Capteurs de la purge : restent en case vide. Recommandation SPS30 (particules) et SDP810-125Pa (pression)
+     transmise au fil Nettoyage, à qui revient le choix des pièces.
+  3. Alarme d'ozone câblée : question posée à Karulium par le fil Nettoyage ; si elle a un contact sec, le Pi le lit
+     seulement pour l'afficher (`ozone_securite_ok`).
+  4. Panneau long du poste du fût pendant la nuit : **levé** en EXEMPLE, question posée au fil Poste du fût.
+  5. Store ouvert pendant un cycle : pause de toute la machine (le portique est déjà arrêté par le câblage). Oui.
+  6. Pi qui démarre store déjà fermé : purge lancée. Oui.
+  7. Compresseur et ventilateur de l'armoire coupés par le Pi pendant la nuit (pas une sécurité de personne). Oui.
+  8. Verrous remis 60 s après une libération si le store n'a pas été levé. Oui.
+  9. « Mesure incohérente » = `ozone_dedans` jamais monté à 1 ppm pendant la génération (générateur ou capteur en
+     panne). Oui.
