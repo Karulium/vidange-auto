@@ -1,0 +1,49 @@
+# Claude sur GitHub : Karulium écrit « @claude ... » dans une issue ou un commentaire, et Claude
+# travaille ici, sur GitHub, en payant avec les crédits de l'API d'Anthropic (secret
+# ANTHROPIC_API_KEY du dépôt, jamais écrit dans un fichier). Mode d'emploi : docs/claude-sur-github.md.
+#
+# Seul le propriétaire du dépôt peut le lancer (pour ne pas dépenser les crédits sans lui).
+# Modèle : Opus par défaut ; « Sonnet » dans le message choisit Sonnet (moins cher).
+name: Claude
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  claude:
+    if: >-
+      github.event.sender.login == github.repository_owner &&
+      (
+        (github.event_name == 'issues' &&
+          (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude'))) ||
+        (github.event_name != 'issues' && contains(github.event.comment.body, '@claude'))
+      )
+    runs-on: ubuntu-24.04
+    # Garde-fou : une tâche ne tourne jamais plus de 2 h.
+    timeout-minutes: 120
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installation (pour lancer les essais)
+        run: pip install -e 'pi[dev]'
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: >-
+            --model ${{ (contains(github.event.comment.body, 'Sonnet') || contains(github.event.issue.body, 'Sonnet')) && 'claude-sonnet-5-5' || 'claude-opus-5-5' }}
+            --allowedTools "Bash,Edit,Write,Read,Glob,Grep"

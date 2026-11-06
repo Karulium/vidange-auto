@@ -1056,13 +1056,17 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
      jamais faire plus d'un peu plus d'un tour (le Hall voit l'aimant à chaque tour : une recherche longue
      tomberait sur le mauvais tour et vrillerait le cordon). Pour cela, le Pi **enregistre l'angle cumulé** de A
      (tours compris) dans un fichier à chaque arrêt (comme les autres états gardés au redémarrage) ; avant la prise
-     d'origine, il ramène la tête près de 0 avec cet angle, puis cherche le Hall. Après une coupure en pleine
-     rotation (angle enregistré pas à jour) : l'écran demande « vérifier que le cordon n'est pas vrillé » et attend
-     la confirmation avant la prise d'origine. Nouveau réglage `prehension → angle_meplats_deg` (angle « méplats
+     d'origine, il ramène la tête près de 0, puis cherche le Hall. **Le tour vient du compte-tours** (décision,
+     point 6) : nouveau signal `compte_tours_tete` (`docs/entrees-sorties.yaml`, `carte: ads1115`, `broche: A1`,
+     `module: prehension`, conversion volts → degrés de la tête EXEMPLE : mi-course = 0°, rapport 3), précision
+     ± 3°. L'angle enregistré sert de contrôle : écart de plus de `prehension → ecart_compte_tours_max_deg` (30,
+     EXEMPLE) avec le compte-tours, ou compte-tours hors plage ⇒ pas de prise d'origine, l'écran demande « vérifier
+     que le cordon n'est pas vrillé » et attend la confirmation (même chose après une coupure en pleine rotation). Nouveau réglage `prehension → angle_meplats_deg` (angle « méplats
      en face des mors en V » par rapport au Hall, EXEMPLE 0, à mesurer à la mise en service, procédure dans
      `pi/systeme/essai-prehension.md`). Pose et prise au porte-bocal : aller à la plus proche de
      `angle_meplats_deg + k × 120°` (dans ± 500°), donc au plus 60° de rotation, tolérance ± 3°. Tests : alignement
-     depuis 0°, 59°, 61°, 490° ; angle enregistré relu après un redémarrage ; coupure ⇒ confirmation demandée.
+     depuis 0°, 59°, 61°, 490° ; angle enregistré relu après un redémarrage ; coupure ⇒ confirmation demandée ;
+     tour pris au compte-tours à 370° ; compte-tours et angle enregistré en désaccord de 40° ⇒ confirmation demandée.
   Tests de chaque point ; `vidange --verifier` et le simulateur passent.
 - [x] **37. Préhension (ventouse, prises et poses)** — Modèle : Opus, effort moyen. **Se fait avant la tâche 21**
   (le Lavage a besoin de la Préhension, qui tient le seau pendant tout le lavage).

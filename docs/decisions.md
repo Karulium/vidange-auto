@@ -663,6 +663,12 @@ si l'une pose problème, elle le dit dans sa PR.
      spiralé).
   5. Après une coupure en pleine rotation : avant de chercher le Hall, l'écran demande à l'opérateur de vérifier
      que le cordon n'est pas vrillé.
+  6. **Compte-tours** (validé par Karulium le 05/11, 12:37) : un potentiomètre multitour, entraîné au rapport 3
+     (± 1,5 tour de la tête = ± 4,5 tours du potentiomètre), lu sur la **voie A1 de l'ADS1115** (`compte_tours_tete`).
+     Tête à 0° = potentiomètre à mi-course. Au démarrage, le **tour** vient du potentiomètre (± 3°), puis l'angle
+     fin vient du Hall ; la recherche du Hall reste limitée à un peu plus d'un tour. L'angle enregistré (point 4)
+     sert alors de contrôle : écart de plus de 30° (réglage) avec le potentiomètre, ou potentiomètre hors de sa
+     plage ⇒ pas de prise d'origine, l'écran demande de vérifier le cordon (point 5).
   Côté logiciel : tâche 36 bis, point 7.
 
 ## Accès à distance et mises à jour (Karulium, 26/10/2026)
