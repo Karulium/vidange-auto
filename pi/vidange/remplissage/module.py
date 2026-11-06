@@ -13,7 +13,8 @@ le solveur (tâche 23). C'est le scénario « remplissage » du simulateur, et u
     centrer                barres en position au contact du corps, puis ouvertes
     ramener_au_vidage      y 0,42, plateau à la hauteur du vidage (manivelle du mycélium en bas
                            si le chariot part de près du poste)
-    verser                 versement de la griffe au vidage : le seau tourne
+    verser                 versement de la griffe au vidage : le seau tourne (permission du chef :
+                           pas pendant la purge de l'enceinte)
     doser                  le Mycélium dose la couche (il mène le chariot : poste, dosage, retour
                            au vidage)
     revenir_au_vidage      couche suivante : retour au vidage (plateau à sa hauteur)
@@ -107,6 +108,11 @@ def module_remplissage(
         lambda: remplissage.contexte().refus_mycelium is None,
     )
     libre = Condition("chariot de remplissage libre", remplissage.libre)
+    # Pas de versement dans le seau ouvert pendant la purge de l'enceinte (« purge en cours »).
+    versement_permis = Condition(
+        "permission du chef : versement dans un seau ouvert (pas de purge en cours)",
+        remplissage.versement_permis,
+    )
     # Règle 7 : sans le plateau du fût en place, l'axe du plateau reste à y ≤ 0,475.
     pose_permise = Condition(
         "plateau du fût en place (le chariot de remplissage va à la pose du seau vide)",
@@ -300,7 +306,7 @@ def module_remplissage(
             geste(
                 "ramener_au_vidage", remplissage.geste_ramener_au_vidage, entree=(manivelle_en_bas,)
             ),
-            geste("verser", verser),
+            geste("verser", verser, entree=(versement_permis,)),
             Etape(
                 "doser",
                 "Le Mycélium dose la couche : regarder son module s'il est en alarme.",

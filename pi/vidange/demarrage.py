@@ -83,6 +83,7 @@ from vidange.materiel.materiel import Fabrique
 from vidange.mises_a_jour import DOSSIER as DOSSIER_MISES_A_JOUR
 from vidange.mises_a_jour import CarteEsp32, MisesAJour, ProgrammePi, preparer_cartes
 from vidange.mode import ModeMachine
+from vidange.nettoyage import Nettoyage
 from vidange.pesees.tour import TourPesees
 from vidange.pesees.verification import pesees_du_bus, verifier_avec_liste
 from vidange.poste_fut import PosteFut
@@ -110,6 +111,8 @@ NOM_CARNET = "etat-cycle.json"
 NOM_MODE = "mode.json"
 # Angles gardés au redémarrage (rotations de la griffe et de la tête de préhension).
 NOM_ANGLES = "angles.json"
+# La nuit UV-ozone en cours (reprise après une coupure de courant).
+NOM_NETTOYAGE = "nettoyage.json"
 # Le compte-tours de la tête de préhension (docs/entrees-sorties.yaml).
 SIGNAL_COMPTE_TOURS = "compte_tours_tete"
 
@@ -288,6 +291,48 @@ def constats_pesees(pesees: TourPesees | None) -> list[Constat]:
     return pesees.constats()
 
 
+def cycle_tourne(chef: Chef) -> bool:
+    """Un module est en plein travail : pas en pause, ni en attente du Go (pour le Nettoyage)."""
+    etat = chef.etat()
+    return not etat.en_pause and any(
+        module.statut == "en_cours" and module.phase != "go" for module in etat.modules
+    )
+
+
+def preparer_nettoyage(
+    reglages: Reglages,
+    materiel: Materiel | None,
+    dossier_donnees: Path,
+    registre: Registre,
+    chef: Chef,
+    mode: ModeMachine,
+) -> Nettoyage | None:
+    """Le Nettoyage, branché au chef (gestes interdits pendant la purge, rien ne commence store
+    ouvert) et au mode (pas de changement de mode en pleine nuit UV-ozone). Capteurs de
+    particules, de pression et consigne 0-10 V : pas encore choisis (cases vides)."""
+    if reglages.machine.nettoyage is None or materiel is None:
+        return None
+    nettoyage = Nettoyage(
+        reglages.machine.nettoyage,
+        materiel,
+        dossier_donnees / NOM_NETTOYAGE,
+        registre,
+        mode=lambda: mode.actuel,
+        cycle_tourne=lambda: cycle_tourne(chef),
+        pause=chef.pause,
+    )
+    chef.interdire(nettoyage.refus_geste)
+    chef.conditions_generales.append(nettoyage.condition_store)
+    mode.refus_supplementaires.append(nettoyage.refus_changement_mode)
+    return nettoyage
+
+
+def constats_nettoyage(nettoyage: Nettoyage | None) -> list[Constat]:
+    if nettoyage is None:
+        return [Constat("enceinte", "attention", "Nettoyage pas lancé (entrées/sorties en panne)")]
+    return nettoyage.constats()
+
+
 def preparer_accelerometre(
     reglages: Reglages,
     liste: EntreesSorties,
@@ -427,6 +472,13 @@ def principal(
             "machine.yaml, stockage : seaux B par file du tiroir, places de la bande du haut, "
             "bord de la 1re pile de fin de lot d'EXEMPLE : les vérifier aux essais "
             "(pi/systeme/essai-stockage.md), puis passer « exemple » à false."
+        )
+    nettoyage_reglages = reglages.machine.nettoyage
+    if nettoyage_reglages is not None and nettoyage_reglages.exemple:
+        journal.warning(
+            "machine.yaml, nettoyage : temps du store, niveaux du ventilateur, durées de la nuit "
+            "UV-ozone d'EXEMPLE : les régler aux essais (pi/systeme/essai-nettoyage.md), puis "
+            "passer « exemple » à false."
         )
     camera_dosage = reglages.machine.camera_dosage
     if camera_dosage is not None and camera_dosage.exemple:
@@ -569,6 +621,14 @@ def principal(
     fil_bilans = bilans.demarrer(arret_bilans)
     serveur: ServeurApi | None = None
     mode = ModeMachine(dossier_donnees / NOM_MODE, chef, registre)
+    nettoyage = preparer_nettoyage(
+        reglages,
+        materiel if erreur_materiel is None else None,
+        dossier_donnees,
+        registre,
+        chef,
+        mode,
+    )
     liaison_ecran = preparer_ecran(reglages, entrees_sorties, raccords.ecran)
     # L'écran s'arrête en premier, comme l'API : plus d'ordre pendant l'arrêt.
     arret_ecran = threading.Event()
@@ -604,6 +664,8 @@ def principal(
             fils += poste.demarrer(arret)
         if pesees is not None:
             fils.append(pesees.demarrer(arret))
+        if nettoyage is not None:
+            fils += nettoyage.demarrer(arret)
         checklist = CheckList(
             {
                 "réglages": lambda: constats_reglages(reglages, entrees_sorties),
@@ -623,6 +685,7 @@ def principal(
                 "caméras": cameras.constats,
                 "accéléromètre": lambda: constats_accelerometre(accelerometre),
                 "pesées": lambda: constats_pesees(pesees),
+                "enceinte": lambda: constats_nettoyage(nettoyage),
             }
         )
         serveur = preparer_api(
@@ -637,6 +700,7 @@ def principal(
                 pilote=pilote,
                 mises_a_jour=mises_a_jour,
                 poste=poste,
+                nettoyage=nettoyage,
             ),
         )
         if serveur is not None:
@@ -651,6 +715,7 @@ def principal(
                 mode,
                 pilote=pilote,
                 poste=poste,
+                nettoyage=nettoyage,
             )
             fil_ecran = ecran.demarrer(arret_ecran)
         gardien.pret()

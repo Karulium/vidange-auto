@@ -16,6 +16,8 @@ journal avec l'adresse d'où il vient. Le pilotage à distance (tâche 12) passe
 (vidange/distance), qui a ses propres garde-fous ; pendant ce pilotage, Go et Reprise sont
 refusés. Les mises à jour (tâche 13) passent par MisesAJour (vidange/mises_a_jour) : seulement
 machine à l'arrêt ; pendant une mise à jour, Go, Reprise et pilotage à distance sont refusés.
+Le Nettoyage (tâche 38) : état de l'enceinte, « ouvrir le store » (verrous seulement, jamais son
+moteur), fermeture, éclairage, passer outre la purge, nuit UV-ozone.
 """
 
 import hmac
@@ -37,6 +39,7 @@ from vidange.distance import ErreurDistance, PiloteDistance
 from vidange.fiabilite.constats import Constat, pire
 from vidange.journal import donner_journal
 from vidange.mises_a_jour import ErreurMiseAJour, MisesAJour
+from vidange.nettoyage import ErreurNettoyage, Nettoyage
 from vidange.poste_fut import ErreurPoste, PosteFut
 from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import ReglagesApi
@@ -64,6 +67,8 @@ class Services:
     mises_a_jour: MisesAJour | None = None
     # Poste du fût (None : pas de poste du fût).
     poste: PosteFut | None = None
+    # Nettoyage : store, purge, nuit UV-ozone (None : pas de nettoyage).
+    nettoyage: Nettoyage | None = None
 
 
 class Tenir(BaseModel):
@@ -144,6 +149,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
     @app.exception_handler(ErreurDistance)
     @app.exception_handler(ErreurMiseAJour)
     @app.exception_handler(ErreurPoste)
+    @app.exception_handler(ErreurNettoyage)
     async def refus(_: Request, erreur: Exception) -> JSONResponse:
         # Un ordre impossible maintenant (pas de Go attendu, alarme déjà acquittée...).
         return JSONResponse({"detail": str(erreur)}, status_code=409)
@@ -172,6 +178,9 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             "distance": pilote is not None and pilote.actif,
             "mise_a_jour": mises_a_jour is not None and mises_a_jour.en_cours,
             "poste_fut": None if services.poste is None else services.poste.etat().en_dict(),
+            "nettoyage": None
+            if services.nettoyage is None
+            else services.nettoyage.etat().en_dict(),
         }
 
     @app.get("/api/checklist", dependencies=protege)
@@ -230,6 +239,38 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         poste = le_poste()
         poste.appuyer_pret(_qui(requete))
         return poste.etat().en_dict()
+
+    # ------------------------------------------------------------ nettoyage
+
+    def le_nettoyage() -> Nettoyage:
+        if services.nettoyage is None:
+            raise HTTPException(404, "pas de nettoyage (machine.yaml → nettoyage)")
+        return services.nettoyage
+
+    @app.get("/api/nettoyage", dependencies=protege)
+    def nettoyage_etat() -> dict[str, Any]:
+        return le_nettoyage().etat().en_dict()
+
+    @app.post("/api/nettoyage/{ordre}", dependencies=protege)
+    def nettoyage_ordre(ordre: str, requete: Request) -> dict[str, Any]:
+        """ouvrir, fermer, eclairage, eteindre, outre, nuit, nuit_maintenant, annuler_nuit."""
+        nettoyage = le_nettoyage()
+        qui = _qui(requete)
+        journal.info("Nettoyage : « %s » demandé par la %s", ordre, qui)
+        ordres: dict[str, Callable[[], None]] = {
+            "ouvrir": lambda: nettoyage.demander_ouverture(qui),
+            "fermer": lambda: nettoyage.demander_fermeture(qui),
+            "eclairage": lambda: nettoyage.eclairage(True, qui),
+            "eteindre": lambda: nettoyage.eclairage(False, qui),
+            "outre": lambda: nettoyage.passer_outre(qui),
+            "nuit": lambda: nettoyage.programmer_nuit(qui),
+            "nuit_maintenant": lambda: nettoyage.programmer_nuit(qui, tout_de_suite=True),
+            "annuler_nuit": lambda: nettoyage.annuler_nuit(qui),
+        }
+        if ordre not in ordres:
+            raise HTTPException(404, f"ordre inconnu « {ordre} » ({', '.join(ordres)})")
+        ordres[ordre]()
+        return nettoyage.etat().en_dict()
 
     # ------------------------------------------------------------ alarmes
 

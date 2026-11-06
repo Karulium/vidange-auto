@@ -91,7 +91,7 @@ def test_module_inconnu(entrees_sorties):
 def test_trop_d_entrees_sur_une_carte(entrees_sorties):
     remplacer(entrees_sorties, "entrees: 8", "entrees: 2")
     message = erreur_de(entrees_sorties)
-    assert "carte « entrees_24v_1 » : 6 entrées branchées pour 2 disponibles" in message
+    assert "carte « entrees_24v_1 » : 7 entrées branchées pour 2 disponibles" in message
 
 
 def test_trop_de_sorties_sur_une_carte(entrees_sorties):
@@ -299,7 +299,7 @@ def test_bus_d_une_carte_sans_fichier(entrees_sorties):
 def test_meme_bus_fichiers_differents(entrees_sorties):
     remplacer(entrees_sorties, "fichier: /dev/i2c-1", "fichier: /dev/i2c-3")
     message = erreur_de(entrees_sorties)
-    assert "signaux sht31_armoire, ads1115_bus, relais_1_bus : même bus" in message
+    assert "signaux sht31_armoire, ads1115_bus, relais_1_bus, relais_2_bus : même bus" in message
 
 
 def test_appareil_i2c_oublie(entrees_sorties):

@@ -8,7 +8,7 @@ Dans l'éditeur, on ne dessine donc que des cases vides avec le bon **nom**.
 Ce qui compte vraiment :
 
 1. le **nom** de chaque page et de chaque objet (exactement comme ici, en minuscules) ;
-2. l'**ordre** des pages (numéro 0 à 5) ;
+2. l'**ordre** des pages (numéro 0 à 6) ;
 3. le **code** de chaque bouton (deux lignes, plus bas) ;
 4. **txt_maxl** (nombre de caractères) au moins égal à celui du tableau.
 
@@ -167,21 +167,25 @@ prints "@b_retour",0
 
 ## Page 3 : « mode »
 
-Production, lavage ou UV-ozone. Le changement demande « Oui », et il est refusé pendant un cycle.
-Revient seule à la page « etat » au bout d'une minute sans appui.
+Production, lavage, UV-ozone ou maïs. Le changement demande « Oui », et il est refusé pendant un
+cycle (et pendant une nuit UV-ozone pas finie). Revient seule à la page « etat » au bout d'une
+minute sans appui. `b_enceinte` mène à la page « nettoyage » (store, purge, nuit UV-ozone).
 
 | Nom | Sorte | x | y | Largeur | Hauteur | Police | txt_maxl |
 |---|---|---|---|---|---|---|---|
 | `t_titre` | Texte | 0 | 0 | 480 | 44 | 2 | 30 |
 | `t_info` | Texte | 4 | 46 | 472 | 44 | 0 | 80 |
-| `b_production` | Bouton | 4 | 94 | 154 | 84 | 1 | 10 |
-| `b_lavage` | Bouton | 163 | 94 | 154 | 84 | 1 | 10 |
-| `b_uv_ozone` | Bouton | 322 | 94 | 154 | 84 | 1 | 10 |
-| `b_retour` | Bouton | 4 | 182 | 472 | 86 | 2 | 10 |
+| `b_production` | Bouton | 4 | 94 | 115 | 84 | 1 | 10 |
+| `b_lavage` | Bouton | 123 | 94 | 115 | 84 | 1 | 10 |
+| `b_uv_ozone` | Bouton | 242 | 94 | 115 | 84 | 1 | 10 |
+| `b_mais` | Bouton | 361 | 94 | 115 | 84 | 1 | 10 |
+| `b_enceinte` | Bouton | 4 | 182 | 234 | 86 | 1 | 10 |
+| `b_retour` | Bouton | 242 | 182 | 234 | 86 | 2 | 10 |
 
 - `t_titre` (bleu) : « MODE : PRODUCTION ».
 - `t_info` (2 lignes) : « Impossible : pas pendant un cycle (lieu_sur). »
 - Le bouton du mode actuel est en bleu.
+- `b_enceinte` : « ENCEINTE ».
 
 Code des boutons :
 
@@ -189,6 +193,8 @@ Code des boutons :
 prints "@b_production",0
 prints "@b_lavage",0
 prints "@b_uv_ozone",0
+prints "@b_mais",0
+prints "@b_enceinte",0
 prints "@b_retour",0
 ```
 
@@ -249,6 +255,51 @@ Code des boutons :
 
 ```
 prints "@b_pret",0
+prints "@b_retour",0
+```
+
+(chacun suivi de `printh FF FF FF`).
+
+## Page 6 : « nettoyage »
+
+L'enceinte (tâche 38) : le store, la purge après fermeture, la nuit UV-ozone. Depuis la page
+« mode » (bouton `b_enceinte`). Revient seule à la page « etat » au bout d'une minute sans appui.
+Le Pi ne commande **pas** le moteur du store : on le monte et on le descend en tenant ses 2 boutons
+câblés. Le Pi libère seulement ses verrous.
+
+| Nom | Sorte | x | y | Largeur | Hauteur | Police | txt_maxl |
+|---|---|---|---|---|---|---|---|
+| `t_titre` | Texte | 0 | 0 | 480 | 44 | 2 | 30 |
+| `t_etat` | Texte | 4 | 46 | 472 | 22 | 0 | 60 |
+| `t_ozone` | Texte | 4 | 68 | 472 | 22 | 0 | 60 |
+| `t_info` | Texte | 4 | 92 | 472 | 44 | 0 | 80 |
+| `b_store` | Bouton | 4 | 138 | 154 | 64 | 1 | 10 |
+| `b_lumiere` | Bouton | 163 | 138 | 154 | 64 | 1 | 10 |
+| `b_nuit` | Bouton | 322 | 138 | 154 | 64 | 1 | 10 |
+| `b_outre` | Bouton | 4 | 206 | 234 | 62 | 1 | 12 |
+| `b_retour` | Bouton | 242 | 206 | 234 | 62 | 2 | 10 |
+
+- `t_titre` : « STORE FERMÉ » (vert), « STORE OUVERT » ou « VERROUS LIBRES » (orange), « STORE ? »
+  (gris), « FUITE D'OZONE » ou « NUIT EN ERREUR » (rouge). Texte centré.
+- `t_etat` : « Purge 3 min : durée oui, particules non, pression non », ou la phase de la nuit
+  UV-ozone (« Nuit UV-ozone : contact, 45 min »), ou « Ventilateur : normal ».
+- `t_ozone` : « Ozone dedans >= 10 ppm · dehors 0,00 ppm ».
+- `t_info` (2 lignes) : la réponse au dernier appui, ou le dernier message de l'enceinte.
+- `b_store` : « OUVRIR » (libère les verrous ; refusé pendant un cycle, la purge ou l'ozone) ou
+  « FERMER » (dit au Pi qu'on redescend le store : alerte s'il n'est pas fermé à temps).
+- `b_lumiere` : « LUMIÈRE » (allume ou éteint les LED ; éteintes en mode UV-ozone).
+- `b_nuit` : « NUIT 22:00 » (nuit UV-ozone à l'heure réglée, après « Oui »), puis
+  « MAINTENANT » (départ tout de suite, après « Oui ») ; gris pâle hors du mode UV-ozone.
+- `b_outre` : « PASSER OUTRE » (fin de la purge sans ses conditions, après « Oui », noté au
+  journal) ; gris pâle sans purge.
+
+Code des boutons :
+
+```
+prints "@b_store",0
+prints "@b_lumiere",0
+prints "@b_nuit",0
+prints "@b_outre",0
 prints "@b_retour",0
 ```
 

@@ -58,7 +58,8 @@ Pas encore de vrai module de la machine.
 | `vidange/distance/` | Pilotage manuel à distance : homme mort, vitesse plafond, voyant-buzzer, priorité à l'armoire, journal |
 | `vidange/mises_a_jour/` | Mises à jour : cartes ESP32 (esptool, console FluidNC, copies de la mémoire), programme du Pi (git), fausse carte ; commande `vidange-maj` |
 | `vidange/accelerometre/` | Accéléromètre du chariot Z : copie de `accelerometre.yaml` dans le programme du RP2040 (`accelerometre/`) ; liaison par le fil série unique (chocs notés au registre, réglages envoyés), mise à jour de son programme par ce fil (chargeur, `fichier_programme.py`), faux RP2040 ; commande `vidange-accelerometre` |
-| `vidange/mode.py` | Mode de la machine (production, lavage, UV-ozone), gardé dans un fichier, changé machine au repos |
+| `vidange/mode.py` | Mode de la machine (production, lavage, UV-ozone, maïs), gardé dans un fichier, changé machine au repos |
+| `vidange/nettoyage/` | Nettoyage (enceinte) : store (le Pi libère seulement les verrous), purge après fermeture, nuit UV-ozone, fuite d'ozone dehors, mode maïs, éclairage, lampe UV des têtes (`nettoyage.py`) ; cases vides des capteurs de particules et de pression et de la consigne 0-10 V (`capteurs.py`) ; faux store, fausse enceinte et scénarios du simulateur (`simulation.py`) |
 | `vidange/angles_gardes.py` | Angles gardés au redémarrage (rotation de la griffe, angle cumulé de la tête de préhension), dans `donnees/angles.json` |
 | `vidange/portique/` | Portique (cartes n° 1 et n° 4) : courses, chaîne Z, prise d'origine dans l'ordre, freins, garage, photos (`portique.py`), origines des rotations de la griffe (fanion) et de la tête de préhension (Hall, compte-tours) (`rotations.py`) ; commande `vidange-portique` |
 | `vidange/griffe/` | Griffe sur mât : règles de position (`regles.py`), doses apprises (`doses.py`), bras sur la carte du portique et sa pesée (`bras.py`), gestes (`griffe.py`), module « griffe » (`module.py`), griffe du simulateur (`simulation.py`) |
@@ -229,6 +230,7 @@ en une fraction de seconde), et sort le planning : chaque étape, quand elle com
 .venv/bin/vidange-simulateur mycelium                # dosage du mycélium (« dosage_mycelium »)
 .venv/bin/vidange-simulateur prehension              # gestes de la préhension (« prehension »)
 .venv/bin/vidange-simulateur lavage                  # 3 seaux lavés, eau comprise (« lavage »)
+.venv/bin/vidange-simulateur nettoyage_nuit          # nuit UV-ozone complète (« nuit_uv_ozone »)
 ```
 
 - **Durées réglables** dans `reglages/simulateur.yaml` : vitesse et accélération de chaque axe (un déplacement
@@ -630,6 +632,33 @@ vidange-stockage piles seau_a            # seaux par pile, bord du seau du haut 
   vision).
 
 Procédure d'essai : `systeme/essai-stockage.md`.
+
+## Nettoyage (tâche 38)
+
+L'enceinte propre (gelée le 28/10, regelée le 04/11/2026). **La sécurité est câblée** : le Pi lit
+`store_ferme`, libère ou remet les verrous, commande ventilateur, LED, générateur d'ozone et lampe UV (derrière
+la chaîne câblée), mais **jamais le moteur du store** ; aucun code ne remplace l'alarme d'ozone câblée.
+
+```
+vidange-simulateur nettoyage_purge         # store refermé (le reed rebondit), purge 7 min, rouvert
+vidange-simulateur nettoyage_purge_longue  # HEPA colmaté : alerte à 20 min, Karulium passe outre (Go)
+vidange-simulateur nettoyage_nuit          # nuit UV-ozone complète : génération, contact, retour, ouverture
+vidange-simulateur nettoyage_fuite         # ozone dehors 0,4 ppm : générateur coupé, alerte forte
+```
+
+- **Store** : « ouvrir » refusé pendant un cycle, la purge, la nuit, ou tant que l'ozone dedans n'est pas sous
+  0,1 ppm en mode UV-ozone. Store ouvert : aucune étape ne commence (condition générale du chef, sauf en mode
+  maïs) ; ouvert pendant un cycle : alerte « store mal fermé » et pause. Fermé stable 2 s : verrous remis, purge.
+- **Purge** : pendant elle, le chef refuse le dosage de la semence, l'ouverture d'une capsule et le versement
+  dans un seau ouvert (`Chef.permission`, demandée par le Mycélium et le Remplissage). Finie : 7 min, particules
+  et surpression ; sans capteurs (pas encore choisis), alerte à 20 min et « passer outre ».
+- **Nuit UV-ozone** (mode « uv_ozone », à 22 h ou tout de suite) : ventilateur, compresseur et ventilateur de
+  l'armoire coupés, génération, contact, retour sous 0,1 ppm stable 15 min ; gardée dans `donnees/nettoyage.json`
+  (après une coupure : générateur coupé, reprise à l'attente du retour).
+- Écran : page « nettoyage » (bouton « ENCEINTE » de la page du mode) ; page web : carte « Enceinte » et
+  `GET /api/nettoyage`, `POST /api/nettoyage/{ouvrir|fermer|eclairage|eteindre|outre|nuit|nuit_maintenant|annuler_nuit}`.
+
+Procédure d'essai : `systeme/essai-nettoyage.md`.
 
 ## Cartes de pesée du bus RS485 (tâche 22 bis)
 

@@ -13,6 +13,10 @@
   vidange-simulateur remplissage               2 seaux posés (prise double), remplis, dosés, rangés
   vidange-simulateur stockage                  15 seaux pris sur les piles, 14 au tiroir, tiroir
                                                plein vidé (boucle ouverte puis fermée), reprise
+  vidange-simulateur nettoyage_purge           store refermé (reed qui rebondit), purge, rouvert
+  vidange-simulateur nettoyage_purge_longue    HEPA colmaté : purge en alerte, passée outre (Go)
+  vidange-simulateur nettoyage_nuit            nuit UV-ozone complète (génération, contact, retour)
+  vidange-simulateur nettoyage_fuite           ozone dehors au-dessus du seuil : générateur coupé
 
 Les durées se règlent dans reglages/simulateur.yaml (vitesses des axes, délai du Go, capteurs).
 Tourne sur n'importe quel PC, sans la machine. Code de sortie 0 si le cycle va au bout, 1 sinon.
@@ -38,6 +42,13 @@ from vidange.lavage.simulation import (
 )
 from vidange.mycelium.module import module_mycelium
 from vidange.mycelium.simulation import mycelium_du_simulateur
+from vidange.nettoyage.simulation import (
+    module_fermeture_purge,
+    module_fuite,
+    module_nuit,
+    module_purge_trop_longue,
+    nettoyage_du_simulateur,
+)
 from vidange.poste_fut.module import module_echange_fut
 from vidange.prehension.module import module_prehension
 from vidange.prehension.simulation import prehension_du_simulateur
@@ -72,6 +83,15 @@ MODULES: dict[str, Callable[[Simulateur], Module]] = {
     "lavage_bocaux": lambda simulateur: module_lavage_bocaux(
         bocaux_du_simulateur(simulateur), _lavage(simulateur).bocaux
     ),
+    # Nettoyage : les gestes de Karulium (le vrai Nettoyage tourne en fond dans le simulateur).
+    "nettoyage_purge": lambda simulateur: module_fermeture_purge(
+        nettoyage_du_simulateur(simulateur)
+    ),
+    "nettoyage_purge_longue": lambda simulateur: module_purge_trop_longue(
+        nettoyage_du_simulateur(simulateur, hepa_colmate=True)
+    ),
+    "nettoyage_nuit": lambda simulateur: module_nuit(nettoyage_du_simulateur(simulateur)),
+    "nettoyage_fuite": lambda simulateur: module_fuite(nettoyage_du_simulateur(simulateur)),
 }
 # Modules simulés à plusieurs (le Remplissage avec le Mycélium, qui mène le chariot au dosage) :
 # nom → fabrique (simulateur → modules).
@@ -90,6 +110,10 @@ SCENARIOS = {
     "lavage_bocaux": "lavage_bocaux",
     "remplissage": "remplissage",
     "stockage": "stockage",
+    "nettoyage_purge": "fermeture_purge",
+    "nettoyage_purge_longue": "purge_trop_longue",
+    "nettoyage_nuit": "nuit_uv_ozone",
+    "nettoyage_fuite": "fuite_ozone",
 }
 
 

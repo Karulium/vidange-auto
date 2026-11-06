@@ -203,6 +203,20 @@ toucher), les seaux sont seulement notés `sans_pesee_fut`. L'app ne doit pas re
 Un cycle `vidange` peut finir `abandonne` si le plateau est retiré avant la fin (fût pas vide).
 L'app peut s'en servir pour le rendement d'un fût (seaux faits, poids vidé) ; rien n'est obligatoire.
 
+### Les cycles du Nettoyage (tâche 38)
+
+Le Pi envoie aussi des cycles `nettoyage`, **sans `seaux`** (donc sans blocs) :
+
+- une **nuit UV-ozone** : `cycle.remarque` « nuit UV-ozone » ; `issue` `termine` (ozone revenu sous 0,1 ppm) ou
+  `abandonne` (erreur : pas revenu à temps, capteur muet, mesure incohérente) ; `mesures[]` avec
+  `nom` = `ozone_dedans`, `unite` = `ppm`, `capteur` = `ozone_dedans` (une valeur par minute, réglage
+  `journal_s`) ; `alarmes[]` du module `nettoyage` (store ouvert pendant la nuit, erreurs) ;
+- une **fuite d'ozone dehors** : un petit cycle à part, `abandonne`, avec une seule alarme « FUITE D'OZONE... »,
+  envoyé tout de suite pour qu'elle arrive vite (pas à la fin de la nuit).
+
+L'app peut les garder dans les tables de la machine (historique de désinfection de l'enceinte) et prévenir
+Karulium pour une fuite ; rien n'est obligatoire.
+
 ### Ce que l'app « machine » en fera (rappel, voir plus haut)
 
 - Chaque élément de `seaux` → un nouveau `Blocs` dont le `contenant` est le seau du QR.

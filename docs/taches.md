@@ -1229,7 +1229,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
     `pesee/src/modbus.c` si c'est possible.
   - Pas de Wi-Fi ni de réseau : ESP-NOW seulement (exception décidée par Karulium). Mise à jour par le câble USB,
     comme les autres cartes.
-- [ ] **38. Nettoyage : store, purge après fermeture, nuit UV-ozone, mode maïs** — Modèle : Opus, effort moyen.
+- [x] **38. Nettoyage : store, purge après fermeture, nuit UV-ozone, mode maïs** — Modèle : Opus, effort moyen.
   **À faire après la tâche 38 bis** (lecture des ZE25-O3 `ozone_dedans` et `ozone_dehors`). Source, recopiée ici le
   06/11/2026 : `nettoyage/logiciel/nettoyage-pour-logiciel.md` du projet mécanique (module Nettoyage gelé, lot validé
   par Karulium les 27/10, 31/10, 01/11 et 04/11). Positions : `nettoyage/logiciel/enceinte-04-11.yaml`. Elles vont

@@ -281,6 +281,8 @@ def mycelium_du_simulateur(
             materiel.poser_bocal()
         return bocaux[-1]
 
+    # Dosage de la semence : permission du chef (refusée pendant une purge du Nettoyage).
+    options.setdefault("permission", simulateur.chef.permission)
     mycelium = Mycelium(
         machine, agitateur, porte_bocal, chariot, nouveau_bocal, horloge=horloge, **options
     )

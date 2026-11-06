@@ -21,6 +21,11 @@ Poste du fût (tâches 17 et 17 bis) : quand le plateau arrive au fond, la page 
 seule (depuis la page d'état) : poids (ou « pesée absente »), accu et radio du plateau, gestes à
 faire à la main, ce qui manque, bouton PRÊT. Elle repart seule quand le poste est prêt ou que le
 plateau s'en va.
+
+Nettoyage (tâche 38) : page « nettoyage », depuis la page du mode (ENCEINTE) : état du store et de
+ses verrous, purge, nuit UV-ozone, ozone dedans et dehors ; OUVRIR (libère les verrous) ou FERMER,
+LUMIÈRE, NUIT (à l'heure réglée, puis MAINTENANT), PASSER OUTRE (la purge). Le Pi ne commande pas
+le moteur du store.
 """
 
 import threading
@@ -32,11 +37,22 @@ from vidange.chef import Chef, ErreurChef
 from vidange.chef.chef import EtatChef, EtatModule
 from vidange.distance import PiloteDistance
 from vidange.ecran.liaison import LiaisonEcran
-from vidange.ecran.pages import ALARME, COMPTEURS, CONFIRMER, ETAT, MODE, POSTE_FUT, Page
+from vidange.ecran.pages import (
+    ALARME,
+    COMPTEURS,
+    CONFIRMER,
+    ETAT,
+    MODE,
+    NETTOYAGE,
+    POSTE_FUT,
+    Page,
+)
 from vidange.ecran.protocole import Appui, couleur_565, preparer_texte
 from vidange.fiabilite.constats import lancer_boucle
 from vidange.journal import donner_journal
 from vidange.mode import MODES, ErreurMode, ModeMachine
+from vidange.nettoyage import ErreurNettoyage, EtatNettoyage, Nettoyage
+from vidange.nettoyage.nettoyage import ERREUR, FERME, INCONNU, OUVERT
 from vidange.poste_fut import ABSENT, EN_PLACE, PRET, ErreurPoste, EtatPoste, PosteFut
 from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import FondTexte, ReglagesEcran
@@ -49,6 +65,11 @@ GESTES_ECRAN = (
     "À la main : fût sur les cales, soupape enlevée, butées du fond, 2 freins, volet rabattu, "
     "panneau levé."
 )
+TITRES_STORE = {
+    FERME: ("STORE FERMÉ", "marche"),
+    OUVERT: ("STORE OUVERT", "pause"),
+    INCONNU: ("STORE ?", "repos"),
+}
 TITRES_POSTE = {
     ABSENT: ("PLATEAU ABSENT", "repos"),
     EN_PLACE: ("EN PLACE, PAS PRÊT", "go"),
@@ -69,6 +90,40 @@ def texte_pesee(poste: EtatPoste) -> str:
     if poste.signal_dbm is not None:
         morceaux.append(f"radio {poste.signal_dbm} dBm")
     return " · ".join(morceaux)
+
+
+def _oui(ok: bool) -> str:
+    return "oui" if ok else "non"
+
+
+def ligne_nettoyage(etat: EtatNettoyage) -> str:
+    """La ligne d'état de l'enceinte : la purge, la nuit UV-ozone, ou le ventilateur."""
+    if etat.purge and etat.purge_depuis_s is not None:
+        return (
+            f"Purge {etat.purge_depuis_s / 60:.0f} min : durée {_oui(etat.purge_duree_ok)}, "
+            f"particules {_oui(etat.purge_particules_ok)}, pression {_oui(etat.purge_pression_ok)}"
+        )
+    if etat.nuit is not None:
+        texte = etat.nuit_libelle
+        if etat.nuit_depuis_s is not None and etat.nuit != "fini":
+            texte += f", {etat.nuit_depuis_s / 60:.0f} min"
+        if etat.nuit_depart_prevu:
+            texte += f" à {etat.nuit_depart_prevu[11:16]}"
+        return texte
+    return f"Ventilateur : {etat.ventilateur}"
+
+
+def texte_enceinte(etat: EtatNettoyage) -> str:
+    """Pour la page d'état : ce qui empêche la machine de bouger, ou une alerte forte."""
+    if etat.fuite:
+        return "FUITE D'OZONE dehors : générateur coupé, ne pas entrer."
+    if etat.mode != "mais" and etat.store == OUVERT:
+        return "Store ouvert : rien ne bouge tant qu'il n'est pas fermé."
+    if etat.purge:
+        return "Purge de l'enceinte en cours : pas de dosage ni de versement."
+    if etat.nuit is not None and etat.nuit != "fini":
+        return etat.nuit_libelle + "."
+    return ""
 
 
 def lisible(nom: str) -> str:
@@ -135,6 +190,7 @@ class Ecran:
         aujourdhui: Callable[[], date] = date.today,
         pilote: PiloteDistance | None = None,
         poste: PosteFut | None = None,
+        nettoyage: Nettoyage | None = None,
     ) -> None:
         self.reglages = reglages
         self.liaison = liaison
@@ -144,6 +200,7 @@ class Ecran:
         self.mode = mode
         self.pilote = pilote
         self.poste = poste
+        self.nettoyage = nettoyage
         self._etat_poste: EtatPoste | None = None
         self._horloge = horloge
         self._aujourdhui = aujourdhui
@@ -178,7 +235,13 @@ class Ecran:
                     continue
                 try:
                     self.appuyer(trame.bouton)
-                except (ErreurChef, ErreurRegistre, ErreurMode, ErreurPoste) as erreur:
+                except (
+                    ErreurChef,
+                    ErreurRegistre,
+                    ErreurMode,
+                    ErreurPoste,
+                    ErreurNettoyage,
+                ) as erreur:
                     journal.warning("Écran : %s", erreur)
                     self._dire(str(erreur))
         alarmes = self.registre.alarmes_ouvertes()
@@ -237,7 +300,9 @@ class Ecran:
         if self._page is CONFIRMER and attente > self.reglages.confirmation_s:
             journal.info("Écran : question sans réponse, abandonnée")
             self._aller(ETAT)
-        elif self._page in (COMPTEURS, MODE) and attente > self.reglages.retour_accueil_s:
+        elif (
+            self._page in (COMPTEURS, MODE, NETTOYAGE) and attente > self.reglages.retour_accueil_s
+        ):
             self._aller(ETAT)
 
     # ------------------------------------------------------------ boutons
@@ -260,8 +325,15 @@ class Ecran:
             self._appui_etat(bouton)
         elif page is ALARME:
             self._appui_alarme(bouton)
+        elif page is MODE and bouton == "b_enceinte":
+            if self.nettoyage is None:
+                self._dire("Pas de nettoyage (machine.yaml → nettoyage).")
+            else:
+                self._aller(NETTOYAGE)
         elif page is MODE:
             self._choisir_mode(bouton.removeprefix("b_"))
+        elif page is NETTOYAGE and self.nettoyage is not None:
+            self._appui_nettoyage(bouton, self.nettoyage)
         elif page is CONFIRMER:
             self._repondre(bouton == "b_oui")
         elif page is POSTE_FUT and self.poste is not None:
@@ -308,6 +380,34 @@ class Ecran:
             journal.info("Alarme n° %d acquittée à l'écran de l'armoire", self._alarme)
             self.acquitter(self._alarme, QUI)
 
+    def _appui_nettoyage(self, bouton: str, nettoyage: Nettoyage) -> None:
+        etat = nettoyage.etat()
+        if bouton == "b_store":
+            if etat.store == FERME and not etat.verrous_liberes:
+                nettoyage.demander_ouverture(QUI)
+            else:
+                nettoyage.demander_fermeture(QUI)
+            messages = nettoyage.etat().messages
+            if messages:
+                self._dire(messages[-1])
+        elif bouton == "b_lumiere":
+            nettoyage.eclairage(not etat.eclairage, QUI)
+        elif bouton == "b_nuit":
+            if etat.nuit == "attente_depart":
+                self._demander("Départ de la nuit UV-ozone tout de suite ?", "nuit_maintenant")
+            elif etat.refus_nuit is not None:
+                self._dire(f"Nuit UV-ozone impossible : {etat.refus_nuit}.")
+            else:
+                heure = nettoyage.reglages.ozone.heure_depart
+                self._demander(
+                    f"Nuit UV-ozone à {heure} ? Personne dans l'enceinte, store fermé.", "nuit"
+                )
+        elif bouton == "b_outre":
+            if not etat.purge:
+                self._dire("Pas de purge en cours.")
+            else:
+                self._demander("Passer outre la purge (noté au journal) ?", "outre")
+
     def _choisir_mode(self, nouveau: str) -> None:
         if nouveau == self.mode.actuel:
             self._dire(f"Déjà en mode {MODES[nouveau]}.")
@@ -339,6 +439,10 @@ class Ecran:
             self.chef.reprendre()
         elif ordre == "mode":
             self.mode.changer(argument, QUI)
+        elif self.nettoyage is not None and ordre in ("nuit", "nuit_maintenant"):
+            self.nettoyage.programmer_nuit(QUI, tout_de_suite=ordre == "nuit_maintenant")
+        elif self.nettoyage is not None and ordre == "outre":
+            self.nettoyage.passer_outre(QUI)
 
     # ------------------------------------------------------------ ce que montre chaque page
 
@@ -359,6 +463,8 @@ class Ecran:
             self._composer_mode(page)
         elif self._page is POSTE_FUT:
             self._composer_poste(page)
+        elif self._page is NETTOYAGE:
+            self._composer_nettoyage(page)
         else:
             self._composer_question(page)
         return page.valeurs
@@ -403,6 +509,8 @@ class Ecran:
         poste = self._etat_poste
         if not info and poste is not None and poste.etat == EN_PLACE:
             info = "Poste du fût : chariot en place, pas prêt."
+        if not info and self.nettoyage is not None:
+            info = texte_enceinte(self.nettoyage.etat())
         page.mettre("t_info", info)
         if etat.en_pause:
             page.mettre("b_pause", "REPRENDRE", "marche")
@@ -472,6 +580,7 @@ class Ecran:
         for mode, libelle in MODES.items():
             choisi = mode == self.mode.actuel
             page.mettre(f"b_{mode}", libelle.upper(), "mode" if choisi else "bouton")
+        page.mettre("b_enceinte", "ENCEINTE", "bouton" if self.nettoyage is not None else "inactif")
         page.mettre("b_retour", "RETOUR", "bouton")
 
     def _composer_poste(self, page: _Composition) -> None:
@@ -486,6 +595,44 @@ class Ecran:
         page.mettre("t_manque", self._message_actuel() or manque)
         possible = poste.etat == EN_PLACE and not poste.manque
         page.mettre("b_pret", "PRÊT", "marche" if possible else "inactif")
+        page.mettre("b_retour", "RETOUR", "bouton")
+
+    def _composer_nettoyage(self, page: _Composition) -> None:
+        if self.nettoyage is None:
+            return
+        etat = self.nettoyage.etat()
+        titre, couleur = TITRES_STORE[etat.store]
+        if etat.fuite:
+            titre, couleur = "FUITE D'OZONE", "alarme"
+        elif etat.nuit == ERREUR:
+            titre, couleur = "NUIT EN ERREUR", "alarme"
+        elif etat.verrous_liberes and etat.store == FERME:
+            titre, couleur = "VERROUS LIBRES", "pause"
+        page.mettre("t_titre", titre, couleur)
+        page.mettre("t_etat", ligne_nettoyage(etat))
+        page.mettre("t_ozone", f"Ozone dedans {etat.ozone_dedans} · dehors {etat.ozone_dehors}")
+        dernier = etat.messages[-1] if etat.messages else ""
+        page.mettre("t_info", self._message_actuel() or dernier)
+        ouvrir = etat.store == FERME and not etat.verrous_liberes
+        if ouvrir:
+            page.mettre(
+                "b_store", "OUVRIR", "bouton" if etat.refus_ouverture is None else "inactif"
+            )
+        else:
+            page.mettre("b_store", "FERMER", "bouton")
+        page.mettre("b_lumiere", "LUMIÈRE", "marche" if etat.eclairage else "bouton")
+        if etat.nuit == "attente_depart":
+            page.mettre("b_nuit", "MAINTENANT", "go")
+        else:
+            heure = self.nettoyage.reglages.ozone.heure_depart
+            page.mettre(
+                "b_nuit", f"NUIT {heure}", "bouton" if etat.refus_nuit is None else "inactif"
+            )
+        page.mettre(
+            "b_outre",
+            "PASSER OUTRE",
+            "pause" if etat.purge_alerte else ("bouton" if etat.purge else "inactif"),
+        )
         page.mettre("b_retour", "RETOUR", "bouton")
 
     def _composer_question(self, page: _Composition) -> None:

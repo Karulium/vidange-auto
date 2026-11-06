@@ -70,6 +70,12 @@ QUOI_FAIRE_TETE = (
     "La tête de préhension est au-dessus du porte-bocal : attendre qu'elle ait fini de poser ou "
     "de reprendre le bocal, ou la remonter et l'écarter, puis acquitter et donner le Go."
 )
+QUOI_FAIRE_PURGE = (
+    "Le dosage de la semence attend la fin de la purge de l'enceinte (store refermé) : attendre "
+    "qu'elle finisse (page MODE, ENCEINTE), puis acquitter et donner le Go."
+)
+# Le geste protégé du chef (vidange.chef.chef.GESTES_PROTEGES) que demande le Mycélium.
+DOSAGE = "dosage_semence"
 QUOI_FAIRE_VIDE = (
     "Le poids du seau ne monte plus : bocal vide ou couvercle bouché ? Le seau est marqué « pas "
     "bon » dans le registre. Changer ou déboucher le bocal, puis acquitter et donner le Go : "
@@ -183,13 +189,16 @@ class Mycelium:
         photo: Callable[[str], object] = lambda raison: None,
         camera: CameraDosage | None = None,
         prehension_hors_zone: Callable[[], bool] = lambda: True,
+        permission: Callable[[str], str | None] = lambda geste: None,
     ) -> None:
         """`nouveau_bocal(variete)` : un bocal neuf de cette variété est mis dans le porte-bocal
         (gestes du Porte-bocal et de la Préhension, QR lu par la vision) ; il rend ce bocal.
         `photo(raison)` : photo de la caméra du dosage, notée avec l'alarme. `camera` : la caméra
         du dosage, pour la photo du seau après chaque dose (None : pas de photo).
         `prehension_hors_zone` : la tête de préhension est hors de la zone du porte-bocal
-        (Prehension.hors_zone_porte_bocal ; sans préhension branchée : toujours vrai)."""
+        (Prehension.hors_zone_porte_bocal ; sans préhension branchée : toujours vrai).
+        `permission(geste)` : Chef.permission, demandée avant le dosage de la semence
+        (« dosage_semence ») ; None = permis (sans chef branché : toujours permis)."""
         assert machine.mycelium is not None and machine.griffe is not None
         self.reglages = machine.mycelium
         self.formats = machine.griffe.formats
@@ -203,6 +212,7 @@ class Mycelium:
         self._photo = photo
         self.camera = camera
         self._prehension_hors_zone = prehension_hors_zone
+        self._permission = permission
         # Dose (et cycle) dont le seau attend sa photo.
         self._a_photographier: tuple[Dose, int | None] | None = None
         self.plan = Plan()
@@ -299,6 +309,13 @@ class Mycelium:
         return (
             self._bouge() or pose is None or not self.regles.en_bas(pose) or self.plan.tete_en_bas
         )
+
+    def refus_dosage(self) -> str | None:
+        """Le chef permet-il le dosage de la semence maintenant (purge du Nettoyage) ?"""
+        return self._permission(DOSAGE)
+
+    def dosage_permis(self) -> bool:
+        return self.refus_dosage() is None
 
     # ------------------------------------------------------------ conditions des étapes
 
@@ -445,6 +462,11 @@ class Mycelium:
                 self.porte_bocal.serrer_bocal()
             return
         cible = self.pose if pas.angle is None else self.pose.avec(angle=pas.angle)
+        if pas.jusqu_a_kg is not None:
+            # L'étape attend déjà la permission ; ceci ne sert que si elle tombe en plein geste.
+            refus = self.refus_dosage()
+            if refus is not None:
+                raise ErreurEtape(f"mycélium, « {pas.texte} » refusé : {refus}", QUOI_FAIRE_PURGE)
         refus = self.regles.refus_manivelle(cible, chariot, agitation=pas.jusqu_a_kg is not None)
         if refus is not None:
             raise ErreurEtape(f"mycélium, « {pas.texte} » refusé : {refus}", QUOI_FAIRE)

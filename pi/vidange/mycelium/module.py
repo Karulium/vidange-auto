@@ -11,7 +11,8 @@ Les étapes se répètent (une couche, la suivante...) : `ensuite` dit laquelle 
     retourner_le_bocal   manivelle en haut, demi-tour du bocal tête en bas, manivelle en bas
     amener_le_seau       le chariot amène le seau au poste (spray, micropore), puis au dosage,
                          plateau à la hauteur du dosage
-    agiter               casse du bloc (1re agitation d'un bocal), agitation jusqu'à la dose
+    agiter               casse du bloc (1re agitation d'un bocal), agitation jusqu'à la dose ;
+                         attend la permission du chef (pas pendant la purge de l'enceinte)
     liberer_le_seau      le chariot repart au vidage (y 0,42)
     rentrer              manivelle en haut, demi-tour du bocal debout, manivelle en bas
     photographier_le_seau  la caméra du dosage pivote vers le seau dosé, photo notée avec sa
@@ -40,6 +41,10 @@ def module_mycelium(mycelium: Mycelium) -> Module:
     y_ecarte = f"{mycelium.reglages.chariot.y_ecarte_min:g}".replace(".", ",")
     ecarte = Condition(f"chariot de remplissage écarté (y ≥ {y_ecarte})", mycelium.chariot_ecarte)
     attente = Condition("manivelle du mycélium en bas, bocal debout", mycelium.en_attente)
+    # Pas de dosage pendant la purge de l'enceinte (le chef le refuse : « purge en cours »).
+    dosage_permis = Condition(
+        "permission du chef : dosage de la semence (pas de purge en cours)", mycelium.dosage_permis
+    )
 
     def geste(
         nom: str, fabrique, ensuite=None, delai: str = GESTE, entree=(), quoi_faire=QUOI_FAIRE
@@ -103,7 +108,13 @@ def module_mycelium(mycelium: Mycelium) -> Module:
                     ),
                 ),
             ),
-            geste("agiter", mycelium.geste_agiter, mycelium.apres_agitation, AGITATION),
+            geste(
+                "agiter",
+                mycelium.geste_agiter,
+                mycelium.apres_agitation,
+                AGITATION,
+                entree=(dosage_permis,),
+            ),
             chariot("liberer_le_seau", mycelium.ecarter_le_chariot, ecarte),
             geste("rentrer", mycelium.geste_rentrer, entree=(ecarte,)),
             Etape(

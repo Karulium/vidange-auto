@@ -173,6 +173,28 @@ stockage:
     - {seau: S0218, format: seau_a, variete: pleurote_grise}
     - {seau: S0219, format: seau_a, variete: pleurote_grise}
 
+# L'enceinte imaginaire du Nettoyage (scénarios « fermeture_purge », « purge_trop_longue »,
+# « nuit_uv_ozone », « fuite_ozone ») : le store ouvert au départ met 25 s à descendre (2,18 m à
+# ≈ 9 cm/s), son reed rebondit 0,6 s (toutes les 0,15 s). Particules : 12 µg/m³ dans le conteneur,
+# 45 dedans store ouvert ; store fermé, le HEPA les fait tendre vers 0,3 × dehors en 90 s
+# (constante de temps à 10 V). Surpression : 24 Pa à 10 V (12 Pa au « normal » de 5 V), constante
+# 20 s ; HEPA colmaté : 25 % (6 Pa au plein : la purge n'atteint jamais 8 Pa). Ozone : + 0,1 ppm/s
+# générateur alimenté (≈ 12 ppm en 2 min : le capteur reste au plafond, 10 ppm), demi-vie 20 min
+# (ventilateur coupé). Tout est d'EXEMPLE.
+nettoyage:
+  course_s: 25
+  rebond_s: 0.6
+  rebond_pas_s: 0.15
+  particules_dehors: 12
+  particules_ouvert: 45
+  particules_fond: 0.3
+  constante_particules_s: 90
+  pression_10v_pa: 24
+  constante_pression_s: 20
+  facteur_hepa_colmate: 0.25
+  montee_ozone_ppm_s: 0.1
+  demi_vie_ozone_s: 1200
+
 # Capteurs (entrées tout-ou-rien de docs/entrees-sorties.yaml) actionnés au départ.
 capteurs_actionnes: []
 
@@ -181,7 +203,8 @@ capteurs_actionnes: []
 # (actionne: true) ou ne l'est plus (false). Une pesée peut aussi changer :
 # « pesee: pesee_fut » avec « kg: 160 » (poids lu, radio du plateau qui parle),
 # « radio_muette: true » (plateau endormi ou accu vide) ou « debranchee: true » (la boîte du poste
-# ne répond plus).
+# ne répond plus). Une mesure aussi (analogique ou ozone, dans l'unité du signal) :
+# « mesure: ozone_dehors » avec « valeur: 0.4 ».
 evenements:
   # Karulium ferme le panneau du poste du fût 10 s après le lancement du module d'exemple.
   - apres: exemple.aller_au_repos
@@ -196,7 +219,10 @@ evenements:
 #         vidange-simulateur prehension  (scénario « prehension » par défaut),
 #         vidange-simulateur lavage      (scénario « lavage » par défaut),
 #         vidange-simulateur lavage_couvercles, vidange-simulateur lavage_bocaux,
-#         vidange-simulateur remplissage (scénario « remplissage » par défaut).
+#         vidange-simulateur remplissage (scénario « remplissage » par défaut),
+#         vidange-simulateur nettoyage_purge, nettoyage_purge_longue, nettoyage_nuit,
+#         nettoyage_fuite (scénarios « fermeture_purge », « purge_trop_longue », « nuit_uv_ozone »,
+#         « fuite_ozone »).
 scenarios:
   # Échange d'un fût au poste (tâche 17 bis) : le plateau du fût vide s'en va, le suivant arrive.
   echange_fut:
@@ -304,3 +330,25 @@ scenarios:
         attente_s: 360
         capteur: boucle_stockage
         actionne: true
+  # Nettoyage (tâche 38). Store ouvert au départ, panneau long du poste du fût levé (comme le veut
+  # machine.yaml → nettoyage → ozone → panneau_poste_fut), porte du spray fermée.
+  # Karulium referme le store (le reed rebondit), purge au plein jusqu'à ses 3 conditions (au moins
+  # 7 min), puis il rouvre le store.
+  fermeture_purge:
+    capteurs_actionnes: [reed_panneau_poste_fut]
+  # HEPA colmaté : la surpression reste sous 8 Pa, alerte à 20 min (dosage toujours refusé), puis
+  # Karulium passe outre (Go, noté au journal).
+  purge_trop_longue:
+    capteurs_actionnes: [reed_panneau_poste_fut]
+  # Fermeture, purge, mode UV-ozone, nuit lancée tout de suite (Go) : 2 min de génération, 2 h de
+  # contact, retour sous 0,1 ppm stable 15 min ; le store se rouvre ensuite.
+  nuit_uv_ozone:
+    capteurs_actionnes: [reed_panneau_poste_fut]
+  # La nuit part ; 30 s après le début de la génération, le capteur du dehors lit 0,4 ppm.
+  fuite_ozone:
+    capteurs_actionnes: [reed_panneau_poste_fut]
+    evenements:
+      - apres: nettoyage_fuite.generation
+        attente_s: 30
+        mesure: ozone_dehors
+        valeur: 0.4
