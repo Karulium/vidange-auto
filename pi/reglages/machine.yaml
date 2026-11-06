@@ -381,14 +381,18 @@ griffe:
   # (bouts des goupilles) ; le corps est donc compté à ± 0,086. Godet grand ouvert, rayon balayé
   # réel 0,174 : le rectangle 0,165 × 0,086 le couvre. Partie haute (au-dessus des axes et jusqu'à
   # 0,03 sous eux) : 0,117 au plus le long du bras, godet ouvert ou fermé (les joues des coquilles
-  # ouvertes, à 0,165, sont 9 à 12 cm sous les axes).
+  # ouvertes, à 0,165, sont 9 à 12 cm sous les axes). Depuis la tâche 18 ter, la partie haute va
+  # jusqu'en bas godet fermé (0,09 sous les axes dans le calcul) ; godet ouvert, la tête
+  # s'élargit dès 0,03 sous les axes (0,127 à −0,045, 0,135 à −0,060, 0,148 à −0,075, 0,165 de
+  # −0,090 à −0,105 : griffe.json, réponse du fil Griffe).
   tete:
     demi_longueur_ferme: 0.111
     demi_longueur_ouvert: 0.165
     demi_largeur: 0.086
     rayon_balaye: 0.139
     demi_longueur_haut: 0.117
-    haut_sous_axes: 0.03
+    haut_sous_axes_ferme: 0.09
+    profil_ouvert: [[0.03, 0.117], [0.045, 0.127], [0.06, 0.135], [0.075, 0.148], [0.105, 0.165]]
   # Pont : x ≥ 0,233 (0,223 de la fiche + 1 cm, Portique 01/11).
   pont_x_min: 0.233
   # Rotation de la tête (fiche) : libre si axes ≤ 1,075 ; de 1,075 à 1,11 libre godet fermé et
@@ -415,28 +419,42 @@ griffe:
     mat_x_min_pour_y: 0.86
   # « En butée haute » : axes à 1 mm près de la fin de la course de griffe_z. EXEMPLE.
   tolerance_butee_haute_m: 0.001
-  # Garage et glissière de l'agitateur du mycélium, volumes interdits à toute hauteur (fiche) :
+  # « Y minimum du mât » avec l'agitateur FIXE (Maquette v45.111, docs/decisions.md, 02/11/2026) :
   # y minimum du mât godet fermé / à moitié ouvert / grand ouvert, par bande de x du mât, tête
-  # bras le long du pont. Tête tournée : godet fermé, y minimum « fermé » + (rayon balayé −
-  # demi-longueur fermé) ; godet ouvert, y minimum « grand ouvert ».
-  # La bande du garage (x 0,15-0,43) est permise à la griffe en butée haute seulement (bas du
-  # godet à 1,087 : rien du Mycélium ne dépasse 1,0 dessous), quand la préhension est au
-  # porte-bocal (mât de la griffe en x 0,249, y 0,150 ; décision du 29/10/2026).
-  garage_glissiere:
-    - {x: [0.15, 0.43], y_min: [0.23, 0.24, 0.28], permise_en_butee_haute: true}
-    - {x: [0.43, 0.77], y_min: [0.33, 0.345, 0.38]}
-    - {x: [0.77, 0.82], y_min: [0.24, 0.24, 0.27]}
-    - {x: [0.82, 0.85], y_min: [0.13, 0.13, 0.13]}
-    - {x: [0.85, 1.22], y_min: [0.10, 0.105, 0.14]}
+  # bras le long du pont. Bandes élargies d'1 cm de chaque côté, qui se chevauchent exprès : une
+  # pose est refusée par toute bande qui la contient. Tête tournée : godet fermé, y minimum
+  # « fermé » + (rayon balayé − demi-longueur fermé) ; godet ouvert, y minimum « grand ouvert ».
+  y_min_mat:
+    # Axes en butée haute.
+    butee_haute:
+      - {x: [0.15, 0.69], y_min: [0.0, 0.015, 0.055]}    # rail du portique, coffret du spray
+      - {x: [0.68, 0.78], y_min: [0.015, 0.075, 0.10]}   # tube haut du support de l'agitateur
+      - {x: [0.77, 1.06], y_min: [0.295, 0.33, 0.365]}   # porte-bocal et bocal
+      - {x: [1.05, 1.12], y_min: [0.215, 0.225, 0.26]}
+      - {x: [1.11, 1.17], y_min: [0.11, 0.11, 0.11]}
+      - {x: [1.16, 1.22], y_min: [0.0, 0.015, 0.055]}
+    # Axes sous la butée haute (table calculée à 1,11 et 1,20, valable à toute hauteur dessous).
+    sous_butee:
+      - {x: [0.77, 0.99], y_min: [0.325, 0.335, 0.37]}
+      - {x: [0.98, 1.15], y_min: [0.395, 0.42, 0.455]}   # caméra du dosage
+      - {x: [1.14, 1.21], y_min: [0.30, 0.30, 0.30]}
+      - {x: [1.20, 1.22], y_min: [0.0, 0.015, 0.055]}
+  # Mât à x < 0,78 et axes de 1,11 à la butée haute : la tête passe dans l'ouverture du poste du
+  # fût ; permis seulement le mât à au plus 0,16 / 0,135 / 0,105 de l'axe du fût (godet fermé / à
+  # moitié ouvert / grand ouvert). Sous 1,11, ce sont les règles du fût.
+  ouverture_fut:
+    rayon_mat_max: [0.16, 0.135, 0.105]
+    z_min: 1.11
+    mat_x_max_m: 0.78
   # Pendant le dosage du mycélium : mât à x ≤ 0,78 ou y ≥ 0,40 (fiche).
   dosage: {mat_x_max: 0.78, mat_y_min: 0.40}
-  # Boîtier de la caméra du bocal (x 1,045-1,085, y 0,22-0,28, z 0,982-1,062) : la tête ne le
-  # touche pas tant que son bas est sous 1,08 (fiche : « mât x ≤ 0,96 », tête bras le long du
+  # Boîtier de la caméra du bocal (x 0,997-1,091, y 0,22-0,28, z 0,975-1,068) : la tête ne le
+  # touche pas tant que son bas est sous 1,07 (mât x ≤ 0,911 : bout de la tête à +0,086, bras le long du
   # pont, raclette côté fût). Le boîtier est un obstacle : la tête ne passe pas non plus de
   # l'autre côté en le touchant. Si seule la partie haute de la tête (tete ci-dessus) arrive au-dessus
   # du bas du boîtier (z_bas), elle seule compte (cotes du projet mécanique, 28/10).
   # z_haut : haut du boîtier, pour la préhension (elle passe au-dessus avec 1 cm de marge).
-  camera_bocal: {x: [1.045, 1.085], y: [0.22, 0.28], bas_z_max: 1.08, z_bas: 0.982, z_haut: 1.062}
+  camera_bocal: {x: [0.997, 1.091], y: [0.22, 0.28], bas_z_max: 1.07, z_bas: 0.975, z_haut: 1.068}
   # Bout côté fût : tête (son bord côté −x) sous x ≈ 0,12 → bas de la tête ≥ 0,85 hors du fût,
   # ≥ 1,05 au-dessus de la paroi du fût (fiche). Mât au-dessus de l'intérieur du fût : ce sont
   # les règles du fût qui comptent.
@@ -494,13 +512,14 @@ griffe:
     entrouvrir_essais_max: 3
     reprises_max: 2
     utile_min_kg: 0.15
-    rayons_m: [0.0, 0.09, 0.17]
+    rayons_m: [0.0, 0.05, 0.10]
     points: [1, 4, 8]
   # 6. Vidage (fiche) : axes = haut du seau + 0,23, le godet s'ouvre en grand en tournant de
   # 45° au plus ; haut du seau au-dessus de 0,88 : vidage tête bloquée, sans tourner.
   vidage:
     au_dessus_haut_m: 0.23
-    rotation_deg: 45
+    rotation_deg: 0
+    zone_seau_m: 0.10
     rotation_haut_max_z: 0.88
   # 7. Tassement : godet refermé à vide, appui ≈ 60 N (fiche) à quelques endroits pendant que le
   # seau tourne (3 appuis, remontée 2 cm, 2 s : EXEMPLES).
@@ -510,15 +529,15 @@ griffe:
     remontee_m: 0.02
     attente_s: 2
   # 8. Essuyage du bord (fiche) : mât à R_haut + 11 cm de l'axe du seau, axes à haut + 0,196.
-  # Durée d'un tour du seau : EXEMPLE. Direction du mât depuis l'axe du seau : la fiche dit +x
-  # (0°, côté stockage), mais la tête y toucherait le boîtier de la caméra du bocal (seaux A et
-  # B) : 90° (côté allée, tête tournée d'un quart de tour) EN ATTENDANT la réponse à la question
-  # de la PR de la tâche 18 bis.
+  # Durée d'un tour du seau : EXEMPLE. Côté allée confirmé (90° : tête tournée d'un quart de tour ;
+  # côté +x impossible, caméra du dosage). Godet à moitié ouvert : grand ouvert, les coquilles
+  # touchent le moteur des barres du Remplissage (docs/decisions.md, 01/11/2026).
   essuyage:
     decalage_m: 0.11
     au_dessus_haut_m: 0.196
     direction_deg: 90
     duree_s: 8
+    ouverture_godet: 0.5
   # Raclage de la paroi du fût (fiche : la lame appuie d'≈ 8 mm, un tour dans chaque sens).
   # Départ 18 cm sous le bord (EXEMPLE : plus haut, la tête ne peut pas tourner godet ouvert).
   raclage:

@@ -29,8 +29,8 @@ cameras:
     video: plafond
     champ_deg: [102, 67]
     calibration: plafond.json
-    # Objectif en (1,45 ; 0,50), à ≈ 2,35 m.
-    position: [1.45, 0.50, 2.35]
+    # Objectif en (1,45 ; 0,545), à ≈ 2,35 m (docs/decisions.md, 01/11/2026).
+    position: [1.45, 0.545, 2.35]
     orientation_deg: 0
   tete_griffe:
     description: Tête de griffe, caméra USB ≥ 5 Mpx (fenêtre Ø 25 au centre du toit de la chape)

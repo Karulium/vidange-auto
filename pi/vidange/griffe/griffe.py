@@ -351,6 +351,15 @@ class Griffe:
                 haut = max(pose.z, self.reglages.rotation.libre_z_max)
             if haut > pose.z + _EGAL:
                 yield Pas("remontée lente après le choc", {"z": haut}, vitesse="remontee_choc")
+        pose = self.pose
+        if (
+            pose.z < self.reglages.ouverture_fut.z_min - _EGAL
+            and self.regles.dans_le_fut(pose)
+            and self.regles.hors_ouverture(pose.x, pose.y)
+        ):
+            # Trop loin de l'axe pour sortir par l'ouverture du poste du fût : d'abord au centre.
+            centre_x, centre_y = self.fut.centre_fut
+            yield Pas("vers le centre du fût", {"x": centre_x, "y": centre_y}, choc=choc)
         noms = {"b": "fermer le godet", "a": "tête bras le long du pont", "z": "monter"}
         for valeurs in self._vers_le_haut(self.pose):
             (axe,) = valeurs
@@ -502,14 +511,22 @@ class Griffe:
         prevue = self._prochaine_prise()
         bas_offset = reglages.bas_godet_sous_axes
         assert self.pose is not None
+        niveau = plan.niveau_z if plan.niveau_z is not None else self.fut.fut_bord_z
+        approche = min(niveau + reglages.descente.marge_niveau_m + bas_offset, reglages.trajet.z)
         if plan.reprendre and self.regles.dans_le_fut(self.pose):
             # Trop léger : reprendre à côté sans faire le voyage (godet ouvert, dans le fût).
+            yield Pas("à côté, dans le fût", {"x": prevue.x, "y": prevue.y})
+        elif self.regles.hors_ouverture(prevue.x, prevue.y) and (
+            approche < reglages.ouverture_fut.z_min
+        ):
+            # Trop loin de l'axe pour passer par l'ouverture du poste du fût : on descend au
+            # centre, puis on va à côté dans le fût.
+            yield from self._aller_au_dessus(*self.fut.centre_fut)
+            yield Pas("descente rapide au centre", {"z": approche})
             yield Pas("à côté, dans le fût", {"x": prevue.x, "y": prevue.y})
         else:
             yield from self._aller_au_dessus(prevue.x, prevue.y)
         plan.reprendre = False
-        niveau = plan.niveau_z if plan.niveau_z is not None else self.fut.fut_bord_z
-        approche = min(niveau + reglages.descente.marge_niveau_m + bas_offset, reglages.trajet.z)
         assert self.pose is not None
         if approche < self.pose.z - _EGAL:
             yield Pas("descente rapide", {"z": approche})
@@ -755,7 +772,7 @@ class Griffe:
         self.plan.couche_tassee = True
 
     def geste_essuyer(self) -> Geste:
-        """Raclette posée sur le bord du seau qui tourne, godet ouvert dehors."""
+        """Raclette posée sur le bord du seau qui tourne, godet à moitié ouvert."""
         seau, essuyage = self.format, self.reglages.essuyage
         x, y = self._point_autour_du_seau(seau.rayon_haut + essuyage.decalage_m)
         yield from self._aller_au_dessus(x, y)
@@ -764,7 +781,7 @@ class Griffe:
         assert self.pose is not None
         vers_le_seau = essuyage.direction_deg + 180 - self.reglages.raclette_angle_deg
         yield Pas("raclette vers le seau", {"a": self._angle_proche(self.pose.a, [vers_le_seau])})
-        yield Pas("ouvrir le godet dehors", {"b": 1.0})
+        yield Pas("ouvrir le godet à moitié", {"b": essuyage.ouverture_godet})
         yield Pas("raclette sur le bord", {"z": z})
         self.tourner_seau(True)
         try:
@@ -801,8 +818,11 @@ class Griffe:
             biais, ouverture = reglages.fond.chasse_neige_angle_deg, 0.0
         points = reglages.raclage.points_par_tour
         premier = self._dans_le_fut(centre_x + rayon, centre_y)
-        yield from self._aller_au_dessus(*premier)
-        yield Pas("descendre contre la paroi", {"z": hauteurs[0]})
+        # L'ouverture du poste du fût ne laisse passer la tête que près de l'axe du fût (entre
+        # 1,11 et la butée haute) : on descend au centre, puis on va contre la paroi dans le fût.
+        yield from self._aller_au_dessus(centre_x, centre_y)
+        yield Pas("descendre dans le fût", {"z": hauteurs[0]})
+        yield Pas("aller contre la paroi", {"x": premier[0], "y": premier[1]})
         assert self.pose is not None
         # Lame dans le plan qui passe par l'axe du fût (chasse-neige : inclinée de « biais »).
         depart = biais - reglages.raclette_angle_deg

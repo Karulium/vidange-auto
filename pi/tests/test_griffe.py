@@ -99,33 +99,58 @@ def test_godet_jamais_au_dela_de_ferme():
 
 
 def test_mat_en_y_godet_ouvert():
-    bord = Pose(x=1.0, y=0.10, z=1.29, a=0, b=0)
+    bord = Pose(x=0.60, y=0.10, z=1.29, a=0, b=0)
     assert refus(bord) is None
     assert "godet ouvert avec le mât à y 0,1 m" in refus(bord.avec(b=1.0))
 
 
-def test_garage_et_glissiere():
-    assert "garage ou glissière" in refus(Pose(x=0.6, y=0.30, z=1.29, a=0, b=0))
-    assert refus(Pose(x=0.6, y=0.34, z=1.29, a=0, b=0)) is None
-    # Grand ouvert : il faut y ≥ 0,38.
-    assert "il faut y ≥ 0,38 m" in refus(Pose(x=0.6, y=0.34, z=1.29, a=0, b=1.0))
-    # Tête tournée, godet fermé : 0,33 + (0,139 − 0,111) ; godet ouvert : minimum grand ouvert.
-    tournee = Pose(x=0.6, y=0.35, z=1.0, a=90, b=0)
-    assert "il faut y ≥ 0,358 m" in refus(tournee)
+def test_agitateur_y_min_du_mat():
+    # Godet fermé, bras le long du pont.
+    bas = Pose(x=0.90, y=0.28, z=1.29, a=0, b=0)  # en butée haute : bande 0,295
+    assert "il faut y ≥ 0,295 m" in refus(bas)
+    assert refus(bas.avec(x=0.60)) is None
+    # Sous la butée haute : 0,325 ; en butée haute : 0,295.
+    assert refus(bas.avec(y=0.31)) is None
+    assert "il faut y ≥ 0,325 m" in refus(bas.avec(y=0.31, z=1.20))
+    # Caméra du dosage : refusée sous la butée, permise en butée haute.
+    camera = Pose(x=1.05, y=0.39, z=1.20, a=0, b=0)
+    assert "il faut y ≥ 0,395 m" in refus(camera)
+    assert refus(camera.avec(z=1.29)) is None
+    # Grand ouvert : 0,365 en butée haute.
+    assert "il faut y ≥ 0,365 m" in refus(bas.avec(y=0.34, b=1.0))
+    # Les bandes se chevauchent : la plus stricte compte (x 1,115 : 0,215 et 0,11).
+    assert "il faut y ≥ 0,215 m" in refus(Pose(x=1.115, y=0.20, z=1.29, a=0, b=0))
+    # Tête tournée, godet fermé : 0,295 + (0,139 − 0,111).
+    tournee = Pose(x=0.80, y=0.34, z=1.0, a=90, b=0)  # sous la butée : 0,325 + 0,028
+    assert "il faut y ≥ 0,353 m" in refus(tournee)
     assert refus(tournee.avec(y=0.36)) is None
-    assert "il faut y ≥ 0,38 m" in refus(tournee.avec(y=0.36, b=0.3))
 
 
-def test_bande_du_garage_permise_en_butee_haute_seulement():
-    # Préhension au porte-bocal : mât de la griffe en x 0,249, y 0,150 (décision du 29/10).
-    pose = Pose(x=0.249, y=0.150, z=1.29, a=0, b=0)
-    assert refus(pose) is None
-    assert refus(pose.avec(z=1.2895)) is None
-    message = refus(pose.avec(z=1.28))
-    assert "garage ou glissière" in message and "(ou la tête en butée haute)" in message
-    # La bande de la glissière reste interdite, même en butée haute.
-    assert "garage ou glissière" in refus(Pose(x=0.6, y=0.30, z=1.29, a=0, b=0))
-    assert REGLES.en_butee_haute(1.29) and not REGLES.en_butee_haute(1.288)
+def test_ouverture_du_poste_du_fut():
+    # Mât à x < 0,78, axes de 1,11 à la butée : seulement près de l'axe du fût.
+    assert "ouverture du poste du fût" in refus(Pose(x=0.50, y=0.60, z=1.15, a=0, b=0))
+    assert refus(Pose(x=0.29, y=0.57, z=1.15, a=0, b=0)) is None
+    # Au bord du cercle : 0,16 godet fermé, 0,105 grand ouvert.
+    assert refus(Pose(x=0.29, y=0.57 + 0.15, z=1.15, a=0, b=0)) is None
+    assert "au plus 0,105 m" in refus(Pose(x=0.29, y=0.57 + 0.12, z=1.15, a=0, b=1.0))
+    # Tête tournée, godet fermé : le rayon perd (0,139 − 0,111).
+    assert "ouverture du poste du fût" in refus(Pose(x=0.29, y=0.57 + 0.15, z=1.15, a=90, b=0))
+    # Sous 1,11, ce sont les règles du fût.
+    assert "dans le fût" in refus(Pose(x=0.29, y=0.80, z=0.5, a=0, b=0))
+
+
+def test_tables_du_mat_verifiees(reglages):
+    remplacer(
+        reglages / "machine.yaml",
+        "{x: [0.77, 0.99], y_min: [0.325",
+        "{x: [0.99, 0.77], y_min: [0.325",
+    )
+    assert "y_min_mat → sous_butee : x du plus petit au plus grand" in erreur_de(reglages)
+
+
+def test_ouverture_godet_de_l_essuyage_verifiee(reglages):
+    remplacer(reglages / "machine.yaml", "ouverture_godet: 0.5", "ouverture_godet: 1.0")
+    assert "ouverture_godet" in erreur_de(reglages)
 
 
 def test_encombrement_de_la_tete():
@@ -144,7 +169,7 @@ def test_encombrement_de_la_tete():
 
 
 def test_dosage_et_porte_du_spray():
-    seau = Pose(x=0.95, y=0.30, z=0.98, a=0, b=0)
+    seau = Pose(x=0.90, y=0.34, z=0.98, a=0, b=0)
     assert refus(seau) is None
     assert "dosage du mycélium" in refus(seau, Contexte(dosage_en_cours=True))
     # La tête (0,086 en travers du bras) entre dans la zone de la porte, pas le mât.
@@ -156,29 +181,22 @@ def test_dosage_et_porte_du_spray():
 
 
 def test_boitier_de_la_camera_du_bocal():
-    # Fiche : mât à x ≤ 0,96 (tête bras le long du pont, raclette côté fût). Les bouts des
-    # goupilles sont à 0,086 du mât côté +x : 0,959 au plus.
-    devant = Pose(x=0.955, y=0.25, z=0.98, a=0, b=0)
+    # Boîtier x 0,997-1,091 (plan de commande v230) : le bout de la tête est à 0,086 du mât côté
+    # +x (bras le long du pont, raclette côté fût), donc mât à x ≤ 0,911.
+    devant = Pose(x=0.91, y=0.33, z=0.98, a=0, b=0)
     assert refus(devant) is None
-    assert "caméra du bocal" in refus(devant.avec(x=0.96))
-    # Axes à moins de 0,03 au-dessus du bas du boîtier (0,982) : godet grand ouvert, seuls les
-    # bras (0,117) comptent ; plus haut, les coquilles ouvertes (0,165) aussi.
-    ouvert = Pose(x=0.92, y=0.365, z=1.01, a=90, b=1.0)
+    assert "caméra du bocal" in refus(devant.avec(x=0.95))
+    # Godet ouvert : seuls les bras (0,117) comptent tant que les joues (0,09 sous les axes) sont
+    # sous le bas du boîtier (0,975), donc jusqu'à des axes à 1,065 ; plus haut, les coquilles
+    # ouvertes (0,165) aussi.
+    ouvert = Pose(x=0.80, y=0.38, z=1.06, a=90, b=1.0)
     assert refus(ouvert) is None
-    assert "caméra du bocal" in refus(ouvert.avec(z=1.02))
-    # Le mât est hors de la bande y 0,22-0,28, mais la tête la recouvre.
-    assert "caméra du bocal" in refus(Pose(x=1.0, y=0.14, z=0.98, a=0, b=0))
-    assert refus(Pose(x=1.0, y=0.22 - 0.111, z=1.02, a=0, b=0)) is None
-    # De l'autre côté du boîtier : permis si la tête ne le touche pas (raclette côté +x) ;
-    # raclette côté fût, sa lame (0,11 du mât) y entrerait.
-    derriere = Pose(x=1.175, y=0.25, z=0.98, a=180, b=0)
-    assert refus(derriere) is None
-    assert "caméra du bocal" in refus(derriere.avec(x=1.17))
-    assert "caméra du bocal" in refus(derriere.avec(a=0))
-    # Bas de la tête à 1,08 ou plus : la tête passe au-dessus. Bas compté à 1,077 en butée
-    # haute (0,213 sous les axes) : elle ne passe pas au-dessus du boîtier.
-    assert refus(Pose(x=1.0, y=0.25, z=1.08 + 0.213, a=0, b=0)) is not None  # hors course
-    assert "caméra du bocal" in refus(Pose(x=1.0, y=0.25, z=1.29, a=0, b=0))
+    # Le mât est hors de la bande y 0,22-0,28, mais la tête la recouvre (bras le long du pont).
+    assert "caméra du bocal" in refus(Pose(x=0.95, y=0.34, z=0.98, a=0, b=0.5))
+    # Bas de la tête à 1,07 ou plus : la tête passe au-dessus (haut du boîtier 1,068). Bas compté
+    # à 1,077 en butée haute (0,213 sous les axes).
+    assert refus(Pose(x=1.0, y=0.30, z=1.29, a=0, b=0)) is None
+    assert "caméra du bocal" in refus(Pose(x=0.95, y=0.33, z=1.065 + 0.213 - 0.01, a=0, b=0))
 
 
 def test_poignee_du_volet():
@@ -197,7 +215,7 @@ def test_poignee_du_volet():
 
 
 def essuyage(nom_format: str, direction_deg: float) -> Pose:
-    """La pose de l'essuyage du bord : raclette sur le bord du seau, godet ouvert dehors."""
+    """La pose de l'essuyage du bord : raclette sur le bord du seau, godet à moitié ouvert."""
     seau = GRIFFE.formats[nom_format]
     x, y = GRIFFE.seau_remplissage
     distance = seau.rayon_haut + GRIFFE.essuyage.decalage_m
@@ -207,7 +225,7 @@ def essuyage(nom_format: str, direction_deg: float) -> Pose:
         y=y + distance * math.sin(angle),
         z=seau.haut_z + GRIFFE.essuyage.au_dessus_haut_m,
         a=direction_deg + 180 - GRIFFE.raclette_angle_deg,
-        b=1.0,
+        b=GRIFFE.essuyage.ouverture_godet,
     )
 
 
@@ -219,6 +237,37 @@ def test_essuyage_au_vidage_loin_du_boitier_de_la_camera():
     assert GRIFFE.essuyage.direction_deg == 90
     for nom in GRIFFE.formats:
         assert refus(essuyage(nom, 90)) is None
+
+
+def test_vidage_au_poste_du_remplissage():
+    # Mât en (0,925 ; 0,42), godet grand ouvert, tête à 0° ou 180° : les 4 formats passent.
+    x, y = GRIFFE.seau_remplissage
+    for seau in GRIFFE.formats.values():
+        z = seau.haut_z + GRIFFE.vidage.au_dessus_haut_m
+        pose = Pose(x=x, y=y, z=z, a=0, b=1.0)
+        assert refus(pose) is None
+        assert refus(pose.avec(a=180)) is None
+        # Tournée de 45°, godet ouvert : refusé ; godet fermé, la rotation reste possible.
+        assert "godet ouvert au-dessus du seau" in refus(pose.avec(a=45))
+        assert "godet ouvert au-dessus du seau" in refus(pose.avec(a=135))
+    # Rotation godet ouvert au-dessus du seau : refusée.
+    depart = Pose(x=x, y=y, z=1.0, a=0, b=1.0)
+    assert "godet ouvert au-dessus du seau" in REGLES.refus_mouvement(
+        depart, depart.avec(a=45), PRODUCTION
+    )
+    assert GRIFFE.vidage.rotation_deg == 0
+    assert GRIFFE.essuyage.ouverture_godet == 0.5
+
+
+def test_tete_godet_ouvert_s_elargit_sous_les_axes():
+    # Boîtier de z 0,975 à 1,068, y 0,22-0,28 ; mât à y 0,40, godet grand ouvert, bras le long du
+    # pont. Bas du boîtier à 0,025 sous les axes : 0,117 de chaque côté, y 0,283, dégagé. À
+    # 0,05 sous les axes : 0,135, y 0,265, contre le boîtier.
+    ouvert = Pose(x=0.95, y=0.40, z=1.0, a=0, b=1.0)
+    assert refus(ouvert) is None
+    assert "caméra du bocal" in refus(ouvert.avec(z=1.025))
+    # Godet fermé : toute la tête reste à 0,117 au plus jusqu'à 0,09 sous les axes.
+    assert "caméra du bocal" not in (refus(ouvert.avec(z=1.025, b=0)) or "")
 
 
 def test_dans_le_fut():
@@ -235,13 +284,13 @@ def test_bout_cote_fut():
     assert refus(Pose(x=0.10, y=0.15, z=1.07, a=0, b=0)) is None
     # Le mât est à x 0,22, mais la raclette (côté −x) va jusqu'à 0,11 ; sa tête est au-dessus
     # de la paroi du fût. Raclette côté +x : la tête reste à x ≥ 0,135.
-    loin = Pose(x=0.22, y=0.24, z=1.2, a=0, b=0)
+    loin = Pose(x=0.22, y=0.24, z=1.0, a=0, b=0)
     assert "tête sous x 0,12 m au-dessus de la paroi du fût" in refus(loin)
     assert refus(loin.avec(a=180)) is None
     # Mât hors du fût, mais la tête au-dessus de sa paroi : bas ≥ 1,05.
-    paroi = Pose(x=0.10, y=0.57 - 0.36, z=1.2, a=0, b=0)
+    paroi = Pose(x=0.10, y=0.57 - 0.36, z=1.0, a=0, b=0)
     assert "au-dessus de la paroi du fût" in refus(paroi)
-    assert refus(paroi.avec(z=1.05 + 0.213)) is None
+    assert refus(paroi.avec(z=1.29)) is None
     # Mât au-dessus de l'intérieur du fût : les règles du fût comptent (prises côté −x).
     assert refus(Pose(x=0.12, y=0.57, z=0.5, a=180, b=0)) is None
 
@@ -266,10 +315,12 @@ def test_trajet_jamais_en_diagonale():
 
 
 def test_mouvement_verifie_point_par_point():
-    # Les deux bouts sont permis, mais le chemin passe trop bas sur le garage.
-    depart = Pose(x=0.95, y=0.31, z=1.29, a=0, b=0)
-    assert REGLES.refus_mouvement(depart, depart.avec(x=0.865), PRODUCTION) is None
-    assert "garage" in REGLES.refus_pose(depart.avec(x=0.6), PRODUCTION)
+    # Les deux bouts sont permis (en butée haute, puis dans le fût), mais la descente à 0,18 m
+    # de l'axe du fût traverse l'ouverture du poste, où le mât ne va qu'à 0,16 m au plus.
+    depart = Pose(x=0.29, y=0.75, z=1.29, a=0, b=0)
+    arrivee = depart.avec(z=1.0)
+    assert refus(depart) is None and refus(arrivee) is None
+    assert "ouverture du poste du fût" in REGLES.refus_mouvement(depart, arrivee, PRODUCTION)
     # Pas de rotation quand le pont est au-delà de x 2,0.
     loin = Pose(x=2.0, y=0.5, z=1.0, a=0, b=0)
     assert "pont est au-delà de x 2" in REGLES.refus_mouvement(loin, loin.avec(a=10), PRODUCTION)
@@ -426,10 +477,10 @@ def test_trop_lourd_s_entrouvrir(caplog):
 
 
 def test_pas_refuse_par_les_regles():
-    # Dosage du mycélium en cours : la griffe ne peut pas aller au seau, elle ne bouge pas.
-    planning, _, _, _ = vider(dosage_en_cours=lambda: True)
+    # Caméra du dosage qui pivote : la griffe ne peut pas aller au seau, elle ne bouge pas.
+    planning, _, _, _ = vider(camera_dosage_pivote=lambda: True)
     assert not planning.fini
-    assert "« trajet » refusé : dosage du mycélium en cours" in planning.probleme
+    assert "refusé : la caméra du dosage pivote" in planning.probleme
 
 
 def test_chariot_perdu_pendant_la_vidange():

@@ -73,7 +73,7 @@ def qr(code: str):
 
 def test_reglages_de_la_vision_du_depot():
     assert VISION.exemple and VISION.stabilisation_s == 0.3
-    assert VISION.cameras["plafond"].position == (1.45, 0.50, 2.35)
+    assert VISION.cameras["plafond"].position == (1.45, 0.545, 2.35)
     assert VISION.cameras["plafond"].champ_deg == (102, 67)
     assert VISION.plafond.photo_age_max_s == 5 and VISION.plafond.attente_s == 300
     assert [r.numero for r in VISION.plafond.regles] == list(range(1, 10))
@@ -540,12 +540,12 @@ def test_griffe_et_camera_du_dosage():
     # Au-dessus du seau du remplissage, bas de la tête sous le haut de la boîte : dedans.
     bas = 1.0 + g.bas_godet_sous_axes
     au_seau = PoseGriffe(0.925, 0.40, bas, 0, 0)
-    assert regles.dans_boite_camera_dosage(au_seau.avec(y=0.30))
+    assert regles.dans_boite_camera_dosage(au_seau.avec(y=0.33))
     # Au fût (y 0,57), ou tête au-dessus de 1,08 : dehors.
     assert not regles.dans_boite_camera_dosage(PoseGriffe(0.29, 0.57, bas, 0, 0))
-    assert not regles.dans_boite_camera_dosage(au_seau.avec(y=0.30, z=1.09 + g.bas_godet_sous_axes))
+    assert not regles.dans_boite_camera_dosage(au_seau.avec(y=0.33, z=1.09 + g.bas_godet_sous_axes))
     # Caméra qui pivote : la tête n'entre pas dans la boîte.
-    dedans = au_seau.avec(y=0.30)
+    dedans = au_seau.avec(y=0.33)
     refus = regles.refus_pose(dedans, ContexteGriffe(camera_dosage_pivote=True))
     assert refus is not None and "la caméra du dosage pivote" in refus
     assert "caméra du dosage" not in (regles.refus_pose(dedans, ContexteGriffe()) or "")

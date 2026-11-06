@@ -266,7 +266,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   l'agitateur. Vérifier l'essuyage du bord du seau (mât à +x du seau, axes à haut + 0,196) contre le boîtier de
   la caméra du bocal (x 1,045-1,085, y 0,22-0,28, z 0,982-1,062) ; s'il y a contact, le dire dans les questions
   de la PR avec une proposition. Tests.
-- [ ] **18 ter. Griffe : nouvelle table « Y minimum du mât » (agitateur fixe) et essuyage godet à moitié** — Modèle :
+- [x] **18 ter. Griffe : nouvelle table « Y minimum du mât » (agitateur fixe) et essuyage godet à moitié** — Modèle :
   Sonnet, effort moyen. **À faire après la tâche 19 ter.**
   Source : `docs/decisions.md`, « Griffe : table Y minimum du mât avec l'agitateur fixe » (02/11/2026), points 1 à
   6, et « Griffe : essuyage et Y minimum du mât » (01/11), points 1, 6 et 7. Dans `pi/reglages/machine.yaml`,

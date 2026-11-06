@@ -107,7 +107,7 @@ def test_objets_de_la_prehension_verifies(reglages):
 def test_hauteurs_et_boitier_de_la_prehension_verifies(reglages):
     machine = reglages / "machine.yaml"
     remplacer(machine, "  haut_z: 1.10\n", "  haut_z: 1.20\n")
-    remplacer(machine, ", z_haut: 1.062}", "}")
+    remplacer(machine, ", z_haut: 1.068}", "}")
     remplacer(machine, "  prehension_geste_max: 300\n", "")
     message = erreur_de(reglages)
     assert "prehension → haut_z : 1.2 m hors de la course de prehension_z" in message
@@ -327,20 +327,19 @@ def test_seau_tenu_bord_limite():
 
 
 def test_boitier_de_la_camera_du_bocal():
-    # Contrôle de la fiche : y < 0,335, face sous 1,072 interdite, à partir de x 0,99.
+    # Boîtier x 0,997-1,091, y < 0,28, haut à 1,068 (plan de commande v230) : plus le rayon de la
+    # tête (0,052) et 1 cm, la face passe au-dessus de 1,068 + 1 cm.
     (x_min, x_max), y_max, bas_min = REGLES.zone_camera_bocal(None)
-    assert x_min == pytest.approx(0.99) and y_max == pytest.approx(0.335)
-    assert bas_min == pytest.approx(1.072)
-    # La fiche dit x ≤ 1,16 : avec la boîte de machine.yaml (x ≤ 1,085), c'est 1,14 (question
-    # de la PR de la tâche 37).
-    assert x_max == pytest.approx(1.14)
+    assert x_min == pytest.approx(0.942) and y_max == pytest.approx(0.335)
+    assert bas_min == pytest.approx(1.078)
+    assert x_max == pytest.approx(1.146)
     # x 1,137 : hors de la zone du porte-bocal (x ≤ 1,08 + 5,5 cm), dans celle du boîtier.
     assert "boîtier de la caméra du bocal" in refus(Pose(x=1.137, y=0.30, z=1.07, a=0))
-    assert refus(Pose(x=1.137, y=0.30, z=1.075, a=0)) is None
-    assert refus(Pose(x=1.137, y=0.34, z=1.0, a=0)) is None
+    assert refus(Pose(x=1.137, y=0.30, z=1.08, a=0)) is None
+    assert refus(Pose(x=1.137, y=0.35, z=1.0, a=0)) is None
     # Avec un bocal (rayon 0,0515, 0,17 sous la face) : zone plus large, et le bas du bocal compte.
     (x_min, _), y_max, _ = REGLES.zone_camera_bocal(BOCAL)
-    assert x_min == pytest.approx(0.9835) and y_max == pytest.approx(0.3415)
+    assert x_min == pytest.approx(0.9355) and y_max == pytest.approx(0.3415)
     # Là, la zone du porte-bocal (plus large avec le bocal) refuse déjà.
     assert refus(Pose(x=1.05, y=0.30, z=1.10, a=0), Contexte(objet=BOCAL)) is not None
 

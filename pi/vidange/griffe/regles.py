@@ -207,24 +207,9 @@ class ReglesGriffe:
                     f"godet ouvert avec le mât à y {_m(pose.y)} m : permis de y {_m(debut)} "
                     f"à {_m(fin)} m seulement"
                 )
-        for bande in g.garage_glissiere:
-            if bande.permise_en_butee_haute and self.en_butee_haute(pose.z):
-                continue
-            minimum = bande.y_min[classe]
-            if not self.bloquee(pose.a):
-                # Tête tournée : elle dépasse en y plus que bras le long du pont.
-                tete = g.tete
-                minimum = (
-                    bande.y_min[2]
-                    if classe
-                    else minimum + tete.rayon_balaye - tete.demi_longueur_ferme
-                )
-            if bande.x[0] <= pose.x <= bande.x[1] and pose.y < minimum - _EGAL:
-                butee = " (ou la tête en butée haute)" if bande.permise_en_butee_haute else ""
-                return (
-                    f"garage ou glissière de l'agitateur : mât à x {_m(pose.x)}, "
-                    f"y {_m(pose.y)} m ; il faut y ≥ {_m(minimum)} m ici{butee}"
-                )
+        refus = self._refus_y_min_mat(pose, classe)
+        if refus is not None:
+            return refus
         if contexte.dosage_en_cours and pose.x > g.dosage.mat_x_max and pose.y < g.dosage.mat_y_min:
             return (
                 f"dosage du mycélium en cours : mât à x ≤ {_m(g.dosage.mat_x_max)} m ou "
@@ -240,9 +225,7 @@ class ReglesGriffe:
         camera = g.camera_bocal
         # Seule la partie haute de la tête (les bras) arrive à la hauteur du boîtier : elle seule
         # peut le toucher.
-        haut_seul = (
-            g.tete.demi_longueur_haut if pose.z - g.tete.haut_sous_axes <= camera.z_bas else None
-        )
+        haut_seul = self._longueur_au_niveau(pose, pose.z - camera.z_bas)
         if bas < camera.bas_z_max - _EGAL and self._touche(pose, camera.x, camera.y, haut_seul):
             return (
                 f"la tête toucherait le boîtier de la caméra du bocal (x {_m(camera.x[0])} à "
@@ -259,12 +242,82 @@ class ReglesGriffe:
         refus = self._refus_rotation(pose)
         if refus is not None:
             return refus
+        if pose.b > _EGAL and not self.bloquee(pose.a) and self._au_dessus_du_seau(pose):
+            return (
+                f"godet ouvert au-dessus du seau du remplissage : tête à {_m(pose.a)}°, il faut "
+                "bras le long du pont (0 ou 180°), sinon elle touche le boîtier de la caméra"
+            )
         refus = regles_poste.refus_griffe(
             poste, pose.x, pose.y, bas, contexte.volet_releve, self.encombrement(pose)
         )
         if refus is not None:
             return refus
         return self._refus_fut(pose, bas)
+
+    def _longueur_au_niveau(self, pose: Pose, profondeur: float) -> float | None:
+        """Demi-longueur de la tête jusqu'à `profondeur` sous les axes ; None : la tête entière."""
+        tete = self.griffe.tete
+        if pose.b <= _EGAL:
+            return tete.demi_longueur_haut if profondeur <= tete.haut_sous_axes_ferme else None
+        for jusqu_a, longueur in tete.profil_ouvert:
+            if profondeur <= jusqu_a + _EGAL:
+                return longueur
+        return None
+
+    def hors_ouverture(self, x: float, y: float) -> bool:
+        """Le mât est-il trop loin de l'axe du fût pour descendre, godet fermé, par l'ouverture
+        du poste (griffe → ouverture_fut) ?"""
+        return self.distance_axe_fut(x, y) > self.griffe.ouverture_fut.rayon_mat_max[0] + _EGAL
+
+    def _refus_y_min_mat(self, pose: Pose, classe: int) -> str | None:
+        """Tables « y minimum du mât » (agitateur fixe) : en butée haute la première, dessous la
+        seconde ; plus le cercle autour de l'axe du fût pour l'ouverture du poste."""
+        g = self.griffe
+        tables = g.y_min_mat
+        bandes = tables.butee_haute if self.en_butee_haute(pose.z) else tables.sous_butee
+        tete = g.tete
+        for bande in bandes:
+            minimum = bande.y_min[classe]
+            if not self.bloquee(pose.a):
+                # Tête tournée : elle dépasse en y plus que bras le long du pont.
+                minimum = (
+                    bande.y_min[2]
+                    if classe
+                    else minimum + tete.rayon_balaye - tete.demi_longueur_ferme
+                )
+            if bande.x[0] <= pose.x <= bande.x[1] and pose.y < minimum - _EGAL:
+                return (
+                    f"agitateur du mycélium : mât à x {_m(pose.x)}, y {_m(pose.y)} m ; "
+                    f"il faut y ≥ {_m(minimum)} m ici"
+                )
+        ouverture = g.ouverture_fut
+        # Axes de z_min jusqu'à la butée haute EXCLUE : en butée haute (trajets), la tête passe
+        # au-dessus de l'ouverture, seule la première table compte.
+        if (
+            pose.x < ouverture.mat_x_max_m
+            and pose.z >= ouverture.z_min - _EGAL
+            and not self.en_butee_haute(pose.z)
+        ):
+            rayon = ouverture.rayon_mat_max[classe]
+            if not self.bloquee(pose.a):
+                rayon = (
+                    ouverture.rayon_mat_max[2]
+                    if classe
+                    else rayon - (tete.rayon_balaye - tete.demi_longueur_ferme)
+                )
+            distance = self.distance_axe_fut(pose.x, pose.y)
+            if distance > rayon + _EGAL:
+                return (
+                    f"ouverture du poste du fût : mât à {_m(distance)} m de l'axe du fût avec "
+                    f"les axes à {_m(pose.z)} m ; au plus {_m(rayon)} m"
+                )
+        return None
+
+    def _au_dessus_du_seau(self, pose: Pose) -> bool:
+        seau_x, seau_y = self.griffe.seau_remplissage
+        return (
+            math.hypot(pose.x - seau_x, pose.y - seau_y) <= self.griffe.vidage.zone_seau_m + _EGAL
+        )
 
     def _refus_rotation(self, pose: Pose) -> str | None:
         rotation = self.griffe.rotation

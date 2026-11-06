@@ -170,6 +170,16 @@ class ReglesPrehension:
             camera.z_haut + self.reglages.camera_bocal_marge_m,
         )
 
+    def y_approche_porte_bocal(self, objet: Objet | None) -> float:
+        """Le mât arrive sur la verticale du porte-bocal par le côté fût : y plus grand que la
+        zone du boîtier de la caméra du bocal ET que la zone du porte-bocal (le boîtier est à 7 cm
+        du bocal : un trajet en diagonale le frôlerait). Plus la tolérance de position."""
+        zone = self.reglages.zone_porte_bocal
+        autour = (
+            self.reglages.rayon_tete_m + zone.marge_m + (0.0 if objet is None else objet.rayon_m)
+        )
+        return max(self.zone_camera_bocal(objet)[1], zone.y[1] + autour) + self.reglages.tolerance_m
+
     def dans_boite_camera_dosage(self, pose: Pose, objet: Objet | None) -> bool:
         """La tête (ou l'objet tenu) est-elle dans la boîte de la caméra du dosage ? Le mât
         descend d'en haut : la boîte est touchée dès que le bas est sous son haut."""

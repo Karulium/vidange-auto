@@ -254,14 +254,31 @@ class TrajetGriffe(Modele):
 
 
 class BandeGriffe(Modele):
-    """Garage et glissière de l'agitateur : y minimum du mât pour une bande de x du mât,
-    godet fermé, à moitié ouvert, grand ouvert (volumes interdits à toute hauteur)."""
+    """Y minimum du mât pour une bande de x du mât, godet fermé, à moitié ouvert, grand ouvert
+    (volumes interdits). Les bandes se chevauchent exprès : une pose est refusée par toute
+    bande qui la contient."""
 
     x: Intervalle
     y_min: tuple[float, float, float]
-    # Bande permise à la griffe en butée haute (garage, quand la préhension est au porte-bocal :
-    # bas du godet au-dessus de tout le Mycélium, docs/decisions.md, 29/10/2026).
-    permise_en_butee_haute: bool = False
+
+
+class YMinMatGriffe(Modele):
+    """Tables « y minimum du mât » de l'agitateur fixe (docs/decisions.md, 02/11/2026) : une
+    pour les axes en butée haute, une pour les axes dessous."""
+
+    butee_haute: list[BandeGriffe] = Field(min_length=1)
+    sous_butee: list[BandeGriffe] = Field(min_length=1)
+
+
+class OuvertureFutGriffe(Modele):
+    """Mât à x < 0,78 et axes de z_min à la butée haute : la tête passe dans l'ouverture du
+    poste du fût. Permis seulement le mât à au plus rayon_mat_max de l'axe du fût (godet fermé,
+    à moitié ouvert, grand ouvert)."""
+
+    rayon_mat_max: tuple[float, float, float]
+    z_min: float
+    # Le mât doit être à x < mat_x_max_m pour que la règle s'applique (au-delà, tables seules).
+    mat_x_max_m: float
 
 
 class ZoneMatGriffe(Modele):
@@ -283,9 +300,13 @@ class TeteGriffe(Modele):
     # Rayon balayé en tournant, godet fermé.
     rayon_balaye: float = Field(gt=0)
     # Partie haute de la tête (tout ce qui est au-dessus de « axes − haut_sous_axes ») : seuls
-    # les bras dépassent du mât, de demi_longueur_haut le long du bras.
+    # les bras dépassent du mât, de demi_longueur_haut le long du bras. Godet fermé, c'est vrai
+    # jusqu'en bas (haut_sous_axes_ferme) ; godet ouvert, la tête s'élargit en descendant sous
+    # les axes : profil_ouvert = [profondeur sous les axes jusqu'à laquelle la demi-longueur
+    # tient, demi-longueur] (griffe.json), croissant ; au-delà, la tête ouverte entière.
     demi_longueur_haut: float = Field(gt=0)
-    haut_sous_axes: float = Field(ge=0)
+    haut_sous_axes_ferme: float = Field(ge=0)
+    profil_ouvert: list[tuple[float, float]] = Field(min_length=1)
 
     @model_validator(mode="after")
     def _verifier(self) -> "TeteGriffe":
@@ -393,6 +414,10 @@ class VidageGriffe(Modele):
     rotation_deg: float = Field(ge=0)
     # Haut du seau au-dessus de ça : vidage tête bloquée, sans tourner.
     rotation_haut_max_z: float
+    # Au-dessus du seau du remplissage (mât à moins de ça de seau_remplissage), godet ouvert, la
+    # tête reste bras le long du pont (A = 0 ou 180°, tolérance rotation → tolerance_deg) : tournée,
+    # elle touche le boîtier de la caméra du bocal.
+    zone_seau_m: float = Field(gt=0)
 
 
 class TassementGriffe(Modele):
@@ -412,6 +437,9 @@ class EssuyageGriffe(Modele):
     direction_deg: float
     # Temps d'un tour du seau sous la raclette (s).
     duree_s: float = Field(gt=0)
+    # Ouverture du godet pendant l'essuyage : de 0 (fermé) à moins de 1 (grand ouvert touche le
+    # moteur des barres du Remplissage, docs/decisions.md, 01/11/2026).
+    ouverture_godet: float = Field(ge=0, lt=1)
 
 
 class RaclageGriffe(Modele):
@@ -560,7 +588,8 @@ class Griffe(Modele):
     mat_y_grand_ouvert: Intervalle
     mat_y_min_ferme: float | None = None
     trajet: TrajetGriffe
-    garage_glissiere: list[BandeGriffe]
+    y_min_mat: YMinMatGriffe
+    ouverture_fut: OuvertureFutGriffe
     # Écart sous lequel les axes sont « en butée haute » (fin de la course de griffe_z), en m.
     tolerance_butee_haute_m: float = Field(gt=0)
     dosage: ZoneMatGriffe
@@ -610,9 +639,16 @@ class Griffe(Modele):
                     f"{nom} : mât à x {x:g}, il faut x ≥ trajet → mat_x_min_pour_y "
                     f"({self.trajet.mat_x_min_pour_y:g}) pour y aller en y"
                 )
-        for bande in self.garage_glissiere:
-            if bande.x[0] >= bande.x[1]:
-                erreurs.append("garage_glissiere : x du plus petit au plus grand")
+        for nom, bandes in (
+            ("butee_haute", self.y_min_mat.butee_haute),
+            ("sous_butee", self.y_min_mat.sous_butee),
+        ):
+            for bande in bandes:
+                if bande.x[0] >= bande.x[1]:
+                    erreurs.append(f"y_min_mat → {nom} : x du plus petit au plus grand")
+        rayons = list(self.ouverture_fut.rayon_mat_max)
+        if rayons != sorted(rayons, reverse=True):
+            erreurs.append("ouverture_fut → rayon_mat_max : du plus grand au plus petit")
         if self.fond.force_max_n < self.fond.seuil_appui_n:
             erreurs.append("fond → force_max_n doit être au moins seuil_appui_n")
         if erreurs:

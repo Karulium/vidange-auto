@@ -386,6 +386,12 @@ class Prehension:
             self.pose.y, y, abs_tol=_EGAL
         ):
             return
+        if self.regles.sur_le_bocal(self.pose):
+            # Depuis la verticale du porte-bocal : d'abord tout droit côté fût, loin du boîtier
+            # de la caméra du bocal (à 7 cm), puis vers le but.
+            sortie = self.regles.y_approche_porte_bocal(self.objet)
+            if self.pose.y < sortie - _EGAL:
+                yield Pas("trajet", {"y": sortie}, choc=True)
         haut = self.regles.hauteur_trajet(self.objet, self.pose.y, y)
         if self.pose.z > haut + _EGAL:
             # Seau tenu : plus bas au-dessus des piles que côté opérateur (règle 3).
@@ -652,6 +658,9 @@ class Prehension:
         # mors » (contact de la capsule à moins de descente → approche_m sous la face haute).
         yield from self._monter()
         yield from self._orienter(reglages.orientation_deg)
+        # D'abord sur l'axe du bocal, côté fût (hors de la zone du boîtier de la caméra du
+        # bocal), puis tout droit jusqu'à sa verticale.
+        yield from self._aller(reglages.x, self.regles.y_approche_porte_bocal(self.objet))
         yield from self._aller(reglages.x, reglages.y)
         assert self.pose is not None
         ecart = abs((self.pose.a - reglages.orientation_deg + 180) % 360 - 180)
