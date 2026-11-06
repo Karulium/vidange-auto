@@ -98,6 +98,9 @@ from vidange.registre import (
     ouvrir_registre,
 )
 from vidange.reglages import ErreurReglages, Reglages, charger_reglages
+from vidange.spray.spray import PORTE as PORTE_SPRAY
+from vidange.spray.spray import Spray
+from vidange.spray.spray import verifier_avec_liste as verifier_spray
 
 # Codes de sortie. Le service systemd (pi/systeme/vidange.service) utilise CODE_REGLAGES_FAUX.
 CODE_OK = 0
@@ -115,6 +118,7 @@ NOM_MODE = "mode.json"
 NOM_ANGLES = "angles.json"
 # La nuit UV-ozone en cours (reprise après une coupure de courant).
 NOM_NETTOYAGE = "nettoyage.json"
+NOM_SPRAY = "spray.json"
 # Le compte-tours de la tête de préhension (docs/entrees-sorties.yaml).
 SIGNAL_COMPTE_TOURS = "compte_tours_tete"
 
@@ -335,6 +339,37 @@ def preparer_nettoyage(
     return nettoyage
 
 
+def preparer_spray(
+    reglages: Reglages,
+    materiel: Materiel | None,
+    dossier_donnees: Path,
+    registre: Registre,
+    chef: Chef,
+) -> Spray | None:
+    """Le Spray en fond (lecture de la carte n° 5, battement, agitateurs). Ses gestes (un seau,
+    nettoyage des tubes) sont des modules du chef : vidange.spray.module."""
+    machine = reglages.machine
+    if machine.spray is None or materiel is None:
+        return None
+    if machine.spray.signal not in materiel.branchements:
+        return None
+    porte = (lambda: materiel.lire(PORTE_SPRAY)) if PORTE_SPRAY in materiel.branchements else None
+    return Spray(
+        machine,
+        materiel,
+        registre,
+        dossier_donnees / NOM_SPRAY,
+        porte_ouverte=porte if porte is not None else (lambda: None),
+        permission=chef.permission,
+    )
+
+
+def constats_spray(spray: Spray | None) -> list[Constat]:
+    if spray is None:
+        return [Constat("spray", "attention", "Spray pas lancé (carte absente de la liste ?)")]
+    return spray.constats()
+
+
 def constats_nettoyage(nettoyage: Nettoyage | None) -> list[Constat]:
     if nettoyage is None:
         return [Constat("enceinte", "attention", "Nettoyage pas lancé (entrées/sorties en panne)")]
@@ -399,9 +434,11 @@ def principal(
     erreurs_pesees = verifier_avec_liste(reglages.pesees, entrees_sorties)
     if reglages.machine.nettoyage is not None:
         erreurs_pesees += verifier_nettoyage(reglages.machine.nettoyage, entrees_sorties)
+    if reglages.machine.spray is not None:
+        erreurs_pesees += verifier_spray(reglages.machine.spray, entrees_sorties)
     if erreurs_pesees:
         journal.error(
-            "Réglages qui ne vont pas ensemble (pesées, ventilateur) :\n%s",
+            "Réglages qui ne vont pas ensemble (pesées, ventilateur, spray) :\n%s",
             "\n".join(f"  - {erreur}" for erreur in erreurs_pesees),
         )
         return CODE_REGLAGES_FAUX
@@ -488,6 +525,13 @@ def principal(
         journal.warning(
             "machine.yaml, nettoyage : temps du store, niveaux du ventilateur, durées de la nuit "
             "UV-ozone d'EXEMPLE : les régler aux essais (pi/systeme/essai-nettoyage.md), puis "
+            "passer « exemple » à false."
+        )
+    spray_reglages = reglages.machine.spray
+    if spray_reglages is not None and spray_reglages.exemple:
+        journal.warning(
+            "machine.yaml, spray : vitesse du bras, doses, durées, tares des flacons et "
+            "agitateurs d'EXEMPLE : les régler aux essais (pi/systeme/essai-spray.md), puis "
             "passer « exemple » à false."
         )
     camera_dosage = reglages.machine.camera_dosage
@@ -639,6 +683,9 @@ def principal(
         chef,
         mode,
     )
+    spray = preparer_spray(
+        reglages, materiel if erreur_materiel is None else None, dossier_donnees, registre, chef
+    )
     liaison_ecran = preparer_ecran(reglages, entrees_sorties, raccords.ecran)
     # L'écran s'arrête en premier, comme l'API : plus d'ordre pendant l'arrêt.
     arret_ecran = threading.Event()
@@ -676,6 +723,8 @@ def principal(
             fils.append(pesees.demarrer(arret))
         if nettoyage is not None:
             fils += nettoyage.demarrer(arret)
+        if spray is not None:
+            fils += spray.demarrer(arret)
         checklist = CheckList(
             {
                 "réglages": lambda: constats_reglages(reglages, entrees_sorties),
@@ -696,6 +745,7 @@ def principal(
                 "accéléromètre": lambda: constats_accelerometre(accelerometre),
                 "pesées": lambda: constats_pesees(pesees),
                 "enceinte": lambda: constats_nettoyage(nettoyage),
+                "spray": lambda: constats_spray(spray),
             }
         )
         serveur = preparer_api(
@@ -711,6 +761,7 @@ def principal(
                 mises_a_jour=mises_a_jour,
                 poste=poste,
                 nettoyage=nettoyage,
+                spray=spray,
             ),
         )
         if serveur is not None:

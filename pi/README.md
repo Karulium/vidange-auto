@@ -67,6 +67,7 @@ Pas encore de vrai module de la machine.
 | `vidange/prehension/` | Préhension (cartes n° 1 et n° 4) : règles de mouvement (`regles.py`), tête sur ses deux cartes avec le vide et la force (`tete.py`), gestes : prendre, poser, porte-bocal, visser (`prehension.py`), scénario du simulateur (`module.py`, `simulation.py`) ; commande `vidange-prehension` |
 | `vidange/lavage/` | Lavage des seaux (cartes n° 1, 3 et 4) : eau du fût de lavage, chauffage, jet d'air (`eau.py`), signaux répartis sur les cartes (`signaux.py`), verrou du noyau et gestes du lavage d'un seau (`lavage.py`), scénario du simulateur (`module.py`, `simulation.py`) ; commande `vidange-lavage` |
 | `vidange/remplissage/` | Remplissage (carte n° 2) : positions interdites du chariot (`regles.py`), chariot sur sa carte avec la balance et la barrière (`chariot.py`), gestes : pose et prise double, anse, centrage, poste, dosage, rangement, modes couvercles et inspection (`remplissage.py`), scénario du simulateur avec le Mycélium (`module.py`, `simulation.py`) ; commande `vidange-remplissage` |
+| `vidange/spray/` | Spray (carte ESP32 n° 5, Modbus sur son bus `rs485_spray` ; table des registres : `../spray/README.md`, codée dans `vidange/materiel/carte_spray.py`) : lecture en fond, battement, agitateurs, bras supposé sorti tant que la carte n'a pas redit « rangé », dose, réserve, amorce, nettoyage des tubes (`spray.py`), modules « spray » et « nettoyage_tubes » (`module.py`) ; fausse carte n° 5 dans `vidange/materiel/faux.py` ; commande `vidange-spray` |
 | `vidange/stockage/` | Stockage (passif, sans capteur de présence) : places calculées depuis les réglages (`places.py`), inventaire gardé dans le registre (`inventaire.py`), verrous des trajets au-dessus des piles, des boîtes et de la caméra du bocal (`regles.py`), prise sur les piles, rendu du seau du dessus, files du tiroir, attente « tiroir plein » (`stockage.py`), scénario du simulateur (`simulation.py`) ; commande `vidange-stockage` |
 | `vidange/vision/` | Vision : photos de mesure (`photo.py`), calibration et passage au repère du portique (`calibration.py`), QR (`qr.py`), repères ArUco (`aruco.py`), caméra du plafond : lave-bocal et « deviner le travail » (`plafond.py`), caméra du dosage sur son servo (`dosage.py`), images fabriquées (`fabrique.py`) ; commande `vidange-vision` |
 | `vidange/poste_fut/` | Poste du fût : état (absent, en place, prêt), bouton « Prêt » et voyant, pesée sans fil du plateau (boîte du poste sur le bus des pesées), pesée absente, accu du plateau, mode permis par le panneau, verrous pour les autres modules, module « poste_fut » ; commande `vidange-pesee` (lecture, étalonnage) |
@@ -659,6 +660,42 @@ vidange-simulateur nettoyage_fuite         # ozone dehors 0,4 ppm : générateur
   `GET /api/nettoyage`, `POST /api/nettoyage/{ouvrir|fermer|eclairage|eteindre|outre|nuit|nuit_maintenant|annuler_nuit}`.
 
 Procédure d'essai : `systeme/essai-nettoyage.md`.
+
+## Spray (tâche 39)
+
+La carte ESP32 n° 5 de la boîte du spray fait le travail fin (pompe jusqu'au poids perdu, électrovannes, bras
+de la buse) ; le Pi lui parle en Modbus RTU sur son bus à elle (`rs485_spray`, signal `carte_spray`). La table
+des registres est la langue commune avec le programme de la carte (tâche 39 bis) : `../spray/README.md`.
+Réglages : `machine.yaml → spray` (EXEMPLES marqués) et `pesees.yaml → balances_spray`.
+
+```python
+spray = Spray(
+    reglages.machine,
+    materiel,
+    registre,
+    donnees / "spray.json",
+    refus_chariot=remplissage.refus_bras_spray,
+    tourner_seau=remplissage.tourner_pour_spray,
+    permission=chef.permission,
+)
+remplissage = Remplissage(..., bras_spray_sorti=spray.bras_spray_sorti)
+chef.lancer(module_spray(spray, seau_au_poste, griffe_partie, micropore_escamote))
+```
+
+- **Règle d'or** : tant que la carte n'a pas redit « bras rangé » (carte muette comprise), `bras_spray_sorti`
+  est vrai : le chariot ne bouge ni en hauteur, ni ses barres, ni en y ; seule la rotation du seau est permise.
+- Le bras ne sort qu'avec la règle 6 (plateau ≤ min(0,50 ; 0,68 − h), barres à plus de 0,50 d'entraxe), la
+  porte de la boîte fermée et pas de purge (`spray_seau`, geste protégé du chef).
+- Erreur avant la sortie (carte muette, balance, flacon presque vide, cartouche à confirmer) : alarme ;
+  l'écran propose « Sans spray » (`POST /api/spray/sans_spray`, puis acquitter et Go) ou d'attendre.
+  Dose incomplète, trop forte ou interrompue (porte ouverte) : notée et alertée, le cycle continue.
+  Bras pas rangé après un seul nouvel essai : alarme forte.
+- Registre du seau : `spray_emplacement`, `spray_dose_demandee`, `spray_dose` (poids perdu, sans l'amorce),
+  `spray_amorce`, `spray_duree`. Gardés dans `donnees/spray.json` : cartouches à confirmer, amorces dues,
+  nettoyages depuis le dernier plein d'alcool.
+- `GET /api/spray`, `POST /api/spray/{sans_spray|cartouche?emplacement=N|alcool_rempli}`.
+- `vidange-spray etat | origine | sortir | ranger | dose | nettoyer | agiter | arret | effacer | zero |
+  etalonner` pour les essais (`systeme/essai-spray.md`).
 
 ## Cartes de pesée du bus RS485 (tâche 22 bis)
 

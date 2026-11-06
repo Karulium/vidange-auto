@@ -182,6 +182,17 @@ Les champs :
 | `photos[]` | les photos prises pendant le cycle : `numero` (sur le Pi), `quand`, `camera`, `fichier` (chemin sur le Pi, relatif au dossier des photos), `remarque`, et l'objet photographié. **Seulement leur description pour l'instant** : l'envoi des fichiers des photos choisies viendra plus tard (question n° 2 de la PR de la tâche 10) |
 | `alarmes[]` | les alarmes du cycle : `numero` (sur le Pi), `quand`, `module`, `etape`, `message`, `quoi_faire`, `acquittee_le`, `acquittee_par` (`null` si pas encore acquittée) |
 
+### Le spray d'un seau (tâche 39)
+
+Le Pi note pour chaque seau sprayé ces `mesures` (`capteur` : `carte_spray`, objet : `seau`) :
+`spray_emplacement` (n° du flacon, 1 à 4, sans unité), `spray_dose_demandee` (`g`), `spray_dose` (`g` : poids
+réellement perdu par le flacon, sans l'amorce), `spray_amorce` (`g`, seulement à la première dose après un
+changement de cartouche), `spray_duree` (`s` : durée du pompage). Elles sont notées sans cycle pour
+l'instant : elles partiront avec le cycle du remplissage quand le spray y sera branché. Un seau « sans spray », à la dose incomplète,
+trop forte ou interrompue a aussi une alarme du module `spray`. Ce que le Pi attend en retour (plus tard) :
+quelle culture est dans quel emplacement (le QR de la cartouche relié à celui de l'emplacement), et la règle
+« quel flacon pour quel seau » (aujourd'hui : un flacon par format, dans `machine.yaml → spray → dose`).
+
 ### Les poids du fût (tâche 17, poste du fût)
 
 Un cycle `vidange` commence quand Karulium appuie sur « Prêt » au poste du fût. La pesée du plateau du

@@ -179,7 +179,12 @@ def test_dosage_et_porte_du_spray():
     porte = Contexte(porte_spray_ouverte=True)
     assert refus(devant) is None
     assert "porte du coffret du spray" in refus(devant, porte)
-    assert refus(devant.avec(y=0.45), porte) is None
+    # Zone de la porte agrandie (Maquette du 31/10, tâche 39) : y < 0,40 au lieu de 0,33.
+    assert REGLAGES.machine.griffe.porte_spray.y_max == 0.40
+    # À y 0,47, la tête permise avant (zone y < 0,33) est maintenant refusée.
+    assert "y < 0,4 m" in refus(devant.avec(y=0.47), porte)
+    assert refus(devant.avec(y=0.47)) is None
+    assert refus(devant.avec(y=0.55), porte) is None
 
 
 def test_boitier_de_la_camera_du_bocal():

@@ -23,18 +23,23 @@ soit testé lui aussi. Seules les broches GPIO du Pi sont imitées plus haut (`F
     faux.carte_pesee("pesee_griffe").hx711_muet = True  # carte du bus RS485 : HX711 muet
     faux.carte_pesee("pesee_fut").radio_muette = True   # boîte du poste : radio muette
     faux.carte_pesee("pesee_fut").accu_mv = 3400        # boîte du poste : accu faible
+    faux.carte_spray("carte_spray").grammes[0] = 120.0  # carte du spray : flacon 1, balances,
+    faux.debrancher("carte_spray")                      # bras, pompes ; carte muette
 
 Le faux suit le même plan que le vrai (niveau actif, contact au repos, tirage), à l'envers.
 """
 
 import errno
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
+from dataclasses import replace
 
 from vidange import trame_sdp810 as sdp
 from vidange import trame_sps30 as shdlc
 from vidange.entrees_sorties import (
     BOITE_POSTE_FUT,
     BROCHES_DES_PUCES,
+    CARTE_SPRAY,
     PESEES_DU_BUS,
     CapteurOzone,
     CapteurParticules,
@@ -42,7 +47,7 @@ from vidange.entrees_sorties import (
     LiaisonUsbSerie,
     SortiePwm,
 )
-from vidange.materiel import carte_pesee
+from vidange.materiel import carte_pesee, carte_spray
 from vidange.materiel.materiel import Branchement, tracer_branchements
 from vidange.materiel.modbus import crc_modbus
 from vidange.materiel.puces import Ads1115, BusI2c, ErreurMateriel, Tirage, crc_sht31
@@ -408,6 +413,417 @@ class FausseBoitePosteFut(FausseCartePesee):
         )
 
 
+class FausseCarteSpray:
+    """La carte ESP32 n° 5 du spray (table : vidange.materiel.carte_spray, spray/README.md), avec
+    4 fausses balances, un faux bras et ses fausses pompes. Le temps est celui de `horloge` :
+    chaque question fait avancer la carte jusqu'à maintenant (pas de 0,05 s).
+
+    Ses réglages sont ceux que le programme de la carte reçoit à la fabrication (machine.yaml →
+    spray) : `appliquer(reglages.machine.spray)` les recopie. Pannes à la main : `debranche`
+    (carte muette), `balance_muette[i]`, `balance_instable[i]`, `debit_g_s = 0` (tube pincé,
+    flacon vide), `bras_bloque`, `capteur_en_panne`, `pousser_bras()`, `redemarrer()`."""
+
+    PAS_S = 0.05
+
+    def __init__(self) -> None:
+        self.horloge: Callable[[], float] = time.monotonic
+        self.debranche = False
+        self.exemple = True
+        # Réglages du programme de la carte (exemples ; `appliquer` les remplace).
+        self.course_deg = 110.0
+        self.vitesse_bras_deg_s = 90.0
+        self.temps_max_bras_s = 3.0
+        self.air_avant_s = 0.5
+        self.temps_max_pompage_s = 15.0
+        self.chasse_s = 4.5
+        self.air_apres_s = 1.0
+        self.nettoyage_pompe_s = 5.0
+        self.sechage_s = 15.0
+        self.silence_max_s = 2.0
+        # Ce qui est dans la boîte.
+        self.grammes = [400.0] * carte_spray.NB_FLACONS
+        self.zero_brut = 0
+        self.brut_par_g = 400.0
+        self.balance_muette = [False] * carte_spray.NB_FLACONS
+        self.balance_instable = [False] * carte_spray.NB_FLACONS
+        self.debit_g_s = 1.0
+        self.bras_bloque = False
+        self.capteur_en_panne = False
+        # Ce que la carte a reçu (pour les tests) : (code, paramètre 1, paramètre 2).
+        self.ordres: list[tuple[int, int, int]] = []
+        self.battements = 0
+        self.questions = 0
+        self.redemarrer()
+
+    def appliquer(self, reglage) -> None:
+        """Les réglages de machine.yaml → spray, comme le programme de la carte à sa
+        fabrication (tâche 39 bis)."""
+        self.course_deg = reglage.bras.course_deg[1]
+        self.vitesse_bras_deg_s = reglage.bras.vitesse_deg_s
+        self.temps_max_bras_s = reglage.bras.temps_max_s
+        self.air_avant_s = reglage.dose.air_avant_s
+        self.temps_max_pompage_s = reglage.dose.temps_max_pompage_s
+        self.chasse_s = reglage.dose.chasse_s
+        self.air_apres_s = reglage.dose.air_apres_s
+        self.nettoyage_pompe_s = reglage.nettoyage.pompe_s
+        self.sechage_s = reglage.nettoyage.sechage_s
+        self.silence_max_s = reglage.liaison.silence_max_s
+
+    def redemarrer(self) -> None:
+        """La carte redémarre : origine perdue, tout arrêté, le bras où il est."""
+        self.demarrages = getattr(self, "demarrages", 0) + 1
+        self._t = self.horloge()
+        self._dernier_message = -1e9
+        self._dernier_battement = -1e9
+        self.angle = getattr(self, "angle", 0.0)
+        self.origine = False
+        self.erreurs = 0
+        self.silence = False
+        self.arret = False
+        self._cible: float | None = None
+        self._debut_mouvement = 0.0
+        self._mouvement = ""  # "origine", "sortir", "ranger"
+        self._sorti_a: float | None = None
+        self._capteur_vu = self._capteur()
+        self.numero_ordre = 0
+        self.suite = carte_spray.SUITE_AUCUN
+        self.refus = 0
+        self._numero_recu: int | None = None
+        # Geste en cours : liste de (phase, durée) ; la phase « pompe » dure jusqu'à la dose.
+        self._phases: list[tuple[str, float]] = []
+        self._debut_phase = 0.0
+        self._sorte_geste = ""  # "spray" ou "nettoyage"
+        self.dose = carte_spray.Dose(0, 0.0, 0.0, 0.0, carte_spray.DOSE_AUCUNE, 0)
+        self._dose_depart_g = 0.0
+        self._debut_pompe = 0.0
+        self.agitateurs_pct = 0
+        self._fin_agitation = 0.0
+        self.trames_abimees = 0
+
+    def regler_horloge(self, horloge: Callable[[], float]) -> None:
+        """Une autre horloge (tests, simulateur) : la carte repart de son heure."""
+        self.horloge = horloge
+        self._t = horloge()
+        self._dernier_message = self._dernier_battement = self._t - 1e6
+
+    def pousser_bras(self, angle: float = 15.0) -> None:
+        """Quelqu'un pousse le bras rangé (sans ordre)."""
+        self._avancer()
+        self.angle = angle
+
+    # ------------------------------------------------------------ le temps passe
+
+    def _capteur(self) -> bool:
+        return self.angle <= 0.5 and not self.capteur_en_panne
+
+    def _occupee(self) -> bool:
+        return bool(self._phases) or self._cible is not None
+
+    def _avancer(self) -> None:
+        maintenant = self.horloge()
+        while self._t < maintenant - 1e-9:
+            if not self._occupee() and (self.silence or not self._bras_dehors()):
+                self._t = maintenant
+                break
+            self._t = min(self._t + self.PAS_S, maintenant)
+            self._un_pas(self.PAS_S)
+        if self.agitateurs_pct and maintenant >= self._fin_agitation:
+            self.agitateurs_pct = 0
+        vu = self._capteur()
+        if self._capteur_vu and not vu and self._cible is None:
+            self.erreurs |= carte_spray.ERREUR_BRAS_POUSSE
+        self._capteur_vu = vu
+
+    def _bras_dehors(self) -> bool:
+        return not self._capteur()
+
+    def _un_pas(self, dt: float) -> None:
+        t = self._t
+        if (self._phases or self._bras_dehors()) and not self.silence:
+            if t - self._dernier_message > self.silence_max_s:
+                # Le Pi s'est tu : pompe et air arrêtés, bras rangé.
+                self.silence = True
+                self._finir_geste(carte_spray.DOSE_INTERROMPUE)
+                self._bouger("ranger", 0.0)
+        if self._cible is not None:
+            self._un_pas_du_bras(t, dt)
+        if self._phases:
+            self._un_pas_du_geste(t, dt)
+
+    def _un_pas_du_bras(self, t: float, dt: float) -> None:
+        assert self._cible is not None
+        if not self.bras_bloque:
+            ecart = self._cible - self.angle
+            pas = self.vitesse_bras_deg_s * dt
+            self.angle = (
+                self._cible if abs(ecart) <= pas else self.angle + pas * (1 if ecart > 0 else -1)
+            )
+        if self._mouvement in ("origine", "ranger"):
+            if self._capteur():
+                self.angle = 0.0
+                if self._mouvement == "origine":
+                    self.origine = True
+                self._fin_mouvement(carte_spray.SUITE_FAIT)
+                self.erreurs &= ~(
+                    carte_spray.ERREUR_BRAS_PAS_RANGE | carte_spray.ERREUR_BRAS_POUSSE
+                )
+                return
+            if self.angle <= 0.0 and self._mouvement == "origine":
+                # Pas encore vu : l'origine continue sous 0 (le bras peut être au-delà).
+                self._cible = -self.course_deg
+        elif abs(self.angle - self._cible) < 1e-6:
+            self._sorti_a = self._cible
+            self._fin_mouvement(carte_spray.SUITE_FAIT)
+            return
+        if t - self._debut_mouvement > self.temps_max_bras_s:
+            bit = (
+                carte_spray.ERREUR_BRAS_PAS_SORTI
+                if self._mouvement == "sortir"
+                else carte_spray.ERREUR_BRAS_PAS_RANGE
+            )
+            self.erreurs |= bit
+            self._fin_mouvement(carte_spray.SUITE_ECHOUE)
+
+    def _fin_mouvement(self, suite: int) -> None:
+        self._cible = None
+        self._mouvement = ""
+        if self._phases:
+            return
+        self.suite = suite
+
+    def _un_pas_du_geste(self, t: float, dt: float) -> None:
+        phase, duree = self._phases[0]
+        if phase == "pompe":
+            n = self.dose.emplacement - 1
+            self.grammes[n] -= self.debit_g_s * dt
+            perdu = self._dose_depart_g - self.grammes[n]
+            if perdu >= self.dose.demandee_g:
+                self._resultat_pompe(carte_spray.DOSE_ATTEINTE)
+            elif t - self._debut_pompe >= self.temps_max_pompage_s:
+                self._resultat_pompe(carte_spray.DOSE_TEMPS_MAX)
+            return
+        if t - self._debut_phase >= duree - 1e-9:
+            self._phases.pop(0)
+            self._debut_phase = t
+            if phase == "air" and self._phases and self._phases[0][0] == "pompe":
+                self._debut_pompe = t
+            if not self._phases:
+                self._finir_geste(None)
+
+    def _resultat_pompe(self, resultat: int) -> None:
+        n = self.dose.emplacement - 1
+        self.dose = replace(
+            self.dose,
+            perdue_g=self._dose_depart_g - self.grammes[n],
+            duree_s=self._t - self._debut_pompe,
+            resultat=resultat,
+        )
+        self._phases.pop(0)
+        self._debut_phase = self._t
+
+    def _finir_geste(self, resultat: int | None) -> None:
+        """Fin d'un spray ou d'un nettoyage (resultat None), ou interruption (resultat : celui de
+        la dose si elle était en cours)."""
+        if self._sorte_geste == "":
+            return
+        if self._sorte_geste == "spray":
+            if resultat is not None and self.dose.resultat == carte_spray.DOSE_EN_COURS:
+                n = self.dose.emplacement - 1
+                self.dose = replace(
+                    self.dose,
+                    perdue_g=self._dose_depart_g - self.grammes[n],
+                    duree_s=self._t - self._debut_pompe if self._debut_pompe else 0.0,
+                    resultat=resultat,
+                )
+            self.dose = replace(self.dose, numero=(self.dose.numero + 1) & 0xFFFF)
+            if self.dose.resultat == carte_spray.DOSE_TEMPS_MAX and resultat is None:
+                # Dose pas atteinte : chasse faite, la carte range le bras elle-même.
+                self._bouger("ranger", 0.0)
+        self._phases = []
+        self._sorte_geste = ""
+        self.suite = carte_spray.SUITE_FAIT if resultat is None else carte_spray.SUITE_ECHOUE
+
+    def _bouger(self, mouvement: str, cible: float) -> None:
+        self._mouvement = mouvement
+        self._cible = cible
+        self._sorti_a = None
+        self._debut_mouvement = self._t
+
+    # ------------------------------------------------------------ les ordres
+
+    def _executer(self, code: int, p1: int, p2: int) -> None:
+        self.ordres.append((code, p1, p2))
+        self.suite, self.refus = carte_spray.SUITE_EN_COURS, 0
+        self.arret = False
+        erreurs_bras = (
+            carte_spray.ERREUR_BRAS_PAS_RANGE
+            | carte_spray.ERREUR_BRAS_POUSSE
+            | carte_spray.ERREUR_PILOTE_BRAS
+        )
+        refus = 0
+        if code == carte_spray.ORDRE_ORIGINE:
+            if self._phases:
+                refus = 5
+            else:
+                self.silence = False
+                self._bouger("origine", 0.0)
+        elif code == carte_spray.ORDRE_SORTIR:
+            if not self.origine:
+                refus = 3
+            elif not 0 < p1 <= self.course_deg * 10:
+                refus = 2
+            elif self._t - self._dernier_battement > self.silence_max_s:
+                refus = 4
+            elif self._occupee():
+                refus = 5
+            elif self.erreurs & erreurs_bras:
+                refus = 8
+            else:
+                self.silence = False
+                self._bouger("sortir", p1 / 10)
+        elif code == carte_spray.ORDRE_RANGER:
+            if self._phases:
+                self._finir_geste(carte_spray.DOSE_INTERROMPUE)
+            self._bouger("ranger", 0.0)
+        elif code in (carte_spray.ORDRE_SPRAY, carte_spray.ORDRE_NETTOYER):
+            n = p1 - 1
+            if code == carte_spray.ORDRE_SPRAY and (not 0 <= n < carte_spray.NB_FLACONS or p2 == 0):
+                refus = 2
+            elif self._occupee():
+                refus = 5
+            elif self._sorti_a is None:
+                refus = 7
+            elif code == carte_spray.ORDRE_SPRAY and (
+                self.balance_muette[n] or self.balance_instable[n]
+            ):
+                refus = 6
+            elif code == carte_spray.ORDRE_SPRAY:
+                self._sorte_geste = "spray"
+                self._dose_depart_g = self.grammes[n]
+                self._debut_pompe = 0.0
+                self.dose = carte_spray.Dose(
+                    p1, p2 / 10, 0.0, 0.0, carte_spray.DOSE_EN_COURS, self.dose.numero
+                )
+                self._phases = [
+                    ("air", self.air_avant_s),
+                    ("pompe", 0.0),
+                    ("chasse", self.chasse_s),
+                    ("air_apres", self.air_apres_s),
+                ]
+                self._debut_phase = self._t
+            else:
+                self._sorte_geste = "nettoyage"
+                self._phases = [
+                    ("pompe_nettoyage", self.nettoyage_pompe_s),
+                    ("chasse", self.sechage_s),
+                    ("air_apres", self.air_apres_s),
+                ]
+                self._debut_phase = self._t
+        elif code == carte_spray.ORDRE_AGITER:
+            if p1 > 100:
+                refus = 2
+            else:
+                self.agitateurs_pct = p1 if p2 else 0
+                self._fin_agitation = self._t + p2
+            self.suite = carte_spray.SUITE_FAIT
+        elif code == carte_spray.ORDRE_ARRET:
+            if self._phases:
+                self._finir_geste(carte_spray.DOSE_INTERROMPUE)
+            self._cible, self._mouvement = None, ""
+            self.agitateurs_pct = 0
+            self.arret = True
+            self.suite = carte_spray.SUITE_FAIT
+        elif code == carte_spray.ORDRE_EFFACER:
+            self.erreurs &= ~0xFF00
+            self.silence = False
+            self.suite = carte_spray.SUITE_FAIT
+        else:
+            refus = 1
+        if refus:
+            self.suite, self.refus = carte_spray.SUITE_REFUSE, refus
+
+    # ------------------------------------------------------------ le bus
+
+    def _registres(self) -> list[int]:
+        etat = (
+            (carte_spray.ETAT_BRAS_RANGE if self._capteur() else 0)
+            | (
+                carte_spray.ETAT_BRAS_SORTI
+                if self._sorti_a is not None and self._cible is None
+                else 0
+            )
+            | (carte_spray.ETAT_BRAS_BOUGE if self._cible is not None else 0)
+            | (carte_spray.ETAT_ORIGINE_FAITE if self.origine else 0)
+            | (carte_spray.ETAT_SPRAY_EN_COURS if self._sorte_geste == "spray" else 0)
+            | (carte_spray.ETAT_NETTOYAGE_EN_COURS if self._sorte_geste == "nettoyage" else 0)
+            | (carte_spray.ETAT_AGITATEURS if self.agitateurs_pct else 0)
+            | (carte_spray.ETAT_EXEMPLE if self.exemple else 0)
+            | (carte_spray.ETAT_SILENCE_PI if self.silence else 0)
+            | (carte_spray.ETAT_ARRET_IMMEDIAT if self.arret else 0)
+        )
+        erreurs = self.erreurs & 0xFF00
+        for i in range(carte_spray.NB_FLACONS):
+            if self.balance_muette[i]:
+                erreurs |= carte_spray.ERREUR_BALANCE_MUETTE[i]
+            if self.balance_instable[i]:
+                erreurs |= carte_spray.ERREUR_BALANCE_INSTABLE[i]
+        flacons = tuple(
+            carte_spray.Flacon(
+                brut=round(self.zero_brut + g * self.brut_par_g),
+                grammes=0.0 if muette else g,
+                muette=muette,
+                instable=instable,
+            )
+            for g, muette, instable in zip(
+                self.grammes, self.balance_muette, self.balance_instable, strict=True
+            )
+        )
+        silence_ms = (self._t - self._dernier_message) * 1000
+        return carte_spray.encoder(
+            carte_spray.EtatSpray(
+                version=carte_spray.VERSION,
+                demarrages=self.demarrages,
+                etat=etat,
+                erreurs=erreurs,
+                angle_deg=max(self.angle, 0.0),
+                numero_ordre=self.numero_ordre,
+                suite_ordre=self.suite,
+                refus=self.refus,
+                silence_pi_ms=int(max(0.0, min(silence_ms, 0xFFFF))),
+                flacons=flacons,
+                dose=self.dose,
+                agitateurs_pct=self.agitateurs_pct,
+                trames_abimees=self.trames_abimees,
+            )
+        )
+
+    def repondre(self, demande: bytes) -> bytes:
+        self.questions += 1
+        self._avancer()
+        adresse, fonction = demande[0], demande[1]
+        premier = int.from_bytes(demande[2:4], "big")
+        nombre = int.from_bytes(demande[4:6], "big")
+        if fonction in (3, 4):
+            return FausseCartePesee._repondre(adresse, fonction, premier, nombre, self._registres())
+        if fonction != 16:
+            reponse = bytes([adresse, fonction | 0x80, 1])
+            return reponse + crc_modbus(reponse)
+        valeurs = [int.from_bytes(demande[7 + 2 * i : 9 + 2 * i], "big") for i in range(nombre)]
+        if premier < carte_spray.REGISTRE_BATTEMENT or premier + nombre > 105:
+            reponse = bytes([adresse, fonction | 0x80, 2])
+            return reponse + crc_modbus(reponse)
+        self._dernier_message = self._t
+        registres = dict(zip(range(premier, premier + nombre), valeurs, strict=True))
+        if carte_spray.REGISTRE_BATTEMENT in registres:
+            self._dernier_battement = self._t
+            self.battements += 1
+        if 104 in registres and registres[104] != self._numero_recu:
+            self._numero_recu = self.numero_ordre = registres[104]
+            self._executer(registres.get(101, 0), registres.get(102, 0), registres.get(103, 0))
+        reponse = demande[:6]
+        return reponse + crc_modbus(reponse)
+
+
 class FauxCapteurOzone:
     """Un capteur d'ozone ZE25-O3 sur sa liaison série, vu comme un port (il fait aussi le port).
 
@@ -630,7 +1046,7 @@ class FauxRs485:
     """Un fil RS485 (port série) avec des appareils à leur adresse."""
 
     def __init__(self) -> None:
-        self.appareils: dict[int, FauxTransmetteurModbus | FausseCartePesee] = {}
+        self.appareils: dict[int, FauxTransmetteurModbus | FausseCartePesee | FausseCarteSpray] = {}
         self.cable_coupe = False
         self._reponse = b""
         self.ouvertures = 0
@@ -646,7 +1062,9 @@ class FauxRs485:
         if self.cable_coupe:
             raise OSError("faux RS485 : adaptateur débranché")
         self._reponse = b""
-        if len(donnees) == 8 and crc_modbus(donnees[:6]) == donnees[6:]:
+        lecture = len(donnees) == 8
+        ecriture = len(donnees) > 9 and donnees[1] == 16 and len(donnees) == 9 + donnees[6]
+        if (lecture or ecriture) and crc_modbus(donnees[:-2]) == donnees[-2:]:
             appareil = self.appareils.get(donnees[0])
             if appareil is not None and not appareil.debranche:
                 self._reponse = appareil.repondre(donnees)
@@ -721,6 +1139,9 @@ class FausseFabrique:
                         else FausseCartePesee
                     )
                     rs485.appareils.setdefault(signal.adresse, classe())
+                    continue
+                if signal.appareil == CARTE_SPRAY:
+                    rs485.appareils.setdefault(signal.adresse, FausseCarteSpray())
                     continue
         # Au départ, aucun capteur n'est actionné.
         for nom, branchement in self.branchements.items():
@@ -844,6 +1265,12 @@ class FausseFabrique:
             raise KeyError(f"faux : « {nom} » n'est pas une carte de pesée du bus RS485")
         return appareil
 
+    def carte_spray(self, nom: str = "carte_spray") -> FausseCarteSpray:
+        """La fausse carte du spray d'un signal (balances, bras, pompes, carte muette)."""
+        appareil = self._appareil(self._branchement(nom, "spray"))
+        assert isinstance(appareil, FausseCarteSpray)
+        return appareil
+
     def debrancher(self, nom: str, debranche: bool = True) -> None:
         """La puce I2C, le capteur d'ozone ou la carte de pesée du signal ne répond plus
         (ou de nouveau)."""
@@ -858,6 +1285,7 @@ class FausseFabrique:
             "particules",
             "pression",
             "consigne",
+            "spray",
         )
         if branchement.ressource[0] == "gpio":
             raise KeyError("faux : une broche GPIO du Pi ne se débranche pas")

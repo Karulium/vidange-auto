@@ -97,6 +97,16 @@ etalonnage:
     zero_brut: 0
     brut_par_kg: 10000
 
+# Balances des 4 flacons du spray (cellule de 1 kg + HX711 chacune, sur la carte ESP32 n° 5, pas
+# sur ce bus) : emplacements 1 à 4. Zéro sans flacon, puis une masse connue pesée à 0,01 g près
+# (pi/systeme/essai-spray.md). Copié dans le programme de la carte quand on le fabrique
+# (tâche 39 bis) : c'est elle qui pèse les doses. EXEMPLES.
+balances_spray:
+  1: {zero_brut: 0, brut_par_kg: 400000}
+  2: {zero_brut: 0, brut_par_kg: 400000}
+  3: {zero_brut: 0, brut_par_kg: 400000}
+  4: {zero_brut: 0, brut_par_kg: 400000}
+
 # Accu Li-ion 18650 du plateau du fût (recharge sans contact au poste). La carte du plateau se
 # coupe d'elle-même vers 3,0 V (protection). EXEMPLES, à confirmer à l'essai.
 accu_plateau_fut:

@@ -814,7 +814,8 @@ Les chiffres ci-dessous vont dans `pi/reglages/machine.yaml`, jamais dans le cod
 ## État des modules (26/10/2026)
 
 - **Figés** (on peut coder leurs gestes) : Poste du fût, Lavage, Griffe (Transfert), Porte-bocal, Mycélium, Guidage caméra, Préhension, écran Nextion, Portique (gelé le 28/10/2026, tâche 36), Nettoyage (gelé le 28/10/2026, regelé le 04/11/2026, tâche 38 : store, purge, nuit UV-ozone, mode maïs).
-- **Pas encore figés** (case vide seulement) : Remplissage, Stockage, Spray, Micropore, Fermeture des seaux, Air comprimé, Entonnoir.
+- **Pas encore figés** (case vide seulement) : Remplissage, Stockage, Micropore, Fermeture des seaux, Air comprimé, Entonnoir.
+- **Spray** : gelé (fiche v5.8 du 01/11/2026) ; côté Pi fait à la tâche 39 (voir « Spray, côté Pi » plus bas).
 - Références encore à choisir : fins de course du Remplissage, microrupteurs du Stockage.
 
 ## Capteurs d'ozone ZE25-O3 (tâche 38 bis, 06/11/2026)
@@ -905,3 +906,47 @@ regelé le 04/11/2026 ; lot validé par Karulium les 27/10, 31/10, 01/11 et 04/1
   2. Grandeur des particules : PM2.5 en masse (réglable) ; le seuil est un rapport dedans / dehors.
   3. Sens des tubes du SDP810 : P dans l'enceinte, N dans le conteneur ; vérifié à l'étape 4, `inverser: true` sinon.
   4. Un adaptateur ou une UART par SPS30 (même adresse SHDLC 0) : règle gardée.
+
+## Spray, côté Pi (tâche 39, 06/11/2026)
+
+Source : fiche `pulverisation/logiciel/spray-pour-logiciel.md` du projet mécanique (v5.8 du 01/11, module
+gelé). Chiffres : `pi/reglages/machine.yaml → spray` (EXEMPLES marqués) et `pesees.yaml → balances_spray` ;
+code : `pi/vidange/spray/` ; table des registres (langue commune avec la tâche 39 bis) : `spray/README.md`.
+
+- **Liaison** : carte ESP32 n° 5 esclave Modbus RTU, seule sur le bus `rs485_spray` (signal `carte_spray`,
+  adresse 1, 115 200 bauds : EXEMPLES). Lecture des registres 0 à 29 (fonction 4), ordres et battement
+  dans les registres 100 à 104 (fonction 16) ; un ordre n'est exécuté qu'au changement de son numéro.
+  Signature 0x5350, version de table 1.
+- **Règle d'or** : tant que la carte n'a pas redit « bras rangé » (capteur vu, bras arrêté), `bras_spray_sorti`
+  est vrai, carte muette comprise (plus de réponse depuis `liaison → muette_s`) et dès l'envoi d'un
+  « sortir ». Le chariot de remplissage ne bouge alors ni en hauteur, ni ses barres, ni en y, ni son
+  pousseur ; seule la rotation du seau est permise (règle 6, `remplissage/regles.py`).
+- La carte s'arrête seule (pompe, air, bras rangé) si le Pi se tait plus de `silence_max_s` (2 s) ; le Pi bat
+  toutes les `battement_s` (0,5 s) pendant ses gestes ; la carte refuse « sortir » sans battement récent.
+- **Zone interdite à la griffe porte du spray ouverte : x < 0,50 et y < 0,40** (Maquette du 31/10) ; « jamais au
+  Bain des têtes » sera branché avec le geste du bain des têtes (pas encore écrit).
+- Le spray de culture dans le seau ouvert est un **geste protégé du chef** (`spray_seau`) : refusé pendant la
+  purge, comme le versement.
+- **Points non décidés, tranchés par Claude (niveau 1)** :
+  1. un seul flacon par seau ; l'emplacement de chaque format vient des réglages (EXEMPLE : emplacement 1
+     pour tous), en attendant la règle du logiciel de culture ;
+  2. agitateurs 30 s avant chaque dose, puis 1 min toutes les 15 min (réglages) ;
+  3. « dose d'amorce » réglable (EXEMPLE 1 g), ajoutée à la première dose après un changement de cartouche,
+     notée à part dans le registre (`spray_amorce`) ;
+  4. pompage pendant la rotation du seau (≈ 200°) ; la chasse finit le travail ;
+  5. nouvelle cartouche reconnue quand le poids d'un emplacement monte d'au moins `changement_min_g`
+     (EXEMPLE 50 g) : l'emplacement ne sert plus tant que Karulium ne l'a pas confirmée
+     (`POST /api/spray/cartouche`) ;
+  6. dose par format proportionnelle au volume (EXEMPLES : A 11 g, B 5 g, C 10 g, D 10 g) ;
+  7. alerte « cartouche bientôt vide » sous 5 doses ; pas de dose sous « flacon vide + 20 g » ;
+  8. alerte « alcool à remettre » à 3 nettoyages restants (≈ 25 par plein de 250 ml).
+- Une erreur avant la sortie du bras met le module en alarme : « Sans spray » (le seau est noté sans spray)
+  ou attendre. Dose incomplète, trop forte (+ 1 g) ou interrompue : notée et alertée, le cycle continue.
+  Bras pas rangé : un seul nouvel essai automatique, puis alarme forte.
+- Testé sur le vrai matériel : non (procédure `pi/systeme/essai-spray.md`, après la tâche 39 bis).
+- **Spray, réponses à la PR n° 82** (tâche 39, 06/11/2026, niveau 1, tranché par Claude) :
+  1. Erreur du spray : la machine s'arrête et l'écran propose « Sans spray » ou « Attendre » (comme la fiche du module).
+  2. Amorce : 1 g (EXEMPLE) ajouté à la première dose après un changement de flacon, noté à part ; pas de seau perdu.
+  3. Bouton « Cartouche N confirmée » en attendant le lien QR du logiciel de culture : suffisant.
+  4. Doses ≈ 1 g par litre de seau (A 11, B 5, C 10, D 10 g ; Karulium 25/09 : ≈ 10 ml pour 10 L) : EXEMPLES, réglés
+     aux essais.

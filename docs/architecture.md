@@ -6,7 +6,7 @@
 |---|---|---|
 | Raspberry Pi 5 8 Go, SSD NVMe 1 To | Le chef : enchaîne les étapes, vision, registre, écrans, liens | Python (`pi/`) |
 | 4 cartes ESP32 FluidNC 6 axes, pilotes externes | Axes : portique, chariot, mycélium/lavage, préhension. Reliées au Pi par USB série | Réglages seulement (`fluidnc/`) |
-| 1 carte ESP32 (boîte du spray) | Pompes et flacons du spray | Petit programme C++ (`spray/`), plus tard |
+| 1 carte ESP32 n° 5 (boîte du spray) | Pompes, balances des 4 flacons, électrovannes, bras de la buse ; Modbus RTU sur son bus RS485 à elle (`rs485_spray`, table : `spray/README.md`) | Petit programme (`spray/`, tâche 39 bis) + côté Pi (`pi/vidange/spray/`) |
 | RP2040 + LIS3DH | Détection des chocs sur le chariot Z | Petit programme (`accelerometre/`) |
 | 3 RP2040 + HX711 (griffe, préhension, plateau du remplissage) | Pesées embarquées, 80 mesures/s, sur un bus RS485 à elles (Modbus RTU) | Petit programme (`pesee/`) + côté Pi |
 | 2 ESP32-C3 (plateau du fût, boîte du poste du fût) | Pesée sans fil du fût (radio ESP-NOW) ; la boîte répond sur le bus des pesées comme une carte (tâche 17 bis) | Petit programme (`poste_fut_radio/`, tâche 17 ter) + côté Pi |

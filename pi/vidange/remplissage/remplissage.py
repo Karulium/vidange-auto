@@ -118,6 +118,8 @@ QUOI_FAIRE_PURGE = (
 )
 # Le geste protégé du chef (vidange.chef.chef.GESTES_PROTEGES) que demande le Remplissage.
 VERSEMENT = "versement_seau_ouvert"
+# Geste protégé du spray (vidange.spray) : la rotation du seau pendant la dose.
+SPRAY = "spray_seau"
 
 # Écart sous lequel deux positions sont égales (m ou °).
 _EGAL = 1e-6
@@ -536,6 +538,21 @@ class Remplissage:
         tour = self.reglages.vitesses.rotation * duree_s
         sens = -1 if pose.a > 0 else 1
         yield from self._orienter(pose.a + sens * tour, "le seau tourne (versement)")
+
+    def tourner_pour_spray(self, degres: float) -> None:
+        """Pour le spray (tâche 39) : le seau tourne de `degres` pendant la dose (le bras est
+        sorti : seule la rotation est permise). Pas pendant la purge (permission du chef)."""
+        refus = self._permission(SPRAY)
+        if refus is not None:
+            raise ErreurEtape(f"remplissage : spray refusé : {refus}", QUOI_FAIRE_PURGE)
+        pose = self.chariot.position()
+        debut, fin = self.course_a
+        sens = 1 if pose.a + degres <= fin else -1
+
+        def tourner() -> Geste:
+            yield from self._orienter(pose.a + sens * degres, "le seau tourne (spray)")
+
+        self.lancer(tourner)
 
     # ------------------------------------------------------------ pour le Lavage (retourneur)
 

@@ -347,7 +347,9 @@ class BoutCoteFutGriffe(Modele):
 
 
 class PorteSprayGriffe(Modele):
-    """Porte du coffret du spray ouverte : griffe interdite en x < x_max et y < y_max."""
+    """Porte du coffret du spray ouverte : griffe interdite en x < x_max et y < y_max (x < 0,50
+    et y < 0,40 depuis la Maquette du 31/10), et jamais au « Bain des têtes » (geste pas encore
+    écrit : à brancher avec lui)."""
 
     x_max: float
     y_max: float
@@ -2273,6 +2275,136 @@ class Nettoyage(Modele):
         return self
 
 
+class BrasSpray(Modele):
+    """Bras de la buse du spray (fiche v5.8) : 0° = rangé (capteur), butée logicielle."""
+
+    # Axe du pivot (x, y), vertical. Figé (v5.8).
+    axe_xy: tuple[float, float]
+    course_deg: Intervalle
+    # Angle du bras au-dessus de chaque format de seau (Maquette v45.103).
+    angles: dict[Nom, float] = Field(min_length=1)
+    # Écart accepté entre l'angle demandé et l'angle dit par la carte.
+    tolerance_deg: float = Field(gt=0)
+    vitesse_deg_s: float = Field(gt=0)
+    # Temps maximum pour sortir, ranger ou prendre l'origine (la carte s'arrête et le dit).
+    temps_max_s: float = Field(gt=0)
+    courant_a: float = Field(gt=0)
+
+
+class DoseSpray(Modele):
+    """Dose de culture d'un seau : le poids perdu par le flacon, mesuré par sa balance."""
+
+    # Dose de chaque format (g ; densité ≈ 1).
+    par_format_g: dict[Nom, Annotated[float, Field(gt=0)]] = Field(min_length=1)
+    # Emplacement (flacon 1 à 4) de chaque format, en attendant la règle du logiciel de culture.
+    emplacement_par_format: dict[Nom, Annotated[int, Field(ge=1, le=4)]] = Field(min_length=1)
+    tolerance_trop_forte_g: float = Field(gt=0)
+    temps_max_pompage_s: float = Field(gt=0)
+    air_avant_s: float = Field(gt=0)
+    chasse_s: float = Field(gt=0)
+    air_apres_s: float = Field(gt=0)
+    # Le seau tourne pendant le spray (°).
+    rotation_seau_deg: float = Field(gt=0)
+    # Ajoutée à la première dose après un changement de flacon (le tube neuf est vide).
+    amorce_g: float = Field(ge=0)
+
+
+class FlaconsSpray(Modele):
+    """Les 4 flacons (500 ml au plus), chacun sur sa balance."""
+
+    contenu_max_g: float = Field(gt=0)
+    # Poids de chaque flacon vide (g), emplacements 1 à 4 (tare à enregistrer).
+    vide_g: dict[Annotated[int, Field(ge=1, le=4)], Annotated[float, Field(ge=0)]]
+    # Pas de dose si le flacon descendrait sous « vide + réserve ».
+    reserve_g: float = Field(gt=0)
+    # Alerte « cartouche bientôt vide » sous ce nombre de doses restantes.
+    alerte_doses_restantes: int = Field(ge=1)
+    # Le poids d'un emplacement monte d'au moins ça : nouvelle cartouche ?
+    changement_min_g: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _quatre(self) -> "FlaconsSpray":
+        if sorted(self.vide_g) != [1, 2, 3, 4]:
+            raise ValueError("vide_g : il faut le poids à vide des 4 emplacements (1 à 4)")
+        return self
+
+
+class AgitateursSpray(Modele):
+    """Une seule sortie PWM pour les 4 agitateurs."""
+
+    vitesse_pct: int = Field(gt=0, le=100)
+    avant_dose_s: float = Field(gt=0)
+    # 1 min toutes les 15 min (en dehors des doses).
+    periode_s: float = Field(gt=0)
+    duree_s: float = Field(gt=0)
+
+
+class NettoyageSpray(Modele):
+    """Nettoyage des tubes (fin de journée) à l'alcool à 70 %."""
+
+    pompe_s: float = Field(gt=0)
+    sechage_s: float = Field(gt=0)
+    alcool_par_nettoyage_ml: float = Field(gt=0)
+    flacon_alcool_ml: float = Field(gt=0)
+    # Alerte « alcool à remettre » sous ce nombre de nettoyages restants.
+    alerte_nettoyages_restants: int = Field(ge=0)
+
+
+class LiaisonSpray(Modele):
+    """Liaison avec la carte n° 5 (Modbus, bus rs485_spray)."""
+
+    # Le Pi bat au moins tous les ... (s) pendant un geste du spray.
+    battement_s: float = Field(gt=0)
+    # La carte s'arrête seule (pompe, air, bras rangé) si le Pi se tait plus de ... (s).
+    silence_max_s: float = Field(gt=0)
+    # Plus de réponse valable depuis ... (s) : carte « muette » (bras supposé sorti).
+    muette_s: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _battre_assez(self) -> "LiaisonSpray":
+        if self.battement_s * 2 > self.silence_max_s:
+            raise ValueError(
+                "liaison : battement_s doit valoir au plus la moitié de silence_max_s (sinon la "
+                "carte s'arrêterait au moindre retard)"
+            )
+        return self
+
+
+class Spray(Modele):
+    """Spray (fiche v5.8 du 01/11/2026, module gelé) : carte ESP32 n° 5, 4 flacons pesés, bras
+    pivotant. Le spray ne protège personne : la règle du bras (règle 6) protège la machine."""
+
+    exemple: bool = False
+    signal: Nom
+    bras: BrasSpray
+    dose: DoseSpray
+    flacons: FlaconsSpray
+    agitateurs: AgitateursSpray
+    nettoyage: NettoyageSpray
+    liaison: LiaisonSpray
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Spray":
+        erreurs = []
+        debut, fin = self.bras.course_deg
+        if not 0 <= debut < fin <= 110:
+            erreurs.append("bras → course_deg : entre 0 et 110°, du plus petit au plus grand")
+        for nom, angle in self.bras.angles.items():
+            if not debut < angle <= fin:
+                erreurs.append(
+                    f"bras → angles → {nom} : {angle:g}° hors de la course du bras "
+                    f"({debut:g} à {fin:g}°)"
+                )
+        if self.flacons.reserve_g >= self.flacons.contenu_max_g:
+            erreurs.append("flacons : reserve_g doit être plus petite que contenu_max_g")
+        for nom, dose in self.dose.par_format_g.items():
+            if dose + self.dose.amorce_g >= self.flacons.contenu_max_g - self.flacons.reserve_g:
+                erreurs.append(f"dose → par_format_g → {nom} : plus grande qu'un flacon plein")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -2316,6 +2448,9 @@ class Machine(Modele):
     portique: Portique | None = None
     # Nettoyage : enceinte, store, purge, nuit UV-ozone (None : pas de nettoyage).
     nettoyage: Nettoyage | None = None
+    # Spray : carte n° 5, flacons, bras de la buse (None : pas de spray). Demande la griffe
+    # (table des formats) et le remplissage (règle 6 du bras).
+    spray: Spray | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -2388,6 +2523,7 @@ class Machine(Modele):
         erreurs += self._verifier_remplissage()
         erreurs += self._verifier_stockage()
         erreurs += self._verifier_portique()
+        erreurs += self._verifier_spray()
         if self.camera_dosage is not None and (self.prehension is None or self.mycelium is None):
             erreurs.append(
                 "camera_dosage : il faut aussi les parties « prehension » et « mycelium »"
@@ -3395,6 +3531,26 @@ class Machine(Modele):
                     )
         if places.capacite_boite(self) < 1:
             erreurs.append("stockage → boites : pas une capsule entre le fond et le dessus")
+        return erreurs
+
+    def _verifier_spray(self) -> list[str]:
+        spray = self.spray
+        if spray is None:
+            return []
+        if self.griffe is None or self.remplissage is None:
+            return ["spray : il faut aussi les parties « griffe » (formats) et « remplissage »"]
+        erreurs = []
+        for quoi, table in (
+            ("bras → angles", spray.bras.angles),
+            ("dose → par_format_g", spray.dose.par_format_g),
+            ("dose → emplacement_par_format", spray.dose.emplacement_par_format),
+        ):
+            for nom in table:
+                if nom not in self.griffe.formats:
+                    erreurs.append(f"spray → {quoi} : format de seau inconnu « {nom} »")
+            for nom in self.griffe.formats:
+                if nom not in table:
+                    erreurs.append(f"spray → {quoi} : il manque le format « {nom} »")
         return erreurs
 
     def _se_chevauchent(self, nom_a: str, nom_b: str) -> bool:
@@ -4633,6 +4789,10 @@ class ReglagesPesees(Modele):
     accu_plateau_fut: AccuPlateauFut | None = None
     # Programmes des 2 ESP32-C3 du poste du fût (seulement s'il y a une boîte du poste).
     poste_fut_radio: PosteFutRadio | None = None
+    # Balances des 4 flacons du spray (cellules de 1 kg + HX711 sur la carte n° 5), emplacements
+    # 1 à 4 : brut_par_kg compte par kilogramme. Copié dans le programme de la carte quand on le
+    # fabrique (tâche 39 bis) : c'est la carte qui pèse les doses.
+    balances_spray: dict[Annotated[int, Field(ge=1, le=4)], EtalonnagePesee] | None = None
 
     @model_validator(mode="after")
     def _verifier_cartes(self) -> "ReglagesPesees":
@@ -4646,6 +4806,8 @@ class ReglagesPesees(Modele):
         for nom in self.lentes:
             if nom not in self.tour:
                 erreurs.append(f"lentes : « {nom} » n'est jamais lue (absente de « tour »)")
+        if self.balances_spray is not None and sorted(self.balances_spray) != [1, 2, 3, 4]:
+            erreurs.append("balances_spray : il faut l'étalonnage des 4 emplacements (1 à 4)")
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self

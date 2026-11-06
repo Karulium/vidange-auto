@@ -96,7 +96,8 @@ def test_hx711_muet_ou_carte_debranchee(materiel, faux):
 
 
 def test_l_ozone_et_les_pesees_sont_sur_deux_bus(liste, faux):
-    assert set(faux.rs485) == {"rs485_pesee"}
+    # Le spray a son bus à lui (tâche 39).
+    assert set(faux.rs485) == {"rs485_pesee", "rs485_spray"}
     assert set(faux.ozones) == {"rs485_ozone_dedans", "rs485_ozone_dehors"}
     with Materiel(liste, faux) as materiel:
         faux.regler("ozone_dedans", 0.05)

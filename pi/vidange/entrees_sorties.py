@@ -69,6 +69,7 @@ Appareil = Literal[
     "accelerometre",
     "carte_pesee",
     "boite_poste_fut",
+    "carte_spray",
 ]
 # Capteur d'ozone Winsen ZE25-O3 : une liaison série à lui seul (un adaptateur USB-RS485 par
 # capteur), pas un appareil Modbus (protocole : vidange/trame_ze25.py).
@@ -86,6 +87,8 @@ CARTE_PESEE = "carte_pesee"
 BOITE_POSTE_FUT = "boite_poste_fut"
 # Les appareils de pesée du bus RS485 des pesées.
 PESEES_DU_BUS = (CARTE_PESEE, BOITE_POSTE_FUT)
+# Carte ESP32 n° 5 du spray, sur son bus RS485 à elle, en Modbus (spray/README.md, tâche 39).
+CARTE_SPRAY = "carte_spray"
 Texte = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 
 
@@ -372,6 +375,11 @@ class Signal(Modele):
                 erreurs.append(
                     "une pesée du bus RS485 doit avoir son adresse sur le bus, de 1 à 247"
                 )
+        if self.appareil == CARTE_SPRAY:
+            if self.type != "serie":
+                erreurs.append("la carte du spray est sur un bus RS485 (« type: serie »)")
+            if self.adresse is None or not 1 <= self.adresse <= 247:
+                erreurs.append("la carte du spray doit avoir son adresse Modbus, de 1 à 247")
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self
@@ -519,6 +527,18 @@ class EntreesSorties(Modele):
         for nom_carte, carte in self.cartes.items():
             sur_la_carte = {n: s for n, s in signaux.items() if s.carte == nom_carte}
             liaison = carte.liaison
+            sprays = [n for n, s in sur_la_carte.items() if s.appareil == CARTE_SPRAY]
+            if sprays and not isinstance(liaison, LiaisonUsbSerie):
+                erreurs.append(
+                    f"signal « {sprays[0]} » : la carte du spray se lit par un adaptateur "
+                    f"USB-RS485 (la carte « {nom_carte} » doit avoir « liaison: usb_serie »)"
+                )
+            if sprays and len(sur_la_carte) > 1:
+                erreurs.append(
+                    f"carte « {nom_carte} » : la carte du spray a son bus à elle (une panne du "
+                    f"spray ne doit pas couper les autres) ; signaux en trop : "
+                    f"{', '.join(n for n in sur_la_carte if n not in sprays[:1])}"
+                )
             if liaison is None:
                 continue
             if isinstance(liaison, LiaisonUsbSerie):

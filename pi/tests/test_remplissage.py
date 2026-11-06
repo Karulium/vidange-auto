@@ -1089,3 +1089,28 @@ def test_outil_etat_avec_un_faux_fluidnc(capsys):
     assert "chariot : y 0.1350 m" in sortie and "barres : hw 0.3000 m" in sortie
     with pytest.raises(SystemExit):
         outil(["--faux", "aller"])
+
+
+def test_bras_du_spray_sorti_seule_la_rotation():
+    """Tâche 39 : bras du spray pas vu rangé ⇒ le chariot ne bouge plus, sauf la rotation du seau
+    (pendant la dose) ; pas de spray pendant la purge."""
+    sorti = [False]
+    purge = [None]
+    banc = Banc(bras_spray_sorti=lambda: sorti[0], permission=lambda geste: purge[0])
+    remplissage = banc.remplissage
+    banc.jouer(lambda: remplissage.geste_aller_a_la_pose("seau_a"))
+    remplissage.seau = SeauPlateau("seau_a", "S1", angle_anse=0.0)
+    banc.jouer(lambda: remplissage.geste_plateau(0.40))
+    banc.jouer(lambda: remplissage.geste_barres(0.30))
+    sorti[0] = True
+    with pytest.raises(ErreurEtape, match="seule la rotation du seau est permise"):
+        remplissage.lancer(lambda: remplissage.geste_plateau(0.30))
+    with pytest.raises(ErreurEtape, match="seule la rotation du seau est permise"):
+        remplissage.lancer(lambda: remplissage.geste_barres(0.32))
+    avant = banc.pose.a
+    remplissage.tourner_pour_spray(200)
+    banc.finir()
+    assert banc.pose.a == pytest.approx(avant + 200)
+    purge[0] = "purge en cours"
+    with pytest.raises(ErreurEtape, match="spray refusé : purge en cours"):
+        remplissage.tourner_pour_spray(200)
