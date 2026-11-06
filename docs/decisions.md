@@ -279,6 +279,14 @@ si l'une pose problème, elle le dit dans sa PR.
      bord + 0,196) : côté allée godet fermé ou à moitié, bon pour les 4 formats (grand ouvert touche le moteur des
      barres). Côté +x serait possible maintenant ; on garde le côté allée (`direction_deg: 90`).
   6. Plus de bande « permise en butée haute » : le porte-bocal n'est plus à 0,565.
+- **Griffe, réponses à la PR n° 74** (tâche 18 ter, 06/11/2026, niveau 1, fil logiciel) :
+  1. Le cercle de l'ouverture du fût (`ouverture_fut`) vaut pour les axes **de 1,11 jusque sous la butée haute**
+     (comme la table « sous la butée », valable de 1,11 à 1,20) ; en butée haute, c'est la table `butee_haute`.
+  2. Les prises loin de l'axe (passe de fond, paroi à 0,197) passent par le centre : descente au centre, déplacement
+     sur le côté dans le fût, retour au centre avant de remonter. On garde ; l'ouverture n'est pas agrandie.
+  3. Partie haute de la tête jusqu'à 0,09 sous les axes (haut des joues) et `camera_bocal → bas_z_max` 1,07 : gardés
+     comme EXEMPLES ; confirmation demandée au fil Griffe le 06/11.
+  4. Rayons des cercles de prise 0 / 0,05 / 0,10 (choix du logiciel, EXEMPLE) : gardés jusqu'aux essais.
 - **Griffe : essuyage et « Y minimum du mât »** (contrôle de la maquette v45.104 du projet mécanique, 01/11/2026 ;
   tranché par le fil logiciel, niveau 1) :
   1. Essuyage du bord du seau **côté allée confirmé** (`essuyage → direction_deg: 90`), mais **godet fermé ou à
