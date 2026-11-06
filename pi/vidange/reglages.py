@@ -1734,6 +1734,9 @@ class FinDeLotStockage(Modele):
     ecart_m: float = Field(ge=0)
     marge_hublot_m: float = Field(ge=0)
     places_max: int = Field(ge=0)
+    # L'axe de chaque pile de fin de lot à x ≥ pile_axe_x_min (règle de la caméra du bocal : il
+    # faut pouvoir longer en −x la rangée y 0,215 avec l'axe à cette valeur ou plus).
+    pile_axe_x_min: float
 
 
 class PilesStockage(Modele):
@@ -1761,6 +1764,9 @@ class TiroirStockage(Modele):
     avance_par_seau_m: float = Field(gt=0)
     poussee_min_m: float = Field(gt=0)
     effort_n: Intervalle
+    # Seuil de blocage du pousseur (N) : au-delà (courant ou écart du codeur), le Pi s'arrête et
+    # alerte. Au-dessus de l'effort attendu.
+    seuil_blocage_n: float = Field(gt=0)
     # Noms des files (remplissage → rangement → files), remplies dans cet ordre.
     files: list[Nom] = Field(min_length=1)
     # Seaux par file, par format.
@@ -1886,6 +1892,8 @@ class Stockage(Modele):
         for nom, (debut, fin) in intervalles:
             if debut >= fin:
                 erreurs.append(f"{nom} : du plus petit au plus grand")
+        if self.tiroir.seuil_blocage_n <= self.tiroir.effort_n[1]:
+            erreurs.append("tiroir : seuil_blocage_n au-dessus de l'effort attendu (effort_n)")
         if self.tiroir.entree_x >= self.tiroir.butee_x:
             erreurs.append("tiroir : l'entrée (entree_x) avant la butée (butee_x)")
         if len(set(self.tiroir.files)) != len(self.tiroir.files):
@@ -3060,6 +3068,13 @@ class Machine(Modele):
                     f"stockage : prise d'un seau « {format} » seul à {contact:g}, hors de la "
                     "course de prehension_z"
                 )
+            for x, _ in places.places_fin_de_lot(self, format):
+                if x < stockage.piles.fin_de_lot.pile_axe_x_min - 1e-9:
+                    erreurs.append(
+                        f"stockage → piles → fin_de_lot ({format}) : l'axe d'une pile "
+                        f"(x {x:g}) est avant pile_axe_x_min "
+                        f"({stockage.piles.fin_de_lot.pile_axe_x_min:g})"
+                    )
             if len(places.places_fin_de_lot(self, format)) < 1:
                 erreurs.append(f"stockage → fin_de_lot : aucune place pour « {format} »")
         # Tiroir : ses files sont celles du Remplissage ; le premier seau ne dépasse pas la butée.

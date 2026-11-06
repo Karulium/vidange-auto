@@ -605,3 +605,15 @@ def test_outil_places_et_piles(capsys):
         in sortie
     )
     assert outil(["places", "seau_z"]) == 2
+
+
+def test_pile_de_fin_de_lot_avant_1_29_refusee(reglages):
+    # Les places réelles respectent x ≥ 1,29 (A, B, C, D) ; une pile à 1,28 est refusée.
+    for format in MACHINE.griffe.formats:  # type: ignore[union-attr]
+        assert all(x >= 1.29 for x, _ in places.places_fin_de_lot(MACHINE, format))
+    remplacer(reglages / "machine.yaml", "seau_x_min: 1.29", "seau_x_min: 1.28")
+    assert "l'axe d'une pile (x 1.28) est avant pile_axe_x_min (1.29)" in erreur_de(reglages)
+
+
+def test_seuil_de_blocage_du_pousseur():
+    assert MACHINE.stockage.tiroir.seuil_blocage_n == 400  # type: ignore[union-attr]

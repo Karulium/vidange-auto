@@ -1322,6 +1322,8 @@ stockage:
       ecart_m: 0.01
       marge_hublot_m: 0.10
       places_max: 5
+      # Axe de chaque pile à x ≥ 1,29 (règle de la caméra du bocal, rangée y 0,215).
+      pile_axe_x_min: 1.29
     # Pile des couvercles des seaux (x 2,27 à 2,29 : 2,28 ; y 0,84). Pas de geste ici.
     couvercles: [2.28, 0.84]
     # Rangée y 0,84 : la préhension prend avec son axe à y 0,83 (bout de la course du chariot,
@@ -1348,6 +1350,10 @@ stockage:
     avance_par_seau_m: 0.272
     poussee_min_m: 0.18
     effort_n: [150, 240]
+    # Seuil de blocage du pousseur (EXEMPLE) : courant ou écart du codeur au-delà duquel le Pi
+    # s'arrête et alerte. 7 seaux pleins ≈ 175 à 280 N, 350 N avec 7 seaux de 10 kg, NEMA 23 ≈
+    # 480 N. Force et vitesse du pousseur inchangées.
+    seuil_blocage_n: 400
     # Remplies dans cet ordre (la file 0,785 en dernier : elle demande le chariot du fût).
     files: [file_1, file_2, file_3]
     places:

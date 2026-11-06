@@ -684,9 +684,11 @@ si l'une pose problème, elle le dit dans sa PR.
      le compte-tours donne déjà le tour à ± 3°, et la tête ne peut pas tomber sur l'aimant du tour suivant.
 - **Stockage agrandi, réponses à la PR n° 76** (tâche 35 ter, 06/11/2026, niveau 1, fil logiciel) : (1) 5 places de
   piles de fin de lot pour A, C et D (au lieu de 4), conséquence du hublot reculé en (2,93 ; 0,22), avec la même
-  règle (bord ≤ 2,87, marge du hublot) : gardées ; confirmation demandée au fil Stockage le 06/11. (2) Effort du
-  pousseur (150 à 240 N, prévu pour 6 seaux par file, 7 maintenant) : inchangé, à mesurer à l'essai ; question
-  posée au fil Stockage le 06/11.
+  règle (bord ≤ 2,87, marge du hublot) : **confirmées par le fil Stockage (06/11)**, avec une condition en plus :
+  l'axe de chaque pile à **x ≥ 1,29** (règle de la caméra du bocal pour la rangée y 0,215 ; ex. C : 1,29 / 1,60 /
+  1,91 / 2,22 / 2,53). (2) Pousseur : poussée ≈ 0,3 × poids, 7 seaux pleins ≈ 175 à 280 N (350 N avec 7 seaux de
+  10 kg), NEMA 23 ≈ 480 N : force et vitesse inchangées ; **seuil de blocage vers 400 N** (EXEMPLE), effort réel
+  mesuré à l'essai.
 - **La fiabilité d'abord** (Karulium, 28/10/2026) : quand rapidité et fiabilité s'opposent, on choisit la
   fiabilité. Un gain de vitesse (ordonnancement, trajets, montée en vitesse par paliers de +5 % tous les 25 cycles)
   n'est gardé que s'il ne crée **aucune alerte ni aucun écart** ; au moindre doute, retour au réglage sûr
