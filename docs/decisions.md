@@ -898,3 +898,10 @@ regelé le 04/11/2026 ; lot validé par Karulium les 27/10, 31/10, 01/11 et 04/1
     mesure plus vieille que `delai_muet_s` est « muette » (même règle que l'ozone).
   - Tous les chiffres des protocoles (commandes, octets, échelles) sont écrits de mémoire : à vérifier sur les
     notices (`pi/systeme/essai-capteurs-purge.md`). Testé sur le vrai matériel : non.
+- **Réponses à la PR n° 81** (06/11/2026, niveau 1, tranché par Claude) :
+  1. PWM du servo de la caméra (GPIO18, 20 ms) et de la consigne (GPIO19, 1 ms) sur la même puce RP1 : gardé. Les
+     canaux du PWM du RP1 ont chacun leur période ; à vérifier à l'étape 5 de la procédure. Si l'un dérègle l'autre :
+     consigne sur un module I2C GP8403.
+  2. Grandeur des particules : PM2.5 en masse (réglable) ; le seuil est un rapport dedans / dehors.
+  3. Sens des tubes du SDP810 : P dans l'enceinte, N dans le conteneur ; vérifié à l'étape 4, `inverser: true` sinon.
+  4. Un adaptateur ou une UART par SPS30 (même adresse SHDLC 0) : règle gardée.
