@@ -1337,7 +1337,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   matériel. Retirer le Modbus de l'ozone s'il ne sert plus à rien d'autre.
   Tests : trames bonnes, somme fausse, trame coupée, capteur muet, valeur au plafond, deux capteurs indépendants
   (l'un muet, l'autre lu). Procédure d'essai sur le vrai capteur ; « testé sur le vrai matériel : non ».
-- [ ] **38 ter. Pilotes réels des capteurs de la purge** — Modèle : Sonnet, effort moyen. Pièces choisies par le fil
+- [x] **38 ter. Pilotes réels des capteurs de la purge** — Modèle : Sonnet, effort moyen. Pièces choisies par le fil
   Nettoyage (06/11/2026) : 2 SPS30 (`particules_dedans` par convertisseur TTL-RS485 et son adaptateur USB-RS485,
   `particules_dehors` sur l'UART3 du Pi, GPIO 8/9 (EXEMPLE, Implantation 06/11) ; adaptateur `rs485_sps30` ; UART 115 200 bauds, protocole SHDLC de Sensirion), 1 SDP810-125Pa en I2C
   (`pression_enceinte`), module PWM → 0-10 V sur GPIO 19 pour `consigne_ventilateur`. Remplacer les cases vides de la tâche 38

@@ -270,8 +270,8 @@ class Nettoyage:
         """`fichier` : où garder la nuit UV-ozone (reprise après coupure ; None : nulle part).
         `mode` : le mode de la machine (ModeMachine.actuel). `cycle_tourne` : un module est en
         plein travail (ni en pause, ni en attente du Go). `pause` : met la machine en pause (store
-        ouvert en plein cycle). Capteurs de particules, de pression et consigne : cases vides
-        (vidange.nettoyage.capteurs) ; None : absents."""
+        ouvert en plein cycle). Capteurs de particules, de pression et consigne :
+        `vidange.nettoyage.capteurs.capteurs_du_materiel` ; None : absents."""
         self.reglages = reglages
         self.materiel = materiel
         self.fichier = fichier

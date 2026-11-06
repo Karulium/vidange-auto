@@ -4,6 +4,7 @@
   vidange-es lister sht31_armoire    seulement ces signaux (une carte à la fois)
   vidange-es surveiller [NOMS...]    affiche chaque entrée qui change (Ctrl+C pour finir)
   vidange-es commander voyant_buzzer oui    (ou non) : commande une sortie
+  vidange-es consigne consigne_ventilateur 5    règle la consigne 0-10 V (en volts)
   ... --faux                         pareil, avec le faux matériel
 
 À ne lancer que quand le programme principal est arrêté (les broches ne se prennent qu'une fois).
@@ -38,6 +39,8 @@ def valeur(materiel: Materiel, nom: str) -> str:
             mesure = materiel.lire_ozone(nom)
             texte = texte_ppm(mesure, reglage.plafond_ppm)
             return f"{texte} ({mesure.trames_ignorees} trames ignorées)"
+        if sorte == "consigne":
+            return "consigne 0-10 V (se règle avec « vidange-es consigne NOM VOLTS »)"
         if sorte == "ambiance":
             ambiance = materiel.ambiance(nom)
             return f"{ambiance.temperature_c:.1f} °C, {ambiance.humidite_pct:.0f} %"
@@ -89,6 +92,18 @@ def commander(materiel: Materiel, nom: str, commande: bool) -> int:
     return 0
 
 
+def regler_consigne(materiel: Materiel, nom: str, volts: float) -> int:
+    try:
+        materiel.regler_consigne(nom, volts)
+    except ErreurMateriel as erreur:
+        print(f"ÉCHEC : {erreur}")
+        return 1
+    print(f"{nom} : {volts:g} V")
+    if volts > 0 and sys.stdin.isatty():
+        input("Entrée pour remettre à 0 V et finir... ")
+    return 0
+
+
 def main(arguments: list[str] | None = None) -> int:
     lecteur = argparse.ArgumentParser(
         prog="vidange-es", description="Essais des entrées/sorties du Pi."
@@ -106,6 +121,9 @@ def main(arguments: list[str] | None = None) -> int:
     parties = sous.add_parser("commander", help="commande une sortie")
     parties.add_argument("signal", help="nom de la sortie (exemple : voyant_buzzer)")
     parties.add_argument("etat", choices=["oui", "non"])
+    parties = sous.add_parser("consigne", help="règle une consigne 0-10 V (PWM)")
+    parties.add_argument("signal", help="nom de la consigne (exemple : consigne_ventilateur)")
+    parties.add_argument("volts", type=float)
     options = lecteur.parse_args(arguments)
 
     configurer_journal()
@@ -117,7 +135,7 @@ def main(arguments: list[str] | None = None) -> int:
     try:
         liste = charger_entrees_sorties(chemin)
         fabrique = FausseFabrique(liste) if options.faux else None
-        if options.action == "commander":
+        if options.action in ("commander", "consigne"):
             seulement = [options.signal]
         else:
             seulement = options.noms or None
@@ -130,6 +148,8 @@ def main(arguments: list[str] | None = None) -> int:
             return lister(materiel)
         if options.action == "surveiller":
             return surveiller(materiel, options.periode)
+        if options.action == "consigne":
+            return regler_consigne(materiel, options.signal, options.volts)
         return commander(materiel, options.signal, options.etat == "oui")
 
 

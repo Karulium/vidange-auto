@@ -863,8 +863,9 @@ regelé le 04/11/2026 ; lot validé par Karulium les 27/10, 31/10, 01/11 et 04/1
   (1 ppm, EXEMPLE) pendant la génération ; le Pi coupe aussi le compresseur (`relais_compresseur`) et le
   ventilateur de l'armoire (`coupure_ventilateur_armoire`, contact fermé au repos) pendant la nuit ; mode « maïs »
   ajouté aux modes ; une fuite part tout de suite par la file d'envoi (cycle « nettoyage » à elle).
-- **Cases vides** (pièces pas choisies, pas de pilote réel) : capteurs de particules (PMS5003 ou SPS30, UART),
-  pression différentielle, convertisseur de la consigne 0-10 V du ventilateur (`vidange/nettoyage/capteurs.py`).
+- **Cases vides** (tâche 38 ; remplacées par de vrais pilotes à la tâche 38 ter, voir plus bas) : capteurs de
+  particules, pression différentielle, convertisseur de la consigne 0-10 V du ventilateur
+  (`vidange/nettoyage/capteurs.py`).
 - **Réponses à la PR n° 80** (06/11/2026, niveau 1, tranché par Claude) :
   1. Consigne 0-10 V du ventilateur : module PWM → 0-10 V sur une GPIO du Pi (EXEMPLE GPIO19), plutôt qu'une carte
      GP8403 en I2C ; choix signalé au fil Nettoyage (pièce à ajouter à sa fiche).
@@ -881,3 +882,19 @@ regelé le 04/11/2026 ; lot validé par Karulium les 27/10, 31/10, 01/11 et 04/1
   8. Verrous remis 60 s après une libération si le store n'a pas été levé. Oui.
   9. « Mesure incohérente » = `ozone_dedans` jamais monté à 1 ppm pendant la génération (générateur ou capteur en
      panne). Oui.
+
+- **Pilotes réels des capteurs de la purge (tâche 38 ter, 06/11/2026, niveau 1, tranché par Claude)** :
+  pièces choisies par le fil Nettoyage : 2 SPS30 (particules), 1 SDP810-125Pa (pression), module PWM → 0-10 V.
+  - `particules_dedans` : SPS30 par convertisseur TTL-RS485 et l'adaptateur `rs485_sps30` ; `particules_dehors` :
+    SPS30 sur l'UART3 du Pi (GPIO 8/9, `/dev/ttyAMA3`, `dtoverlay=uart3-pi5`). 115 200 bauds, protocole SHDLC
+    (`vidange/trame_sps30.py`). Grandeur lue : PM2.5 en masse (µg/m³), réglable (`particules → grandeur`).
+  - `pression_enceinte` : SDP810-125Pa en I2C, adresse 0x25, mesure continue (`vidange/trame_sdp810.py`), en Pa,
+    positive si l'enceinte est plus haute que le conteneur (`pression → inverser` si les tuyaux sont à l'envers).
+  - `consigne_ventilateur` : sortie PWM matérielle GPIO19 (canal 3, EXEMPLE) vers le module 0-10 V ; période et
+    tension à 100 % dans `entrees-sorties.yaml → pwm` (EXEMPLES). Le Pi remet 0 V à la fermeture du matériel.
+    Au démarrage, `plein_v` doit rester dans la pleine échelle du module (sinon le programme ne démarre pas).
+  - **Capteur muet, en erreur ou à la trame fausse : jamais une valeur.** `lire` lève une erreur, le Nettoyage
+    compte la mesure absente, la condition de purge n'est pas vraie, la purge finit en alerte à 20 min. Une
+    mesure plus vieille que `delai_muet_s` est « muette » (même règle que l'ozone).
+  - Tous les chiffres des protocoles (commandes, octets, échelles) sont écrits de mémoire : à vérifier sur les
+    notices (`pi/systeme/essai-capteurs-purge.md`). Testé sur le vrai matériel : non.
