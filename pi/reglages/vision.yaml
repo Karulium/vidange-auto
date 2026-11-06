@@ -49,9 +49,9 @@ cameras:
     description: Micropore (lit aussi le QR du seau) ; servie par la tâche Micropore
     champ_deg: [70, 55]
   vue_a:
-    description: Vue A, vers le haut, place A (2,50 ; 0,22) ; servie par l'inspection après lavage
+    description: Vue A, vers le haut, place A (2,93 ; 0,22) ; servie par l'inspection après lavage
     champ_deg: [70, 55]
-    position: [2.50, 0.22, 0.30]
+    position: [2.93, 0.22, 0.30]
 
 # Calibration, une fois par caméra : mire en damier imprimée (coins intérieurs : 9 × 6, cases de
 # 25 mm), collée bien à plat. L'outil prend 15 photos (bouger la mire entre deux : 2 s), il en

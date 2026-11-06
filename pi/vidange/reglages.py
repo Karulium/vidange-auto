@@ -1734,6 +1734,9 @@ class FinDeLotStockage(Modele):
     ecart_m: float = Field(ge=0)
     marge_hublot_m: float = Field(ge=0)
     places_max: int = Field(ge=0)
+    # L'axe de chaque pile de fin de lot à x ≥ pile_axe_x_min (règle de la caméra du bocal : il
+    # faut pouvoir longer en −x la rangée y 0,215 avec l'axe à cette valeur ou plus).
+    pile_axe_x_min: float
 
 
 class PilesStockage(Modele):
@@ -1761,6 +1764,9 @@ class TiroirStockage(Modele):
     avance_par_seau_m: float = Field(gt=0)
     poussee_min_m: float = Field(gt=0)
     effort_n: Intervalle
+    # Seuil de blocage du pousseur (N) : au-delà (courant ou écart du codeur), le Pi s'arrête et
+    # alerte. Au-dessus de l'effort attendu.
+    seuil_blocage_n: float = Field(gt=0)
     # Noms des files (remplissage → rangement → files), remplies dans cet ordre.
     files: list[Nom] = Field(min_length=1)
     # Seaux par file, par format.
@@ -1867,6 +1873,9 @@ class Stockage(Modele):
     piles: PilesStockage
     tiroir: TiroirStockage
     bande_haut: BandeHautStockage
+    # Capacité d'un lot (tiroir + bande du haut) par format, chiffres de l'étude : facultatif ;
+    # vérifiée au démarrage contre les places.
+    capacite_lot: dict[Nom, Annotated[int, Field(ge=1)]] = Field(default_factory=dict)
     bocaux: BocauxStockage
     boites: BoitesStockage
     hublot: HublotStockage
@@ -1883,6 +1892,8 @@ class Stockage(Modele):
         for nom, (debut, fin) in intervalles:
             if debut >= fin:
                 erreurs.append(f"{nom} : du plus petit au plus grand")
+        if self.tiroir.seuil_blocage_n <= self.tiroir.effort_n[1]:
+            erreurs.append("tiroir : seuil_blocage_n au-dessus de l'effort attendu (effort_n)")
         if self.tiroir.entree_x >= self.tiroir.butee_x:
             erreurs.append("tiroir : l'entrée (entree_x) avant la butée (butee_x)")
         if len(set(self.tiroir.files)) != len(self.tiroir.files):
@@ -3057,6 +3068,13 @@ class Machine(Modele):
                     f"stockage : prise d'un seau « {format} » seul à {contact:g}, hors de la "
                     "course de prehension_z"
                 )
+            for x, _ in places.places_fin_de_lot(self, format):
+                if x < stockage.piles.fin_de_lot.pile_axe_x_min - 1e-9:
+                    erreurs.append(
+                        f"stockage → piles → fin_de_lot ({format}) : l'axe d'une pile "
+                        f"(x {x:g}) est avant pile_axe_x_min "
+                        f"({stockage.piles.fin_de_lot.pile_axe_x_min:g})"
+                    )
             if len(places.places_fin_de_lot(self, format)) < 1:
                 erreurs.append(f"stockage → fin_de_lot : aucune place pour « {format} »")
         # Tiroir : ses files sont celles du Remplissage ; le premier seau ne dépasse pas la butée.
@@ -3132,6 +3150,18 @@ class Machine(Modele):
         for nom in [*tiroir.places, *tiroir.centres_x, *tiroir.cales, *bande.places]:
             if nom not in formats:
                 erreurs.append(f"stockage : format « {nom} » absent de griffe → formats")
+        # Capacité d'un lot : celle de l'étude doit être celle des places.
+        for format, attendue in stockage.capacite_lot.items():
+            if format not in formats:
+                erreurs.append(f"stockage → capacite_lot : format « {format} » absent de griffe")
+            elif set(tiroir.places.get(format, {})) != set(tiroir.files):
+                continue  # déjà signalé plus haut
+            elif places.capacite_lot(self, format) != attendue:
+                erreurs.append(
+                    f"stockage → capacite_lot → {format} : {attendue} dans les réglages, mais "
+                    f"les places du tiroir et de la bande en donnent "
+                    f"{places.capacite_lot(self, format)}"
+                )
         # Coin d'inspection : des places du quinconce, chacune une seule fois.
         quinconce = places.places_bocaux(self)
         inspection = stockage.bocaux.inspection
@@ -3148,6 +3178,16 @@ class Machine(Modele):
                         f"stockage → bocaux → inspection : place [{j}, {i}] écrite deux fois"
                     )
                 vues.add((j, i))
+        # Le coin d'inspection reste à la portée du mât de la griffe.
+        for quoi, liste in coin:
+            for j, i in liste:
+                place = quinconce.get(places.nom_bocal(j, i))
+                if place is not None and place[0] > stockage.trajets.griffe_x_max + 1e-9:
+                    erreurs.append(
+                        f"stockage → bocaux → inspection → {quoi} : la place [{j}, {i}] "
+                        f"(x {place[0]:g}) est hors de la portée de la griffe "
+                        f"(x ≤ {stockage.trajets.griffe_x_max:g})"
+                    )
         if places.capacite_boite(self) < 1:
             erreurs.append("stockage → boites : pas une capsule entre le fond et le dessus")
         return erreurs
@@ -3796,6 +3836,9 @@ class StockageSimule(Modele):
 
     piles: dict[Nom, PileSimulee] = Field(min_length=1)
     seaux: list[SeauRemplissageSimule] = Field(min_length=1)
+    # Seaux pleins déjà rangés au départ, par file du tiroir (pour jouer un lot plein sans
+    # simuler tous les seaux).
+    files_pleines: dict[Nom, Annotated[int, Field(ge=0)]] = Field(default_factory=dict)
 
 
 class ScenarioSimule(Modele):

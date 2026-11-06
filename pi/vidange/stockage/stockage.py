@@ -12,9 +12,9 @@
 
 Le Stockage est passif (aucun moteur) et n'a aucun capteur de présence : le Pi tient
 l'inventaire de chaque place (vidange.stockage.inventaire, gardé dans le registre). Une seule
-entrée : la boucle des 3 microrupteurs NF en série (tiroir rentré et verrouillé, P1 et P2
+entrée : la boucle des 4 microrupteurs NF en série (tiroir rentré et verrouillé, P1, P2 et P3
 fermés). Boucle ouverte : aucun mouvement du portique ni du chariot ; le Pi attend et le dit à
-l'écran (il ne sait pas lequel des trois est ouvert). Elle informe et fait attendre : la
+l'écran (il ne sait pas lequel des quatre est ouvert). Elle informe et fait attendre : la
 sécurité des personnes reste câblée (portes, arrêt d'urgence).
 
 Piles de seaux vides : vidées dans l'ordre (rangée y 0,84, puis 0,53, puis la bande 0,215 ; la
@@ -61,17 +61,17 @@ Geste = Generator[object, object, None]
 journal = donner_journal("stockage")
 
 QUOI_FAIRE = (
-    "Regarder le stockage : tiroir rentré et verrouillé, panneaux P1 et P2 fermés, piles "
+    "Regarder le stockage : tiroir rentré et verrouillé, panneaux P1, P2 et P3 fermés, piles "
     "comme l'écran les montre. Corriger l'inventaire à l'écran si besoin, puis acquitter et "
     "donner le Go."
 )
 QUOI_FAIRE_BOUCLE = (
-    "Rentrer et verrouiller le tiroir du stockage, fermer les panneaux P1 et P2 : le Pi attend "
+    "Rentrer et verrouiller le tiroir du stockage, fermer les panneaux P1, P2 et P3 : le Pi attend "
     "la boucle fermée pour bouger."
 )
 QUOI_FAIRE_TIROIR = (
     "Stockage plein : vider le plateau du haut (seaux pleins de la bande du haut, bocaux, "
-    "tapis), relever P1 et P2, déverrouiller et tirer le tiroir, sortir les seaux pleins, tout "
+    "tapis), relever P1, P2 et P3, déverrouiller et tirer le tiroir, sortir les seaux pleins, tout "
     "remettre (tiroir rentré et verrouillé, panneaux fermés), puis confirmer à l'écran (Go)."
 )
 QUOI_FAIRE_BANDE = (
@@ -126,7 +126,7 @@ class Stockage:
         if registre is not None:
             self.inventaire.reprendre(registre.inventaire_stockage())
         self.boucle = Condition(
-            "boucle du stockage fermée (tiroir rentré et verrouillé, P1 et P2 fermés)",
+            "boucle du stockage fermée (tiroir rentré et verrouillé, P1, P2 et P3 fermés)",
             self.boucle_fermee,
             QUOI_FAIRE_BOUCLE,
         )
