@@ -418,7 +418,7 @@ def test_vidange_d_un_fut_complet(tmp_path):
         assert griffe.doses.densite() == pytest.approx(0.62, rel=0.02)
         assert etat.messages[-1].startswith(f"Fût vide : {griffe.plan.seaux_finis} seaux")
         assert etat.doses_kg == pytest.approx(fut.verse_kg, abs=0.01)
-        assert etat.chariot  # le chariot peut partir : la griffe est hors de sa zone
+        assert etat.plateau  # le plateau peut partir : la griffe est hors de sa zone
         assert simulation.etat_axes.positions["pont_x"] > MACHINE.poste_fut.pont_interdit_x[1]
         suite = etapes(planning)
         assert suite[0] == "attendre_le_fut" and suite[-1] == "fut_vide"
@@ -500,9 +500,9 @@ def test_pas_refuse_par_les_regles():
 
 
 def test_chariot_perdu_pendant_la_vidange():
-    perdu = EvenementSimule(attente_s=300, capteur="chariot_fut_en_place", actionne=False)
+    perdu = EvenementSimule(attente_s=300, capteur="plateau_fut_en_place", actionne=False)
     planning, _, simulation, _ = vider(reglages_simules(evenements=[perdu]))
-    assert "plus tenu : chariot du fût en place" in planning.probleme
+    assert "plus tenu : plateau du fût en place" in planning.probleme
     assert QUOI_FAIRE_PERTE in planning.probleme
     # Le pont s'est retiré hors de la zone du chariot, tête en haut.
     positions = simulation.etat_axes.positions

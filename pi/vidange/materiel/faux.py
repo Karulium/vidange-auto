@@ -9,11 +9,13 @@ soit testé lui aussi. Seules les broches GPIO du Pi sont imitées plus haut (`F
     faux.actionner("reed_panneau_poste_fut", True)   # le capteur est actionné
     faux.regler("vide_venturi", -40)                  # dans l'unité du signal
     faux.regler_ambiance("sht31_armoire", 28.5, 70)
-    faux.regler_pesee("pesee_fut", 1_234_567)        # mesure brute de la carte HX711
+    faux.regler_pesee("pesee_griffe", 1_234_567)     # mesure brute d'une pesée du bus RS485
     faux.commande("voyant_buzzer")                    # ce qu'a fait le programme
     faux.debrancher("sht31_armoire")                  # la puce ne répond plus
-    faux.debrancher("pesee_fut")                      # prise de la pesée débranchée
+    faux.debrancher("pesee_fut")                      # la boîte du poste ne répond plus
     faux.carte_pesee("pesee_griffe").hx711_muet = True  # carte du bus RS485 : HX711 muet
+    faux.carte_pesee("pesee_fut").radio_muette = True   # boîte du poste : radio muette
+    faux.carte_pesee("pesee_fut").accu_mv = 3400        # boîte du poste : accu faible
 
 Le faux suit le même plan que le vrai (niveau actif, contact au repos, tirage), à l'envers.
 """
@@ -22,15 +24,16 @@ import errno
 from collections.abc import Mapping
 
 from vidange.entrees_sorties import (
+    BOITE_POSTE_FUT,
     BROCHES_DES_PUCES,
-    CARTE_PESEE,
+    PESEES_DU_BUS,
     EntreesSorties,
     LiaisonUsbSerie,
 )
 from vidange.materiel import carte_pesee
 from vidange.materiel.materiel import Branchement, tracer_branchements
 from vidange.materiel.modbus import crc_modbus
-from vidange.materiel.puces import Ads1115, BusI2c, Hx711, Tirage, crc_sht31
+from vidange.materiel.puces import Ads1115, BusI2c, Tirage, crc_sht31
 
 
 def _pas_de_reponse() -> OSError:
@@ -222,67 +225,6 @@ class FauxMcp23017(FauxAppareilI2c):
         return bytes(octets)
 
 
-# ------------------------------------------------------------- pesée (HX711)
-
-
-class FauxHx711:
-    """Une carte HX711 au bout de ses 2 broches : une mesure toujours prête, envoyée bit par bit
-    à chaque impulsion de SCK (le plus fort d'abord), DT à 1 après la 25ᵉ impulsion.
-    Débranchée : DT reste à 1 (tirage haut du Pi), comme une prise de pesée débranchée.
-
-    Elle a sa propre horloge, qui n'avance que quand le lecteur attend (`dormir`) : une prise
-    débranchée ne fait pas attendre les tests ni le simulateur, et une impulsion n'est jamais
-    jugée trop longue parce que l'ordinateur d'essai est chargé."""
-
-    def __init__(self) -> None:
-        self.temps = 0.0
-        self.brut = 0
-        self.debranche = False
-        self.ferme = False
-        self.lectures = 0
-        self._impulsions = 0
-        self._sck = False
-        self._apres_lecture = False
-
-    def _bit(self) -> bool:
-        if self._impulsions == 0 or self._impulsions > 24:
-            return False
-        mot = self.brut & 0xFFFFFF
-        return bool(mot >> (24 - self._impulsions) & 1)
-
-    def horloge(self) -> float:
-        return self.temps
-
-    def horloge_ns(self) -> int:
-        return round(self.temps * 1e9)
-
-    def dormir(self, duree_s: float) -> None:
-        self.temps += duree_s
-
-    def dt(self) -> bool:
-        if self.debranche:
-            return True
-        if self._apres_lecture:
-            # La puce garde DT à 1 jusqu'à la mesure suivante : prête au coup d'après ici,
-            # une fois SCK redescendu.
-            if not self._sck:
-                self._apres_lecture = False
-            return True
-        return self._bit()
-
-    def sck(self, haut: bool) -> None:
-        if haut and not self._sck and not self.debranche:
-            self._impulsions += 1
-            if self._impulsions == 25:
-                self._impulsions = 0
-                self._apres_lecture = True
-                self.lectures += 1
-        self._sck = haut
-
-    def fermer(self) -> None:
-        self.ferme = True
-
-
 # ---------------------------------------------------------------------- RS485
 
 
@@ -331,9 +273,15 @@ class FausseCartePesee:
         premier = int.from_bytes(demande[2:4], "big")
         nombre = int.from_bytes(demande[4:6], "big")
         self.questions += 1
-        if not self.figee and not self.hx711_muet:
+        if self._mesure_nouvelle():
             self.numero = (self.numero + 1) & 0xFFFF
-        registres = carte_pesee.encoder(
+        return self._repondre(adresse, fonction, premier, nombre, self._registres())
+
+    def _mesure_nouvelle(self) -> bool:
+        return not self.figee and not self.hx711_muet
+
+    def _registres(self) -> list[int]:
+        return carte_pesee.encoder(
             carte_pesee.MesureCarte(
                 brut=self.brut,
                 numero=self.numero,
@@ -344,6 +292,11 @@ class FausseCartePesee:
                 trames_abimees=self.trames_abimees,
             )
         )
+
+    @staticmethod
+    def _repondre(
+        adresse: int, fonction: int, premier: int, nombre: int, registres: list[int]
+    ) -> bytes:
         if fonction not in (3, 4):
             reponse = bytes([adresse, fonction | 0x80, 1])
         elif nombre == 0 or premier + nombre > len(registres):
@@ -352,6 +305,57 @@ class FausseCartePesee:
             donnees = b"".join(r.to_bytes(2, "big") for r in registres[premier : premier + nombre])
             reponse = bytes([adresse, fonction, len(donnees)]) + donnees
         return reponse + crc_modbus(reponse)
+
+
+class FausseBoitePosteFut(FausseCartePesee):
+    """La boîte du poste du fût (13 registres, signature 0x5046) et le plateau qu'elle entend.
+
+    Chaque question trouve une trame nouvelle (numéro + 1), sauf si `figee` ou `radio_muette`
+    (le plateau dort ou est trop loin : âge au plus haut, numéro qui ne bouge plus). `age_ms` :
+    l'âge de la dernière trame quand la radio parle. `signature` : pour essayer une carte RP2040
+    à l'adresse de la boîte."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.par_seconde = 2
+        self.age_ms = 0
+        self.radio_muette = False
+        self.au_poste = True
+        self.en_recharge = True
+        self.sur_usb = False
+        self.accu_mv = 3900
+        self.accu_pct = 80
+        self.signal_dbm = -60
+        self.trames_perdues = 0
+        self.signature = carte_pesee.SIGNATURE_BOITE
+
+    def _mesure_nouvelle(self) -> bool:
+        return super()._mesure_nouvelle() and not self.radio_muette
+
+    def _registres(self) -> list[int]:
+        muette = self.radio_muette
+        return carte_pesee.encoder(
+            carte_pesee.MesureCarte(
+                brut=self.brut,
+                numero=self.numero,
+                age_ms=0xFFFF if muette else self.age_ms,
+                hx711_muet=self.hx711_muet,
+                exemple=self.exemple,
+                par_seconde=0 if muette or self.hx711_muet else self.par_seconde,
+                trames_abimees=self.trames_abimees,
+                radio_muette=muette,
+                plateau=carte_pesee.Plateau(
+                    au_poste=self.au_poste,
+                    en_recharge=self.en_recharge,
+                    sur_usb=self.sur_usb,
+                    accu_mv=self.accu_mv,
+                    accu_pct=self.accu_pct,
+                    signal_dbm=self.signal_dbm,
+                    trames_perdues=self.trames_perdues,
+                ),
+            ),
+            signature=self.signature,
+        )
 
 
 class FauxRs485:
@@ -405,7 +409,6 @@ class FausseFabrique:
         self.gpios: dict[str, FauxGpio] = {}
         self.bus: dict[str, FauxBusI2c] = {}
         self.rs485: dict[str, FauxRs485] = {}
-        self.balances: dict[str, FauxHx711] = {}
         classes = {
             "sht31": FauxSht31,
             "ads1115": FauxAds1115,
@@ -416,8 +419,6 @@ class FausseFabrique:
             ressource = branchement.ressource
             if ressource[0] == "gpio":
                 self.gpios.setdefault(ressource[1], FauxGpio())
-            elif ressource[0] == "hx711":
-                self.balances.setdefault(branchement.nom, FauxHx711())
             elif ressource[0] == "i2c":
                 bus = self.bus.setdefault(ressource[1], FauxBusI2c())
                 if ressource[2] not in bus.appareils:
@@ -426,8 +427,13 @@ class FausseFabrique:
                 rs485 = self.rs485.setdefault(ressource[1], FauxRs485())
                 signal = liste.signaux[branchement.nom]
                 assert signal.adresse is not None
-                if signal.appareil == CARTE_PESEE:
-                    rs485.appareils.setdefault(signal.adresse, FausseCartePesee())
+                if signal.appareil in PESEES_DU_BUS:
+                    classe = (
+                        FausseBoitePosteFut
+                        if signal.appareil == BOITE_POSTE_FUT
+                        else FausseCartePesee
+                    )
+                    rs485.appareils.setdefault(signal.adresse, classe())
                     continue
                 assert signal.modbus is not None
                 transmetteur = rs485.appareils.setdefault(signal.adresse, FauxTransmetteurModbus())
@@ -451,15 +457,6 @@ class FausseFabrique:
                 return rs485.ouvrir()
         raise OSError(f"faux : aucun adaptateur n° « {liaison.numero_serie_usb} »")
 
-    def hx711(self, fichier: str, dt: str, sck: str) -> Hx711:
-        for nom, branchement in self.branchements.items():
-            if branchement.ressource == ("hx711", fichier, dt, sck):
-                faux = self.balances[nom]
-                return Hx711(
-                    faux, horloge_ns=faux.horloge_ns, horloge=faux.horloge, dormir=faux.dormir
-                )
-        raise OSError(f"faux : aucune carte de pesée sur {dt}, {sck}")
-
     # ------------------------------------------------ réglage par les noms
 
     def _branchement(self, nom: str, *sortes: str) -> Branchement:
@@ -472,8 +469,6 @@ class FausseFabrique:
         ressource = branchement.ressource
         if ressource[0] == "gpio":
             return self.gpios[ressource[1]]
-        if ressource[0] == "hx711":
-            return self.balances[branchement.nom]
         if ressource[0] == "i2c":
             return self.bus[ressource[1]].appareils[ressource[2]]
         signal = self.liste.signaux[branchement.nom]
@@ -510,11 +505,12 @@ class FausseFabrique:
         appareil.humidite_pct = humidite_pct
 
     def regler_pesee(self, nom: str, brut: int) -> None:
-        """Mesure brute de la carte de pesée (nombre signé de 24 bits), HX711 ou carte RS485."""
+        """Mesure brute d'une pesée du bus RS485 (nombre signé de 24 bits)."""
         self._appareil(self._branchement(nom, "pesee")).brut = brut
 
     def carte_pesee(self, nom: str) -> FausseCartePesee:
-        """La fausse carte de pesée du bus RS485 d'un signal (la figer, couper son HX711...)."""
+        """La fausse carte de pesée du bus RS485 d'un signal (la figer, couper son HX711...),
+        ou la fausse boîte du poste du fût (FausseBoitePosteFut : radio, accu...)."""
         appareil = self._appareil(self._branchement(nom, "pesee"))
         if not isinstance(appareil, FausseCartePesee):
             raise KeyError(f"faux : « {nom} » n'est pas une carte de pesée du bus RS485")

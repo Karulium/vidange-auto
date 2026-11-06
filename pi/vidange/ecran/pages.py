@@ -120,7 +120,7 @@ POSTE_FUT = Page(
     5,
     (
         _texte("t_titre", 30),
-        _texte("t_poids", 40),
+        _texte("t_poids", 60),
         _texte("t_gestes", 100),
         _texte("t_manque", 140),
         _bouton("b_pret", 10),

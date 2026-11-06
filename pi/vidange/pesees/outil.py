@@ -1,4 +1,4 @@
-"""Outil « vidange-pesees » : lire et étalonner les cartes de pesée du bus RS485.
+"""Outil « vidange-pesees » : lire et étalonner les pesées du bus RS485.
 
   vidange-pesees lire                         chaque seconde, une ligne par carte (Ctrl+C)
   vidange-pesees zero pesee_griffe            étape 1 : zéro, rien de plus sur la pesée
@@ -6,8 +6,9 @@
   ... --faux                                  pareil, avec le faux matériel (pour essayer)
 
 « lire » montre, pour chaque carte : la mesure brute, le poids, les mesures faites par la carte
-par seconde (80 attendues), celles que le Pi a vues, les questions sans réponse et les questions
-arrivées abîmées à la carte (câble, terminaison du bus).
+par seconde (80 attendues ; 2 pour la boîte du poste du fût), celles que le Pi a vues, les
+questions sans réponse et les questions arrivées abîmées à la carte (câble, terminaison du bus).
+La boîte du poste du fût dit aussi l'accu et la radio du plateau (outil « vidange-pesee »).
 
 Chaque étape d'étalonnage affiche les lignes à recopier dans pi/reglages/pesees.yaml
 (etalonnage). L'outil n'écrit jamais lui-même dans les réglages. Procédure complète :
@@ -26,7 +27,7 @@ from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.journal import configurer_journal
 from vidange.materiel import ErreurMateriel, FausseFabrique, Materiel
 from vidange.pesees.tour import TourPesees
-from vidange.pesees.verification import cartes_de_pesee, verifier_avec_liste
+from vidange.pesees.verification import pesees_du_bus, verifier_avec_liste
 from vidange.poste_fut.pesee import pente
 from vidange.reglages import ErreurReglages, charger_reglages
 
@@ -67,7 +68,7 @@ def main(arguments: list[str] | None = None, fabrique=None) -> int:
     if erreurs:
         print("\n".join(erreurs), file=sys.stderr)
         return 2
-    cartes = list(cartes_de_pesee(liste))
+    cartes = list(pesees_du_bus(liste))
     if options.commande != "lire" and options.carte not in cartes:
         print(f"pesée inconnue « {options.carte} » (pesées : {', '.join(cartes)})", file=sys.stderr)
         return 2
@@ -119,7 +120,9 @@ def _ligne(tour: TourPesees, nom: str, sans_reponse: int, vues: int) -> str:
     return (
         f"{nom:28} brut {mesure.brut:9d}  {poids}  carte {mesure.par_seconde:3d} mesures/s  "
         f"vues par le Pi {vues:3d}/s  sans réponse {sans_reponse:3d}  "
-        f"trames abîmées {mesure.trames_abimees}" + ("  HX711 MUET" if mesure.hx711_muet else "")
+        f"trames abîmées {mesure.trames_abimees}"
+        + ("  HX711 MUET" if mesure.hx711_muet else "")
+        + ("  RADIO MUETTE" if mesure.radio_muette else "")
     )
 
 
@@ -131,12 +134,17 @@ def _brut_median(tour: TourPesees, nom: str) -> int | None:
     while time.monotonic() < fin:
         tour.interroger(nom)
         derniere = tour.etats[nom].derniere
-        if derniere is not None and not derniere[1].hx711_muet and derniere[1].numero != numero:
+        if (
+            derniere is not None
+            and not derniere[1].hx711_muet
+            and not derniere[1].radio_muette
+            and derniere[1].numero != numero
+        ):
             numero = derniere[1].numero
             valeurs.append(derniere[1].brut)
     if not valeurs:
         etat = tour.etats[nom]
-        print(f"ÉCHEC : aucune mesure de « {nom} » ({etat.erreur or 'HX711 muet'})")
+        print(f"ÉCHEC : aucune mesure de « {nom} » ({etat.erreur or 'HX711 ou radio muets'})")
         return None
     return round(median(valeurs))
 

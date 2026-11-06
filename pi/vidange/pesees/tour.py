@@ -12,6 +12,10 @@ seconde). Chaque carte mesure seule, 80 fois par seconde ; le Pi garde sa derni�
 Ceux qui lisent une pesée ont toujours la dernière, ou une erreur si elle est trop vieille
 (`age_max_ms`) ou si le HX711 de la carte est muet : jamais une vieille valeur prise pour bonne.
 
+Une pesée de `lentes` (la boîte du poste du fût, 2 mesures par seconde) n'est interrogée qu'au
+plus une fois toutes les `espacement_s`, et a son propre âge maximal. La radio du plateau muette
+(dit par la boîte) : pesée muette, comme un HX711 muet.
+
 Une carte muette ne fait pas attendre les autres : elle coûte le délai de l'adaptateur
 (`delai_reponse_s` de rs485_pesee dans entrees-sorties.yaml) à chaque tour.
 """
@@ -34,6 +38,11 @@ QUOI_FAIRE_MUETTE = (
     "Vérifier le câble du bus des pesées (A, B, 0 V) jusqu'à cette carte, son alimentation, et "
     "l'adaptateur USB-RS485 du Pi (pesee/essai-etabli.md)."
 )
+QUOI_FAIRE_RADIO = (
+    "La boîte du poste du fût n'entend plus le plateau : normal si le plateau n'est pas au poste "
+    "(il dort). Sinon, recharger l'accu du plateau (USB-C de secours) et regarder son voyant "
+    "(pi/systeme/essai-poste-fut.md). Rien ne s'arrête : la vidange se fait sans la pesée."
+)
 QUOI_FAIRE_HX711 = (
     "La carte répond mais son HX711 ne mesure plus : vérifier le capteur et ses fils jusqu'au "
     "HX711, et son alimentation 3,3 V."
@@ -54,6 +63,8 @@ class EtatCarte:
     erreur: str = ""
     # La carte est-elle dite muette au journal (pour ne l'écrire qu'une fois) ?
     muette: bool = False
+    # Heure du Pi de la dernière question (pour les pesées « lentes »).
+    demandee_a: float | None = None
 
 
 class CapteurPesee:
@@ -71,12 +82,16 @@ class CapteurPesee:
         if derniere is None:
             raise ErreurMateriel(f"pesée « {self.nom} » muette : aucune réponse de sa carte")
         heure, mesure = derniere
+        if mesure.radio_muette:
+            raise PeseeMuette(f"pesée « {self.nom} » : radio du plateau muette")
         if mesure.hx711_muet:
             raise PeseeMuette(f"pesée « {self.nom} » : HX711 muet (débranché ?)")
         age_s = self.tour.horloge() - heure + mesure.age_ms / 1000
-        if age_s * 1000 > self.tour.reglages.age_max_ms:
+        if age_s * 1000 > self.tour.age_max_ms(self.nom):
+            sans_reponse = " (plus de réponse)" if etat.erreur else ""
             raise ErreurMateriel(
                 f"pesée « {self.nom} » muette : dernière mesure vieille de {age_s:.2f} s"
+                + sans_reponse
             )
         return mesure.brut
 
@@ -101,6 +116,10 @@ class TourPesees:
         self.etats = {nom: EtatCarte() for nom in reglages.tour}
         self._verrou = threading.Lock()
 
+    def age_max_ms(self, nom: str) -> int:
+        lente = self.reglages.lentes.get(nom)
+        return self.reglages.age_max_ms if lente is None else lente.age_max_ms
+
     def capteur(self, nom: str) -> CapteurPesee:
         if nom not in self.etats:
             raise KeyError(f"pesée inconnue « {nom} » (absente de « tour » dans pesees.yaml)")
@@ -108,10 +127,24 @@ class TourPesees:
 
     # ------------------------------------------------------------ les questions
 
+    def interroger_si_du(self, nom: str) -> bool | None:
+        """Une question, sauf à une pesée « lente » interrogée il y a moins de `espacement_s`
+        (rend alors None). Vrai si elle a répondu."""
+        lente = self.reglages.lentes.get(nom)
+        demandee_a = self.etats[nom].demandee_a
+        if (
+            lente is not None
+            and demandee_a is not None
+            and self.horloge() - demandee_a < lente.espacement_s
+        ):
+            return None
+        return self.interroger(nom)
+
     def interroger(self, nom: str) -> bool:
         """Une question à une carte. Vrai si elle a répondu."""
         etat = self.etats[nom]
         etat.questions += 1
+        etat.demandee_a = self.horloge()
         try:
             mesure = self.materiel.lire_carte_pesee(nom)
         except ErreurMateriel as erreur:
@@ -132,9 +165,10 @@ class TourPesees:
         return True
 
     def faire_un_tour(self) -> bool:
-        """Une question à chaque carte de `tour`. Vrai si au moins une a répondu."""
+        """Une question à chaque carte de `tour` (aux pesées « lentes » seulement quand c'est
+        l'heure). Vrai si au moins une a répondu."""
         with self._verrou:
-            reponses = [self.interroger(nom) for nom in self.reglages.tour]
+            reponses = [self.interroger_si_du(nom) for nom in self.reglages.tour]
         return any(reponses)
 
     def demarrer(self, arret: threading.Event) -> threading.Thread:
@@ -171,7 +205,11 @@ class TourPesees:
                 constats.append(Constat(sujet, "attention", texte, QUOI_FAIRE_MUETTE))
                 continue
             mesure = etat.derniere[1]
-            if mesure.hx711_muet:
+            if mesure.radio_muette:
+                constats.append(
+                    Constat(sujet, "attention", "radio du plateau muette", QUOI_FAIRE_RADIO)
+                )
+            elif mesure.hx711_muet:
                 constats.append(Constat(sujet, "attention", "HX711 muet", QUOI_FAIRE_HX711))
             elif mesure.exemple:
                 constats.append(

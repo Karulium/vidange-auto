@@ -32,7 +32,7 @@ def test_au_depart_rien_n_est_actionne_et_tout_est_au_repos(faux_et_materiel):
         "fdc_stockage_haut": False,
         "boucle_stockage": False,
         "onduleur_sur_batterie": False,
-        "chariot_fut_en_place": False,
+        "plateau_fut_en_place": False,
         "bouton_pret_fut": False,
     }
     assert materiel.lire("voyant_buzzer") is False

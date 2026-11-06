@@ -150,7 +150,7 @@ class Remplissage:
         registre: Registre | None = None,
         horloge: Callable[[], float] = time.monotonic,
         # Cases vides des autres modules (valeurs prudentes par défaut) :
-        chariot_fut_en_place: Callable[[], bool] = lambda: False,
+        plateau_fut_en_place: Callable[[], bool] = lambda: False,
         refus_mycelium: Callable[[], str | None] = lambda: "agitateur du mycélium pas connu",
         bras_galet_range: Callable[[], bool | None] = lambda: None,
         bras_spray_sorti: Callable[[], bool] = lambda: False,
@@ -158,7 +158,7 @@ class Remplissage:
         vision: VisionSeau | None = None,
         photo: Callable[[str], object] = lambda raison: None,
     ) -> None:
-        """`chariot_fut_en_place` : PosteFut (chariot du fût au fond). `refus_mycelium` :
+        """`plateau_fut_en_place` : PosteFut (plateau du fût au fond). `refus_mycelium` :
         Mycelium.refus_chariot (le chariot peut-il rouler près du poste ?). `bras_galet_range`,
         `bras_spray_sorti`, `micropore_rentre` : modules pas encore écrits (tâches 41, 39, 40).
         `vision` : QR du flanc et angle de l'anse. `photo(raison)` : photo notée au registre."""
@@ -177,7 +177,7 @@ class Remplissage:
         self.chariot = chariot
         self.registre = registre
         self._horloge = horloge
-        self._chariot_fut = chariot_fut_en_place
+        self._plateau_fut = plateau_fut_en_place
         self._refus_mycelium = refus_mycelium
         self._bras_galet = bras_galet_range
         self._bras_spray = bras_spray_sorti
@@ -206,7 +206,7 @@ class Remplissage:
         seau = self.seau
         hauteur = None if seau is None else self.formats[seau.format].hauteur
         return Contexte(
-            chariot_fut_en_place=self._chariot_fut(),
+            plateau_fut_en_place=self._plateau_fut(),
             refus_mycelium=self._refus_mycelium(),
             bras_galet_range=self._bras_galet(),
             bras_spray_sorti=self._bras_spray(),
@@ -599,9 +599,9 @@ class Remplissage:
     # ------------------------------------------------------------ pour les autres modules
 
     def place_permise(self, y: float) -> bool:
-        """Le chariot peut-il aller en y (règle 7) : chariot du fût en place, ou bout du chariot
+        """Le chariot peut-il aller en y (règle 7) : plateau du fût en place, ou bout du chariot
         côté allée assez loin de la 3e file (axe du plateau ≤ 0,475) ?"""
-        if self._chariot_fut():
+        if self._plateau_fut():
             return True
         bout_max = self.regles.bout_max_y
         return y + self.reglages.verrous.bout_y_m <= bout_max + _EGAL

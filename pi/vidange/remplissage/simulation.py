@@ -238,7 +238,7 @@ def remplissage_du_simulateur(
         assert mycelium is not None
         return mycelium.refus_chariot()
 
-    options.setdefault("chariot_fut_en_place", lambda: not poste.echange_en_cours)
+    options.setdefault("plateau_fut_en_place", lambda: not poste.echange_en_cours)
     options.setdefault("bras_galet_range", lambda: True)
     options.setdefault("micropore_rentre", lambda: True)
     remplissage = Remplissage(

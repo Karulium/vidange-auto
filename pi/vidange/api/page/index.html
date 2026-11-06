@@ -379,13 +379,22 @@ function afficherPosteFut(poste) {
   const poids = poste.pesee
     ? "Pesée : " + poste.pesee
     : "Substrat : " + kg(poste.poids_net_kg) + " (lu : " + kg(poste.poids_lu_kg) + ")";
+  // Accu et radio du plateau de pesée (dernière trame ; rien si la radio se tait).
+  const plateau = poste.accu_pct === null ? null
+    : "Plateau : accu " + poste.accu_pct + " % (" + poste.accu_v.toFixed(2).replace(".", ",") + " V"
+      + (poste.en_recharge ? ", en recharge" : ", pas en recharge") + ") · radio "
+      + poste.signal_dbm + " dBm";
   remplir("poste-fut",
     el("h2", {}, "Poste du fût"),
     el("div", { classe: "carte " + classe },
       el("strong", {}, poste.libelle),
-      el("div", {}, poids + (poste.exemple_pesee ? " — pesée pas encore étalonnée" : "")),
+      el("div", { classe: poste.pesee_absente ? "quoi" : "" },
+        poids + (poste.exemple_pesee ? " — pesée pas encore étalonnée" : "")),
+      plateau && el("div", { classe: poste.accu ? "quoi" : "doux" },
+        plateau + (poste.accu ? " — " + poste.accu : "")),
       poste.cycle !== null && el("div", { classe: "doux" },
-        "Fût plein : " + kg(poste.poids_plein_kg) + " · doses de la griffe : " + kg(poste.doses_kg)),
+        "Fût plein : " + kg(poste.poids_plein_kg) + " · doses de la griffe : " + kg(poste.doses_kg)
+        + (poste.sans_pesee ? " · seaux « sans pesée du fût »" : "")),
       !pret && el("div", {}, el("strong", {}, "À faire à la main : "), poste.gestes.join(" ; ") + "."),
       poste.manque.length ? el("div", { classe: "quoi" },
         el("strong", {}, "Il manque : "), poste.manque.join(" ; ") + ".") : null,

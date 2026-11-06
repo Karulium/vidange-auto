@@ -84,7 +84,7 @@ from vidange.mises_a_jour import DOSSIER as DOSSIER_MISES_A_JOUR
 from vidange.mises_a_jour import CarteEsp32, MisesAJour, ProgrammePi, preparer_cartes
 from vidange.mode import ModeMachine
 from vidange.pesees.tour import TourPesees
-from vidange.pesees.verification import cartes_de_pesee, verifier_avec_liste
+from vidange.pesees.verification import pesees_du_bus, verifier_avec_liste
 from vidange.poste_fut import PosteFut
 from vidange.quoi_faire import COUPURE_COURANT, PLANTAGE
 from vidange.registre import (
@@ -379,8 +379,8 @@ def principal(
     poste_reglages = reglages.machine.poste_fut
     if poste_reglages is not None and poste_reglages.pesee.exemple:
         journal.warning(
-            "machine.yaml, poste_fut → pesee : zéro, pente et tare d'EXEMPLE : étalonner la "
-            "pesée (pi/systeme/essai-poste-fut.md), puis passer « exemple » à false."
+            "machine.yaml, poste_fut → pesee : tare et bornes d'EXEMPLE : étalonner la pesée du "
+            "plateau (pi/systeme/essai-poste-fut.md), puis passer « exemple » à false."
         )
     griffe = reglages.machine.griffe
     if griffe is not None and griffe.exemple:
@@ -495,14 +495,15 @@ def principal(
     }
     fiabilite = reglages.programme.fiabilite
     chef = Chef(reglages.machine, reglages.programme.chef, carnet)
+    # Les pesées du bus RS485, interrogées en fond (griffe, préhension, plateau du remplissage,
+    # boîte du poste du fût).
+    pesees: TourPesees | None = None
+    if materiel is not None and erreur_materiel is None and pesees_du_bus(entrees_sorties):
+        pesees = TourPesees(reglages.pesees, materiel)
     # Le poste du fût lit ses signaux en fond. Sans entrées/sorties ouvertes : pas de poste.
     poste: PosteFut | None = None
     if poste_reglages is not None and materiel is not None and erreur_materiel is None:
-        poste = PosteFut(poste_reglages, materiel, registre)
-    # Les cartes de pesée du bus RS485, interrogées en fond (griffe, préhension, plateau).
-    pesees: TourPesees | None = None
-    if materiel is not None and erreur_materiel is None and cartes_de_pesee(entrees_sorties):
-        pesees = TourPesees(reglages.pesees, materiel)
+        poste = PosteFut(poste_reglages, materiel, registre, pesees=pesees)
     sante = Sante(dossier_donnees, fiabilite.sante, registre, sauvegarde.copies, raccords.sondes)
     bilans = Bilans(
         dossier_donnees,

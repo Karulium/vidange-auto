@@ -526,7 +526,7 @@ def test_file_3_refusee_sans_chariot_du_fut():
         scenario = stockage_du_simulateur(simulation)
         remplissage = scenario.remplissage.remplissage
         files = MACHINE.remplissage.rangement.files  # type: ignore[union-attr]
-        simulation.fabrique.actionner("chariot_fut_en_place", False)
+        simulation.fabrique.actionner("plateau_fut_en_place", False)
         assert remplissage.place_permise(files["file_1"].y)
         assert not remplissage.place_permise(files["file_3"].y)
 

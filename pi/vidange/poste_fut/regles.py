@@ -4,7 +4,7 @@ Chaque fonction rend la raison du refus (en français, pour l'écran et la page 
 le geste est permis. Les chiffres viennent de machine.yaml (`poste_fut`). Ces verrous ne
 protègent que la MACHINE : la sécurité des personnes reste câblée.
 
-`echange` = le chariot du fût est absent ou en mouvement (pas « en place » de façon stable) :
+`echange` = le plateau du fût est absent ou en mouvement (pas « en place » de façon stable) :
 c'est `PosteFut.echange_en_cours`.
 
 Les modules qui s'en serviront ne sont pas encore écrits (Portique, Remplissage, Griffe,
@@ -27,7 +27,7 @@ def refus_pont(reglages: PosteFut, echange: bool, x: float) -> str | None:
     debut, fin = reglages.pont_interdit_x
     if echange and debut <= x <= fin:
         return (
-            f"pont interdit en x {_m(debut)} à {_m(fin)} m tant que le chariot du fût est absent "
+            f"pont interdit en x {_m(debut)} à {_m(fin)} m tant que le plateau du fût est absent "
             "ou en mouvement (il passe sous le chariot X du pont)"
         )
     return None
@@ -39,7 +39,7 @@ def refus_remplissage(reglages: PosteFut, echange: bool, y_bout: float) -> str |
     if echange and y_bout > maximum:
         return (
             f"chariot de remplissage à garder à y ≤ {_m(maximum)} m (poste, files 1 et 2) "
-            "tant que le chariot du fût est absent : il passe en biais devant la 3e file"
+            "tant que le plateau du fût est absent : il passe en biais devant la 3e file"
         )
     return None
 

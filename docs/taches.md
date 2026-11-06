@@ -1166,7 +1166,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   et d'un bocal, pose et reprise au porte-bocal, vissage. Tests, dont : vide qui lâche pendant la levée (feed hold,
   2 échecs ⇒ alerte), deux seaux pris, contact trop bas, choc, isolation du fût, XY refusé tête basse, vissage
   au-delà de 150 N, zéro du vide au démarrage.
-- [ ] **17 bis. Poste du fût : plateau de pesée sans fil (côté Pi)** — Modèle : Opus, effort moyen. **À faire après
+- [x] **17 bis. Poste du fût : plateau de pesée sans fil (côté Pi)** — Modèle : Opus, effort moyen. **À faire après
   la tâche 35 ter.**
   Sources : `docs/decisions.md`, « Poste du fût : plateau de pesée sans fil » (05/11/2026), recopiée de
   `poste-fut-pour-logiciel.md` v10 du projet mécanique. Les chiffres vont dans `pi/reglages/` et

@@ -67,7 +67,7 @@ Pas encore de vrai module de la machine.
 | `vidange/remplissage/` | Remplissage (carte n° 2) : positions interdites du chariot (`regles.py`), chariot sur sa carte avec la balance et la barrière (`chariot.py`), gestes : pose et prise double, anse, centrage, poste, dosage, rangement, modes couvercles et inspection (`remplissage.py`), scénario du simulateur avec le Mycélium (`module.py`, `simulation.py`) ; commande `vidange-remplissage` |
 | `vidange/stockage/` | Stockage (passif, sans capteur de présence) : places calculées depuis les réglages (`places.py`), inventaire gardé dans le registre (`inventaire.py`), verrous des trajets au-dessus des piles, des boîtes et de la caméra du bocal (`regles.py`), prise sur les piles, rendu du seau du dessus, files du tiroir, attente « tiroir plein » (`stockage.py`), scénario du simulateur (`simulation.py`) ; commande `vidange-stockage` |
 | `vidange/vision/` | Vision : photos de mesure (`photo.py`), calibration et passage au repère du portique (`calibration.py`), QR (`qr.py`), repères ArUco (`aruco.py`), caméra du plafond : lave-bocal et « deviner le travail » (`plafond.py`), caméra du dosage sur son servo (`dosage.py`), images fabriquées (`fabrique.py`) ; commande `vidange-vision` |
-| `vidange/poste_fut/` | Poste du fût : état (absent, en place, prêt), bouton « Prêt » et voyant, pesée (HX711), mode permis par le panneau, verrous pour les autres modules, module « poste_fut » ; commande `vidange-pesee` (étalonnage) |
+| `vidange/poste_fut/` | Poste du fût : état (absent, en place, prêt), bouton « Prêt » et voyant, pesée sans fil du plateau (boîte du poste sur le bus des pesées), pesée absente, accu du plateau, mode permis par le panneau, verrous pour les autres modules, module « poste_fut » ; commande `vidange-pesee` (lecture, étalonnage) |
 | `reglages/machine.yaml` | Axes (et leur carte FluidNC), positions, zones, délais (pour l'instant : un **exemple** inventé) ; poste du fût (chiffres **vrais**, pesée à étalonner) |
 | `reglages/programme.yaml` | Réglages du programme lui-même (journal, chef d'orchestre, registre, fiabilité, API, écran, caméras, pilotage à distance, mises à jour) |
 | `reglages/fluidnc.yaml` | Cartes FluidNC (numéro de série USB) et réglages de leur liaison |
@@ -237,8 +237,9 @@ en une fraction de seconde), et sort le planning : chaque étape, quand elle com
   la simulation ; le planning dit pourquoi (code de sortie 1).
 - Plusieurs modules peuvent être rejoués ensemble : ils se partagent zones et cartes comme sur la machine.
 - **Scénarios** nommés (`scenarios:` dans `simulateur.yaml`) : leurs capteurs et événements remplacent ceux
-  du haut du fichier (`--scenario nom`). Un événement peut aussi régler la fausse pesée (`pesee: pesee_fut`,
-  `kg: 165` ou `debranchee: true`). Le module `poste_fut` joue le scénario `echange_fut` par défaut.
+  du haut du fichier (`--scenario nom`). Un événement peut aussi régler la fausse pesée du poste du fût
+  (`pesee: pesee_fut`, `kg: 165`, `radio_muette: true` ou `debranchee: true`). Le module `poste_fut` joue
+  le scénario `echange_fut` par défaut (`echange_fut_sans_pesee` : radio du plateau muette).
 - Un module reçoit des axes imaginaires (`simulateur.axes()`) à la place des vrais `Axes`, avec les mêmes noms ;
   son code ne change pas. Pour qu'un nouveau module soit simulable, l'ajouter à `MODULES` dans
   `vidange/simulateur/outil.py`.
@@ -353,16 +354,17 @@ Au plus `lignes_max` lignes par réponse ; `avant=<numéro>` donne la page suiva
 
 ## Poste du fût (tâche 17)
 
-Rien ne bouge seul au poste : `PosteFut` (`vidange/poste_fut/poste.py`) relit en fond le détecteur du chariot,
-le contact du panneau et le bouton « Prêt », pèse le chariot (carte HX711 lue par 2 broches du Pi), et règle
-le voyant du bouton (clignote tant que ce n'est pas prêt).
+Rien ne bouge seul au poste : `PosteFut` (`vidange/poste_fut/poste.py`) relit en fond le détecteur du plateau,
+le contact du panneau et le bouton « Prêt », lit la pesée du plateau (tâche 17 bis : sans fil, la boîte du
+poste répond sur le bus des pesées comme une carte de pesée, `pesee_fut`), et règle le voyant du bouton
+(clignote tant que ce n'est pas prêt).
 
 ```python
-poste = PosteFut(reglages.machine.poste_fut, materiel, registre)
+poste = PosteFut(reglages.machine.poste_fut, materiel, registre, pesees=tour)  # tour : TourPesees
 poste.etat()  # absent / en_place / pret, ce qui manque, poids, messages
 poste.appuyer_pret("page web")  # comme le bouton du poste (ErreurPoste : ce qui manque)
 poste.refus_lancement("production")  # panneau levé ? (None : permis)
-poste.surveillance  # Condition « chariot du fût en place » pour la griffe
+poste.surveillance  # Condition « plateau du fût en place » pour la griffe
 poste.noter_dose(kg)
 poste.finir_vidange(nombre_seaux)  # appelés par la griffe (tâche 18)
 poste.refus_pont(x)
@@ -370,15 +372,21 @@ poste.refus_remplissage(y_bout)
 poste.refus_griffe(x, y, z, mode)
 ```
 
-- **Prêt** = chariot au fond + chariot immobile depuis `stabilite_s` + pesée qui répond avec un poids
-  plausible + appui sur « Prêt ». Au « Prêt », le cycle `vidange` commence dans le registre avec le poids du
-  fût plein ; chariot retiré avant `finir_vidange` : cycle abandonné.
-- **Pesée** : médiane de plusieurs lectures, lectures aberrantes jetées, lecture interrompue par Linux refaite ;
-  pas de réponse = « pesée débranchée », jamais une erreur qui arrête le Pi. Étalonnage :
-  `vidange-pesee zero | etalonner 20 | tare` (voir `systeme/essai-poste-fut.md`).
+- **Prêt** = plateau au fond + plateau immobile depuis `stabilite_s` + appui sur « Prêt ». **La pesée n'y
+  entre pas.** Au « Prêt », le cycle `vidange` commence dans le registre avec le poids du fût plein, ou noté
+  « sans pesée du fût » (`sans_pesee_fut`) ; plateau retiré avant `finir_vidange` : cycle abandonné.
+- **Pesée** : la boîte du poste (adresse 4, signature 0x5046, registres 0 à 12) est interrogée au plus une fois
+  par seconde (`pesees.yaml → lentes`) : la griffe garde ses 80 mesures par seconde. Le plateau fait déjà la
+  moyenne de 5 ; le Pi rejette seulement une valeur hors des bornes plausibles. Pas de réponse, radio du
+  plateau muette ou mesure de plus de 2 s : « pesée absente » 5 s après l'arrivée du plateau (affichée, au
+  journal, une alerte par absence) ; jamais un refus ni un arrêt ; elle revient seule.
+- **Accu du plateau** (`pesees.yaml → accu_plateau_fut`) : alertes « recharger le plateau » (< 3,5 V), « pesée
+  bientôt absente » (< 3,3 V), « recharge sans contact en panne ? » (au poste depuis 10 min sans recharge).
+  Niveau en % et signal radio à l'écran et sur la page web. Étalonnage :
+  `vidange-pesee zero | etalonner 20 | tare` et `vidange-pesee lire` (voir `systeme/essai-poste-fut.md`).
 - **Verrous** (`vidange/poste_fut/regles.py`) : pour le pont, le chariot de remplissage, la griffe et la
   préhension en lavage ; ils rendent la raison du refus. Ils ne protègent que la machine.
-- Page web (`/api/poste-fut`, bouton PRÊT) et écran (page `poste_fut`, qui vient seule à l'arrivée du chariot).
+- Page web (`/api/poste-fut`, bouton PRÊT) et écran (page `poste_fut`, qui vient seule à l'arrivée du plateau).
 
 ## Griffe (tâche 18)
 
@@ -574,7 +582,7 @@ vidange-remplissage --faux etat          # l'outil d'essai, sur un faux FluidNC
 - **Verrous** (`ReglesRemplissage`, règles du fichier des positions) : anneaux du fût (plateau en bas hors du
   poste et du milieu), écart entre les 2 barres (au plus 1 mm, sinon plus rien ne bouge avant la prise
   d'origine), joues de l'élévateur et barres ouvertes au-dessus de 0,515 (pour chaque barre), pousseur rentré dès que le
-  plateau n'est pas en bas (il ne sort que plateau ≤ 0,20), bras du galet, spray, chariot du fût absent
+  plateau n'est pas en bas (il ne sort que plateau ≤ 0,20), bras du galet, spray, plateau du fût absent
   (axe du plateau ≤ 0,475), Mycélium (rouler près du poste, monter au poste), préhension (règle 9, branchée
   dans la préhension par `brancher_prehension`, sauf en mode couvercles et pendant la pose d'un seau vide). Un trajet est vérifié tous les
   5 mm. Les gestes font d'eux-mêmes les détours.

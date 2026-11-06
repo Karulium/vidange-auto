@@ -80,7 +80,7 @@ Quand le cycle se lancera depuis l'écran :
 ## Étape 5 : le tiroir
 
 1. `vidange-stockage places seau_a` : les 3 files (y 0,215 / 0,500 / 0,785) et leur nombre de seaux.
-2. Tiroir rentré et verrouillé, chariot du fût en place. Avec un seau A vide sur le plateau du chariot :
+2. Tiroir rentré et verrouillé, plateau du fût en place. Avec un seau A vide sur le plateau du chariot :
    `vidange-remplissage ranger seau_a file_1 --agitateur-au-garage --galet-range --micropore-rentre`.
    Attendu : le chariot va à y 0,215, plateau en bas, le pousseur pousse le seau dans la file ; la tôle du
    tiroir (0,176) est au plus 5 mm sous le plateau : le seau passe sans accrocher.

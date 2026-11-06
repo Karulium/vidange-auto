@@ -25,7 +25,7 @@ chaque barre ; deux barres écartées de plus de `barres → ecart_max_m` : tout
    passe plus sous la tête du micropore) ;
 5. plateau au-dessus de 0,26 seulement bras du galet rangé ;
 6. bras du spray sorti : plateau ≤ min(0,50 ; 0,68 − h), entraxe des barres > 0,50 ;
-7. chariot du fût pas en place : bout du chariot côté allée (axe + 0,40) à y ≤ 0,875, donc axe
+7. plateau du fût pas en place : bout du chariot côté allée (axe + 0,40) à y ≤ 0,875, donc axe
    du plateau à y ≤ 0,475 ;
 8. agitateur du mycélium FIXE au-dessus du poste (01/11/2026) : en deçà du dosage (y <
    dosage_y, le poste), bord du seau (plateau + h) ≤ 0,68 TOUJOURS ; près du poste (y <
@@ -96,7 +96,7 @@ class Pose:
 class Contexte:
     """Ce que disent les autres modules (cases vides : valeurs prudentes par défaut)."""
 
-    chariot_fut_en_place: bool = False
+    plateau_fut_en_place: bool = False
     # Raison pour laquelle le Mycélium interdit de rouler (ou de monter le plateau) près du poste
     # (None : permis).
     refus_mycelium: str | None = "position de la manivelle du mycélium inconnue"
@@ -213,11 +213,11 @@ class ReglesRemplissage:
                     f"au poste (y {_m(pose.y)}, sous le bocal du mycélium) : bord du seau ≤ "
                     f"{_m(v.poste_bord_max_z)} toujours (il serait à {_m(bord)})"
                 )
-        if not contexte.chariot_fut_en_place:
+        if not contexte.plateau_fut_en_place:
             bout = pose.y + v.bout_y_m
             if bout > self.bout_max_y + _EGAL:
                 return (
-                    f"chariot du fût pas en place : le bout du chariot de remplissage doit rester "
+                    f"plateau du fût pas en place : le bout du chariot de remplissage doit rester "
                     f"à y ≤ {_m(self.bout_max_y)} (axe du plateau ≤ "
                     f"{_m(self.bout_max_y - v.bout_y_m)}) ; il serait à {_m(bout)}"
                 )

@@ -39,7 +39,7 @@ assert REMPLISSAGE is not None
 REGLES = ReglesRemplissage(MACHINE)
 # Tout est permis par les autres modules (chacun est essayé à part).
 PERMIS = Contexte(
-    chariot_fut_en_place=True,
+    plateau_fut_en_place=True,
     refus_mycelium=None,
     bras_galet_range=True,
 )
@@ -268,9 +268,9 @@ def test_le_pousseur_rentre_a_son_zero_et_pousse_vers_le_stockage():
 
 def test_regle_5_bras_du_galet():
     pose = POSTE.avec(y=0.50, z=0.30)
-    assert "bras du galet pas connu" in REGLES.refus_pose(pose, Contexte(chariot_fut_en_place=True))
+    assert "bras du galet pas connu" in REGLES.refus_pose(pose, Contexte(plateau_fut_en_place=True))
     assert "pas rangé" in REGLES.refus_pose(pose, Contexte(True, None, False))
-    assert REGLES.refus_pose(pose.avec(z=0.26), Contexte(chariot_fut_en_place=True)) is None
+    assert REGLES.refus_pose(pose.avec(z=0.26), Contexte(plateau_fut_en_place=True)) is None
     assert REGLES.refus_bras_galet(pose) is not None
     assert REGLES.refus_bras_galet(pose.avec(z=0.25)) is None
 
@@ -293,12 +293,12 @@ def test_regle_6_bras_du_spray():
 
 
 def test_regle_7_chariot_du_fut_absent():
-    absent = Contexte(chariot_fut_en_place=False, refus_mycelium=None, bras_galet_range=True)
+    absent = Contexte(plateau_fut_en_place=False, refus_mycelium=None, bras_galet_range=True)
     # Bout du chariot à 0,40 de l'axe : axe du plateau à y ≤ 0,875 − 0,40 = 0,475.
     assert REGLES.refus_pose(POSTE.avec(y=0.475), absent) is None
     for y in (0.48, 0.50, 0.785):
         refus = REGLES.refus_pose(POSTE.avec(y=y), absent)
-        assert refus is not None and "chariot du fût pas en place" in refus
+        assert refus is not None and "plateau du fût pas en place" in refus
         assert "axe du plateau ≤ 0,475" in refus
     assert REGLES.refus_pose(POSTE.avec(y=0.785), PERMIS) is None
 
@@ -376,7 +376,7 @@ class Banc:
         self.chariot = ChariotSimule(self.etat, MACHINE, horloge)
         self.photos: list[str] = []
         valeurs = {
-            "chariot_fut_en_place": lambda: True,
+            "plateau_fut_en_place": lambda: True,
             "refus_mycelium": lambda: None,
             "bras_galet_range": lambda: True,
             "micropore_rentre": lambda: True,
@@ -469,12 +469,12 @@ def test_ramener_au_vidage_puis_ranger():
 
 
 def test_ranger_loin_refuse_sans_chariot_du_fut():
-    banc = Banc(chariot_fut_en_place=lambda: False)
+    banc = Banc(plateau_fut_en_place=lambda: False)
     remplissage = banc.remplissage
-    with pytest.raises(ErreurEtape, match="chariot du fût pas en place"):
+    with pytest.raises(ErreurEtape, match="plateau du fût pas en place"):
         banc.jouer(lambda: remplissage.geste_aller(0.85))
     assert banc.pose.y == 0.135
-    # Les files 2 et 3 (0,500 et 0,785) sont refusées au-delà de 0,475 sans le chariot du fût ;
+    # Les files 2 et 3 (0,500 et 0,785) sont refusées au-delà de 0,475 sans le plateau du fût ;
     # la file 1 passe.
     remplissage.seau = SeauPlateau("seau_a", "S1", angle_anse=0.0)
     with pytest.raises(ErreurEtape, match="axe du plateau ≤ 0,475"):
@@ -756,7 +756,7 @@ def test_le_vrai_chariot_remplace_le_faux_retourneur():
             MACHINE,
             chariot,
             horloge=lambda: simulation.temps,
-            chariot_fut_en_place=lambda: True,
+            plateau_fut_en_place=lambda: True,
             refus_mycelium=lambda: None,
             bras_galet_range=lambda: True,
         )

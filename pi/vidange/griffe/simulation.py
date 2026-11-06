@@ -4,7 +4,7 @@
     module = module_griffe(griffe)
 
 Le faux fût (`FutSimule`) garde le substrat qui reste : son niveau (fond + volume / section) et
-son poids, qu'il écrit sur la fausse pesée du chariot du fût. Le godet prend « densité vraie ×
+son poids, qu'il écrit sur la fausse pesée du plateau du fût. Le godet prend « densité vraie ×
 volume de la table » quand il se ferme dans le substrat (moins près de la paroi et au fond), le
 rend au fût s'il s'ouvre dedans, le verse dans le seau ailleurs. Une descente au contact s'arrête
 sur le substrat ; une poussée s'arrête sur le fond.
@@ -215,9 +215,12 @@ def griffe_du_simulateur(simulateur: Simulateur, **options: Any) -> Griffe:
         raise ErreurSimulation("simulateur.yaml n'a pas de partie « griffe »")
     poste = simulateur.poste_fut()
     pesee = poste.pesee
+    if pesee is None:
+        raise ErreurSimulation("pas de pesée du poste du fût (pesee_fut dans pesees.yaml, tour)")
 
     def regler_pesee(kg: float) -> None:
-        simulateur.fabrique.regler_pesee("pesee_fut", pesee.brut(kg + pesee.reglages.tare_kg))
+        # Seulement la mesure : une radio muette (scénario) le reste.
+        simulateur.fabrique.regler_pesee(pesee.signal, pesee.brut(kg + pesee.reglages.tare_kg))
 
     fut = FutSimule(machine, reglages.simulateur.griffe, poste.poids_restant_kg, regler_pesee)
     bras = BrasSimule(simulateur.etat_axes, machine, fut, reglages.simulateur.griffe)

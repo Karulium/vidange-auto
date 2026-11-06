@@ -2,13 +2,12 @@
 
 from vidange.materiel.faux import FausseFabrique
 from vidange.materiel.materiel import Ambiance, Materiel, VraieFabrique
-from vidange.materiel.puces import ErreurMateriel, LectureInterrompue, PeseeMuette
+from vidange.materiel.puces import ErreurMateriel, PeseeMuette
 
 __all__ = [
     "Ambiance",
     "ErreurMateriel",
     "FausseFabrique",
-    "LectureInterrompue",
     "Materiel",
     "PeseeMuette",
     "VraieFabrique",

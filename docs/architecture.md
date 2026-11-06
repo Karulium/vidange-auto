@@ -9,6 +9,7 @@
 | 1 carte ESP32 (boîte du spray) | Pompes et flacons du spray | Petit programme C++ (`spray/`), plus tard |
 | RP2040 + LIS3DH | Détection des chocs sur le chariot Z | Petit programme (`accelerometre/`) |
 | 3 RP2040 + HX711 (griffe, préhension, plateau du remplissage) | Pesées embarquées, 80 mesures/s, sur un bus RS485 à elles (Modbus RTU) | Petit programme (`pesee/`) + côté Pi |
+| 2 ESP32-C3 (plateau du fût, boîte du poste du fût) | Pesée sans fil du fût (radio ESP-NOW) ; la boîte répond sur le bus des pesées comme une carte (tâche 17 bis) | Petit programme (`poste_fut_radio/`, tâche 17 ter) + côté Pi |
 | Écran Nextion 4,3" (porte de l'armoire) | Tableau de bord sur place, relié au Pi par UART (GPIO 4/5) | Pages Nextion (`nextion/`) + côté Pi |
 | ADS1115 (I2C) | Capteur de vide du venturi (voie A0) | Côté Pi |
 | SHT31 (I2C 0x44, partagé avec l'ADS1115 en 0x48, GPIO 2/3) | Température et humidité de l'armoire | Côté Pi |

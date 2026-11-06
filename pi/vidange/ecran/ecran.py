@@ -17,9 +17,10 @@ si le texte est plus long). Les autres pages reviennent seules à la page d'éta
 Pendant un pilotage à distance (tâche 12), le bandeau le dit, et la main est à l'armoire : le
 premier appui sur n'importe quel bouton arrête le pilotage à distance (et ne fait rien d'autre).
 
-Poste du fût (tâche 17) : quand le chariot arrive au fond, la page « poste_fut » vient seule
-(depuis la page d'état) : gestes à faire à la main, ce qui manque, bouton PRÊT. Elle repart
-seule quand le poste est prêt ou que le chariot s'en va.
+Poste du fût (tâches 17 et 17 bis) : quand le plateau arrive au fond, la page « poste_fut » vient
+seule (depuis la page d'état) : poids (ou « pesée absente »), accu et radio du plateau, gestes à
+faire à la main, ce qui manque, bouton PRÊT. Elle repart seule quand le poste est prêt ou que le
+plateau s'en va.
 """
 
 import threading
@@ -45,13 +46,29 @@ journal = donner_journal("ecran")
 QUI = "écran de l'armoire"
 # Rappel des gestes à la main au poste du fût (version courte de vidange.poste_fut.GESTES).
 GESTES_ECRAN = (
-    "À la main : butées du fond, frein, prise de la pesée, soupape enlevée, volet rabattu."
+    "À la main : fût sur les cales, soupape enlevée, butées du fond, 2 freins, volet rabattu, "
+    "panneau levé."
 )
 TITRES_POSTE = {
-    ABSENT: ("CHARIOT ABSENT", "repos"),
+    ABSENT: ("PLATEAU ABSENT", "repos"),
     EN_PLACE: ("EN PLACE, PAS PRÊT", "go"),
     PRET: ("PRÊT", "marche"),
 }
+
+
+def texte_pesee(poste: EtatPoste) -> str:
+    """La ligne du poids du poste : substrat (ou pourquoi pas de poids), accu et radio."""
+    if poste.pesee:
+        morceaux = [poste.pesee[0].upper() + poste.pesee[1:]]
+    elif poste.poids_net_kg is not None:
+        morceaux = [f"Substrat : {poste.poids_net_kg:.1f} kg".replace(".", ",")]
+    else:
+        morceaux = []
+    if poste.accu_pct is not None:
+        morceaux.append(f"accu {poste.accu_pct} %" + (" : RECHARGER" if poste.accu else ""))
+    if poste.signal_dbm is not None:
+        morceaux.append(f"radio {poste.signal_dbm} dBm")
+    return " · ".join(morceaux)
 
 
 def lisible(nom: str) -> str:
@@ -198,7 +215,7 @@ class Ecran:
             self._morceau = 0
 
     def _suivre_poste(self) -> None:
-        """Chariot arrivé : la page du poste vient (depuis la page d'état) ; prêt ou chariot
+        """Plateau arrivé : la page du poste vient (depuis la page d'état) ; prêt ou plateau
         parti : elle repart."""
         if self.poste is None:
             return
@@ -463,12 +480,7 @@ class Ecran:
             return
         titre, couleur = TITRES_POSTE[poste.etat]
         page.mettre("t_titre", titre, couleur)
-        if poste.pesee:
-            page.mettre("t_poids", poste.pesee.capitalize())
-        elif poste.poids_net_kg is not None:
-            page.mettre("t_poids", f"Substrat : {poste.poids_net_kg:.1f} kg".replace(".", ","))
-        else:
-            page.mettre("t_poids", "")
+        page.mettre("t_poids", texte_pesee(poste))
         page.mettre("t_gestes", "" if poste.etat == PRET else GESTES_ECRAN)
         manque = "Il manque : " + " ; ".join(poste.manque) + "." if poste.manque else ""
         page.mettre("t_manque", self._message_actuel() or manque)

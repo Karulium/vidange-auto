@@ -19,7 +19,7 @@ from vidange.reglages import ErreurReglages, charger_reglages
 from .conftest import DOSSIER_PI
 from .test_reglages import erreur_de, remplacer
 
-CARTES = ["pesee_griffe", "pesee_prehension", "pesee_plateau_remplissage"]
+CARTES = ["pesee_griffe", "pesee_prehension", "pesee_plateau_remplissage", "pesee_fut"]
 
 
 @pytest.fixture
@@ -79,7 +79,7 @@ def test_lecture_d_une_carte_par_son_nom(materiel, faux):
     assert mesure.brut == -2_000_000
     assert mesure.par_seconde == 80
     assert not mesure.hx711_muet
-    assert materiel.peser("pesee_prehension", 0.5) == 1234
+    assert materiel.peser("pesee_prehension") == 1234
     # Chaque carte à son adresse.
     assert faux.carte_pesee("pesee_griffe").questions == 1
     assert faux.carte_pesee("pesee_plateau_remplissage").questions == 0
@@ -89,7 +89,7 @@ def test_hx711_muet_ou_carte_debranchee(materiel, faux):
     faux.carte_pesee("pesee_griffe").hx711_muet = True
     assert materiel.lire_carte_pesee("pesee_griffe").hx711_muet
     with pytest.raises(PeseeMuette, match="HX711 muet"):
-        materiel.peser("pesee_griffe", 0.5)
+        materiel.peser("pesee_griffe")
     faux.debrancher("pesee_prehension")
     with pytest.raises(ErreurMateriel, match="pesee_prehension.*pas de réponse"):
         materiel.lire_carte_pesee("pesee_prehension")
@@ -101,7 +101,7 @@ def test_l_ozone_et_les_pesees_sont_sur_deux_bus(liste, faux):
         faux.regler("ozone_1", 0.05)
         faux.regler_pesee("pesee_griffe", 77)
         assert materiel.mesurer("ozone_1") == pytest.approx(0.05)
-        assert materiel.peser("pesee_griffe", 0.5) == 77
+        assert materiel.peser("pesee_griffe") == 77
 
 
 # --------------------------------------------------------------- le tour
@@ -226,7 +226,7 @@ def test_pesees_et_entrees_sorties_vont_ensemble(reglages_pesees, entrees_sortie
     remplacer(entrees_sorties, "  pesee_prehension:\n", "  pesee_autre:\n")
     liste = charger_entrees_sorties(entrees_sorties)
     erreurs = "\n".join(verifier_avec_liste(reglages_pesees, liste))
-    assert "« pesee_prehension » n'est pas une carte de pesée de entrees-sorties.yaml" in erreurs
+    assert "« pesee_prehension » n'est pas une pesée du bus de entrees-sorties.yaml" in erreurs
     assert "la carte de pesée « pesee_autre » n'est pas dans pesees.yaml" in erreurs
     assert "delai_reponse_s (0.001 s) doit valoir au moins" in erreurs
 

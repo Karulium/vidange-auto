@@ -1,4 +1,5 @@
-"""Poste du fût : carte de pesée HX711, pesée, états du poste, bouton « Prêt », mode, verrous."""
+"""Poste du fût (tâches 17 et 17 bis) : pesée sans fil du plateau (boîte du poste sur le bus des
+pesées), états du poste, bouton « Prêt », pesée absente, accu du plateau, mode, verrous."""
 
 import logging
 
@@ -9,16 +10,24 @@ from vidange.api import Services, creer_app
 from vidange.ecran import Ecran, FauxNextion, LiaisonEcran
 from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.fiabilite import Bilans
-from vidange.materiel import ErreurMateriel, FausseFabrique, LectureInterrompue, Materiel
-from vidange.materiel.faux import FauxHx711
-from vidange.materiel.puces import Hx711, PeseeMuette
+from vidange.materiel import ErreurMateriel, FausseFabrique, Materiel, PeseeMuette
+from vidange.materiel.carte_pesee import (
+    SIGNATURE,
+    MesureCarte,
+    Plateau,
+    decoder_boite,
+    encoder,
+)
+from vidange.materiel.faux import FausseBoitePosteFut
 from vidange.mode import ModeMachine
-from vidange.poste_fut import ABSENT, EN_PLACE, PRET, ErreurPesee, ErreurPoste, PosteFut
+from vidange.pesees.tour import TourPesees
+from vidange.pesees.verification import cartes_de_pesee, verifier_avec_liste
+from vidange.poste_fut import ABSENT, EN_PLACE, PRET, ErreurPoste, PosteFut
 from vidange.poste_fut.outil import main as outil_pesee
-from vidange.poste_fut.pesee import filtrer, pente
+from vidange.poste_fut.pesee import pente
 from vidange.registre import Registre
+from vidange.reglages import AccuPlateauFut, PeseeLente, ReglagesBilan, charger_reglages
 from vidange.reglages import PosteFut as ReglagesPosteFut
-from vidange.reglages import ReglagesBilan, charger_reglages
 from vidange.simulateur import ErreurSimulation, Simulateur
 from vidange.simulateur.outil import main as simulateur
 
@@ -26,19 +35,23 @@ from .conftest import DOSSIER_PI
 from .test_api import CLE, LOCAL, reglages_api
 from .test_chef import Horloge, nouveau_chef
 from .test_ecran import REGLAGES as REGLAGES_ECRAN
-from .test_entrees_sorties import erreur_de as erreur_de_liste
 from .test_reglages import erreur_de, remplacer
 
 LISTE = DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml"
 REGLAGES = charger_reglages(DOSSIER_PI / "reglages")
 POSTE = REGLAGES.machine.poste_fut
 assert POSTE is not None
-# Réglages du dépôt : 10 000 points par kg, zéro à 0, tare 40 kg.
-POINTS_PAR_KG = POSTE.pesee.brut_par_kg
+ACCU = REGLAGES.pesees.accu_plateau_fut
+assert ACCU is not None
+# Réglages du dépôt (EXEMPLES) : tare 59,4 kg, poids plausible de 50 à 200 kg, absente 5 s après
+# l'arrivée du plateau, mesure refusée au-delà de 2 s, une question par seconde.
+TARE = POSTE.pesee.tare_kg
+SIGNAL = "pesee_fut"
 
 
 class BancPoste:
-    """Le vrai poste du fût sur le faux matériel, avec un vrai registre et une fausse horloge."""
+    """Le vrai poste du fût sur le faux matériel, avec le vrai tour des pesées, un vrai registre
+    et une fausse horloge. `avancer` fait aussi tourner le tour (son fil, sur la machine)."""
 
     def __init__(self, dossier, griffe_hors_fut=lambda: True) -> None:
         self.horloge = Horloge()
@@ -46,34 +59,47 @@ class BancPoste:
         self.faux = FausseFabrique(liste)
         self.materiel = Materiel(liste, self.faux)
         self.registre = Registre(dossier / "registre.sqlite", dossier / "photos")
+        self.tour = TourPesees(REGLAGES.pesees, self.materiel, self.horloge)
         self.poste = PosteFut(
             POSTE,
             self.materiel,
             self.registre,
             horloge=self.horloge,
             griffe_hors_fut=griffe_hors_fut,
+            pesees=self.tour,
         )
+        self.boite = self.faux.carte_pesee(SIGNAL)
+        assert isinstance(self.boite, FausseBoitePosteFut)
 
     def peser(self, kg: float) -> None:
-        self.faux.regler_pesee("pesee_fut", round(kg * POINTS_PAR_KG))
-        self.poste.peser()
-
-    def chariot(self, au_fond: bool = True) -> None:
-        self.faux.actionner("chariot_fut_en_place", au_fond)
+        """Le plateau pèse ce poids (lu) ; la boîte est interrogée et le poste relu."""
+        assert self.poste.pesee is not None
+        self.boite.brut = self.poste.pesee.brut(kg)
+        self.tour.interroger(SIGNAL)
         self.poste.observer()
 
-    def avancer(self, secondes: float) -> None:
-        self.horloge.t += secondes
+    def plateau(self, au_fond: bool = True) -> None:
+        self.faux.actionner("plateau_fut_en_place", au_fond)
         self.poste.observer()
+
+    def avancer(self, secondes: float, pas: float = 0.5) -> None:
+        fin = self.horloge.t + secondes
+        while self.horloge.t < fin - 1e-9:
+            self.horloge.t = min(self.horloge.t + pas, fin)
+            self.tour.faire_un_tour()
+            self.poste.observer()
 
     def jusqu_au_pret(self, kg: float = 165) -> None:
-        self.chariot()
+        self.plateau()
         self.peser(kg)
         self.avancer(2)
         self.poste.appuyer_pret("essai")
 
     def mesures(self) -> dict[str, float]:
         return {m["nom"]: m["valeur"] for m in self.registre.lire("SELECT * FROM mesures")}
+
+    def alarmes(self) -> list[str]:
+        return [a["message"] for a in self.registre.alarmes_ouvertes()]
 
 
 @pytest.fixture
@@ -90,97 +116,148 @@ def caplog(caplog, monkeypatch):
     return caplog
 
 
-# ---------------------------------------------------------------- carte HX711
+# ------------------------------------------------------- la boîte du poste du fût
 
 
-def test_hx711_lit_les_mesures_bit_par_bit():
-    faux = FauxHx711()
-    hx711 = Hx711(faux, horloge_ns=faux.horloge_ns, horloge=faux.horloge, dormir=faux.dormir)
-    faux.brut = 1_234_567
-    assert hx711.lire(0.5) == 1_234_567
-    faux.brut = -5
-    assert hx711.lire(0.5) == -5
-    assert faux.lectures == 2
+def _mesure_boite(**autres) -> MesureCarte:
+    valeurs = dict(
+        brut=-123456,
+        numero=7,
+        age_ms=250,
+        hx711_muet=False,
+        exemple=True,
+        par_seconde=2,
+        trames_abimees=1,
+        radio_muette=False,
+        plateau=Plateau(True, True, False, 3912, 81, -63, 4),
+    )
+    valeurs.update(autres)
+    return MesureCarte(**valeurs)
 
 
-def test_hx711_prise_debranchee():
-    faux = FauxHx711()
-    faux.debranche = True
-    hx711 = Hx711(faux, horloge_ns=faux.horloge_ns, horloge=faux.horloge, dormir=faux.dormir)
-    with pytest.raises(PeseeMuette, match="prise débranchée"):
-        hx711.lire(0.5)
-    assert faux.temps == pytest.approx(0.5, abs=0.002)
+def test_registres_de_la_boite_aller_et_retour():
+    mesure = _mesure_boite()
+    registres = encoder(mesure, signature=0x5046)
+    assert len(registres) == 13 and registres[7] == 0x5046
+    # Registre 8 : reed fermé + recharge ; 11 : dBm + 200.
+    assert registres[8:13] == [3, 3912, 81, 137, 4]
+    assert decoder_boite(registres) == mesure
+    muette = encoder(_mesure_boite(radio_muette=True), signature=0x5046)
+    assert muette[4] & 4 and decoder_boite(muette).radio_muette
 
 
-def test_hx711_impulsion_trop_longue_jetee():
-    faux = FauxHx711()
-    temps = iter(range(0, 10**9, 60_000))
-    hx711 = Hx711(faux, horloge_ns=lambda: next(temps), horloge=faux.horloge, dormir=faux.dormir)
-    with pytest.raises(LectureInterrompue, match="impulsion d'horloge de 60 µs"):
-        hx711.lire(0.5)
+def test_signature_d_une_carte_rp2040_refusee_pour_pesee_fut(b):
+    with pytest.raises(ErreurMateriel, match="pas la boîte du poste du fût.*0x5053"):
+        decoder_boite(encoder(_mesure_boite(), signature=SIGNATURE))
+    # Une carte RP2040 à l'adresse de la boîte : refusée, et le poste dit « pesée absente ».
+    b.boite.signature = SIGNATURE
+    with pytest.raises(ErreurMateriel, match="signature 0x5053, 0x5046 attendue"):
+        b.materiel.lire_carte_pesee(SIGNAL)
+    b.plateau()
+    b.avancer(5)
+    etat = b.poste.etat()
+    assert etat.pesee == "pesée absente : la boîte du poste ne répond pas" and etat.pesee_absente
 
 
-def test_hx711_fil_dt_a_la_masse_et_hors_echelle():
-    class DtAZero(FauxHx711):
-        def dt(self) -> bool:
-            return False
-
-    a_zero = DtAZero()
-    with pytest.raises(ErreurMateriel, match="fil DT reste à 0"):
-        Hx711(
-            a_zero, horloge_ns=a_zero.horloge_ns, horloge=a_zero.horloge, dormir=a_zero.dormir
-        ).lire(0.5)
-    faux = FauxHx711()
-    faux.brut = (1 << 23) - 1
-    with pytest.raises(ErreurMateriel, match="hors échelle"):
-        Hx711(faux, horloge_ns=faux.horloge_ns, horloge=faux.horloge, dormir=faux.dormir).lire(0.5)
+def test_lecture_de_la_boite_par_le_materiel(b):
+    b.boite.brut = 1234
+    mesure = b.materiel.lire_carte_pesee(SIGNAL)
+    assert mesure.brut == 1234 and mesure.plateau is not None
+    assert mesure.plateau.accu_mv == 3900 and mesure.plateau.signal_dbm == -60
+    assert b.materiel.peser(SIGNAL) == 1234
+    b.boite.radio_muette = True
+    assert b.materiel.lire_carte_pesee(SIGNAL).age_ms == 0xFFFF
+    with pytest.raises(PeseeMuette, match="radio du plateau muette"):
+        b.materiel.peser(SIGNAL)
 
 
-def test_pesee_par_son_nom_dans_le_materiel():
+def test_la_boite_est_un_appareil_du_bus_pas_une_carte_rp2040():
+    liste = charger_entrees_sorties(LISTE)
+    signal = liste.signaux[SIGNAL]
+    assert signal.carte == "rs485_pesee" and signal.appareil == "boite_poste_fut"
+    assert signal.adresse == 4 and signal.exemple
+    # La fabrication du programme des cartes RP2040 ne la prend pas.
+    assert SIGNAL not in cartes_de_pesee(liste)
+    assert verifier_avec_liste(REGLAGES.pesees, liste) == []
+    # Plus de signal « chariot » ni de broche du Pi pour la pesée.
+    assert "plateau_fut_en_place" in liste.signaux
+    assert "chariot_fut_en_place" not in liste.signaux
+
+
+def test_la_boite_doit_etre_lente_et_l_accu_regle(reglages, entrees_sorties):
+    liste = charger_entrees_sorties(entrees_sorties)
+    pesees = REGLAGES.pesees.model_copy(update={"lentes": {}, "accu_plateau_fut": None})
+    erreurs = "\n".join(verifier_avec_liste(pesees, liste))
+    assert "« pesee_fut » doit être dans « lentes »" in erreurs
+    assert "il manque « accu_plateau_fut »" in erreurs
+    remplacer(reglages / "pesees.yaml", "    age_max_ms: 2000", "    age_max_ms: 900")
+    assert "age_max_ms (900) doit dépasser espacement_s (1 s)" in erreur_de(reglages)
+
+
+def test_seuils_de_l_accu_dans_le_bon_ordre(reglages):
+    with pytest.raises(ValueError, match="seuils de l'accu dans le désordre"):
+        AccuPlateauFut(bon_v=3.6, recharger_v=3.3, bientot_absente_v=3.5, sans_recharge_max_s=600)
+    with pytest.raises(ValueError, match="dans le désordre"):
+        AccuPlateauFut(bon_v=3.4, recharger_v=3.5, bientot_absente_v=3.3, sans_recharge_max_s=600)
+    remplacer(reglages / "pesees.yaml", "  recharger_v: 3.5", "  recharger_v: 3.2")
+    assert "seuils de l'accu dans le désordre" in erreur_de(reglages)
+    assert PeseeLente(espacement_s=1, age_max_ms=2000).age_max_ms == 2000
+
+
+# --------------------------------------------------------------- le tour des pesées
+
+
+def test_la_griffe_garde_ses_80_mesures_par_seconde_avec_pesee_fut(tmp_path):
+    """Chaque question dure le temps de ses octets sur le bus (115 200 bauds) et l'attente de
+    la carte : sur une seconde, la griffe est lue au moins 80 fois, la boîte au plus 2 fois."""
     liste = charger_entrees_sorties(LISTE)
     faux = FausseFabrique(liste)
+    horloge = Horloge()
+    bauds = liste.cartes["rs485_pesee"].liaison.vitesse_bauds
+    attente_s = REGLAGES.pesees.programme.delai_avant_reponse_us / 1e6
     with Materiel(liste, faux) as materiel:
-        assert materiel.branchements["pesee_fut"].ressource == (
-            "hx711",
-            "/dev/gpiochip0",
-            "GPIO20",
-            "GPIO21",
-        )
-        faux.regler_pesee("pesee_fut", 420_000)
-        # Délai large : sur un ordinateur d'essai chargé, des lectures sont jetées puis refaites.
-        assert materiel.peser("pesee_fut", 5) == 420_000
-        faux.debrancher("pesee_fut")
-        with pytest.raises(PeseeMuette, match="signal « pesee_fut » : pas de réponse"):
-            materiel.peser("pesee_fut", 0.5)
-    assert faux.balances["pesee_fut"].ferme
+        vraie = materiel.lire_carte_pesee
+
+        def chronometree(nom):
+            boite = liste.signaux[nom].appareil == "boite_poste_fut"
+            octets = 8 + 5 + 2 * (13 if boite else 8)
+            horloge.t += octets * 10 / bauds + attente_s
+            return vraie(nom)
+
+        materiel.lire_carte_pesee = chronometree
+        tour = TourPesees(REGLAGES.pesees, materiel, horloge)
+        assert SIGNAL in REGLAGES.pesees.tour
+        while horloge.t < 1.0:
+            tour.faire_un_tour()
+            horloge.t += REGLAGES.pesees.pause_entre_tours_ms / 1000
+    assert faux.carte_pesee("pesee_griffe").questions >= 80
+    assert 1 <= faux.carte_pesee(SIGNAL).questions <= 2
 
 
-def test_liste_verifie_la_pesee(entrees_sorties):
-    remplacer(entrees_sorties, "broche: [GPIO20, GPIO21]", "broche: GPIO20")
-    message = erreur_de_liste(entrees_sorties)
-    assert "une pesée (HX711) a 2 broches, dans cet ordre : [DT, SCK]" in message
+def test_mesure_de_2_5_s_absente(b):
+    b.plateau()
+    b.peser(165)
+    assert b.poste.etat().poids_lu_kg == pytest.approx(165)
+    b.boite.age_ms = 2500
+    b.avancer(1)
+    etat = b.poste.etat()
+    assert etat.poids_lu_kg is None
+    assert etat.pesee == "pesée absente : mesure trop vieille"
+    with pytest.raises(ErreurMateriel, match="vieille de 2.50 s"):
+        b.tour.capteur(SIGNAL).lire_kg()
 
 
-def test_liste_refuse_une_pesee_en_5_v_ou_sur_une_broche_prise(entrees_sorties):
-    remplacer(
-        entrees_sorties,
-        "broche: [GPIO20, GPIO21]\n    type: pesee\n    tension: 3.3",
-        "broche: [GPIO6, GPIO21]\n    type: pesee\n    tension: 5",
-    )
-    message = erreur_de_liste(entrees_sorties)
-    assert "signal « pesee_fut » : 5 V, plus que les 3.3 V acceptés par la carte « pi »" in message
-    assert "broche GPIO6 : utilisée par plusieurs signaux (onduleur_sur_batterie, pesee_fut)" in (
-        message
-    )
+def test_boite_qui_ne_repond_plus_absente_apres_2_s(b):
+    b.plateau()
+    b.peser(165)
+    b.faux.debrancher(SIGNAL)
+    b.avancer(1.5)
+    assert b.poste.etat().poids_lu_kg == pytest.approx(165)
+    b.avancer(1)
+    assert b.poste.etat().pesee == "pesée absente : la boîte du poste ne répond plus"
 
 
 # ---------------------------------------------------------------- pesée
-
-
-def test_filtrer_jette_les_lectures_aberrantes():
-    assert filtrer([10, 10.5, 9.8, 50, 10.2], 2, 3) == pytest.approx(10.1)
-    with pytest.raises(ErreurPesee, match="trop dispersées"):
-        filtrer([0, 10, 20], 2, 2)
 
 
 def test_pente_de_l_etalonnage():
@@ -191,7 +268,23 @@ def test_pente_de_l_etalonnage():
         pente(1000, 2000, 0)
 
 
+def test_valeur_hors_bornes_rejetee(b):
+    b.plateau()
+    b.peser(20)
+    etat = b.poste.etat()
+    assert etat.poids_lu_kg is None
+    assert etat.pesee == "poids rejeté : 20,0 kg lus, attendu entre 50 et 200 kg"
+    b.peser(165)
+    etat = b.poste.etat()
+    assert etat.pesee == "" and etat.poids_net_kg == pytest.approx(165 - TARE)
+
+
 def test_outil_d_etalonnage_avec_le_faux_materiel(capsys):
+    assert outil_pesee(["--faux", "lire", "--tours", "1"]) == 0
+    sortie = capsys.readouterr().out
+    # Le faux plateau pèse 0 : hors des bornes plausibles ; l'accu et la radio sont lus.
+    assert "ÉCHEC : poids rejeté : 0,0 kg lus" in sortie
+    assert "accu 3.90 V  80 % en recharge" in sortie and "radio -60 dBm" in sortie
     assert outil_pesee(["--faux", "zero"]) == 0
     assert "    zero_brut: 0" in capsys.readouterr().out
     assert outil_pesee(["--faux", "etalonner", "20"]) == 1
@@ -203,44 +296,154 @@ def test_outil_d_etalonnage_avec_le_faux_materiel(capsys):
 # ---------------------------------------------------------------- états du poste
 
 
-def test_du_chariot_absent_au_pret(b):
+def test_du_plateau_absent_au_pret(b):
     etat = b.poste.etat()
-    assert etat.etat == ABSENT and etat.libelle == "Chariot du fût absent"
-    assert "chariot du fût contre les 2 butées du fond" in etat.manque
-    with pytest.raises(ErreurPoste, match="« Prêt » refusé, il manque : chariot du fût"):
+    assert etat.etat == ABSENT and etat.libelle == "Plateau du fût absent"
+    assert "plateau du fût contre les 2 butées du fond" in etat.manque
+    with pytest.raises(ErreurPoste, match="« Prêt » refusé, il manque : plateau du fût"):
         b.poste.appuyer_pret("essai")
 
-    b.chariot()
-    b.faux.debrancher("pesee_fut")
-    b.poste.peser()
-    etat = b.poste.etat()
-    assert etat.etat == EN_PLACE and not etat.chariot_stable
-    assert etat.manque == (
-        "chariot immobile depuis 2 s",
-        "pesée qui répond : brancher la prise magnétique",
-    )
-    assert etat.pesee == "pesée débranchée" and etat.poids_lu_kg is None
-
-    b.faux.debrancher("pesee_fut", False)
-    b.peser(10)
-    b.avancer(2)
-    assert b.poste.etat().manque == ("poids plausible : 10,0 kg lus, attendu entre 20 et 400 kg",)
-
+    b.plateau()
     b.peser(165)
     etat = b.poste.etat()
-    assert etat.etat == EN_PLACE and etat.manque == () and etat.poids_net_kg == pytest.approx(125)
+    assert etat.etat == EN_PLACE and not etat.plateau_stable
+    assert etat.manque == ("plateau immobile depuis 2 s",)
+    b.avancer(2)
+    etat = b.poste.etat()
+    assert etat.etat == EN_PLACE and etat.manque == ()
+    assert etat.poids_net_kg == pytest.approx(165 - TARE)
+    assert etat.accu_pct == 80 and etat.signal_dbm == -60 and etat.en_recharge
+    assert etat.accu == ""
     b.poste.appuyer_pret("essai", fut="F3")
     etat = b.poste.etat()
-    assert etat.etat == PRET and etat.cycle == 1 and etat.poids_plein_kg == pytest.approx(125)
-    assert etat.messages[-1] == "Prêt : fût de 125,0 kg (substrat)."
+    assert etat.etat == PRET and etat.cycle == 1 and etat.poids_plein_kg == pytest.approx(105.6)
+    assert not etat.sans_pesee
+    assert etat.messages[-1] == "Prêt : fût de 105,6 kg (substrat)."
     cycle = b.registre.lire("SELECT * FROM cycles")[0]
     assert cycle["module"] == "vidange" and cycle["fin"] is None
     mesure = b.registre.lire("SELECT * FROM mesures")[0]
-    assert mesure["nom"] == "poids_fut_plein" and mesure["valeur"] == pytest.approx(125)
+    assert mesure["nom"] == "poids_fut_plein" and mesure["valeur"] == pytest.approx(105.6)
     assert mesure["capteur"] == "pesee_fut" and mesure["fut_id"] is not None
     # Un deuxième appui ne fait rien.
     b.poste.appuyer_pret("essai")
     assert len(b.registre.lire("SELECT * FROM cycles")) == 1
+
+
+def test_pret_accepte_sans_pesee(b):
+    b.boite.radio_muette = True
+    b.plateau()
+    b.avancer(2)
+    etat = b.poste.etat()
+    # Avant 5 s : pas encore « absente » (le plateau se réveille), pas d'alerte.
+    assert etat.manque == () and not etat.pesee_absente and b.alarmes() == []
+    assert etat.pesee == "pesée absente : radio du plateau muette"
+    b.poste.appuyer_pret("essai", fut="F4")
+    etat = b.poste.etat()
+    assert etat.etat == PRET and etat.poids_plein_kg is None and etat.sans_pesee
+    assert etat.messages[-1] == (
+        "Prêt, sans pesée du fût : la vidange commence sans le poids du fût."
+    )
+    assert b.mesures() == {"sans_pesee_fut": 1}
+    mesure = b.registre.lire("SELECT * FROM mesures")[0]
+    assert mesure["fut_id"] is not None and mesure["seau_id"] is None
+    # Les doses prises sans pesée : le seau est noté « sans pesée du fût », une fois.
+    b.poste.noter_dose(8, seau="S1")
+    b.poste.noter_dose(7, seau="S1")
+    b.poste.noter_dose(9, seau="S2")
+    seaux = b.registre.lire(
+        "SELECT s.code FROM mesures m JOIN seaux s ON s.id = m.seau_id "
+        "WHERE m.nom = 'sans_pesee_fut'"
+    )
+    assert [ligne["code"] for ligne in seaux] == ["S1", "S2"]
+    # Rien ne s'est arrêté.
+    assert b.poste.etat().etat == PRET
+
+
+def test_pesee_absente_5_s_apres_le_plateau_une_seule_alerte(b, caplog):
+    b.faux.debrancher(SIGNAL)
+    b.plateau()
+    b.avancer(4.5)
+    assert b.alarmes() == []
+    b.avancer(1)
+    etat = b.poste.etat()
+    assert etat.pesee_absente
+    assert etat.pesee == "pesée absente : la boîte du poste ne répond pas"
+    assert b.alarmes() == [
+        "Pesée du fût absente (la boîte du poste ne répond pas) : la vidange continue sans les "
+        "kilos restants."
+    ]
+    # Une longue absence : une seule alerte, pas une par seconde.
+    b.avancer(120, pas=1)
+    assert len(b.alarmes()) == 1
+    assert caplog.text.count("Pesée du fût absente") == 1
+    alarme = b.registre.alarmes_ouvertes()[0]
+    assert alarme["module"] == "poste_fut" and "Rien ne s'arrête" in alarme["quoi_faire"]
+
+
+def test_retour_de_la_pesee_sans_redemarrer(b):
+    b.jusqu_au_pret()
+    b.boite.radio_muette = True
+    b.avancer(3)
+    assert b.poste.etat().pesee == "pesée absente : radio du plateau muette"
+    assert len(b.alarmes()) == 1
+    assert b.poste.poids_restant_kg() is None
+    assert b.poste.etat().etat == PRET
+    # La radio revient : le poids revient seul, et le dit.
+    b.boite.radio_muette = False
+    b.avancer(1)
+    etat = b.poste.etat()
+    assert etat.pesee == "" and etat.poids_lu_kg == pytest.approx(165)
+    assert etat.messages[-1] == "La pesée du fût répond de nouveau."
+    # Une nouvelle absence plus tard : une nouvelle alerte.
+    b.boite.radio_muette = True
+    b.avancer(3)
+    assert len(b.alarmes()) == 2
+
+
+def test_seuils_de_l_accu(b):
+    b.plateau()
+    b.peser(165)
+    b.boite.accu_mv, b.boite.accu_pct = 3550, 30
+    b.avancer(1)
+    assert b.alarmes() == [] and b.poste.etat().accu == ""
+    b.boite.accu_mv, b.boite.accu_pct = 3450, 18
+    b.avancer(1)
+    assert b.alarmes() == ["Accu du plateau faible (3,45 V, 18 %) : recharger le plateau."]
+    assert b.poste.etat().accu == "recharger le plateau"
+    b.avancer(5)
+    assert len(b.alarmes()) == 1
+    b.boite.accu_mv, b.boite.accu_pct = 3250, 4
+    b.avancer(1)
+    assert b.alarmes()[-1] == "Accu du plateau presque vide (3,25 V, 4 %) : pesée bientôt absente."
+    assert b.poste.etat().accu == "pesée bientôt absente : recharger le plateau"
+    # Rechargé (au moins 3,6 V), puis de nouveau faible : une nouvelle alerte.
+    b.boite.accu_mv = 3700
+    b.avancer(1)
+    assert b.poste.etat().accu == ""
+    b.boite.accu_mv = 3400
+    b.avancer(1)
+    assert len(b.alarmes()) == 3
+
+
+def test_plateau_10_min_sans_recharge(b):
+    b.plateau()
+    b.peser(165)
+    b.boite.en_recharge = False
+    b.avancer(590, pas=10)
+    assert b.alarmes() == []
+    b.avancer(20, pas=10)
+    assert b.alarmes() == [
+        "Plateau au poste depuis plus de 10 min sans recharge : recharge sans contact en panne ?"
+    ]
+    b.avancer(600, pas=10)
+    assert len(b.alarmes()) == 1
+    assert b.poste.etat().en_recharge is False
+    # La recharge en cours : pas d'alerte, même longtemps.
+    b.plateau(False)
+    b.plateau()
+    b.boite.en_recharge = True
+    b.avancer(1200, pas=10)
+    assert len(b.alarmes()) == 1
 
 
 def test_voyant_clignote_tant_que_ce_n_est_pas_pret(b):
@@ -256,13 +459,13 @@ def test_voyant_clignote_tant_que_ce_n_est_pas_pret(b):
 
 
 def test_bouton_lumineux_du_poste(b):
-    b.chariot()
+    b.plateau()
     b.peser(165)
     b.faux.actionner("bouton_pret_fut")
     b.poste.observer()
     assert b.poste.etat().etat == EN_PLACE
     assert b.poste.etat().messages[-1] == (
-        "« Prêt » refusé, il manque : chariot immobile depuis 2 s."
+        "« Prêt » refusé, il manque : plateau immobile depuis 2 s."
     )
     # Bouton tenu : pas de nouvel appui. Relâché puis appuyé : prêt.
     b.avancer(2)
@@ -274,28 +477,28 @@ def test_bouton_lumineux_du_poste(b):
     assert b.poste.etat().etat == PRET
 
 
-def test_chariot_perdu_puis_retire(b):
+def test_plateau_perdu_puis_retire(b):
     b.jusqu_au_pret()
     assert b.poste.surveillance.test() is True
-    b.chariot(False)
+    b.plateau(False)
     etat = b.poste.etat()
     assert etat.etat == ABSENT and etat.cycle == 1
     assert b.poste.surveillance.test() is False
-    assert "Le pont doit sortir de la zone du chariot" in b.poste.surveillance.quoi_faire
-    assert etat.messages[-1] == "Chariot du fût plus vu : le poste n'est plus prêt."
+    assert "Le pont doit sortir de la zone du plateau" in b.poste.surveillance.quoi_faire
+    assert etat.messages[-1] == "Plateau du fût plus vu : le poste n'est plus prêt."
     # Il revient tout de suite : la même vidange continue après un nouvel appui.
-    b.chariot()
+    b.plateau()
     b.avancer(2)
     b.poste.appuyer_pret("essai")
     assert b.poste.etat().cycle == 1
     assert b.poste.etat().messages[-1] == "Prêt de nouveau : la vidange du fût continue."
     # Il s'en va pour de bon : la vidange est abandonnée.
     b.peser(150)
-    b.chariot(False)
+    b.plateau(False)
     b.avancer(2)
     assert b.poste.etat().cycle is None
     assert b.registre.lire("SELECT issue FROM cycles")[0]["issue"] == "abandonne"
-    assert b.mesures()["poids_fut_restant"] == pytest.approx(110)
+    assert b.mesures()["poids_fut_restant"] == pytest.approx(150 - TARE)
     assert b.poste.etat().messages[-1] == "fût retiré avant la fin de la vidange"
 
 
@@ -303,7 +506,7 @@ def test_doses_de_la_griffe_et_fut_vide(b, caplog):
     b.jusqu_au_pret()
     b.peser(155)
     assert b.poste.noter_dose(10) is None
-    assert b.poste.poids_restant_kg() == pytest.approx(115)
+    assert b.poste.poids_restant_kg() == pytest.approx(155 - TARE)
     # La griffe dit 10 kg de plus, mais la pesée n'a pas bougé : avertissement, pas d'arrêt.
     message = b.poste.noter_dose(10)
     assert message is not None and "écart 10,0 kg" in message
@@ -312,26 +515,30 @@ def test_doses_de_la_griffe_et_fut_vide(b, caplog):
     assert b.poste.etat().etat == PRET
 
     b.peser(145)
-    assert b.poste.finir_vidange(2) == "Fût vide : 2 seaux, 20,0 kg vidés. Sortir le chariot."
+    assert b.poste.finir_vidange(2) == (
+        "Fût vide : 2 seaux, 20,0 kg vidés. Relever le volet, desserrer les freins, sortir le "
+        "plateau."
+    )
     assert b.registre.lire("SELECT issue FROM cycles")[0]["issue"] == "termine"
     assert b.mesures()["poids_fut_vide_total"] == pytest.approx(20)
     # Le fût vide doit sortir avant un nouveau « Prêt ».
     etat = b.poste.etat()
     assert etat.etat == EN_PLACE and etat.cycle is None
-    assert etat.manque[0] == "sortir le chariot : ce fût est vide"
-    assert b.poste.condition_chariot_parti.test() is False
-    b.chariot(False)
+    assert etat.manque[0] == "sortir le plateau : ce fût est vide"
+    assert b.poste.condition_plateau_parti.test() is False
+    b.plateau(False)
     b.avancer(2)
-    assert b.poste.condition_chariot_parti.test() is True
+    assert b.poste.condition_plateau_parti.test() is True
 
 
 def test_fin_sans_pesee_d_apres_les_doses(b):
     b.jusqu_au_pret()
     b.poste.noter_dose(12.5)
-    b.faux.debrancher("pesee_fut")
-    b.poste.peser()
+    b.boite.radio_muette = True
+    b.avancer(1)
     assert b.poste.finir_vidange(1) == (
-        "Fût vide : 1 seaux, 12,5 kg d'après les doses (pesée absente). Sortir le chariot."
+        "Fût vide : 1 seaux, 12,5 kg d'après les doses (pesée absente). Relever le volet, "
+        "desserrer les freins, sortir le plateau."
     )
 
 
@@ -343,6 +550,20 @@ def test_pas_de_pesee_quand_la_griffe_est_dans_le_fut(tmp_path):
     banc.peser(100)
     assert banc.poste.etat().poids_lu_kg == pytest.approx(165)
     banc.registre.fermer()
+
+
+def test_sans_tour_des_pesees_pas_de_pesee_ni_d_alerte(tmp_path):
+    liste = charger_entrees_sorties(LISTE)
+    faux = FausseFabrique(liste)
+    horloge = Horloge()
+    with Materiel(liste, faux) as materiel:
+        poste = PosteFut(POSTE, materiel, horloge=horloge, lecture_directe=True)
+        faux.actionner("plateau_fut_en_place")
+        poste.etat()
+        horloge.t += 10
+        etat = poste.etat()
+    assert poste.pesee is None and etat.pesee == "pas de pesée du fût"
+    assert not etat.pesee_absente and etat.manque == ()
 
 
 # ---------------------------------------------------------------- mode et verrous
@@ -373,7 +594,7 @@ def test_verrous_pendant_l_echange(b):
     assert b.poste.refus_pont(0.9) is None
     assert "y ≤ 0,875 m" in b.poste.refus_remplissage(0.9)
     assert b.poste.refus_remplissage(0.875) is None
-    b.chariot()
+    b.plateau()
     assert b.poste.refus_pont(0.5) is not None
     b.avancer(2)
     assert not b.poste.echange_en_cours
@@ -401,13 +622,16 @@ def test_verrous_de_la_griffe_et_de_la_prehension(b):
 def test_reglages_du_poste_verifies():
     donnees = POSTE.model_dump()
     donnees["fut_fond_interieur_z"] = 1.1
-    donnees["pesee"]["lectures_valides_min"] = 9
-    donnees["pesee"]["plausible_kg"] = [400, 20]
+    donnees["pesee"]["plausible_kg"] = [200, 50]
     with pytest.raises(ValueError) as erreur:
         ReglagesPosteFut.model_validate(donnees)
-    texte = str(erreur.value)
-    assert "lectures_valides_min ne peut pas dépasser lectures" in texte
-    assert "plausible_kg : aller du plus petit au plus grand" in texte
+    assert "plausible_kg : aller du plus petit au plus grand" in str(erreur.value)
+
+
+def test_l_etalonnage_est_dans_pesees_yaml():
+    assert "zero_brut" not in POSTE.pesee.model_dump()
+    assert REGLAGES.pesees.etalonnage[SIGNAL].brut_par_kg != 0
+    assert REGLAGES.pesees.lentes[SIGNAL].espacement_s == 1
 
 
 def test_reglages_fond_sous_le_bord(reglages):
@@ -421,20 +645,33 @@ def test_reglages_fond_sous_le_bord(reglages):
 
 
 def test_simulateur_echange_de_fut(capsys):
-    with Simulateur(REGLAGES, charger_entrees_sorties(LISTE), "echange_fut") as banc:
-        from vidange.poste_fut.module import module_echange_fut
+    from vidange.poste_fut.module import module_echange_fut
 
+    with Simulateur(REGLAGES, charger_entrees_sorties(LISTE), "echange_fut") as banc:
         planning = banc.jouer([module_echange_fut(banc.poste_fut())])
         etat = banc.poste_fut().etat()
     assert planning.fini, planning.probleme
     sortir, pret = planning.lignes
-    # Chariot sorti à 40 s, vu absent 2 s plus tard ; Prêt appuyé à 430 s.
+    # Plateau sorti à 40 s, vu absent 2 s plus tard ; Prêt appuyé à 430 s.
     assert sortir.fin == pytest.approx(42)
     assert pret.fin == pytest.approx(430)
-    assert (400, "pesée « pesee_fut » : 165 kg") in planning.evenements
-    assert etat.etat == PRET and etat.poids_plein_kg == pytest.approx(125)
+    assert (70, "pesée « pesee_fut » : radio du plateau muette") in planning.evenements
+    assert (342, "pesée « pesee_fut » : 165 kg") in planning.evenements
+    assert etat.etat == PRET and etat.poids_plein_kg == pytest.approx(165 - TARE)
     assert simulateur(["poste_fut"]) == 0
     assert "« attendre_le_pret »" in capsys.readouterr().out
+
+
+def test_simulateur_echange_sans_pesee():
+    from vidange.poste_fut.module import module_echange_fut
+
+    with Simulateur(REGLAGES, charger_entrees_sorties(LISTE), "echange_fut_sans_pesee") as banc:
+        planning = banc.jouer([module_echange_fut(banc.poste_fut())])
+        etat = banc.poste_fut().etat()
+    assert planning.fini, planning.probleme
+    assert etat.etat == PRET and etat.poids_plein_kg is None and etat.sans_pesee
+    assert etat.pesee_absente
+    assert any("Pesée du fût absente (radio du plateau muette)" in m for m in etat.messages)
 
 
 def test_simulateur_scenario_inconnu_et_evenement_mal_ecrit(reglages):
@@ -442,8 +679,8 @@ def test_simulateur_scenario_inconnu_et_evenement_mal_ecrit(reglages):
         Simulateur(REGLAGES, charger_entrees_sorties(LISTE), "absent")
     remplacer(
         reglages / "simulateur.yaml",
-        "        pesee: pesee_fut\n        kg: 42\n",
-        "        pesee: pesee_fut\n        kg: 42\n        capteur: bouton_pret_fut\n",
+        "        pesee: pesee_fut\n        kg: 62\n",
+        "        pesee: pesee_fut\n        kg: 62\n        capteur: bouton_pret_fut\n",
     )
     assert "une seule chose par événement" in erreur_de(reglages)
 
@@ -462,10 +699,12 @@ def test_page_web_du_poste(b, tmp_path):
     )
     assert client.get("/api/etat").json()["poste_fut"]["etat"] == ABSENT
     reponse = client.post("/api/poste-fut/pret")
-    assert reponse.status_code == 409 and "il manque : chariot du fût" in reponse.json()["detail"]
-    b.chariot()
+    assert reponse.status_code == 409 and "il manque : plateau du fût" in reponse.json()["detail"]
+    b.plateau()
     b.peser(165)
     b.avancer(2)
+    poste = client.get("/api/poste-fut").json()
+    assert poste["accu_pct"] == 80 and poste["signal_dbm"] == -60 and poste["accu_v"] == 3.9
     reponse = client.post("/api/poste-fut/pret")
     assert reponse.status_code == 200 and reponse.json()["etat"] == PRET
     assert client.get("/api/poste-fut").json()["gestes"][-1] == "Appuyer sur « Prêt »"
@@ -501,43 +740,20 @@ def test_ecran_du_poste(b, tmp_path):
 
     tour()
     assert nextion.page == "etat"
-    b.chariot()
+    b.plateau()
     b.peser(165)
     tour()
     assert nextion.page == "poste_fut"
     assert nextion.texte("t_titre") == "EN PLACE, PAS PRÊT"
-    assert nextion.texte("t_poids") == "Substrat : 125,0 kg"
-    assert nextion.texte("t_gestes").startswith("À la main : butées du fond, frein")
-    assert nextion.texte("t_manque") == "Il manque : chariot immobile depuis 2 s."
+    assert nextion.texte("t_poids") == "Substrat : 105,6 kg · accu 80 % · radio -60 dBm"
+    assert nextion.texte("t_gestes").startswith("À la main : fût sur les cales, soupape enlevée")
+    assert nextion.texte("t_manque") == "Il manque : plateau immobile depuis 2 s."
     nextion.appuyer("b_pret")
     tour()
-    assert nextion.texte("t_manque") == "« Prêt » refusé, il manque : chariot immobile depuis 2 s."
+    assert nextion.texte("t_manque") == "« Prêt » refusé, il manque : plateau immobile depuis 2 s."
     b.avancer(2)
     nextion.appuyer("b_pret")
     tour()
     assert b.poste.etat().etat == PRET
     assert nextion.page == "etat"
     assert nextion.texte("t_info") == "Poste du fût prêt."
-
-
-def test_lectures_interrompues_refaites_puis_signalees(b, monkeypatch):
-    pesee = b.poste.pesee
-    vraie = b.materiel.peser
-    appels = iter(range(1000))
-
-    def une_sur_deux(nom, delai_s):
-        if next(appels) % 2:
-            raise LectureInterrompue("impulsion d'horloge de 80 µs")
-        return vraie(nom, delai_s)
-
-    monkeypatch.setattr(b.materiel, "peser", une_sur_deux)
-    b.faux.regler_pesee("pesee_fut", round(165 * POINTS_PAR_KG))
-    assert pesee.peser() == pytest.approx(165)
-    assert (pesee.lectures, pesee.interrompues) == (9, 4)
-
-    def toujours(nom, delai_s):
-        raise LectureInterrompue("impulsion d'horloge de 80 µs")
-
-    monkeypatch.setattr(b.materiel, "peser", toujours)
-    with pytest.raises(ErreurPesee, match=r"interrompues par Linux \(10 sur 10\)"):
-        pesee.peser()

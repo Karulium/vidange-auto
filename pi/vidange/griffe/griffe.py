@@ -286,11 +286,11 @@ class Griffe:
         self.bras.reprendre()
 
     def arreter(self) -> None:
-        """Alarme : le mouvement s'arrête. Si le chariot du fût n'est plus vu, le pont se retire
-        hors de la zone du chariot (en remontant d'abord)."""
+        """Alarme : le mouvement s'arrête. Si le plateau du fût n'est plus vu, le pont se retire
+        hors de la zone du plateau (en remontant d'abord)."""
         self._geste = self._pas = None
         self.bras.arreter()
-        if self.poste.etat().chariot is True:
+        if self.poste.etat().plateau is True:
             return
         try:
             depart = self.bras.position()
@@ -299,10 +299,10 @@ class Griffe:
             for pose in poses:
                 refus = self.regles.refus_mouvement(precedente, pose, self.contexte())
                 if refus is not None:
-                    journal.error("Griffe : retrait hors de la zone du chariot refusé : %s", refus)
+                    journal.error("Griffe : retrait hors de la zone du plateau refusé : %s", refus)
                     return
                 precedente = pose
-            journal.warning("Griffe : chariot du fût plus vu, le pont sort de sa zone")
+            journal.warning("Griffe : plateau du fût plus vu, le pont sort de sa zone")
             self.bras.enchainer(poses, None)
             self.pose = poses[-1] if poses else depart
         except ErreurEtape as erreur:
@@ -870,7 +870,7 @@ class Griffe:
         yield from self._monter()
 
     def geste_fut_vide(self) -> Geste:
-        """Fût vide : la griffe sort de la zone du chariot, puis « finir_vidange » au poste."""
+        """Fût vide : la griffe sort de la zone du plateau, puis « finir_vidange » au poste."""
         yield from self._aller_au_dessus(*self.reglages.attente)
         message = self.poste.finir_vidange(self.plan.seaux_finis)
         journal.warning("Griffe : %s", message)

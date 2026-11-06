@@ -247,7 +247,7 @@ positions:
     exemple_x: 0.3
     exemple_y: 0.2
     exemple_z: 0.9
-  # La griffe en attente, hors de la zone du chariot du fût (griffe → attente), tête en haut,
+  # La griffe en attente, hors de la zone du plateau du fût (griffe → attente), tête en haut,
   # bras le long du pont, godet fermé.
   griffe_attente:
     pont_x: 1.035
@@ -334,11 +334,11 @@ poste_fut:
   # À peu près : le fond est trouvé au toucher par la griffe (tâche 18).
   fut_fond_interieur_z: 0.1825
   fut_bord_z: 1.0425
-  # Chariot du fût absent ou en mouvement : le pont reste hors de x 0 à 0,80
-  # (le chariot monte à 1,06, le chariot X du pont descend à 1,11).
+  # Plateau du fût absent ou en mouvement : le pont reste hors de x 0 à 0,80
+  # (le fût monte à 1,06, le chariot X du pont descend à 1,11).
   pont_interdit_x: [0.0, 0.80]
   # Pendant ce temps, le bout du chariot de remplissage reste à y ≤ 0,875 (poste ou files 1
-  # et 2, jamais devant la 3e file), pour laisser passer le chariot du fût en biais.
+  # et 2, jamais devant la 3e file), pour laisser passer le plateau du fût en biais.
   remplissage_y_bout_max: 0.875
   # Griffe au-dessus de la poignée du volet : bas de sa tête à z ≥ 1,13.
   poignee_volet:
@@ -353,25 +353,19 @@ poste_fut:
   periode_s: 0.1
   # Voyant du bouton « Prêt » : clignote (0,5 s allumé, 0,5 s éteint) tant que ce n'est pas prêt.
   clignotement_s: 0.5
+  # Plateau de pesée sans fil (tâche 17 bis) : la boîte du poste est sur le bus des pesées
+  # (pesee_fut) ; son étalonnage (zéro, pente) et sa cadence sont dans pesees.yaml.
   pesee:
-    # EXEMPLE : zéro, pente et tare à mesurer sur la vraie pesée (pi/systeme/essai-poste-fut.md),
-    # puis passer « exemple » à false. Les bornes « plausible_kg » sont aussi à confirmer.
+    # EXEMPLE : tare et bornes à mesurer sur la vraie pesée (pi/systeme/essai-poste-fut.md),
+    # puis passer « exemple » à false.
     exemple: true
-    zero_brut: 0
-    brut_par_kg: 10000
-    # Berceau + fût vide.
-    tare_kg: 40
-    # Poids lu (berceau + fût + contenu) plausible quand un fût est en place.
-    # 2 capteurs de 150/200 kg : au plus 400 kg.
-    plausible_kg: [20, 400]
-    # Une pesée = médiane de 5 lectures ; une lecture à plus de 2 kg de la médiane est jetée ;
-    # il en faut au moins 3 bonnes.
-    lectures: 5
-    lectures_valides_min: 3
-    ecart_aberrant_kg: 2
-    # Pas de réponse en 0,5 s : « pesée débranchée » (jamais une erreur qui arrête le Pi).
-    delai_reponse_s: 0.5
-    periode_s: 1
+    # Plateau + boîtier (≈ 26 kg) + fût vide (29,5 kg) + couvercle (3,9 kg).
+    tare_kg: 59.4
+    # Poids lu plausible avec un fût sur le plateau (au plus ≈ 160 kg) : hors bornes, la valeur
+    # est rejetée (pas de poids).
+    plausible_kg: [50, 200]
+    # Plateau en place et pas de poids au bout de 5 s : « pesée absente » (jamais un arrêt).
+    delai_apres_plateau_s: 5
     # Somme des doses de la griffe contre baisse de la pesée : avertissement au-delà de 3 kg.
     ecart_doses_max_kg: 3
 
@@ -670,7 +664,7 @@ griffe:
   # Vidage de la griffe dans le seau du chariot de remplissage (agitateur fixe, 01/11/2026) :
   # mât en (0,925 ; 0,42), seau au vidage (remplissage → vidage_y), jamais au poste.
   seau_remplissage: [0.925, 0.42]
-  # Fût vide : le mât attend ici, pont hors de la zone du chariot du fût (choix du logiciel).
+  # Fût vide : le mât attend ici, pont hors de la zone du plateau du fût (choix du logiciel).
   attente: [0.86, 0.57]
   # Point des demi-tours de la tête hors du fût et de la recherche de l'origine de A (fil
   # Griffe, 03/11 ; un tour complet libre vérifié par la Maquette sur la v45.112) : mât en
@@ -1167,7 +1161,7 @@ remplissage:
     spray_plateau_max_z: 0.50
     spray_bord_max_z: 0.68
     spray_entraxe_min_m: 0.50
-    # 7. Chariot du fût pas « en place » : bout du chariot côté allée à y ≤ 0,875 (poste_fut →
+    # 7. Plateau du fût pas « en place » : bout du chariot côté allée à y ≤ 0,875 (poste_fut →
     #    remplissage_y_bout_max). Bout à 0,40 de l'axe du plateau (fil Remplissage : point le plus
     #    loin 0,396, renvoi d'angle et moteur de montée) : axe du plateau à y ≤ 0,475.
     bout_y_m: 0.40
@@ -1250,7 +1244,7 @@ remplissage:
   # Rangement dans le tiroir : plateau en bas (tôle à 0,176), le pousseur pousse vers le stockage
   # jusqu'au bout de sa course (0,325 ; moins la cale du stockage s'il y en a une). Les 3 files du
   # tiroir (y 0,215 / 0,500 / 0,785) viennent du Stockage (stockage → tiroir). Règle 7 : sans le
-  # chariot du fût en place, axe ≤ 0,475, donc seule la file 1 est permise.
+  # plateau du fût en place, axe ≤ 0,475, donc seule la file 1 est permise.
   # Bande du haut (plateau du Stockage, y 0,215 ; décisions, « Pousseur côté allée et bande du
   # haut », 31/10) : plateau à 0,4985, jamais hors de 0,496-0,501 (jamais plus bas que la tôle à
   # 0,496, au plus 5 mm plus haut). Course du pousseur : EXEMPLE (à régler à l'essai).
@@ -1354,7 +1348,7 @@ stockage:
     # s'arrête et alerte. 7 seaux pleins ≈ 175 à 280 N, 350 N avec 7 seaux de 10 kg, NEMA 23 ≈
     # 480 N. Force et vitesse du pousseur inchangées.
     seuil_blocage_n: 400
-    # Remplies dans cet ordre (la file 0,785 en dernier : elle demande le chariot du fût).
+    # Remplies dans cet ordre (la file 0,785 en dernier : elle demande le plateau du fût).
     files: [file_1, file_2, file_3]
     places:
       seau_a: {file_1: 6, file_2: 7, file_3: 7}

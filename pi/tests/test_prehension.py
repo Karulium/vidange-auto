@@ -591,7 +591,7 @@ def test_choc_pendant_un_trajet():
 def test_porte_bocal_panneau_leve():
     # Panneau du poste du fût levé (contact fermé, production) : la tête descend quand même au
     # porte-bocal (x 0,925, hors de l'isolation du fût).
-    reglages = reglages_avec_capteurs("chariot_fut_en_place", "reed_panneau_poste_fut")
+    reglages = reglages_avec_capteurs("plateau_fut_en_place", "reed_panneau_poste_fut")
     planning, _, _ = jouer(reglages=reglages)
     assert planning.fini, planning.probleme
 

@@ -1,6 +1,9 @@
 # Cartes de pesée embarquées (tâche 22 bis) : une carte RP2040 près de chaque HX711 (griffe,
 # préhension, plateau du remplissage) lit son HX711 et répond au Pi sur le bus RS485 des pesées
 # (adaptateur « rs485_pesee » de docs/entrees-sorties.yaml), en Modbus RTU.
+# La pesée du poste du fût (tâche 17 bis) est sur le même bus : la boîte du poste reçoit par radio
+# les mesures du plateau et répond comme une carte (pesee_fut). Elle n'est pas une carte RP2040 :
+# les sections « carte », « broches » et « programme » ne la concernent pas (tâche 17 ter).
 #
 # Le programme des cartes est dans pesee/ (pesee/README.md). Les sections « carte », « broches »
 # et « programme » y sont copiées quand on le fabrique : les changer = refabriquer et recharger
@@ -54,11 +57,21 @@ tour:
   - pesee_prehension
   - pesee_griffe
   - pesee_plateau_remplissage
+  - pesee_fut
 # Pause entre deux tours (ms) : 1 ms laisse respirer le reste du programme. 0 : aucune.
 pause_entre_tours_ms: 1
 # Une mesure plus vieille que ça (ms) est refusée par qui la lit (griffe, préhension, dosage) :
 # « pesée muette ». Doit rester au-dessus du temps d'un tour.
 age_max_ms: 100
+# Pesées lues moins souvent que les autres, avec leur propre âge maximal.
+lentes:
+  # La boîte du poste du fût : le plateau envoie 2 mesures par seconde (moyenne de 5). Une
+  # question par seconde au plus, pour ne pas ralentir la griffe (80 mesures par seconde). Une
+  # mesure plus vieille que 2 s (âge dit par la boîte + temps depuis la question) : « pesée
+  # absente » au poste du fût, jamais un arrêt.
+  pesee_fut:
+    espacement_s: 1
+    age_max_ms: 2000
 # Plus aucune carte ne répond (adaptateur débranché...) : nouvel essai toutes les ... (s).
 reconnexion_s: 2
 
@@ -75,3 +88,21 @@ etalonnage:
   pesee_plateau_remplissage:
     zero_brut: 0
     brut_par_kg: 40000
+  # Plateau du fût : 4 capteurs de 150 kg en parallèle sur un seul HX711. Zéro plateau vide,
+  # puis une masse connue d'environ 20 kg au centre (pi/systeme/essai-poste-fut.md). La tare
+  # (fût vide) et les bornes du poids sont dans machine.yaml (poste_fut → pesee).
+  pesee_fut:
+    zero_brut: 0
+    brut_par_kg: 10000
+
+# Accu Li-ion 18650 du plateau du fût (recharge sans contact au poste). La carte du plateau se
+# coupe d'elle-même vers 3,0 V (protection). EXEMPLES, à confirmer à l'essai.
+accu_plateau_fut:
+  # 3,6 V et plus : bon. Sous 3,5 V (≈ 20 %) : alerte « recharger le plateau ». Sous 3,3 V
+  # (≈ 5 %) : alerte forte « pesée bientôt absente ».
+  bon_v: 3.6
+  recharger_v: 3.5
+  bientot_absente_v: 3.3
+  # Plateau au poste depuis plus de 10 min sans « recharge en cours » : alerte « recharge sans
+  # contact en panne ? ».
+  sans_recharge_max_s: 600

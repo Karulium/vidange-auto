@@ -104,7 +104,7 @@ modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
    --manivelle-en-bas aller 0.40`, puis faire le demi-tour du bocal à la main, lentement, manivelle en
    haut : rien ne touche. `vidange-remplissage etat` à y 0,39 : le Mycélium doit refuser le demi-tour
    (essai-mycelium.md).
-5. Chariot du fût sorti (pas « en place ») : `vidange-remplissage --manivelle-en-bas aller 0.50` →
+5. Plateau du fût sorti (pas « en place ») : `vidange-remplissage --manivelle-en-bas aller 0.50` →
    **refusé** (« axe du plateau ≤ 0,475 ») ; `aller 0.47` → permis. Mesurer, chariot à y 0,47, où est son
    bout côté allée (le point le plus loin : renvoi d'angle et moteur de montée) : la fiche dit 0,396 de
    l'axe, `remplissage → verrous → bout_y_m` = 0,40. Il doit rester à y ≤ 0,875.

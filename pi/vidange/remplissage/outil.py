@@ -18,7 +18,7 @@
   ... --faux                                  avec un faux FluidNC (essai de l'outil)
 
 Les gestes sont ceux du programme, avec tous leurs verrous (vidange.remplissage.regles). Le
-chariot du fût est lu (règle 7). L'agitateur du mycélium, le bras du galet et la tête du
+plateau du fût est lu (règle 7). L'agitateur du mycélium, le bras du galet et la tête du
 micropore ne sont pas lus : --manivelle-en-bas, --galet-range et --micropore-rentre disent
 qu'on les a vus (sinon le chariot ne roule pas près du poste, le plateau ne monte pas au-dessus
 de 0,26, la préhension ne descend pas). Procédure complète : pi/systeme/essai-remplissage.md. À ne
@@ -51,7 +51,7 @@ from vidange.remplissage.remplissage import Geste, Remplissage, SeauPlateau
 CARTE = "chariot"
 PESEE = "pesee_plateau_remplissage"
 PANNEAU = "reed_panneau_poste_fut"
-CHARIOT_FUT = "chariot_fut_en_place"
+PLATEAU_FUT = "plateau_fut_en_place"
 # Attente de la première réponse de la carte (s).
 CONNEXION_S = 10
 # Commande → nombre de valeurs attendues.
@@ -131,7 +131,7 @@ def main(arguments: list[str] | None = None) -> int:
     with ExitStack() as pile:
         try:
             fabrique = FausseFabrique(liste) if options.faux else None
-            seulement = {PANNEAU, CHARIOT_FUT, *reglages.pesees.tour}
+            seulement = {PANNEAU, PLATEAU_FUT, *reglages.pesees.tour}
             materiel = pile.enter_context(Materiel(liste, fabrique, seulement))
             liaison = Liaison(
                 CARTE, reglages.fluidnc, ouvrir=_faux_ouvrir(machine) if options.faux else None
@@ -153,7 +153,7 @@ def main(arguments: list[str] | None = None) -> int:
             remplissage = Remplissage(
                 machine,
                 chariot,
-                chariot_fut_en_place=lambda: not poste.echange_en_cours,
+                plateau_fut_en_place=lambda: not poste.echange_en_cours,
                 refus_mycelium=lambda: None if en_bas else "manivelle du mycélium pas vue en bas",
                 bras_galet_range=lambda: True if options.galet_range else None,
                 micropore_rentre=lambda: True if options.micropore_rentre else None,

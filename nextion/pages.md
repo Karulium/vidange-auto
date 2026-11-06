@@ -221,24 +221,26 @@ prints "@b_oui",0
 
 ## Page 5 : « poste_fut »
 
-Le poste du fût (tâche 17). Arrive toute seule quand le chariot du fût arrive au fond (depuis la
-page « etat »), et repart seule quand le poste est prêt ou que le chariot s'en va. Elle rappelle
-les gestes à faire à la main (rien n'est vérifié par un capteur, sauf le chariot et la pesée),
-puis dit ce qui manque pour « Prêt ».
+Le poste du fût (tâches 17 et 17 bis). Arrive toute seule quand le plateau du fût arrive au fond
+(depuis la page « etat »), et repart seule quand le poste est prêt ou que le plateau s'en va. Elle
+dit le poids (ou « pesée absente »), l'accu et la radio du plateau, rappelle les gestes à faire à
+la main (rien n'est vérifié par un capteur, sauf le plateau et le panneau), puis dit ce qui manque
+pour « Prêt » (la pesée n'y entre pas).
 
 | Nom | Sorte | x | y | Largeur | Hauteur | Police | txt_maxl |
 |---|---|---|---|---|---|---|---|
 | `t_titre` | Texte | 0 | 0 | 480 | 44 | 2 | 30 |
-| `t_poids` | Texte | 4 | 46 | 472 | 22 | 0 | 40 |
+| `t_poids` | Texte | 4 | 46 | 472 | 22 | 0 | 60 |
 | `t_gestes` | Texte | 4 | 68 | 472 | 44 | 0 | 100 |
 | `t_manque` | Texte | 4 | 112 | 472 | 66 | 0 | 140 |
 | `b_pret` | Bouton | 4 | 182 | 234 | 86 | 2 | 10 |
 | `b_retour` | Bouton | 242 | 182 | 234 | 86 | 2 | 10 |
 
-- `t_titre` : « CHARIOT ABSENT » (gris), « EN PLACE, PAS PRÊT » (jaune), « PRÊT » (vert). Texte centré.
-- `t_poids` : « Substrat : 125,0 kg » ou « Pesée débranchée ».
-- `t_gestes` (2 lignes) : « À la main : butées du fond, frein, prise de la pesée, soupape enlevée,
-  volet rabattu. »
+- `t_titre` : « PLATEAU ABSENT » (gris), « EN PLACE, PAS PRÊT » (jaune), « PRÊT » (vert). Texte centré.
+- `t_poids` : « Substrat : 105,6 kg · accu 80 % · radio -60 dBm », ou « Pesée absente : radio du
+  plateau muette » ; « accu 18 % : RECHARGER » quand l'accu est faible.
+- `t_gestes` (2 lignes) : « À la main : fût sur les cales, soupape enlevée, butées du fond, 2 freins,
+  volet rabattu, panneau levé. »
 - `t_manque` (3 lignes) : ce qui manque pour « Prêt », ou la réponse au dernier appui.
 - `b_pret` : « PRÊT » (vert quand l'appui est possible, gris pâle sinon). Fait comme le bouton
   lumineux du poste et le bouton de la page web.

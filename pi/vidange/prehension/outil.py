@@ -55,7 +55,7 @@ PORTE_BOCAL = "mycelium_lavage"
 VIDE = "vide_venturi"
 PESEE = "pesee_prehension"
 PANNEAU = "reed_panneau_poste_fut"
-CHARIOT = "chariot_fut_en_place"
+PLATEAU = "plateau_fut_en_place"
 # Attente de la première réponse des cartes (s).
 CONNEXION_S = 10
 
@@ -112,7 +112,7 @@ def main(arguments: list[str] | None = None) -> int:
         try:
             fabrique = FausseFabrique(liste) if options.faux else None
             # Seulement ce dont la tête a besoin : vide, pesées, panneau et chariot du poste du fût.
-            seulement = {VIDE, PANNEAU, CHARIOT, *reglages.pesees.tour}
+            seulement = {VIDE, PANNEAU, PLATEAU, *reglages.pesees.tour}
             materiel = pile.enter_context(Materiel(liste, fabrique, seulement))
             if fabrique is not None:
                 fabrique.regler(VIDE, 0.0)

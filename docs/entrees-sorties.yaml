@@ -136,13 +136,14 @@ cartes:
       parite: aucune
       delai_reponse_s: 0.5
   # 2ᵉ adaptateur USB-RS485, réservé aux 3 cartes de pesée embarquées (RP2040 + HX711 : griffe,
-  # préhension, plateau du remplissage), séparé du Modbus de l'ozone (docs/decisions.md, 28/10).
+  # préhension, plateau du remplissage) et à la boîte du poste du fût (pesée du plateau du fût,
+  # tâche 17 bis), séparé du Modbus de l'ozone (docs/decisions.md, 28/10).
   # Puce à numéro de série unique (FT232 ou CP2102N). Programme des cartes : pesee/.
   # delai_reponse_s : une question et sa réponse durent ≈ 3 ms ; au-delà de ce délai, la carte
   # est dite muette pour cette question (le Pi passe à la suivante).
   rs485_pesee:
     exemple: true
-    description: Adaptateur USB-RS485 du bus des pesées (3 cartes RP2040 + HX711)
+    description: Adaptateur USB-RS485 du bus des pesées (3 cartes RP2040 + boîte du poste du fût)
     tension_max: 5
     isolee: false
     liaison:
@@ -206,8 +207,6 @@ cartes:
 #     bus : i2c, serie (UART, RS485) ;
 #     pwm : sortie PWM matérielle du Pi (servo) ; le dossier de Linux et le canal sont dans
 #           pi/reglages/machine.yaml (camera_dosage → pwm).
-#     pesee : une carte de pesée HX711 lue directement par 2 broches du Pi, dans cet ordre :
-#             [DT, SCK]. Carte HX711 alimentée en 3,3 V (sinon DT grillerait la broche du Pi).
 #   tension : en volts (pour un relais : la tension qu'il commute).
 #   repos : pour contact, pnp, npn, relais seulement : « ouvert » ou « ferme »
 #     = l'état du contact quand rien ne se passe (capteur non actionné, relais non commandé).
@@ -217,7 +216,10 @@ cartes:
 #   module : un nom de la liste « modules » ci-dessus.
 #   appareil : pour un bus, l'appareil au bout (obligatoire en i2c) :
 #     sht31, ads1115, pcf8574, mcp23017, transmetteur_modbus, nextion, accelerometre,
-#     carte_pesee (carte RP2040 + HX711 du bus des pesées, lue en Modbus : pesee/README.md).
+#     carte_pesee (carte RP2040 + HX711 du bus des pesées, lue en Modbus : pesee/README.md),
+#     boite_poste_fut (boîte du poste du fût sur le bus des pesées : elle reçoit par radio les
+#       mesures du plateau de pesée ; lue en Modbus, signature 0x5046 ; son programme n'est pas
+#       fait par pesee/ : tâche 17 ter).
 #   fichier : pour un bus sur les broches du Pi, le fichier de Linux qui y donne accès
 #     (I2C des GPIO2/3 : /dev/i2c-1).
 #   unite, conversion : pour une mesure, son unité et deux points « tension lue → valeur »
@@ -234,8 +236,10 @@ cartes:
 # (tâche 9, écran de l'armoire) :
 #   ecran_nextion : liaison série vers l'écran Nextion ; son « fichier » est l'UART du Pi
 #     (GPIO 4/5 = /dev/ttyAMA2, avec « dtoverlay=uart2-pi5 » : voir pi/systeme/essai-ecran.md).
-# (tâche 17, poste du fût) :
-#   chariot_fut_en_place, reed_panneau_poste_fut, pesee_fut, bouton_pret_fut, voyant_pret_fut.
+# (tâche 17, poste du fût ; tâche 17 bis : plateau de pesée sans fil) :
+#   plateau_fut_en_place, reed_panneau_poste_fut, pesee_fut, bouton_pret_fut, voyant_pret_fut.
+#   Le reed de réveil du plateau n'est pas un signal du Pi (il est câblé sur la carte du plateau ;
+#   la boîte du poste dit son état). Pas de capteur du volet du dessus ni de fût posé.
 # (tâche 19, mycélium : tous sur la carte FluidNC n° 3, lus par FluidNC ; agitateur fixe depuis la
 #   tâche 19 ter, plus de glissière) :
 #   origine_manivelle, alarme_manivelle, moteur_manivelle.
@@ -482,11 +486,12 @@ signaux:
       registre: 0
       fonction: 3
       echelle: 0.001
-  chariot_fut_en_place:
+  plateau_fut_en_place:
     exemple: true
-    # Inductif M12 dans la butée d'angle côté portique : voit le bout du châssis à 4 mm
-    # quand le chariot est au fond.
-    description: Chariot du fût au fond du poste (inductif M12 dans la butée d'angle)
+    # Inductif M12 PNP dans l'aile arrière de la butée d'angle côté portique : voit le bord du
+    # plateau (acier de 6 mm) à environ 4 mm quand le plateau est au fond. Câblé en 24 V : il
+    # marche même si la radio du plateau se tait.
+    description: Plateau du fût au fond du poste (inductif M12 dans la butée d'angle)
     carte: entrees_24v_1
     broche: E4
     type: pnp
@@ -515,15 +520,18 @@ signaux:
     module: poste_fut
   pesee_fut:
     exemple: true
-    # Carte HX711 sur le chariot (2 capteurs de pesage de 150/200 kg : berceau + fût + contenu),
-    # câble de 10 m à prise magnétique (alimentation, DT, SCK). Prise souvent débranchée :
-    # pas de réponse = « pesée débranchée », jamais une erreur qui arrête le Pi.
-    description: Pesée du chariot du fût (HX711, broches [DT, SCK])
-    carte: pi
-    broche: [GPIO20, GPIO21]
-    type: pesee
+    # Plateau de pesée sans fil (tâche 17 bis) : 4 capteurs de 150 kg en parallèle sur un seul
+    # HX711, lus par l'ESP32-C3 du plateau, qui envoie la mesure par radio ESP-NOW à l'ESP32-C3
+    # de la boîte du poste (MAX3485 avec DE/RE). La boîte répond en Modbus RTU sur le bus des
+    # pesées, comme une carte de pesée. Radio muette : « pesée absente », jamais un arrêt.
+    description: Pesée du plateau du fût (boîte du poste, reçoit le plateau par radio)
+    carte: rs485_pesee
+    broche: [A, B]
+    type: serie
     tension: 3.3
+    adresse: 4
     module: poste_fut
+    appareil: boite_poste_fut
   # Mycélium (fiche du module v10 du 01/11/2026, agitateur FIXE ; carte n° 3). La glissière, son
   # pilote et ses 2 fins de course sont retirés. Repères et types : EXEMPLES (plan de câblage).
   # Capteur inductif M8 PNP (fiche des pièces v9, décision du 29/10/2026). Il voit du MÉTAL

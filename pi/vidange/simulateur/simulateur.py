@@ -30,7 +30,10 @@ from vidange.chef import Chef, Condition, Etape, EtatChef, Module
 from vidange.chef.chef import ATTENTE_GO
 from vidange.entrees_sorties import EntreesSorties
 from vidange.materiel import FausseFabrique, Materiel
-from vidange.poste_fut import Pesee, PosteFut
+from vidange.materiel.faux import FausseBoitePosteFut
+from vidange.pesees.tour import TourPesees
+from vidange.poste_fut import PeseePlateau, PosteFut
+from vidange.poste_fut.pesee import SIGNAL as PESEE_FUT
 from vidange.reglages import EvenementSimule, Reglages
 from vidange.simulateur.axes import AxesSimulees, EtatAxes
 from vidange.simulateur.planning import LignePlanning, Planning
@@ -64,6 +67,8 @@ class Simulateur:
         self.temps = 0.0
         self.fabrique = FausseFabrique(liste)
         self.materiel = Materiel(liste, self.fabrique)
+        # Le tour des pesées du bus, à l'heure du simulateur (la pesée du poste du fût).
+        self.pesees = TourPesees(reglages.pesees, self.materiel, horloge=self._horloge)
         self._axes = EtatAxes(reglages.machine, self._reglages, horloge=self._horloge)
         # Le même chef que sur la machine, à l'heure du simulateur, sans carnet.
         self.chef = Chef(reglages.machine, reglages.programme.chef, horloge=self._horloge)
@@ -106,8 +111,22 @@ class Simulateur:
                 self.materiel,
                 horloge=self._horloge,
                 lecture_directe=True,
+                pesees=self.pesees,
             )
         return self._poste
+
+    def boite_poste_fut(self) -> FausseBoitePosteFut:
+        """La fausse boîte du poste du fût (et le plateau qu'elle entend)."""
+        boite = self.fabrique.carte_pesee(PESEE_FUT)
+        assert isinstance(boite, FausseBoitePosteFut)
+        return boite
+
+    def regler_pesee_fut(self, kg: float) -> None:
+        """Le plateau pèse ce poids (kg, comme lu par le poste) ; sa radio parle."""
+        assert self._machine.poste_fut is not None
+        pesee = PeseePlateau(self._machine.poste_fut.pesee, self.pesees)
+        boite = self.boite_poste_fut()
+        boite.brut, boite.radio_muette, boite.debranche = pesee.brut(kg), False, False
 
     # ------------------------------------------------------------ jouer
 
@@ -222,24 +241,25 @@ class Simulateur:
         self._a_venir = restent
 
     def _peser(self, evenement: EvenementSimule) -> str:
-        """La fausse pesée change : un poids (kg, comme lu par le poste) ou prise débranchée."""
+        """La fausse pesée du poste du fût change : un poids (kg, comme lu par le poste), boîte
+        qui ne répond plus, ou radio du plateau muette."""
         nom = evenement.pesee
-        assert nom is not None
         if self._machine.poste_fut is None:
             raise ErreurSimulation("simulateur.yaml, evenements : pesée sans « poste_fut »")
-        try:
-            self.fabrique.debrancher(nom, evenement.debranchee)
-            if evenement.kg is not None:
-                pesee = Pesee(self._machine.poste_fut.pesee, self.materiel)
-                self.fabrique.regler_pesee(nom, pesee.brut(evenement.kg))
-        except KeyError:
+        if nom != PESEE_FUT or PESEE_FUT not in self.pesees.etats:
             raise ErreurSimulation(
-                f"simulateur.yaml, evenements : « {nom} » n'est pas une pesée "
-                "de docs/entrees-sorties.yaml"
-            ) from None
+                f"simulateur.yaml, evenements : « {nom} » n'est pas la pesée du poste du fût "
+                f"(« {PESEE_FUT} », dans docs/entrees-sorties.yaml et le tour de pesees.yaml)"
+            )
+        if evenement.kg is not None:
+            self.regler_pesee_fut(evenement.kg)
+            return f"pesée « {nom} » : {evenement.kg:g} kg"
+        boite = self.boite_poste_fut()
         if evenement.debranchee:
-            return f"pesée « {nom} » débranchée"
-        return f"pesée « {nom} » : {evenement.kg:g} kg"
+            boite.debranche = True
+            return f"pesée « {nom} » : la boîte du poste ne répond plus"
+        boite.radio_muette = True
+        return f"pesée « {nom} » : radio du plateau muette"
 
     def _actionner(self, capteur: str, actionne: bool, ou: str) -> None:
         try:

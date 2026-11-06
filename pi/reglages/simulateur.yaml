@@ -179,7 +179,9 @@ capteurs_actionnes: []
 # Ce qui change pendant le cycle : « attente_s » secondes après le début de l'étape « apres »
 # (module.etape ; sans « apres » : après le début de la simulation), le capteur est actionné
 # (actionne: true) ou ne l'est plus (false). Une pesée peut aussi changer :
-# « pesee: pesee_fut » avec « kg: 160 » (poids lu) ou « debranchee: true ».
+# « pesee: pesee_fut » avec « kg: 160 » (poids lu, radio du plateau qui parle),
+# « radio_muette: true » (plateau endormi ou accu vide) ou « debranchee: true » (la boîte du poste
+# ne répond plus).
 evenements:
   # Karulium ferme le panneau du poste du fût 10 s après le lancement du module d'exemple.
   - apres: exemple.aller_au_repos
@@ -196,43 +198,65 @@ evenements:
 #         vidange-simulateur lavage_couvercles, vidange-simulateur lavage_bocaux,
 #         vidange-simulateur remplissage (scénario « remplissage » par défaut).
 scenarios:
-  # Échange d'un fût au poste : le chariot du fût vide s'en va, le suivant arrive.
+  # Échange d'un fût au poste (tâche 17 bis) : le plateau du fût vide s'en va, le suivant arrive.
   echange_fut:
-    # Au départ, le chariot du fût vide est au fond, pesée branchée.
-    capteurs_actionnes: [chariot_fut_en_place]
+    # Au départ, le plateau du fût vide est au fond, sa radio parle : 62 kg lus (fût vide et son
+    # couvercle, 59,4 kg, et un reste de substrat).
+    capteurs_actionnes: [plateau_fut_en_place]
     evenements:
       - attente_s: 0
         pesee: pesee_fut
-        kg: 42
-      # Karulium débranche la pesée et sort le chariot.
-      - attente_s: 30
-        pesee: pesee_fut
-        debranchee: true
+        kg: 62
+      # Karulium relève le volet, desserre les freins et sort le plateau.
       - attente_s: 40
-        capteur: chariot_fut_en_place
+        capteur: plateau_fut_en_place
         actionne: false
-      # Fût plein retourné sous le pont roulant, chariot roulé au fond 5 min plus tard.
+      # Loin de l'aimant du poste, le plateau se rendort 30 s plus tard : radio muette.
+      - attente_s: 70
+        pesee: pesee_fut
+        radio_muette: true
+      # Fût plein sorti du culbuteur, posé debout sur le plateau (soupape enlevée) ; plateau
+      # poussé au fond 5 min plus tard.
       - attente_s: 340
-        capteur: chariot_fut_en_place
+        capteur: plateau_fut_en_place
         actionne: true
-      # Freiné, prise de la pesée branchée, soupape enlevée, volet rabattu, puis « Prêt ».
-      - attente_s: 400
+      # L'aimant du poste réveille le plateau : sa radio parle de nouveau (165 kg lus).
+      - attente_s: 342
         pesee: pesee_fut
         kg: 165
+      # 2 roulettes freinées, volet rabattu, panneau levé, puis « Prêt ».
       - attente_s: 430
         capteur: bouton_pret_fut
         actionne: true
       - attente_s: 431
         capteur: bouton_pret_fut
         actionne: false
-  # Vidange d'un fût par la griffe : chariot au fond, panneau levé (production), 100 kg lus
-  # (60 kg de substrat), « Prêt » au bout de 5 s ; puis prises, couches, passe de fond, fût vide.
-  vidange_fut:
-    capteurs_actionnes: [chariot_fut_en_place, reed_panneau_poste_fut]
+  # Le même échange, mais la radio du plateau reste muette (accu vide) : « pesée absente »
+  # (alerte, jamais un arrêt), « Prêt » accepté quand même, cycle sans poids du fût plein.
+  echange_fut_sans_pesee:
+    capteurs_actionnes: []
     evenements:
       - attente_s: 0
         pesee: pesee_fut
-        kg: 100
+        radio_muette: true
+      - attente_s: 10
+        capteur: plateau_fut_en_place
+        actionne: true
+      - attente_s: 30
+        capteur: bouton_pret_fut
+        actionne: true
+      - attente_s: 31
+        capteur: bouton_pret_fut
+        actionne: false
+  # Vidange d'un fût par la griffe : plateau au fond, panneau levé (production), 119,4 kg lus
+  # (60 kg de substrat et 59,4 kg de tare), « Prêt » au bout de 5 s ; puis prises, couches,
+  # passe de fond, fût vide.
+  vidange_fut:
+    capteurs_actionnes: [plateau_fut_en_place, reed_panneau_poste_fut]
+    evenements:
+      - attente_s: 0
+        pesee: pesee_fut
+        kg: 119.4
       - attente_s: 5
         capteur: bouton_pret_fut
         actionne: true
@@ -241,35 +265,35 @@ scenarios:
         actionne: false
   # Dosage du mycélium (seaux de la partie « mycelium » plus haut) : aucun capteur ne change.
   dosage_mycelium: {}
-  # Gestes de la préhension (objets de la partie « prehension » plus haut) : chariot du fût au
+  # Gestes de la préhension (objets de la partie « prehension » plus haut) : plateau du fût au
   # fond, panneau du poste du fût rabattu (contact ouvert) : la tête peut descendre au
   # porte-bocal, sous x 0,71. Prise et pose d'un seau, d'un couvercle, d'un bocal, pose et
   # reprise au porte-bocal, vissage d'une capsule.
   prehension:
-    capteurs_actionnes: [chariot_fut_en_place]
-  # Lavage de 3 seaux (A, B, C) : chariot du fût au fond, panneau du poste du fût rabattu (contact
+    capteurs_actionnes: [plateau_fut_en_place]
+  # Lavage de 3 seaux (A, B, C) : plateau du fût au fond, panneau du poste du fût rabattu (contact
   # ouvert) ; remplissage, 3 seaux lavés, vidange, série finie.
   lavage:
-    capteurs_actionnes: [chariot_fut_en_place]
+    capteurs_actionnes: [plateau_fut_en_place]
   # Lavage de 2 couvercles avec retournement (mêmes capteurs) : retourneur vérifié, remplissage,
   # chaque couvercle lavé sur ses 2 faces, vidange, série finie.
   lavage_couvercles:
-    capteurs_actionnes: [chariot_fut_en_place]
+    capteurs_actionnes: [plateau_fut_en_place]
   # Lavage de 3 bocaux et capsules au lave-bocal (mêmes capteurs) : lave-bocal confirmé (Go),
   # bocaux lavés, vidange, lave-bocal enlevé (Go), série finie.
   lavage_bocaux:
-    capteurs_actionnes: [chariot_fut_en_place]
-  # Remplissage de 2 seaux (partie « remplissage » plus haut) : chariot du fût au fond. Seau A posé
+    capteurs_actionnes: [plateau_fut_en_place]
+  # Remplissage de 2 seaux (partie « remplissage » plus haut) : plateau du fût au fond. Seau A posé
   # avec un 2e seau emboîté (barrière coupée : prise double séparée, le seau du dessus rendu),
   # anse orientée, centré, 4 couches versées et dosées (Mycélium), rangé ; puis un seau B.
   remplissage:
-    capteurs_actionnes: [chariot_fut_en_place]
-  # Stockage (partie « stockage » plus haut) : chariot du fût au fond, boucle du stockage fermée.
+    capteurs_actionnes: [plateau_fut_en_place]
+  # Stockage (partie « stockage » plus haut) : plateau du fût au fond, boucle du stockage fermée.
   # 14 seaux remplis et rangés (4 + 5 + 5), puis « plus de place » : 1 min plus tard, Karulium
   # tire le tiroir (boucle ouverte), le vide et le remet 5 min après ; Go (tiroir vide), et le
   # 15e seau est rangé dans la file 1 vidée.
   stockage:
-    capteurs_actionnes: [chariot_fut_en_place, boucle_stockage]
+    capteurs_actionnes: [plateau_fut_en_place, boucle_stockage]
     evenements:
       - apres: remplissage.vider_le_tiroir
         attente_s: 60
