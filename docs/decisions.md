@@ -697,6 +697,21 @@ si l'une pose problème, elle le dit dans sa PR.
      du fût (demandé au fil mécanique). Broches et valeurs : `pesees.yaml`, EXEMPLES.
   4. **Puissance radio** 8 dBm (≈ 1 m entre plateau et boîte) : gardée ; à monter seulement si l'essai montre des
      trames perdues ou un signal sous −85 dBm. Pas de chiffrement (une clé serait un secret de plus pour une pesée).
+- **Électronique du chariot et liaison du spray** (06/11/2026, niveau 1, fil logiciel, d'accord : Guidage caméra / plan de
+  commande) :
+  1. **PCA9685 et ToF VL6180X du boîtier du chariot** : commandés par la **carte de pesée RP2040-Zero du plateau du
+     remplissage** (bus `rs485_pesee`, Modbus), par un I2C en plus (exemple I2C0 sur GP4/GP5, 100 kHz). Le Pi écrit les
+     angles des servos et lit le ToF par des registres Modbus en plus. La PCA9685 démarre sorties coupées : le Pi renvoie
+     les angles après chaque redémarrage de la carte, vu par un registre « compteur de démarrages ». Plus de 2 s sans
+     ordre du Pi : la carte garde les angles (aucun mouvement).
+  2. **Servo DS3225 de la Fermeture des seaux** : seulement son SIGNAL sur un canal libre de cette PCA9685 ; son + vient de
+     `bec_servo` (24 V → 6,8 V 5 A), masse commune. Le BEC 6 V 3 A de la PCA9685 reste pour le Micropore (DS3225
+     d'escamotage + MG90S de lame). `cable_servo` (12 m depuis l'armoire) n'est plus utile.
+  3. **Carte ESP32 n° 5 du spray** : Modbus RTU sur RS485 (MAX3485), sur **son propre bus `rs485_spray`** et son
+     adaptateur USB-RS485 (une panne du spray ne coupe pas les pesées) ; paire torsadée A/B + 0 V, 120 Ω aux 2 bouts,
+     polarisation de repos sur l'adaptateur. L'USB de la carte : mises à jour seulement, machine à l'arrêt.
+  4. **Capteur 24 V `bras_spray_range` sur l'ESP32** : optocoupleur PC817 (2,2 kΩ ½ W côté 24 V, ≈ 10 mA ; collecteur
+     vers le GPIO avec 10 kΩ de tirage au 3,3 V, émetteur au 0 V). Logique inversée : bras rangé = GPIO à 0.
 - **Portique, réponses à la PR n° 75** (tâche 36 bis, 06/11/2026, niveau 1, fil logiciel) :
   1. Le pilote boucle fermée du godet ne laisse pas FluidNC baisser son courant : prise d'origine du godet **lente**,
      et les sorties d'alarme des pilotes A et B de la griffe vont **en parallèle sur l'entrée libre E12 de la carte
@@ -792,7 +807,7 @@ Les chiffres ci-dessous vont dans `pi/reglages/machine.yaml`, jamais dans le cod
    ⇒ posé (seau, noyau, couronne interdits) ; fût vide vu clairement ⇒ seaux permis ; doute ⇒ rien ne bouge,
    alerte avec la photo, bouton « Vérifié ». Caméra et confirmation à l'écran d'accord, sinon doute.
 2. **Caméra du dosage** sur servo DS3225 : 0° = bocal, 63° = seau. Photo du seau après chaque godet, avec sa dose. Elle pivote SEULEMENT si l'agitateur est garé (bocal x ≤ 0,62) ET si griffe et préhension sont hors de la zone x < 1,10, y < 0,34, z 0,95 à 1,08. Elle remonte avant le retour de l'agitateur ou du godet.
-3. **Porte du spray ouverte** : portique arrêté, griffe interdite en x < 0,50 et y < 0,33, ozone et UV coupés.
+3. **Porte du spray ouverte** : portique arrêté, griffe interdite en x < 0,50 et y < 0,40 (y < 0,33 avant le 31/10 ; boîte du spray de 200 de profondeur, Maquette) et jamais au « Bain des têtes », ozone et UV coupés.
 4. **Reed du panneau du poste du fût** : production seulement contact fermé ; lavage seulement contact ouvert.
 5. **Mycélium / Remplissage** : quand l'agitateur roule, le chariot de remplissage reste à y ≥ **0,40** (31/10/2026 ; avant : 0,375).
 
@@ -848,8 +863,9 @@ regelé le 04/11/2026 ; lot validé par Karulium les 27/10, 31/10, 01/11 et 04/1
   (1 ppm, EXEMPLE) pendant la génération ; le Pi coupe aussi le compresseur (`relais_compresseur`) et le
   ventilateur de l'armoire (`coupure_ventilateur_armoire`, contact fermé au repos) pendant la nuit ; mode « maïs »
   ajouté aux modes ; une fuite part tout de suite par la file d'envoi (cycle « nettoyage » à elle).
-- **Cases vides** (pièces pas choisies, pas de pilote réel) : capteurs de particules (PMS5003 ou SPS30, UART),
-  pression différentielle, convertisseur de la consigne 0-10 V du ventilateur (`vidange/nettoyage/capteurs.py`).
+- **Cases vides** (tâche 38 ; remplacées par de vrais pilotes à la tâche 38 ter, voir plus bas) : capteurs de
+  particules, pression différentielle, convertisseur de la consigne 0-10 V du ventilateur
+  (`vidange/nettoyage/capteurs.py`).
 - **Réponses à la PR n° 80** (06/11/2026, niveau 1, tranché par Claude) :
   1. Consigne 0-10 V du ventilateur : module PWM → 0-10 V sur une GPIO du Pi (EXEMPLE GPIO19), plutôt qu'une carte
      GP8403 en I2C ; choix signalé au fil Nettoyage (pièce à ajouter à sa fiche).
@@ -866,3 +882,26 @@ regelé le 04/11/2026 ; lot validé par Karulium les 27/10, 31/10, 01/11 et 04/1
   8. Verrous remis 60 s après une libération si le store n'a pas été levé. Oui.
   9. « Mesure incohérente » = `ozone_dedans` jamais monté à 1 ppm pendant la génération (générateur ou capteur en
      panne). Oui.
+
+- **Pilotes réels des capteurs de la purge (tâche 38 ter, 06/11/2026, niveau 1, tranché par Claude)** :
+  pièces choisies par le fil Nettoyage : 2 SPS30 (particules), 1 SDP810-125Pa (pression), module PWM → 0-10 V.
+  - `particules_dedans` : SPS30 par convertisseur TTL-RS485 et l'adaptateur `rs485_sps30` ; `particules_dehors` :
+    SPS30 sur l'UART3 du Pi (GPIO 8/9, `/dev/ttyAMA3`, `dtoverlay=uart3-pi5`). 115 200 bauds, protocole SHDLC
+    (`vidange/trame_sps30.py`). Grandeur lue : PM2.5 en masse (µg/m³), réglable (`particules → grandeur`).
+  - `pression_enceinte` : SDP810-125Pa en I2C, adresse 0x25, mesure continue (`vidange/trame_sdp810.py`), en Pa,
+    positive si l'enceinte est plus haute que le conteneur (`pression → inverser` si les tuyaux sont à l'envers).
+  - `consigne_ventilateur` : sortie PWM matérielle GPIO19 (canal 3, EXEMPLE) vers le module 0-10 V ; période et
+    tension à 100 % dans `entrees-sorties.yaml → pwm` (EXEMPLES). Le Pi remet 0 V à la fermeture du matériel.
+    Au démarrage, `plein_v` doit rester dans la pleine échelle du module (sinon le programme ne démarre pas).
+  - **Capteur muet, en erreur ou à la trame fausse : jamais une valeur.** `lire` lève une erreur, le Nettoyage
+    compte la mesure absente, la condition de purge n'est pas vraie, la purge finit en alerte à 20 min. Une
+    mesure plus vieille que `delai_muet_s` est « muette » (même règle que l'ozone).
+  - Tous les chiffres des protocoles (commandes, octets, échelles) sont écrits de mémoire : à vérifier sur les
+    notices (`pi/systeme/essai-capteurs-purge.md`). Testé sur le vrai matériel : non.
+- **Réponses à la PR n° 81** (06/11/2026, niveau 1, tranché par Claude) :
+  1. PWM du servo de la caméra (GPIO18, 20 ms) et de la consigne (GPIO19, 1 ms) sur la même puce RP1 : gardé. Les
+     canaux du PWM du RP1 ont chacun leur période ; à vérifier à l'étape 5 de la procédure. Si l'un dérègle l'autre :
+     consigne sur un module I2C GP8403.
+  2. Grandeur des particules : PM2.5 en masse (réglable) ; le seuil est un rapport dedans / dehors.
+  3. Sens des tubes du SDP810 : P dans l'enceinte, N dans le conteneur ; vérifié à l'étape 4, `inverser: true` sinon.
+  4. Un adaptateur ou une UART par SPS30 (même adresse SHDLC 0) : règle gardée.

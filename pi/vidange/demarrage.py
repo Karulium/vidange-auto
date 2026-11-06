@@ -84,6 +84,8 @@ from vidange.mises_a_jour import DOSSIER as DOSSIER_MISES_A_JOUR
 from vidange.mises_a_jour import CarteEsp32, MisesAJour, ProgrammePi, preparer_cartes
 from vidange.mode import ModeMachine
 from vidange.nettoyage import Nettoyage
+from vidange.nettoyage.capteurs import capteurs_du_materiel
+from vidange.nettoyage.capteurs import verifier_avec_liste as verifier_nettoyage
 from vidange.pesees.tour import TourPesees
 from vidange.pesees.verification import pesees_du_bus, verifier_avec_liste
 from vidange.poste_fut import PosteFut
@@ -309,9 +311,11 @@ def preparer_nettoyage(
 ) -> Nettoyage | None:
     """Le Nettoyage, branché au chef (gestes interdits pendant la purge, rien ne commence store
     ouvert) et au mode (pas de changement de mode en pleine nuit UV-ozone). Capteurs de
-    particules, de pression et consigne 0-10 V : pas encore choisis (cases vides)."""
+    particules, de pression et consigne 0-10 V : ceux de la liste des entrées/sorties (SPS30,
+    SDP810, module PWM) ; un absent de la liste reste « absent » pour le Nettoyage."""
     if reglages.machine.nettoyage is None or materiel is None:
         return None
+    dedans, dehors, pression, consigne = capteurs_du_materiel(materiel)
     nettoyage = Nettoyage(
         reglages.machine.nettoyage,
         materiel,
@@ -320,6 +324,10 @@ def preparer_nettoyage(
         mode=lambda: mode.actuel,
         cycle_tourne=lambda: cycle_tourne(chef),
         pause=chef.pause,
+        particules_dedans=dedans,
+        particules_dehors=dehors,
+        pression=pression,
+        consigne=consigne,
     )
     chef.interdire(nettoyage.refus_geste)
     chef.conditions_generales.append(nettoyage.condition_store)
@@ -389,9 +397,11 @@ def principal(
         journal.error("%s", erreur)
         return CODE_REGLAGES_FAUX
     erreurs_pesees = verifier_avec_liste(reglages.pesees, entrees_sorties)
+    if reglages.machine.nettoyage is not None:
+        erreurs_pesees += verifier_nettoyage(reglages.machine.nettoyage, entrees_sorties)
     if erreurs_pesees:
         journal.error(
-            "Réglages des pesées qui ne vont pas ensemble :\n%s",
+            "Réglages qui ne vont pas ensemble (pesées, ventilateur) :\n%s",
             "\n".join(f"  - {erreur}" for erreur in erreurs_pesees),
         )
         return CODE_REGLAGES_FAUX

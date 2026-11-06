@@ -63,6 +63,8 @@ Appareil = Literal[
     "pcf8574",
     "mcp23017",
     "ze25_o3",
+    "sps30",
+    "sdp810",
     "nextion",
     "accelerometre",
     "carte_pesee",
@@ -71,6 +73,12 @@ Appareil = Literal[
 # Capteur d'ozone Winsen ZE25-O3 : une liaison série à lui seul (un adaptateur USB-RS485 par
 # capteur), pas un appareil Modbus (protocole : vidange/trame_ze25.py).
 CAPTEUR_OZONE = "ze25_o3"
+# Capteur de particules Sensirion SPS30 : une liaison série à lui seul (protocole SHDLC,
+# vidange/trame_sps30.py), soit sur un adaptateur USB-RS485, soit sur un UART du Pi.
+CAPTEUR_PARTICULES = "sps30"
+# Capteur de pression différentielle Sensirion SDP810-125Pa, sur le bus I2C du Pi
+# (vidange/trame_sdp810.py).
+CAPTEUR_PRESSION = "sdp810"
 # Carte de pesée RP2040 + HX711 sur un bus RS485, lue en Modbus (pesee/README.md).
 CARTE_PESEE = "carte_pesee"
 # Boîte du poste du fût : reçoit par radio les mesures du plateau de pesée et répond sur le même
@@ -214,6 +222,39 @@ class CapteurOzone(Modele):
         return self
 
 
+class CapteurParticules(Modele):
+    """Réglages d'un capteur de particules SPS30 (protocole à vérifier sur sa notice)."""
+
+    # La concentration en masse (µg/m³) que le Pi lit : pm1_0, pm2_5, pm4_0 ou pm10.
+    grandeur: Literal["pm1_0", "pm2_5", "pm4_0", "pm10"]
+    # Sans mesure valable depuis ce délai, le capteur est dit muet.
+    delai_muet_s: float = Field(gt=0)
+    # Vitesse (bauds) quand le capteur est sur un UART du Pi ; sur un adaptateur USB-RS485, la
+    # vitesse est celle de la carte (liaison) et cette ligne est interdite.
+    vitesse_bauds: int | None = Field(default=None, gt=0)
+    # Attente maximale d'une réponse (s), sur un UART du Pi seulement (comme la vitesse).
+    delai_reponse_s: float | None = Field(default=None, gt=0)
+
+
+class CapteurPression(Modele):
+    """Réglages d'un capteur de pression différentielle SDP810 (le sens des tuyaux)."""
+
+    # Vrai si les tuyaux sont branchés à l'envers : la pression lue est alors changée de signe
+    # pour que « enceinte plus haute que le conteneur » soit positif.
+    inverser: bool = False
+
+
+class SortiePwm(Modele):
+    """Sortie PWM matérielle du Pi 5 vers un module PWM → 0-10 V (EXEMPLES à vérifier)."""
+
+    fichier: Annotated[str, StringConstraints(pattern=r"^/sys/class/pwm/pwmchip[0-9]+$")]
+    canal: int = Field(ge=0, le=3)
+    # Fréquence de la porteuse : la période (µs) que demande la notice du module.
+    periode_us: int = Field(gt=0)
+    # Tension de sortie du module (V) quand le rapport cyclique est de 100 %.
+    pleine_echelle_v: float = Field(gt=0)
+
+
 class Carte(Modele):
     """Une carte où l'on branche des signaux."""
 
@@ -249,6 +290,10 @@ class Signal(Modele):
     conversion: Conversion | None = None
     # Pour un capteur d'ozone : son protocole et ses seuils.
     ozone: CapteurOzone | None = None
+    # Pour un capteur de particules SPS30, de pression SDP810, une consigne PWM → 0-10 V.
+    particules: CapteurParticules | None = None
+    pression: CapteurPression | None = None
+    pwm: SortiePwm | None = None
     # Pour une entrée tout-ou-rien : l'état attendu à la check-list de démarrage (porte fermée,
     # sécurité en état...). Un autre état empêche de lancer la production, avec son nom.
     au_demarrage: Literal["actionne", "repos"] | None = None
@@ -300,6 +345,26 @@ class Signal(Modele):
                 erreurs.append("un capteur d'ozone n'a pas d'adresse (ce n'est pas du Modbus)")
         elif self.ozone is not None:
             erreurs.append(f"« ozone » ne sert qu'à un appareil {CAPTEUR_OZONE}")
+        if self.appareil == CAPTEUR_PARTICULES:
+            if self.particules is None:
+                erreurs.append("un capteur de particules doit dire ses réglages (« particules: »)")
+            if self.type != "serie":
+                erreurs.append(
+                    "un capteur de particules est sur une liaison série (« type: serie »)"
+                )
+            if self.adresse is not None:
+                erreurs.append("un capteur de particules n'a pas d'adresse (adresse SHDLC fixe)")
+        elif self.particules is not None:
+            erreurs.append(f"« particules » ne sert qu'à un appareil {CAPTEUR_PARTICULES}")
+        if self.appareil == CAPTEUR_PRESSION:
+            if self.pression is None:
+                erreurs.append("un capteur de pression doit dire ses réglages (« pression: »)")
+            if self.type != "i2c":
+                erreurs.append("un capteur de pression est sur le bus I2C (« type: i2c »)")
+        elif self.pression is not None:
+            erreurs.append(f"« pression » ne sert qu'à un appareil {CAPTEUR_PRESSION}")
+        if self.pwm is not None and self.type != "pwm":
+            erreurs.append("« pwm » ne sert qu'aux signaux de type pwm")
         if self.appareil in PESEES_DU_BUS:
             if self.type != "serie":
                 erreurs.append("une pesée du bus RS485 est sur un bus série (« type: serie »)")
@@ -349,6 +414,7 @@ class EntreesSorties(Modele):
         erreurs.extend(self._verifier_nombres(connus))
         erreurs.extend(self._verifier_fichiers(connus))
         erreurs.extend(self._verifier_liaisons(connus))
+        erreurs.extend(self._verifier_particules(connus))
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self
@@ -484,6 +550,39 @@ class EntreesSorties(Modele):
                 erreurs.append(
                     f"broche {broche.upper()} du Pi ({fichier}) : prise plusieurs fois "
                     f"({', '.join(dict.fromkeys(qui))})"
+                )
+        return erreurs
+
+    def _verifier_particules(self, signaux: dict[str, Signal]) -> list[str]:
+        """La vitesse d'un SPS30 vient de sa carte (USB-RS485) ou de lui-même (UART du Pi)."""
+        erreurs = []
+        for nom, signal in signaux.items():
+            if signal.appareil != CAPTEUR_PARTICULES or signal.particules is None:
+                continue
+            liaison = self.cartes[signal.carte].liaison
+            vitesse = signal.particules.vitesse_bauds
+            delai = signal.particules.delai_reponse_s
+            if isinstance(liaison, LiaisonUsbSerie):
+                if vitesse is not None or delai is not None:
+                    erreurs.append(
+                        f"signal « {nom} » : « vitesse_bauds » et « delai_reponse_s » sont "
+                        f"interdites ici, ils sont ceux de la carte « {signal.carte} » (liaison)"
+                    )
+            elif isinstance(liaison, LiaisonGpio):
+                if vitesse is None or delai is None:
+                    erreurs.append(
+                        f"signal « {nom} » : sur un UART du Pi, « particules → vitesse_bauds » "
+                        "et « delai_reponse_s » sont requis"
+                    )
+                if signal.fichier is None:
+                    erreurs.append(
+                        f"signal « {nom} » : sur un UART du Pi, le « fichier » est requis "
+                        "(exemple : /dev/ttyAMA3)"
+                    )
+            else:
+                erreurs.append(
+                    f"signal « {nom} » : un capteur de particules est sur un adaptateur "
+                    "USB-RS485 ou sur un UART du Pi"
                 )
         return erreurs
 

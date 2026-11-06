@@ -1337,10 +1337,162 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   matériel. Retirer le Modbus de l'ozone s'il ne sert plus à rien d'autre.
   Tests : trames bonnes, somme fausse, trame coupée, capteur muet, valeur au plafond, deux capteurs indépendants
   (l'un muet, l'autre lu). Procédure d'essai sur le vrai capteur ; « testé sur le vrai matériel : non ».
-- [ ] 39. Spray (et le programme de sa carte ESP32)
-- [ ] 40. Micropore
-- [ ] 41. Fermeture des seaux (à prévoir : diamètre du couvercle dans la table des formats, A 0,28, B 0,23, C 0,315,
-  D 0,28, et le contrôle au démarrage de la bande du haut avec lui : `docs/decisions.md`, PR n° 54).
-- [ ] 42. Air comprimé
-- [ ] 43. Entonnoir
+- [x] **38 ter. Pilotes réels des capteurs de la purge** — Modèle : Sonnet, effort moyen. Pièces choisies par le fil
+  Nettoyage (06/11/2026) : 2 SPS30 (`particules_dedans` par convertisseur TTL-RS485 et son adaptateur USB-RS485,
+  `particules_dehors` sur l'UART3 du Pi, GPIO 8/9 (EXEMPLE, Implantation 06/11) ; adaptateur `rs485_sps30` ; UART 115 200 bauds, protocole SHDLC de Sensirion), 1 SDP810-125Pa en I2C
+  (`pression_enceinte`), module PWM → 0-10 V sur GPIO 19 pour `consigne_ventilateur`. Remplacer les cases vides de la tâche 38
+  par les vrais pilotes (protocoles à vérifier sur les notices, dans la PR), avec faux et tests (trame fausse, capteur
+  muet ⇒ condition de purge jamais vraie). Procédure d'essai ; « testé sur le vrai matériel : non ».
+- [ ] **39. Spray, côté Pi** — Modèle : Opus, effort moyen. À faire après la tâche 38.
+  Source, recopiée ici le 06/11/2026 : `pulverisation/logiciel/spray-pour-logiciel.md` du projet mécanique. C'est la
+  fiche v5.8 du module gelé ; elle donne les gestes a) à d), les signaux, les chiffres et le câblage. Choix
+  électriques : `docs/decisions.md`, « Électronique du chariot et liaison du spray » (06/11/2026).
+  1. **Liaison** : la carte ESP32 n° 5 est un esclave Modbus RTU sur son propre bus `rs485_spray`, avec son adaptateur
+     USB-RS485 (reconnu par son numéro de série) et sa propre adresse. Écrire la **table des registres** dans
+     `spray/README.md`, avec une signature propre : c'est la langue commune avec la tâche 39 bis.
+     - Ordres : état, prise d'origine du bras, sortir à l'angle, ranger, spray (emplacement, dose en g), nettoyer,
+       agitateurs (vitesse), arrêt immédiat.
+     - Réponses : poids de chaque flacon (brut et en g), bras rangé (capteur), bras sorti, résultat de la dernière dose
+       (poids perdu, durée, état), compteur de démarrages, erreurs.
+     - Le Pi envoie un battement pendant un spray. La carte s'arrête seule (pompe, air, bras) si le Pi se tait plus de
+       2 s (réglage).
+  2. **Gestes du Pi** : a) un seau, b) nettoyage des tubes, c) changement de flacon, d) cas d'erreur, comme dans la
+     source. Règle d'or : **tant que la carte n'a pas redit « bras rangé », `bras_spray_sorti` est vrai** (chariot
+     immobile en hauteur et aux barres, seule la rotation du seau est permise), même si la carte se tait. Reprendre
+     `remplissage/regles.py → refus_bras_spray` (règle 6). Une erreur du spray met le seau « sans spray » et
+     l'écran propose de continuer sans spray ou d'attendre. Le spray ne protège personne.
+  3. **Zone interdite à la griffe, porte du spray ouverte** : **x < 0,50 et y < 0,40**, et jamais au « Bain des
+     têtes ». Ces chiffres viennent de la Maquette (31/10) et remplacent y < 0,33 dans `docs/decisions.md` (règle 3)
+     et dans `PorteSprayGriffe` de `reglages.py`.
+  4. **Points non décidés, tranchés ici** (niveau 1, à noter dans `docs/decisions.md`) :
+     - un seul flacon par seau, l'emplacement par format venant des réglages (EXEMPLE : emplacement 1 pour tous), en
+       attendant la règle du logiciel de culture ;
+     - agitateurs 30 s avant chaque dose, puis 1 min toutes les 15 min (réglages) ;
+     - « dose d'amorce » réglable (EXEMPLE 1 g), ajoutée à la première dose après un changement de flacon et notée à
+       part dans le registre ;
+     - pompage pendant la rotation du seau ; la chasse finit le travail.
+  5. Réglages : tous les chiffres du § 3 de la source vont dans `machine.yaml → spray`, en EXEMPLE quand la source le
+     dit. Étalonnage des 4 balances dans `pesees.yaml`.
+     Vérification au démarrage : angles par format entre 0 et 110°, réserve > 0, temps positifs.
+  Simulateur : fausse carte n° 5 (balances, bras, pompe, carte muette).
+  Tests :
+  - bras pas rangé ⇒ chariot immobile ;
+  - carte muette ⇒ bras supposé sorti ;
+  - règle 6 refusée ;
+  - flacon presque vide ;
+  - dose pas atteinte, dose trop forte ;
+  - porte ouverte pendant un spray ;
+  - nouvelle zone de la griffe ;
+  - amorce ;
+  - compteur des nettoyages.
+  `vidange --verifier` passe.
+- [ ] **39 bis. Programme de la carte ESP32 n° 5 du spray** — Modèle : Opus, effort moyen. À faire après la tâche 39.
+  Vrai matériel : procédure d'essai pas à pas, « testé sur le vrai matériel : non ».
+  Dossier `spray/`, sur le modèle de `poste_fut_radio/` (ESP-IDF, code commun en C testé sur PC, CI qui fabrique le
+  programme, réglages copiés depuis les réglages du Pi à la fabrication). Le Modbus vient de `pesee/src/modbus.c`
+  et suit la table des registres de la tâche 39.
+  - 4 pompes NEMA 17 sur TMC2209 en pas/direction : pompage jusqu'à la perte de poids demandée, avec un temps maximum.
+  - Bras : NEMA 17 sur TMC2209 en UART, 1,2 A, lent ; origine sur `bras_spray_range` ; butée logicielle 0 à 110°.
+  - `bras_spray_range` passe par un optocoupleur PC817 (logique inversée : bras rangé = GPIO à 0).
+  - 4 HX711 (cellules de 1 kg).
+  - Sorties MOSFET : `ev_buse_spray`, `ev_chasse_spray`, `agitateurs_spray` (PWM, une seule pour les 4),
+    `pompe_nettoyage_spray`.
+  - Sécurité de la machine : « sortir » refusé sans ordre récent du Pi ; arrêt seul (pompe, air, bras rangé) si le Pi
+    se tait plus de 2 s pendant un spray.
+  - Broches : EXEMPLES dans les réglages, en attendant l'Implantation.
+  Tests sur PC avec faux HX711, faux capteur et faux moteur.
+- [ ] **40. Micropore, côté Pi** — Modèle : Opus, effort moyen. À faire après la tâche 39 bis.
+  Source, recopiée ici le 06/11/2026 : `micropore/logiciel/micropore-pour-logiciel.md` du projet mécanique (module
+  gelé le 28/10). Elle donne les gestes 1 a (pose : tour de repérage, approche, avance de 13 mm, appui vu au ToF,
+  pose de 17 mm, tension, coupe, fin, contrôle à la caméra), 1 b (tête escamotée pendant le spray, l'inspection et
+  tout mouvement du plateau) et 1 c (changer le rouleau, apprendre un format), puis les signaux, les chiffres
+  (figé, exemple, appris) et la sécurité câblée.
+  - **Matériel** :
+    - `servo_escamotage_micropore` et `servo_lame_micropore` sont sur la PCA9685 ;
+    - `tof_tete_micropore` est un VL6180X ;
+    - les deux passent par la **carte de pesée RP2040 du plateau du remplissage**, avec des registres Modbus en plus
+      (tâche 40 bis, `docs/decisions.md` du 06/11/2026) ;
+    - `avance_micropore` : NEMA 11 sur la carte FluidNC n° 3 (vérifier dans `fluidnc/` ; si la source se trompe de
+      numéro de carte, le dire dans la PR) ;
+    - `camera_micropore` : caméra USB.
+  - **Règle** : tête escamotée (ToF à la position escamotée) avant tout mouvement du plateau, sinon le plateau ne
+    bouge pas. Après un redémarrage de la carte (compteur de démarrages), le Pi renvoie les angles des servos.
+  - **Gestes appris** (angle d'approche, angle de contact, angle caméra → rouleau par format) : dans un fichier de
+    réglages appris, jamais dans le code. Les modifications sont notées et annulables.
+  - **Rangée du fond** : le Pi attend environ 4 kg sur la balance du chariot (réglage). Cette rangée se pose pendant
+    le premier aller-retour de la griffe. Si l'ordre avec le Remplissage pose problème, le dire dans la PR.
+  - Compteur de morceaux et alerte « rouleau bientôt vide ». Le seau est marqué « micropore à vérifier » dans le
+    registre.
+  - Ne pas inventer de capteur (pas de contact ni de détecteur de ruban vide en plus de la caméra et du compteur).
+  - Les chiffres du § 3 de la source vont dans `machine.yaml → micropore`, avec la vérification au démarrage.
+  Simulateur et tests : ToF qui ne voit pas l'escamotage, pas de contact, trou découvert puis nouvel essai, rangée
+  trop haute (> 0,575), format inconnu, carte redémarrée.
+- [ ] **40 bis. Carte de pesée du plateau : I2C vers la PCA9685 et le VL6180X** — Modèle : Sonnet, effort moyen. À
+  faire avant la tâche 40.
+  Vrai matériel : procédure d'essai, « testé sur le vrai matériel : non ».
+  Dans `pesee/`, pour la carte du plateau du remplissage seulement (réglage par carte), ajouter un I2C (EXEMPLE I2C0
+  sur GP4/GP5, 100 kHz) avec :
+  - la PCA9685 : une voie par servo (escamotage du micropore, lame du micropore, signal du servo de la fermeture),
+    angle → largeur d'impulsion par des réglages ;
+  - le VL6180X : distance en mm et état.
+  Registres Modbus en plus, à ajouter à `pesee/README.md`, sans changer les registres 0 à 7 :
+  - en écriture (fonction 6 ou 16) : angles des voies ;
+  - en lecture : ToF, compteur de démarrages, état de l'I2C.
+  Fonctionnement :
+  - la PCA9685 démarre sorties coupées ;
+  - plus de 2 s sans ordre du Pi : la carte garde les angles (aucun mouvement).
+  La pesée garde son rythme : la vérifier dans un test.
+  Côté Pi : lecture et écriture de ces registres dans `pi/vidange/materiel/carte_pesee.py`, avec le faux, plus les
+  signaux dans `docs/entrees-sorties.yaml` (`exemple: true`).
+- [ ] **41. Fermeture des seaux** — Modèle : Sonnet, effort moyen. À faire après la tâche 40.
+  Source, recopiée ici le 06/11/2026 : `fermeture-seaux/logiciel/fermeture-seaux-pour-logiciel.md` du projet
+  mécanique (module gelé).
+  - Le servo DS3225 tourne le bras à vide, entre rangé (−160°, sens horaire) et travail (sur sa butée, 2,5° au-delà).
+    Il ne bouge que si le plateau est à 0,26 au plus.
+  - C'est le plateau qui ferme : il monte jusqu'à Hf selon le format, sous surveillance de la pesée du chariot (F_max
+    200 N au plus), puis il tourne en sens horaire. **Jamais de rotation trigo pendant le contact.**
+  - Il n'y a aucun capteur sur le bras : c'est la pesée qui vérifie.
+  - Rien n'est câblé en dur pour ce module.
+  - Signal du servo : une voie de la PCA9685 (tâche 40 bis). Son + vient de `bec_servo`.
+  - Au redémarrage : zéro de la montée d'abord, puis bras rangé.
+  - Diamètre du couvercle dans la table des formats (A 0,28, B 0,23, C 0,315, D 0,28) et contrôle au démarrage de
+    la bande du haut avec lui (`docs/decisions.md`, PR n° 54).
+  - Hf, Hc et le nombre de tours : EXEMPLES, à vérifier au premier essai sur les 4 vrais seaux.
+  - La position du chariot en y pendant la fermeture se trouve dans les fichiers du Remplissage. Si elle n'y est
+    pas, la poser en réglage et le dire dans la PR.
+  - Le vérin de l'ancien LISEZMOI du mode couvercles n'existe plus.
+  Tests :
+  - plateau trop haut ⇒ servo refusé ;
+  - effort au-delà de F_max ⇒ arrêt et descente ;
+  - rotation trigo refusée en contact ;
+  - redémarrage dans le bon ordre.
+- [ ] **42. Air comprimé** — Modèle : Sonnet, effort bas. Source, recopiée ici le 06/11/2026 :
+  `air/logiciel/air-comprime-pour-logiciel.md` du projet mécanique (module gelé le 28/10).
+  - Un seul signal du Pi : `relais_compresseur`, une sortie relais vers un contacteur. Il est ouvert pendant l'ozone
+    et la purge ; la coupure de sécurité est câblée.
+  - Pas de capteur de pression de ligne : un manque d'air se voit chez la Préhension (vide non atteint).
+  - Réglages dans `pi/reglages/air.yaml` : attente de mise en pression 240 s et rappel du bidon de purge tous les
+    7 jours, tous deux en EXEMPLE.
+  - Au démarrage, le Pi attend la mise en pression avant le premier geste qui a besoin d'air. Le rappel de purge du
+    bidon s'affiche à l'écran.
+  - Brancher la coupure du compresseur de la nuit UV-ozone (tâche 38) sur ce relais, si la tâche 38 ne l'a pas déjà
+    fait.
+  - Tests.
+- [ ] **43. Entonnoir à bocaux** — Modèle : Sonnet, effort moyen. Source, recopiée ici le 06/11/2026 :
+  `entonnoir/logiciel/entonnoir-pour-logiciel.md` du projet mécanique (v3 du 28/10).
+  - L'entonnoir n'a ni capteur ni moteur. La Préhension le prend par sa ventouse, par l'oreille, en x bocal + 0,140,
+    aimants éteints.
+  - Seuils du vide : lever à −55 kPa ; en tenue, alerte au-dessus de −40 kPa.
+  - Levée de transport : 0,060.
+  - Contrôle de la pose : par la hauteur au contact du M8.
+  - Le Pi garde l'état `entonnoir_place` (un bocal, « hors machine » ou « inconnu »), et le conserve après une
+    coupure.
+  - Pose et enlèvement à la main, confirmés par Karulium. Pas de poste de repos.
+  - Pas de photo au hublot tant que l'entonnoir est sur le plateau.
+  - La griffe ne verse que dans le bocal noté `entonnoir_place`.
+  - Pas de rotation de la tête en tenant l'entonnoir.
+  - Les noms de signaux de la source sont **proposés** : utiliser les noms qui existent déjà dans le code de la
+    Préhension (tâche 36 bis).
+  - Les hauteurs « exemple » se mesurent sur l'entonnoir reçu.
+  - Tests : les cas du § 5 de la source.
 - [ ] 44. App « machine » dans le logiciel de culture (avec l'accord de Karulium)

@@ -13,6 +13,10 @@ soit testé lui aussi. Seules les broches GPIO du Pi sont imitées plus haut (`F
     faux.regler("ozone_dedans", 0.85)                      # ppm : le faux ZE25-O3 envoie ses trames
     faux.capteur_ozone("ozone_dedans").muet = True         # capteur d'ozone : plus aucune trame
     faux.capteur_ozone("ozone_dedans").injecter(b"\xff\x00")  # octets de travers, à la main
+    faux.regler("particules_dedans", 35.0)               # µg/m³ : le faux SPS30 répond en SHDLC
+    faux.capteur_particules("particules_dedans").muet = True   # SPS30 : plus aucune réponse
+    faux.regler("pression_enceinte", 9.0)                # Pa : le faux SDP810 sur le bus I2C
+    faux.consigne("consigne_ventilateur").volts()        # dernière consigne 0-10 V reçue
     faux.commande("voyant_buzzer")                    # ce qu'a fait le programme
     faux.debrancher("sht31_armoire")                  # la puce ne répond plus
     faux.debrancher("pesee_fut")                      # la boîte du poste ne répond plus
@@ -26,18 +30,22 @@ Le faux suit le même plan que le vrai (niveau actif, contact au repos, tirage),
 import errno
 from collections.abc import Mapping
 
+from vidange import trame_sdp810 as sdp
+from vidange import trame_sps30 as shdlc
 from vidange.entrees_sorties import (
     BOITE_POSTE_FUT,
     BROCHES_DES_PUCES,
     PESEES_DU_BUS,
     CapteurOzone,
+    CapteurParticules,
     EntreesSorties,
     LiaisonUsbSerie,
+    SortiePwm,
 )
 from vidange.materiel import carte_pesee
 from vidange.materiel.materiel import Branchement, tracer_branchements
 from vidange.materiel.modbus import crc_modbus
-from vidange.materiel.puces import Ads1115, BusI2c, Tirage, crc_sht31
+from vidange.materiel.puces import Ads1115, BusI2c, ErreurMateriel, Tirage, crc_sht31
 from vidange.trame_ze25 import trame_avec_valeur
 
 
@@ -141,6 +149,43 @@ class FauxSht31(FauxAppareilI2c):
         octets = b""
         for brut in (max(0, min(65535, brut_t)), max(0, min(65535, brut_h))):
             mot = brut.to_bytes(2, "big")
+            octets += mot + bytes([crc_sht31(mot) ^ (0xFF if self.abime else 0)])
+        return octets[:nombre]
+
+
+class FauxSdp810(FauxAppareilI2c):
+    """Un SDP810-125Pa : répond en mesure continue après la commande de démarrage."""
+
+    # Facteur d'échelle de la fiche technique du SDP810-125Pa (le vrai capteur le donne lui-même).
+    ECHELLE = 240
+    ECHELLE_TEMPERATURE = 200
+
+    def __init__(self) -> None:
+        super().__init__()
+        # Pression du côté « P » moins celle du côté « N » (Pa), comme la puce la voit.
+        self.pascals = 0.0
+        self.temperature_c = 25.0
+        self.demarre = False
+        self.abime = False
+        self.sans_echelle = False
+
+    def recevoir(self, donnees: bytes) -> None:
+        if donnees == sdp.COMMANDE_DEMARRER:
+            self.demarre = True
+        elif donnees == sdp.COMMANDE_ARRETER:
+            self.demarre = False
+
+    def envoyer(self, nombre: int) -> bytes:
+        if not self.demarre:
+            raise _pas_de_reponse()  # le vrai répond NACK hors mesure continue
+        brut = max(-32768, min(32767, round(self.pascals * self.ECHELLE)))
+        mots = [
+            brut.to_bytes(2, "big", signed=True),
+            round(self.temperature_c * self.ECHELLE_TEMPERATURE).to_bytes(2, "big", signed=True),
+            (0 if self.sans_echelle else self.ECHELLE).to_bytes(2, "big"),
+        ]
+        octets = b""
+        for mot in mots:
             octets += mot + bytes([crc_sht31(mot) ^ (0xFF if self.abime else 0)])
         return octets[:nombre]
 
@@ -430,6 +475,157 @@ class FauxCapteurOzone:
         pass
 
 
+class FauxSps30:
+    """Un capteur de particules SPS30 sur sa liaison série, vu comme un port (il fait aussi le
+    port). Il parle SHDLC : il répond à « start measurement » et à « read measured values »."""
+
+    def __init__(self, reglage: CapteurParticules) -> None:
+        self.reglage = reglage
+        # Concentration en masse (µg/m³) de la grandeur lue ; les autres sont différentes.
+        self.valeur = 0.0
+        self.muet = False
+        self.cable_coupe = False
+        self.demarre = False
+        # Pas de mesure nouvelle : il répond « 0 octet de données ».
+        self.sans_mesure_nouvelle = False
+        # Un adaptateur RS485 qui renvoie ce que le Pi écrit.
+        self.echo = False
+        self.etat_force = 0
+        # Chaque réponse arrive avec un octet changé (somme de contrôle fausse).
+        self.abimer = False
+        self.couper = False
+        self.ouvertures = 0
+        self._tampon = bytearray()
+
+    @property
+    def debranche(self) -> bool:
+        return self.muet
+
+    @debranche.setter
+    def debranche(self, valeur: bool) -> None:
+        self.muet = valeur
+
+    def injecter(self, octets: bytes) -> None:
+        """Des octets arrivent au Pi, tels quels (trame abîmée, coupée...)."""
+        self._tampon += octets
+
+    def ouvrir(self) -> "FauxSps30":
+        if self.cable_coupe:
+            raise OSError("faux SPS30 : adaptateur débranché")
+        self.ouvertures += 1
+        self._tampon.clear()
+        return self
+
+    def _valeurs(self) -> tuple[float, ...]:
+        rang = shdlc.RANG_GRANDEUR[self.reglage.grandeur]
+        return tuple(
+            self.valeur if i == rang else self.valeur + 1000.0 + i
+            for i in range(shdlc.NOMBRE_VALEURS)
+        )
+
+    def write(self, donnees: bytes) -> int:
+        if self.cable_coupe:
+            raise OSError("faux SPS30 : adaptateur débranché")
+        if self.echo:
+            self._tampon += donnees
+        if self.muet:
+            return len(donnees)
+        try:
+            question = shdlc.decoder_reponse(self._question_en_reponse(donnees))
+        except shdlc.ErreurTrame:
+            return len(donnees)
+        reponse = self._repondre(question.commande, question.donnees)
+        if self.abimer:
+            abimee = bytearray(reponse)
+            abimee[len(abimee) // 2] ^= 0xFF
+            reponse = bytes(abimee)
+        if self.couper:
+            reponse = reponse[: len(reponse) // 2]
+        self._tampon += reponse
+        return len(donnees)
+
+    def _repondre(self, commande: int, contenu: bytes) -> bytes:
+        if commande == shdlc.COMMANDE_DEMARRER:
+            if contenu != shdlc.DONNEES_DEMARRER:
+                return shdlc.construire_reponse(commande, etat=0x04)
+            if self.demarre:
+                return shdlc.construire_reponse(commande, etat=0x43)
+            self.demarre = True
+            return shdlc.construire_reponse(commande)
+        if commande == shdlc.COMMANDE_LIRE:
+            if not self.demarre:
+                return shdlc.construire_reponse(commande, etat=0x43)
+            if self.sans_mesure_nouvelle:
+                return shdlc.construire_reponse(commande, etat=self.etat_force)
+            mesure = shdlc.donnees_de_mesure(self._valeurs())
+            return shdlc.construire_reponse(commande, mesure, self.etat_force)
+        return shdlc.construire_reponse(commande, etat=0x02)
+
+    @staticmethod
+    def _question_en_reponse(question: bytes) -> bytes:
+        """Une question (adresse, commande, longueur, données) relue comme une réponse
+        (adresse, commande, état = 0, longueur, données) pour la décoder avec le même code."""
+        contenu = shdlc.retirer_echappements(question[1:-1])
+        adresse, commande, longueur = contenu[0], contenu[1], contenu[2]
+        donnees = contenu[3 : 3 + longueur]
+        if adresse != shdlc.ADRESSE:
+            raise shdlc.ErreurTrame("pas pour lui")
+        if shdlc.somme_de_controle(contenu[:-1]) != contenu[-1]:
+            raise shdlc.ErreurTrame("somme fausse")
+        return shdlc.construire_reponse(commande, donnees)
+
+    @property
+    def in_waiting(self) -> int:
+        if self.cable_coupe:
+            raise OSError("faux SPS30 : adaptateur débranché")
+        return len(self._tampon)
+
+    def read(self, nombre: int) -> bytes:
+        if self.cable_coupe:
+            raise OSError("faux SPS30 : adaptateur débranché")
+        morceau = bytes(self._tampon[:nombre])
+        del self._tampon[:nombre]
+        return morceau
+
+    def reset_input_buffer(self) -> None:
+        self._tampon.clear()
+
+    def close(self) -> None:
+        pass
+
+
+class FausseSortiePwm:
+    """Une sortie PWM imaginaire : garde les rapports cycliques reçus."""
+
+    def __init__(self, reglage: SortiePwm) -> None:
+        self.reglage = reglage
+        self.rapports: list[float] = []
+        self.en_panne = False
+        self.ferme = False
+
+    @property
+    def debranche(self) -> bool:
+        return self.en_panne
+
+    @debranche.setter
+    def debranche(self, valeur: bool) -> None:
+        self.en_panne = valeur
+
+    def regler(self, rapport: float) -> None:
+        if self.en_panne:
+            raise ErreurMateriel("faux PWM en panne")
+        self.rapports.append(rapport)
+
+    def volts(self) -> float | None:
+        """La tension que le module donnerait en ce moment (None : jamais réglée)."""
+        if not self.rapports:
+            return None
+        return self.rapports[-1] * self.reglage.pleine_echelle_v
+
+    def fermer(self) -> None:
+        self.ferme = True
+
+
 class FauxRs485:
     """Un fil RS485 (port série) avec des appareils à leur adresse."""
 
@@ -482,7 +678,11 @@ class FausseFabrique:
         self.bus: dict[str, FauxBusI2c] = {}
         self.rs485: dict[str, FauxRs485] = {}
         self.ozones: dict[str, FauxCapteurOzone] = {}
+        # SPS30 : par carte (USB-RS485) ou par fichier (UART du Pi).
+        self.particules: dict[str, FauxSps30] = {}
+        self.pwms: dict[tuple[str, int], FausseSortiePwm] = {}
         classes = {
+            "sdp810": FauxSdp810,
             "sht31": FauxSht31,
             "ads1115": FauxAds1115,
             "pcf8574": FauxPcf8574,
@@ -500,6 +700,16 @@ class FausseFabrique:
                 reglage = liste.signaux[branchement.nom].ozone
                 assert reglage is not None
                 self.ozones.setdefault(ressource[1], FauxCapteurOzone(reglage))
+            elif branchement.sorte == "particules":
+                reglage_p = liste.signaux[branchement.nom].particules
+                assert reglage_p is not None
+                self.particules.setdefault(ressource[1], FauxSps30(reglage_p))
+            elif branchement.sorte == "consigne":
+                reglage_pwm = liste.signaux[branchement.nom].pwm
+                assert reglage_pwm is not None
+                self.pwms.setdefault(
+                    (reglage_pwm.fichier, reglage_pwm.canal), FausseSortiePwm(reglage_pwm)
+                )
             else:
                 rs485 = self.rs485.setdefault(ressource[1], FauxRs485())
                 signal = liste.signaux[branchement.nom]
@@ -525,10 +735,21 @@ class FausseFabrique:
     def bus_i2c(self, fichier: str) -> BusI2c:
         return self.bus.setdefault(fichier, FauxBusI2c())
 
-    def port_serie(self, liaison: LiaisonUsbSerie) -> FauxRs485 | FauxCapteurOzone:
+    def port_uart(self, fichier: str, vitesse_bauds: int, delai_reponse_s: float) -> FauxSps30:
+        if fichier not in self.particules:
+            raise OSError(f"faux : aucun UART « {fichier} »")
+        return self.particules[fichier].ouvrir()
+
+    def sortie_pwm(self, reglage: SortiePwm) -> FausseSortiePwm:
+        return self.pwms.setdefault((reglage.fichier, reglage.canal), FausseSortiePwm(reglage))
+
+    def port_serie(self, liaison: LiaisonUsbSerie) -> FauxRs485 | FauxCapteurOzone | FauxSps30:
         for carte, ozone in self.ozones.items():
             if self.liste.cartes[carte].liaison == liaison:
                 return ozone.ouvrir()
+        for carte, capteur in self.particules.items():
+            if carte in self.liste.cartes and self.liste.cartes[carte].liaison == liaison:
+                return capteur.ouvrir()
         for carte, rs485 in self.rs485.items():
             if self.liste.cartes[carte].liaison == liaison:
                 return rs485.ouvrir()
@@ -550,6 +771,10 @@ class FausseFabrique:
             return self.bus[ressource[1]].appareils[ressource[2]]
         if branchement.sorte == "ozone":
             return self.ozones[ressource[1]]
+        if branchement.sorte == "particules":
+            return self.particules[ressource[1]]
+        if branchement.sorte == "consigne":
+            return self.pwms[(ressource[1], ressource[2])]
         signal = self.liste.signaux[branchement.nom]
         return self.rs485[ressource[1]].appareils[signal.adresse]
 
@@ -564,13 +789,21 @@ class FausseFabrique:
         return branchement.actif(self._appareil(branchement).niveau(branchement.broche))
 
     def regler(self, nom: str, valeur: float) -> None:
-        """Mesure analogique, ou ozone en ppm, dans l'unité du signal."""
-        branchement = self._branchement(nom, "mesure", "ozone")
+        """Mesure analogique, ozone en ppm, particules en µg/m³ ou pression en Pa (positive :
+        l'enceinte plus haute que le conteneur), dans l'unité du signal."""
+        branchement = self._branchement(nom, "mesure", "ozone", "particules", "pression")
         signal = self.liste.signaux[nom]
         appareil = self._appareil(branchement)
         if branchement.sorte == "ozone":
             assert signal.ozone is not None
             appareil.brut = round(valeur / signal.ozone.pas_ppm)
+            return
+        if branchement.sorte == "particules":
+            appareil.valeur = valeur
+            return
+        if branchement.sorte == "pression":
+            assert signal.pression is not None
+            appareil.pascals = -valeur if signal.pression.inverser else valeur
             return
         volts = valeur
         if signal.conversion is not None:
@@ -591,6 +824,18 @@ class FausseFabrique:
         """Le faux capteur d'ozone d'un signal (le rendre muet, lui injecter des octets...)."""
         return self._appareil(self._branchement(nom, "ozone"))
 
+    def capteur_particules(self, nom: str) -> FauxSps30:
+        """Le faux SPS30 d'un signal (le rendre muet, lui injecter des octets...)."""
+        return self._appareil(self._branchement(nom, "particules"))
+
+    def capteur_pression(self, nom: str) -> FauxSdp810:
+        """Le faux SDP810 d'un signal (abîmer sa somme de contrôle...)."""
+        return self._appareil(self._branchement(nom, "pression"))
+
+    def consigne(self, nom: str) -> FausseSortiePwm:
+        """La fausse sortie PWM d'un signal (ses rapports reçus, `volts()`)."""
+        return self._appareil(self._branchement(nom, "consigne"))
+
     def carte_pesee(self, nom: str) -> FausseCartePesee:
         """La fausse carte de pesée du bus RS485 d'un signal (la figer, couper son HX711...),
         ou la fausse boîte du poste du fût (FausseBoitePosteFut : radio, accu...)."""
@@ -603,7 +848,16 @@ class FausseFabrique:
         """La puce I2C, le capteur d'ozone ou la carte de pesée du signal ne répond plus
         (ou de nouveau)."""
         branchement = self._branchement(
-            nom, "mesure", "ozone", "ambiance", "entree", "sortie", "pesee"
+            nom,
+            "mesure",
+            "ozone",
+            "ambiance",
+            "entree",
+            "sortie",
+            "pesee",
+            "particules",
+            "pression",
+            "consigne",
         )
         if branchement.ressource[0] == "gpio":
             raise KeyError("faux : une broche GPIO du Pi ne se débranche pas")

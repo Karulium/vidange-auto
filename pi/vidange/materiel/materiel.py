@@ -5,6 +5,9 @@
         materiel.ecrire("voyant_buzzer", True)   # True = relais commandé
         materiel.mesurer("vide_venturi")         # valeur dans son unité (kPa...)
         materiel.lire_ozone("ozone_dedans")           # MesureOzone (ppm, au plafond ou non)
+        materiel.lire_particules("particules_dedans")  # µg/m³ (SPS30) ; CapteurMuet s'il se tait
+        materiel.lire_pression("pression_enceinte")    # Pa (SDP810)
+        materiel.regler_consigne("consigne_ventilateur", 5.0)  # volts (PWM → 0-10 V)
         materiel.ambiance("sht31_armoire")       # Ambiance(temperature_c, humidite_pct)
         materiel.peser("pesee_griffe")            # mesure brute d'une pesée du bus RS485
         materiel.lire_carte_pesee("pesee_griffe") # tout ce qu'elle dit (MesureCarte)
@@ -32,6 +35,8 @@ from typing import Literal, NamedTuple, Protocol
 from vidange.entrees_sorties import (
     BOITE_POSTE_FUT,
     CAPTEUR_OZONE,
+    CAPTEUR_PARTICULES,
+    CAPTEUR_PRESSION,
     ENTREES,
     PESEES_DU_BUS,
     SORTIES,
@@ -39,12 +44,16 @@ from vidange.entrees_sorties import (
     LiaisonGpio,
     LiaisonUsbSerie,
     Signal,
+    SortiePwm,
 )
 from vidange.journal import donner_journal
 from vidange.materiel import carte_pesee
 from vidange.materiel.carte_pesee import MesureCarte
+from vidange.materiel.consigne import PwmLinux
 from vidange.materiel.modbus import ClientModbus, PortSerie
 from vidange.materiel.ozone import LecteurOzone, MesureOzone
+from vidange.materiel.particules import LecteurSps30
+from vidange.materiel.pression import Sdp810
 from vidange.materiel.puces import (
     Ads1115,
     BusI2c,
@@ -69,7 +78,8 @@ class Ambiance(NamedTuple):
 
 # --------------------------------------------- d'où vient chaque signal (le plan)
 
-# Une ressource : ("gpio", fichier), ("i2c", fichier, adresse, puce) ou ("serie", carte).
+# Une ressource : ("gpio", fichier), ("i2c", fichier, adresse, puce), ("serie", carte),
+# ("uart", fichier) pour un UART du Pi ou ("pwm", dossier de la puce, canal).
 Ressource = tuple
 
 
@@ -78,7 +88,17 @@ class Branchement:
     """Comment un signal arrive au Pi, tiré de la liste des entrées/sorties."""
 
     nom: str
-    sorte: Literal["entree", "sortie", "mesure", "ambiance", "ozone", "pesee"]
+    sorte: Literal[
+        "entree",
+        "sortie",
+        "mesure",
+        "ambiance",
+        "ozone",
+        "pesee",
+        "particules",
+        "pression",
+        "consigne",
+    ]
     ressource: Ressource
     # Broche tout-ou-rien (GPIO17, P0...) ou voie de l'ADS1115 (A0...).
     broche: str = ""
@@ -115,8 +135,21 @@ def tracer_branchements(liste: EntreesSorties) -> dict[str, Branchement]:
         if isinstance(liaison, LiaisonUsbSerie):
             if signal.appareil == CAPTEUR_OZONE:
                 branchements[nom] = Branchement(nom, "ozone", ("serie", signal.carte))
+            elif signal.appareil == CAPTEUR_PARTICULES:
+                branchements[nom] = Branchement(nom, "particules", ("serie", signal.carte))
             elif signal.appareil in PESEES_DU_BUS:
                 branchements[nom] = Branchement(nom, "pesee", ("serie", signal.carte))
+            continue
+        if signal.appareil == CAPTEUR_PARTICULES and signal.fichier is not None:
+            branchements[nom] = Branchement(nom, "particules", ("uart", signal.fichier))
+            continue
+        if signal.type == "i2c" and signal.appareil == CAPTEUR_PRESSION:
+            branchements[nom] = Branchement(nom, "pression", _bus_i2c(signal))
+            continue
+        if signal.type == "pwm" and signal.pwm is not None:
+            branchements[nom] = Branchement(
+                nom, "consigne", ("pwm", signal.pwm.fichier, signal.pwm.canal)
+            )
             continue
         if signal.type == "i2c" and signal.appareil == "sht31":
             branchements[nom] = Branchement(nom, "ambiance", _bus_i2c(signal))
@@ -157,6 +190,20 @@ class Fabrique(Protocol):
 
     def port_serie(self, liaison: LiaisonUsbSerie) -> PortSerie: ...
 
+    def port_uart(self, fichier: str, vitesse_bauds: int, delai_reponse_s: float) -> PortSerie:
+        """Un UART du Pi (GPIO 8/9 : /dev/ttyAMA3...)."""
+        ...
+
+    def sortie_pwm(self, reglage: SortiePwm) -> "SortiePwmMateriel": ...
+
+
+class SortiePwmMateriel(Protocol):
+    def regler(self, rapport: float) -> None:
+        """Rapport cyclique de 0 à 1 ; lève ErreurMateriel si la sortie ne marche pas."""
+        ...
+
+    def fermer(self) -> None: ...
+
 
 class VraieFabrique:
     def gpio(self, fichier: str) -> Lignes:
@@ -194,6 +241,16 @@ class VraieFabrique:
             pass
         return port
 
+    def port_uart(self, fichier: str, vitesse_bauds: int, delai_reponse_s: float) -> PortSerie:
+        import serial
+
+        return serial.Serial(
+            fichier, vitesse_bauds, timeout=delai_reponse_s, write_timeout=delai_reponse_s
+        )
+
+    def sortie_pwm(self, reglage: SortiePwm) -> SortiePwmMateriel:
+        return PwmLinux(reglage)
+
 
 # ------------------------------------------------------------------ le Materiel
 
@@ -221,9 +278,13 @@ class Materiel:
         self._commandes: dict[str, bool] = {}
         self._bus: dict[str, BusI2c] = {}
         self._lignes: dict[Ressource, Lignes] = {}
-        self._puces: dict[Ressource, Ads1115 | Sht31] = {}
+        self._puces: dict[Ressource, Ads1115 | Sht31 | Sdp810] = {}
         self._clients: dict[str, ClientModbus] = {}
         self._ozones: dict[str, LecteurOzone] = {}
+        self._particules: dict[str, LecteurSps30] = {}
+        self._consignes: dict[str, SortiePwmMateriel] = {}
+        # Les consignes déjà réglées une fois (les autres sont au repos : rien à remettre à 0).
+        self._consignes_reglees: set[str] = set()
         try:
             self._preparer()
         except Exception:
@@ -248,7 +309,12 @@ class Materiel:
                 assert isinstance(liaison, LiaisonUsbSerie)
                 ouvrir = lambda liaison=liaison: self.fabrique.port_serie(liaison)  # noqa: E731
                 ozones = [b.nom for b in groupe if b.sorte == "ozone"]
-                if ozones:
+                particules = [b.nom for b in groupe if b.sorte == "particules"]
+                if particules:
+                    # Un capteur de particules a son adaptateur à lui (même adresse SHDLC).
+                    for nom in particules:
+                        self._ajouter_particules(nom, ouvrir)
+                elif ozones:
                     # Un capteur d'ozone a son adaptateur à lui : pas de Modbus, pas de partage.
                     for nom in ozones:
                         reglage = self.liste.signaux[nom].ozone
@@ -256,6 +322,29 @@ class Materiel:
                         self._ozones[nom] = LecteurOzone(ouvrir, reglage, nom=carte)
                 else:
                     self._clients[carte] = ClientModbus(ouvrir, nom=carte)
+                continue
+            if sorte == "uart":
+                for branchement in groupe:
+                    reglage = self.liste.signaux[branchement.nom].particules
+                    assert reglage is not None
+                    assert reglage.vitesse_bauds is not None and reglage.delai_reponse_s
+                    ouvrir_uart = lambda fichier=ressource[1], r=reglage: (  # noqa: E731
+                        self.fabrique.port_uart(fichier, r.vitesse_bauds, r.delai_reponse_s)
+                    )
+                    self._ajouter_particules(branchement.nom, ouvrir_uart)
+                continue
+            if sorte == "pwm":
+                for branchement in groupe:
+                    reglage_pwm = self.liste.signaux[branchement.nom].pwm
+                    assert reglage_pwm is not None
+                    self._consignes[branchement.nom] = self.fabrique.sortie_pwm(reglage_pwm)
+                continue
+            if sorte == "i2c" and ressource[3] == CAPTEUR_PRESSION:
+                reglage_pression = self.liste.signaux[groupe[0].nom].pression
+                assert reglage_pression is not None
+                self._puces[ressource] = Sdp810(
+                    self._bus_de(ressource[1]), ressource[2], reglage_pression.inverser
+                )
                 continue
             if sorte == "i2c" and ressource[3] in ("ads1115", "sht31"):
                 classe = Ads1115 if ressource[3] == "ads1115" else Sht31
@@ -277,6 +366,11 @@ class Materiel:
             for branchement in groupe:
                 if branchement.sorte == "sortie":
                     self._commandes[branchement.nom] = False
+
+    def _ajouter_particules(self, nom: str, ouvrir) -> None:
+        reglage = self.liste.signaux[nom].particules
+        assert reglage is not None
+        self._particules[nom] = LecteurSps30(ouvrir, reglage, nom=nom)
 
     def _branchement(self, nom: str, *sortes: str) -> Branchement:
         if nom not in self.liste.signaux:
@@ -326,7 +420,13 @@ class Materiel:
         return resultat
 
     def mesurer(self, nom: str) -> float:
-        """Mesure analogique (ADS1115) ou capteur d'ozone (ppm), dans l'unité du signal."""
+        """Mesure analogique (ADS1115), ozone (ppm), particules (µg/m³) ou pression (Pa), dans
+        l'unité du signal."""
+        autre = self.branchements.get(nom)
+        if autre is not None and autre.sorte == "particules":
+            return self.lire_particules(nom)
+        if autre is not None and autre.sorte == "pression":
+            return self.lire_pression(nom)
         branchement = self._branchement(nom, "mesure", "ozone")
         signal = self.liste.signaux[nom]
         if branchement.sorte == "ozone":
@@ -345,6 +445,36 @@ class Materiel:
         self._branchement(nom, "ozone")
         lecteur = self._ozones[nom]
         return self._au_nom_de(nom, lecteur.lire)
+
+    def lire_particules(self, nom: str) -> float:
+        """Concentration en masse (µg/m³) d'un SPS30. Lève ErreurMateriel (CapteurMuet s'il ne
+        dit plus rien) : jamais une valeur inventée."""
+        self._branchement(nom, "particules")
+        return self._au_nom_de(nom, self._particules[nom].lire)
+
+    def lire_pression(self, nom: str) -> float:
+        """Pression différentielle (Pa) d'un SDP810 : positive si l'enceinte est plus haute."""
+        branchement = self._branchement(nom, "pression")
+        puce = self._puces[branchement.ressource]
+        assert isinstance(puce, Sdp810)
+        with self._verrou:
+            return self._au_nom_de(nom, puce.mesurer)
+
+    def regler_consigne(self, nom: str, volts: float) -> None:
+        """Consigne 0-10 V (module PWM) : `volts` de 0 à la pleine échelle du module."""
+        self._branchement(nom, "consigne")
+        reglage = self.liste.signaux[nom].pwm
+        assert reglage is not None
+        if not 0 <= volts <= reglage.pleine_echelle_v:
+            raise ErreurMateriel(
+                f"signal « {nom} » : {volts:g} V hors de 0 à {reglage.pleine_echelle_v:g} V "
+                "(pleine échelle du module)"
+            )
+        sortie = self._consignes[nom]
+        with self._verrou:
+            self._consignes_reglees.add(nom)
+            self._au_nom_de(nom, lambda: sortie.regler(volts / reglage.pleine_echelle_v))
+        journal.debug("Consigne %s : %g V", nom, volts)
 
     def ambiance(self, nom: str) -> Ambiance:
         """Température (°C) et humidité (%) d'un SHT31."""
@@ -408,7 +538,12 @@ class Materiel:
         return (nom for nom, b in self.branchements.items() if b.sorte == "sortie")
 
     def mettre_au_repos(self) -> None:
-        """Toutes les sorties au repos ; continue même si l'une échoue."""
+        """Toutes les sorties au repos (consignes à 0 V) ; continue même si l'une échoue."""
+        for nom in sorted(self._consignes_reglees):
+            try:
+                self._consignes[nom].regler(0.0)
+            except ErreurMateriel as erreur:
+                journal.error("Consigne %s à 0 V impossible : %s", nom, erreur)
         for nom in list(self._commandes):
             try:
                 self.ecrire(nom, False)
@@ -423,6 +558,8 @@ class Materiel:
             *self._lignes.values(),
             *self._clients.values(),
             *self._ozones.values(),
+            *self._particules.values(),
+            *self._consignes.values(),
             *self._bus.values(),
         ]:
             try:
@@ -432,6 +569,9 @@ class Materiel:
         self._lignes.clear()
         self._clients.clear()
         self._ozones.clear()
+        self._particules.clear()
+        self._consignes.clear()
+        self._consignes_reglees.clear()
         self._bus.clear()
         self._puces.clear()
         self._commandes.clear()

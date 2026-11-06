@@ -299,7 +299,8 @@ def test_bus_d_une_carte_sans_fichier(entrees_sorties):
 def test_meme_bus_fichiers_differents(entrees_sorties):
     remplacer(entrees_sorties, "fichier: /dev/i2c-1", "fichier: /dev/i2c-3")
     message = erreur_de(entrees_sorties)
-    assert "signaux sht31_armoire, ads1115_bus, relais_1_bus, relais_2_bus : même bus" in message
+    bus = "sht31_armoire, ads1115_bus, relais_1_bus, pression_enceinte, relais_2_bus"
+    assert f"signaux {bus} : même bus" in message
 
 
 def test_appareil_i2c_oublie(entrees_sorties):

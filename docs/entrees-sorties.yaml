@@ -152,6 +152,21 @@ cartes:
       vitesse_bauds: 9600
       parite: aucune
       delai_reponse_s: 0.5
+  # Capteurs de particules Sensirion SPS30 du Nettoyage (tâche 38 ter) : protocole SHDLC sur UART
+  # (vidange/trame_sps30.py), 115 200 bauds, 8N1. Le capteur du DEDANS passe par un convertisseur
+  # TTL-RS485 et cet adaptateur USB-RS485 ; celui du DEHORS est sur l'UART3 du Pi (GPIO 8/9, voir le
+  # signal particules_dehors). Valeurs À VÉRIFIER sur la notice (pi/systeme/essai-capteurs-purge.md).
+  rs485_sps30:
+    exemple: true
+    description: Adaptateur USB-RS485 du capteur de particules (dedans)
+    tension_max: 5
+    isolee: false
+    liaison:
+      type: usb_serie
+      numero_serie_usb: "EXEMPLE-RS485-SPS30"
+      vitesse_bauds: 115200
+      parite: aucune
+      delai_reponse_s: 0.3
   # Nettoyage (tâche 38) : relais 230 V du ventilateur, du générateur d'ozone, de la lampe UV, du
   # compresseur et du ventilateur de l'armoire ; relais 12 V des verrous du store et des LED.
   # Liaison d'EXEMPLE (2e PCF8574 à l'adresse 0x21), comme la carte n° 1.
@@ -256,12 +271,16 @@ cartes:
 #   module : un nom de la liste « modules » ci-dessus.
 #   appareil : pour un bus, l'appareil au bout (obligatoire en i2c) :
 #     sht31, ads1115, pcf8574, mcp23017, transmetteur_modbus, nextion, accelerometre,
+#     sps30 (capteur de particules, protocole SHDLC : bloc « particules: »), sdp810 (pression
+#       différentielle en I2C : bloc « pression: »),
 #     carte_pesee (carte RP2040 + HX711 du bus des pesées, lue en Modbus : pesee/README.md),
 #     boite_poste_fut (boîte du poste du fût sur le bus des pesées : elle reçoit par radio les
 #       mesures du plateau de pesée ; lue en Modbus, signature 0x5046 ; son programme n'est pas
 #       fait par pesee/ : tâche 17 ter).
 #   fichier : pour un bus sur les broches du Pi, le fichier de Linux qui y donne accès
 #     (I2C des GPIO2/3 : /dev/i2c-1).
+#   pwm : pour un signal de type pwm qui est une consigne 0-10 V : sa sortie PWM matérielle
+#     (fichier, canal, periode_us) et la tension du module à 100 % (pleine_echelle_v).
 #   unite, conversion : pour une mesure, son unité et deux points « tension lue → valeur »
 #     (volts: [0.5, 3.0], valeurs: [0, -90]) ; sans conversion, la mesure est en volts.
 #   modbus : pour un transmetteur_modbus, où lire sa mesure :
@@ -1237,10 +1256,58 @@ signaux:
   # du bas du store + porte_spray en série dans l'alimentation de generateur_ozone et lampe_uv ;
   # verrous fermés sans courant, clé de dépannage). Le moteur du store n'est PAS un signal du Pi
   # (commande maintenue : 2 boutons câblés, fins de course dans le moteur).
-  # Pas encore dans la liste (capteurs pas choisis, « case vide » dans vidange/nettoyage/capteurs.py) :
-  #   particules_dedans, particules_dehors (PMS5003 ou SPS30, UART) ; pression_enceinte (pression
-  #   différentielle enceinte / conteneur, Pa) ; ozone_securite_ok (contact de l'alarme d'ozone câblée,
-  #   appareil pas choisi : facultatif, le Pi l'affiche seulement s'il est ici).
+  # Pas encore dans la liste : ozone_securite_ok (contact de l'alarme d'ozone câblée, appareil pas
+  # choisi : facultatif, le Pi l'affiche seulement s'il est ici).
+  # Capteurs de la purge (tâche 38 ter, pièces choisies le 06/11/2026) : 2 SPS30 (particules) et un
+  # SDP810-125Pa (pression enceinte / conteneur). Broches et adresses d'EXEMPLE (Implantation).
+  particules_dedans:
+    exemple: true
+    description: Capteur de particules SPS30 de l'enceinte (dedans), par convertisseur TTL-RS485
+    carte: rs485_sps30
+    broche: [A, B]
+    type: serie
+    tension: 5
+    module: nettoyage
+    appareil: sps30
+    unite: µg/m³
+    # EXEMPLES, à vérifier sur la notice du SPS30.
+    particules:
+      grandeur: pm2_5     # concentration en masse lue : pm1_0, pm2_5, pm4_0 ou pm10
+      delai_muet_s: 5     # sans mesure valable depuis ce délai : capteur « muet »
+  particules_dehors:
+    exemple: true
+    # UART3 du Pi 5 : GPIO 8 (TX) et 9 (RX), avec « dtoverlay=uart3-pi5 » dans config.txt
+    # (pi/systeme/essai-capteurs-purge.md). Le Pi parle en 3,3 V, comme le SPS30.
+    description: Capteur de particules SPS30 de l'air extérieur (dehors), sur l'UART3 du Pi
+    carte: pi
+    broche: [GPIO8, GPIO9]
+    type: serie
+    tension: 3.3
+    module: nettoyage
+    appareil: sps30
+    fichier: /dev/ttyAMA3
+    unite: µg/m³
+    particules:
+      grandeur: pm2_5
+      delai_muet_s: 5
+      vitesse_bauds: 115200   # UART du Pi seulement (sur l'USB-RS485, c'est la carte qui le dit)
+      delai_reponse_s: 0.3    # UART du Pi seulement
+  pression_enceinte:
+    exemple: true
+    # SDP810-125Pa : tuyau « P » dans l'enceinte, tuyau « N » dans le conteneur (côté du filtre).
+    # Surpression de l'enceinte = valeur positive. Si c'est l'inverse : « inverser: true ».
+    description: Pression différentielle enceinte / conteneur (SDP810-125Pa, I2C)
+    carte: pi
+    broche: [GPIO2, GPIO3]
+    type: i2c
+    tension: 3.3
+    adresse: 0x25
+    module: nettoyage
+    appareil: sdp810
+    fichier: /dev/i2c-1
+    unite: Pa
+    pression:
+      inverser: false
   store_ferme:
     exemple: true
     # Les 2 reeds IP67 du bas du store EN SÉRIE : fermé = store fermé aux deux bouts.
@@ -1322,14 +1389,22 @@ signaux:
     module: armoire
   consigne_ventilateur:
     exemple: true
-    # Consigne 0-10 V du moteur EC (il s'arrête sans signal). Convertisseur PAS ENCORE CHOISI (sortie
-    # PWM du Pi + module PWM → 0-10 V, ou convertisseur I2C) : « case vide » pour l'instant.
-    description: Consigne 0-10 V du ventilateur de l'enceinte (convertisseur à choisir)
+    # Consigne 0-10 V du moteur EC (il s'arrête sans signal) : sortie PWM matérielle du Pi + module
+    # PWM → 0-10 V (docs/decisions.md, réponses à la PR n° 80). GPIO19 = canal 3 de la puce PWM du Pi 5
+    # avec « dtoverlay=pwm-2chan,pin=18,func=3,pin2=19,func2=3 » (canal 2 = GPIO18, le servo de la
+    # caméra du dosage), à vérifier. EXEMPLES à vérifier sur la notice du module : période, tension
+    # à 100 %. Procédure : pi/systeme/essai-capteurs-purge.md.
+    description: Consigne 0-10 V du ventilateur de l'enceinte (module PWM → 0-10 V)
     carte: pi
     broche: GPIO19
     type: pwm
     tension: 3.3
     module: nettoyage
+    pwm:
+      fichier: /sys/class/pwm/pwmchip0
+      canal: 3
+      periode_us: 1000        # 1 kHz
+      pleine_echelle_v: 10    # tension du module quand le rapport cyclique est de 100 %
   relais_2_bus:
     exemple: true
     description: Liaison I2C vers la puce PCF8574 de la carte relais n° 2
