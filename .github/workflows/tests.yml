@@ -117,3 +117,40 @@ jobs:
         with:
           name: pesee
           path: pesee/build/*.uf2
+
+  # Programmes des 2 ESP32-C3 du poste du fût (plateau de pesée et boîte du poste) : essais sur
+  # PC (faux HX711, fausses trames radio, Modbus), puis fabrication des 2 programmes avec ESP-IDF,
+  # dans l'image Docker officielle d'Espressif (environ 3 à 5 min, surtout le téléchargement).
+  poste_fut_radio:
+    runs-on: ubuntu-24.04
+    env:
+      IDF_VERSION: "v5.5.4"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Essais sur PC
+        run: |
+          cmake -S poste_fut_radio/tests -B poste_fut_radio/build-essais
+          cmake --build poste_fut_radio/build-essais
+          ctest --test-dir poste_fut_radio/build-essais --output-on-failure
+      - name: Fabrication des 2 programmes (ESP-IDF, ESP32-C3)
+        run: |
+          docker run --rm -v "$PWD":/projet -w /projet "espressif/idf:$IDF_VERSION" bash -c '
+            set -e
+            git config --global --add safe.directory "*"
+            # Lecture et vérification de pesees.yaml et entrees-sorties.yaml (par le code du Pi).
+            pip install -q "pydantic>=2.5,<3" "PyYAML>=6.0,<7"
+            mkdir -p poste_fut_radio/build
+            for carte in plateau boite; do
+              idf.py -C poste_fut_radio/$carte build
+            done
+            # Un seul fichier par carte, à charger à 0x0 (essai-materiel.md, étape 1).
+            (cd poste_fut_radio/plateau/build &&
+              python -m esptool --chip esp32c3 merge_bin -o ../../build/plateau_fut-complet.bin @flash_args)
+            (cd poste_fut_radio/boite/build &&
+              python -m esptool --chip esp32c3 merge_bin -o ../../build/boite_poste_fut-complet.bin @flash_args)
+          '
+      - name: Programmes à télécharger (un fichier par carte)
+        uses: actions/upload-artifact@v4
+        with:
+          name: poste_fut_radio
+          path: poste_fut_radio/build/*-complet.bin

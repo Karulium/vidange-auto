@@ -1,0 +1,13 @@
+# Réglages d'ESP-IDF pour la boîte du poste (pas des chiffres de la machine : ceux-là sont dans
+# pi/reglages/pesees.yaml).
+CONFIG_IDF_TARGET="esp32c3"
+# Fenêtre texte et mises à jour par le câble USB de la carte (USB-Serial-JTAG).
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+# Horloge de FreeRTOS à 1 ms (attentes courtes, réponse rapide au Pi).
+CONFIG_FREERTOS_HZ=1000
+# Programme figé : la carte redémarre (le délai vient de pesees.yaml).
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT=y
+# Le pilote de l'UART dans la mémoire rapide (réponse sans attente).
+CONFIG_UART_ISR_IN_IRAM=y
