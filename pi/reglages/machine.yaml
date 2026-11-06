@@ -1287,11 +1287,14 @@ remplissage:
 # Un verrou du logiciel ne protège que la MACHINE : la sécurité des personnes reste câblée.
 stockage:
   exemple: true
-  # Plateau du haut (dessus de la tôle) et ses 2 panneaux relevables (de x à x).
+  # Plateau du haut (dessus de la tôle) et ses 3 panneaux relevables (de x à x). Stockage agrandi
+  # de 43 cm (validé le 04/11/2026, 17:58) : le stockage commence toujours à x 1,10, tout ce qui
+  # était au bout avance de 0,43. Joints de 12,5 mm.
   plateau_z: 0.496
   panneaux:
-    p1: [1.155, 1.870]
-    p2: [1.880, 2.595]
+    p1: [1.155, 1.770]
+    p2: [1.7825, 2.3975]
+    p3: [2.410, 3.025]
   # Piles de seaux vides (mode seaux, sans tapis). Un format par pile.
   #   Seaux par pile : n = min(⌊(bord_max_m − h)/pas⌋ + 1 ; ⌊(sortie_max_m − 2h)/pas⌋ + 1),
   #   h = hauteur du seau et pas = pas_pile_m (griffe → formats). Contrôle : A 5, B 7, C 5, D 3.
@@ -1327,71 +1330,87 @@ stockage:
     prise_hors_axe_max_m: 0.01
   # Tiroir du bas, 3 files (celles du Remplissage, remplissage → rangement → files), tôle à
   # 0,176 (au plus 5 mm sous le plateau du chariot en bas). Entrée à x 1,10, face d'appui de la
-  # butée de fond à x 2,582 (barre 2,582-2,612 ; réponses à la PR n° 52). Le pousseur du chariot
+  # butée de fond à x 3,012 (stockage agrandi de 43 cm, 04/11/2026). Le pousseur du chariot
   # pousse vers +x : avance ≈ 0,272 par seau, poussée au moins 0,18 ; le premier seau ne dépasse
-  # jamais la butée. Effort pour une file de 6 : 150 à 240 N (à l'essai). Rangement seulement
+  # jamais la butée. Effort pour une file pleine : 150 à 240 N (à l'essai). Rangement seulement
   # boucle fermée (tiroir rentré et verrouillé). Oreilles de l'anse à 45° des files
   # (remplissage → anse_deg).
-  # Seaux par file et par format (capacités du tiroir corrigées le 01/11 : A 14, B 15, C 12,
-  # D 14) : A et D 4 + 5 + 5 (file y 0,215 : dernière place sous la caméra du fond) ; B 5 + 5 + 5
-  # (répartition déduite de 15 : à vérifier dans le fichier du fil Stockage) ; C 4 par file, plus
-  # de quinconce. Centres en x : ceux du seau C (fichier du fil Stockage) ; ceux de A, B et D sont
-  # dans ce fichier, à recopier ici (centres_x, facultatif : vérifiés au démarrage).
+  # Seaux par file et par format (tiroir : A 20, B 21, C 17, D 17 ; avec la bande du haut : A 26,
+  # B 28, C 22, D 23). Place sous la caméra du fond (boîtier x 2,87-2,99) : elle RESTE VIDE pour
+  # A et D sur la file y 0,215 (le pousseur s'arrête au codeur sur la 2e place) ; B et C ne sont
+  # pas concernés. B est limité à 7 par file (un 8e tiendrait, mais le total de l'étude en
+  # compte 7). Centres en x de toutes les places, du plus loin au plus près (vérifiés au
+  # démarrage) : chiffres du fil Stockage (places-agrandi-43.md).
   tiroir:
     tole_z: 0.176
     entree_x: 1.10
-    butee_x: 2.582
+    butee_x: 3.012
     avance_par_seau_m: 0.272
     poussee_min_m: 0.18
     effort_n: [150, 240]
     # Remplies dans cet ordre (la file 0,785 en dernier : elle demande le chariot du fût).
     files: [file_1, file_2, file_3]
     places:
-      seau_a: {file_1: 4, file_2: 5, file_3: 5}
-      seau_b: {file_1: 5, file_2: 5, file_3: 5}
-      seau_c: {file_1: 4, file_2: 4, file_3: 4}
-      seau_d: {file_1: 4, file_2: 5, file_3: 5}
+      seau_a: {file_1: 6, file_2: 7, file_3: 7}
+      seau_b: {file_1: 7, file_2: 7, file_3: 7}
+      seau_c: {file_1: 6, file_2: 5, file_3: 6}
+      seau_d: {file_1: 5, file_2: 6, file_3: 6}
     centres_x:
+      seau_a:
+        file_1: [2.6065, 2.3345, 2.0625, 1.7905, 1.5185, 1.2465]
+        file_2: [2.8785, 2.6065, 2.3345, 2.0625, 1.7905, 1.5185, 1.2465]
+        file_3: [2.8785, 2.6065, 2.3345, 2.0625, 1.7905, 1.5185, 1.2465]
+      seau_b:
+        file_1: [2.897, 2.662, 2.427, 2.192, 1.957, 1.722, 1.487]
+        file_2: [2.897, 2.662, 2.427, 2.192, 1.957, 1.722, 1.487]
+        file_3: [2.897, 2.662, 2.427, 2.192, 1.957, 1.722, 1.487]
       seau_c:
-        file_1: [2.432, 2.132, 1.832, 1.532]
-        file_2: [2.282, 1.982, 1.682, 1.382]
-        file_3: [2.432, 2.132, 1.832, 1.532]
-    # Cales posées par l'opérateur contre la butée : seau C, file y 0,50, cale de 15 cm ; la
-    # course du pousseur de cette file est plus courte d'autant.
+        file_1: [2.862, 2.562, 2.262, 1.962, 1.662, 1.362]
+        file_2: [2.712, 2.412, 2.112, 1.812, 1.512]
+        file_3: [2.862, 2.562, 2.262, 1.962, 1.662, 1.362]
+      seau_d:
+        file_1: [2.592, 2.312, 2.032, 1.752, 1.472]
+        file_2: [2.872, 2.592, 2.312, 2.032, 1.752, 1.472]
+        file_3: [2.872, 2.592, 2.312, 2.032, 1.752, 1.472]
+    # Cales posées par l'opérateur contre la butée : seau C, file y 0,50, cale de 15 cm (inchangée) ;
+    # la course du pousseur de cette file est plus courte d'autant.
     cales:
       seau_c: {file_2: 0.15}
   # Bande du haut (seaux pleins poussés sur le plateau du haut par le pousseur du chariot, y
   # 0,215 ; décisions, « Pousseur côté allée et bande du haut », 31/10). Entrée au bord de P1
   # (x 1,155) ; pas de butée : fin de course logicielle, bord du couvercle (rayon du haut du
-  # seau) à x ≤ 2,44 (jamais sur le hublot). Centres des places, du plus loin (1er seau poussé)
-  # au plus près : le seau poussé arrive à la dernière place, les autres avancent d'une place
-  # (pas réel = contact des rebords, recalé à la caméra). Photo du plafond après chaque
-  # poussée : chaque seau à y 0,215 ± 0,007, sinon arrêt et alerte. Remplie après le tiroir
-  # (fin de lot : le tiroir d'abord) ; seulement quand les piles de fin de lot de la bande sont
-  # vides. Capacité d'un lot : A 18, B 20, C 16, D 18. Chiffres du fil Stockage ; EXEMPLE tant
-  # que ce n'est pas essayé.
+  # seau) à x ≤ 2,87 (verre du hublot x 2,88-2,98 : jamais dessus). Centres des places, du plus
+  # loin (1er seau poussé) au plus près : le seau poussé arrive à la dernière place, les autres
+  # avancent d'une place (pas réel = contact des rebords, recalé à la caméra). Photo du plafond
+  # après chaque poussée : chaque seau à y 0,215 ± 0,007, sinon arrêt et alerte. Remplie après
+  # le tiroir (fin de lot : le tiroir d'abord) ; seulement quand les piles de fin de lot de la
+  # bande sont vides. Chiffres du fil Stockage (agrandi de 43 cm) ; EXEMPLE tant que ce n'est
+  # pas essayé.
   bande_haut:
     active: true
     y: 0.215
     entree_x: 1.155
-    bord_x_max: 2.44
+    bord_x_max: 2.87
     tolerance_y_m: 0.007
     places:
-      seau_a: [2.30, 2.028, 1.756, 1.484]
-      seau_b: [2.32, 2.085, 1.85, 1.615, 1.38]
-      seau_c: [2.28, 1.98, 1.68, 1.38]
-      seau_d: [2.30, 2.02, 1.74, 1.46]
+      seau_a: [2.73, 2.458, 2.186, 1.914, 1.642, 1.37]
+      seau_b: [2.755, 2.52, 2.285, 2.05, 1.815, 1.58, 1.345]
+      seau_c: [2.7125, 2.4125, 2.1125, 1.8125, 1.5125]
+      seau_d: [2.73, 2.45, 2.17, 1.89, 1.61, 1.33]
+  # Capacité d'un lot (tiroir + bande du haut), chiffres de l'étude : le programme recalcule
+  # depuis les places ci-dessus et refuse de démarrer si les deux ne concordent pas.
+  capacite_lot: {seau_a: 26, seau_b: 28, seau_c: 22, seau_d: 23}
   # Bocaux (mode bocaux, tapis silicone de 1 mm posé ; avant de relever un panneau : plateau
-  # vidé, tapis enlevé). Quinconce de 95 : 9 rangées j = 0 à 8, y = y0 + pas_y × j ; rangées
-  # paires 11 bocaux x = x0 + pas_x × i, impaires 10 bocaux. Bocal posé à 0,497, haut de la
+  # vidé, tapis enlevé). Quinconce de 122 : 9 rangées j = 0 à 8, y = y0 + pas_y × j ; rangées
+  # paires 14 bocaux x = x0 + pas_x × i (1,2075 → 2,6375), impaires 13 (1,2625 → 2,5825). Bocal posé à 0,497, haut de la
   # capsule à 0,644.
   bocaux:
     rangees: 9
     y0: 0.06
     pas_y: 0.0953
     pas_x: 0.110
-    paires: {places: 11, x0: 1.2075}
-    impaires: {places: 10, x0: 1.2625}
+    paires: {places: 14, x0: 1.2075}
+    impaires: {places: 13, x0: 1.2625}
     pose_z: 0.497
     capsule_haut_z: 0.644
     # Bocaux de semence : 3 × 6 places, x = x0 + pas_x × i (i = 0 à 5), aux 3 y.
@@ -1401,11 +1420,13 @@ stockage:
       colonnes: 6
       y: [0.415, 0.523, 0.631]
     # Mode inspection (coin du haut du quinconce, côté x grand) : 9 places « suspects », 6 places
-    # vides de séparation, les 80 autres saines. Places en [rangée j, rang i] (liste du fil
-    # Stockage, réponses à la PR n° 52). Coin plein : arrêt et alerte.
+    # vides de séparation, les 107 autres saines. Places en [rangée j, rang i] (liste du fil
+    # Stockage, décalée de 3 rangs vers le bout avec l'agrandissement de 43 cm). Le bocal
+    # [8,13] est à x 2,6375 : dans la portée de la griffe (x ≤ 2,738), loin des boîtes et du
+    # hublot. Coin plein : arrêt et alerte.
     inspection:
-      suspects: [[8, 8], [8, 9], [8, 10], [7, 7], [7, 8], [7, 9], [6, 8], [6, 9], [6, 10]]
-      separation: [[5, 7], [5, 8], [5, 9], [6, 7], [7, 6], [8, 7]]
+      suspects: [[8, 11], [8, 12], [8, 13], [7, 10], [7, 11], [7, 12], [6, 11], [6, 12], [6, 13]]
+      separation: [[5, 10], [5, 11], [5, 12], [6, 10], [7, 9], [8, 10]]
   # Boîtes à capsules (l'opérateur les change) : fond ≈ 0,498, dessus 0,739, Ø 0,12 ; hauteur de
   # la pile = fond_z + epaisseur_capsule_m × nombre de capsules.
   boites:
@@ -1414,11 +1435,11 @@ stockage:
     diametre_m: 0.12
     epaisseur_capsule_m: 0.013
     places:
-      capsules_enlevees: [2.52, 0.53]
-      couvercles_perces: [2.52, 0.80]
+      capsules_enlevees: [2.95, 0.53]
+      couvercles_perces: [2.95, 0.80]
   # Hublot de la caméra du fond, affleurant : fond du bocal présenté entre 0,70 et 0,73 ; pas de
   # photo si l'entonnoir est sur le plateau.
-  hublot: {x: 2.50, y: 0.22, fond_bocal_z: [0.70, 0.73]}
+  hublot: {x: 2.93, y: 0.22, fond_bocal_z: [0.70, 0.73]}
   # Trajets au-dessus du Stockage (verrous de la préhension et de la griffe).
   trajets:
     # Griffe : axe du mât à x ≤ 2,738 (butée logicielle ; rails X +0,43, PR n° 56, point 9).

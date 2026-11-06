@@ -932,7 +932,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   pour la bande du haut ; chariot à y 0,215 plateau haut permis (plus de règle des anneaux) ; places et capacité par
   format ; seau mal aligné à la photo ⇒ arrêt ; scénario du simulateur avec 18 seaux A. « Testé sur le vrai
   matériel : non ».
-- [ ] **35 ter. Stockage agrandi de 43 cm** — Modèle : Sonnet, effort moyen. **À faire après la tâche 36 bis.**
+- [x] **35 ter. Stockage agrandi de 43 cm** — Modèle : Sonnet, effort moyen. **À faire après la tâche 36 bis.**
   Source : `docs/decisions.md`, « Stockage agrandi de 43 cm » (04/11/2026), points 1 à 6. Dans `pi/reglages/machine.yaml`
   (`stockage`) : 3 panneaux (`panneaux → p1, p2, p3`) ; tiroir `butee_x: 3.012`, `places` et `centres_x` de tous les
   formats et de toutes les files (la place sous la caméra du fond reste vide pour A et D sur la file 0,215 : le

@@ -315,13 +315,14 @@ signaux:
     module: stockage
   boucle_stockage:
     exemple: true
-    # Stockage (tâche 35) : UNE entrée, la boucle de 3 microrupteurs NF en série (tiroir rentré
-    # ET verrouillé, panneau P1 fermé, panneau P2 fermé). Contact fermé = tout est en place ;
-    # ouvert = l'un des trois ne l'est pas (le Pi ne sait pas lequel). Boucle ouverte : aucun
+    # Stockage (tâche 35, agrandi de 43 cm : tâche 35 ter) : UNE entrée, la boucle de 4
+    # microrupteurs NF en série (tiroir rentré ET verrouillé, panneau P1, P2 et P3 fermés ;
+    # microrupteurs des panneaux à x 1,510 / 2,1375 / 2,765). Contact fermé = tout est en place ;
+    # ouvert = l'un des quatre ne l'est pas (le Pi ne sait pas lequel). Boucle ouverte : aucun
     # mouvement du portique ni du chariot de remplissage, le Pi attend et le dit à l'écran. Elle
     # informe et fait attendre : la sécurité des personnes reste câblée. Références des
     # microrupteurs : à choisir (docs/decisions.md).
-    description: Boucle du stockage (tiroir rentré et verrouillé, P1 et P2 fermés)
+    description: Boucle du stockage (tiroir rentré et verrouillé, P1, P2 et P3 fermés)
     carte: entrees_24v_1
     broche: E6
     type: contact

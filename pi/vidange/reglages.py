@@ -1867,6 +1867,9 @@ class Stockage(Modele):
     piles: PilesStockage
     tiroir: TiroirStockage
     bande_haut: BandeHautStockage
+    # Capacité d'un lot (tiroir + bande du haut) par format, chiffres de l'étude : facultatif ;
+    # vérifiée au démarrage contre les places.
+    capacite_lot: dict[Nom, Annotated[int, Field(ge=1)]] = Field(default_factory=dict)
     bocaux: BocauxStockage
     boites: BoitesStockage
     hublot: HublotStockage
@@ -3132,6 +3135,18 @@ class Machine(Modele):
         for nom in [*tiroir.places, *tiroir.centres_x, *tiroir.cales, *bande.places]:
             if nom not in formats:
                 erreurs.append(f"stockage : format « {nom} » absent de griffe → formats")
+        # Capacité d'un lot : celle de l'étude doit être celle des places.
+        for format, attendue in stockage.capacite_lot.items():
+            if format not in formats:
+                erreurs.append(f"stockage → capacite_lot : format « {format} » absent de griffe")
+            elif set(tiroir.places.get(format, {})) != set(tiroir.files):
+                continue  # déjà signalé plus haut
+            elif places.capacite_lot(self, format) != attendue:
+                erreurs.append(
+                    f"stockage → capacite_lot → {format} : {attendue} dans les réglages, mais "
+                    f"les places du tiroir et de la bande en donnent "
+                    f"{places.capacite_lot(self, format)}"
+                )
         # Coin d'inspection : des places du quinconce, chacune une seule fois.
         quinconce = places.places_bocaux(self)
         inspection = stockage.bocaux.inspection
@@ -3148,6 +3163,16 @@ class Machine(Modele):
                         f"stockage → bocaux → inspection : place [{j}, {i}] écrite deux fois"
                     )
                 vues.add((j, i))
+        # Le coin d'inspection reste à la portée du mât de la griffe.
+        for quoi, liste in coin:
+            for j, i in liste:
+                place = quinconce.get(places.nom_bocal(j, i))
+                if place is not None and place[0] > stockage.trajets.griffe_x_max + 1e-9:
+                    erreurs.append(
+                        f"stockage → bocaux → inspection → {quoi} : la place [{j}, {i}] "
+                        f"(x {place[0]:g}) est hors de la portée de la griffe "
+                        f"(x ≤ {stockage.trajets.griffe_x_max:g})"
+                    )
         if places.capacite_boite(self) < 1:
             erreurs.append("stockage → boites : pas une capsule entre le fond et le dessus")
         return erreurs
@@ -3796,6 +3821,9 @@ class StockageSimule(Modele):
 
     piles: dict[Nom, PileSimulee] = Field(min_length=1)
     seaux: list[SeauRemplissageSimule] = Field(min_length=1)
+    # Seaux pleins déjà rangés au départ, par file du tiroir (pour jouer un lot plein sans
+    # simuler tous les seaux).
+    files_pleines: dict[Nom, Annotated[int, Field(ge=0)]] = Field(default_factory=dict)
 
 
 class ScenarioSimule(Modele):

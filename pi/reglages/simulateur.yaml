@@ -143,6 +143,10 @@ remplissage:
 # rendu à sa pile). Le Stockage choisit la place de chaque seau : le tiroir (4 + 5 + 5 = 14), puis la bande
 # du haut (4), soit 18 seaux A par lot ; le 19e attend que le tiroir et la bande soient vidés.
 stockage:
+  # Lot de 26 seaux A (stockage agrandi de 43 cm) : le tiroir porte déjà 13 seaux (files 1 et 2
+  # pleines), les 19 seaux ci-dessous en rangent 13 (file 3, puis la bande du haut), puis la
+  # pause « plus de place », puis les 6 derniers dans la file 1.
+  files_pleines: {file_1: 6, file_2: 7}
   piles:
     pile_1: {format: seau_a, nombre: 5}
     pile_2: {format: seau_a, nombre: 5}

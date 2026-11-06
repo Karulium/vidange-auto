@@ -34,6 +34,8 @@ def stockage_du_simulateur(simulateur: Simulateur) -> ScenarioStockage:
     stockage = Stockage(reglages.machine, boucle_fermee=lambda: materiel.lire(BOUCLE))
     for nom, pile in simule.piles.items():
         stockage.charger_pile(nom, pile.format, pile.nombre)
+    for file, nombre in simule.files_pleines.items():
+        stockage.inventaire.changer_file(file, nombre)
     remplissage = remplissage_du_simulateur(simulateur, seaux_simules=simule.seaux)
     remplissage.plan.magasin = stockage
     return ScenarioStockage(stockage, remplissage)

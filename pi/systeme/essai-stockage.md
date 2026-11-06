@@ -22,7 +22,7 @@ La boucle (3 microrupteurs **NF** en série : tiroir rentré ET verrouillé, P1 
 entrée 24 V optocouplée. Sa vraie broche est à écrire dans `docs/entrees-sorties.yaml` (signal
 `boucle_stockage`, aujourd'hui « exemple » sur E6 de la carte `entrees_24v_1`).
 
-1. Tout fermé : tiroir rentré et verrouillé, P1 et P2 rabattus. Taper `vidange-es surveiller`.
+1. Tout fermé : tiroir rentré et verrouillé, P1, P2 et P3 rabattus. Taper `vidange-es surveiller`.
    Attendu : `boucle_stockage` **actionné** (contact fermé).
 2. Déverrouiller le tiroir sans le tirer. Attendu : `boucle_stockage` passe au **repos** en moins d'une seconde.
    Reverrouiller : actionné.
@@ -34,14 +34,14 @@ entrée 24 V optocouplée. Sa vraie broche est à écrire dans `docs/entrees-sor
 ## Étape 2 : boucle ouverte, rien ne bouge
 
 Le cycle de production complet ne se lance pas encore depuis l'écran (il viendra avec le solveur, tâche 23).
-En attendant, regarder le comportement voulu sur le simulateur : `vidange-simulateur stockage` (18 seaux
-A rangés : 14 au tiroir puis 4 sur la bande du haut, chacun suivi de sa photo ; « plus de place », le
-tiroir tiré puis remis, Go, le 19e seau rangé dans la file 1 vidée).
+En attendant, regarder le comportement voulu sur le simulateur : `vidange-simulateur stockage` (le lot
+de 26 seaux A : 20 au tiroir puis 6 sur la bande du haut, chacun suivi de sa photo ; « plus de place »,
+le tiroir tiré puis remis, Go, les seaux suivants rangés dans la file 1 vidée).
 
 Quand le cycle se lancera depuis l'écran :
 
 1. Lancer un remplissage (des seaux vides sur les piles), puis relever P1 **avant** le Go.
-2. Attendu : l'écran dit qu'il attend « boucle du stockage fermée (tiroir rentré et verrouillé, P1 et P2
+2. Attendu : l'écran dit qu'il attend « boucle du stockage fermée (tiroir rentré et verrouillé, P1, P2 et P3
    fermés) » ; ni le portique ni le chariot ne bougent.
 3. Rabattre P1 : le cycle part.
 4. Pendant un geste (la tête qui va vers une pile), déverrouiller le tiroir : le geste s'arrête, alarme « plus
@@ -84,33 +84,33 @@ Quand le cycle se lancera depuis l'écran :
    `vidange-remplissage ranger seau_a file_1 --agitateur-au-garage --galet-range --micropore-rentre`.
    Attendu : le chariot va à y 0,215, plateau en bas, le pousseur pousse le seau dans la file ; la tôle du
    tiroir (0,176) est au plus 5 mm sous le plateau : le seau passe sans accrocher.
-3. Recommencer jusqu'à remplir la file 1 (4 seaux A) : à chaque poussée la file avance d'environ 0,272 ; le
-   premier seau ne touche jamais la butée de fond (face d'appui à x **2,582**) en force. Noter l'effort
+3. Recommencer jusqu'à remplir la file 1 (6 seaux A ; la place sous la caméra du fond, x 2,8785, reste vide) : à chaque poussée la file avance d'environ 0,272 ; le
+   premier seau ne touche jamais la butée de fond (face d'appui à x **3,012**) en force. Noter l'effort
    ressenti (150 à 240 N pour une file de 6, à l'essai).
-4. Même chose pour les files 2 et 3 (5 seaux chacune).
-5. Seau B : 5 seaux dans **chaque** file (15 au tiroir, répartition déduite de la capacité : la vérifier
-   dans le fichier du fil Stockage et à l'essai ; sinon corriger `stockage → tiroir → places → seau_b`).
-6. Seau C : **4 par file**, sans quinconce. Poser la cale de 15 cm contre la butée de la file y 0,50 : sa
-   course de pousseur est plus courte de 0,15 (`vidange-remplissage ... pousseur 0.175` pour voir). Centres
-   attendus : files 0,215 et 0,785 à x 2,432 / 2,132 / 1,832 / 1,532 ; file 0,50 à 2,282 / 1,982 / 1,682 /
-   1,382. Les mesurer au mètre.
-7. Vider le tiroir comme l'écran le demande (plateau vidé, P1 et P2 relevés, tiroir déverrouillé et tiré,
+4. Même chose pour les files 2 et 3 (7 seaux A chacune, la première place à x 2,8785).
+5. Seau B : 7 seaux dans **chaque** file (21 au tiroir) ; centres attendus de 2,897 à 1,487. Seau D : 5
+   (file 0,215, place sous la caméra du fond vide) puis 6 et 6 (de 2,872 à 1,472).
+6. Seau C : files 0,215 et 0,785 à 6 seaux, file 0,50 à 5 (cale de 15 cm contre la butée de la file
+   y 0,50 : sa course de pousseur est plus courte de 0,15, `vidange-remplissage ... pousseur 0.175`
+   pour voir). Centres attendus : files 0,215 et 0,785 à x 2,862 / 2,562 / 2,262 / 1,962 / 1,662 /
+   1,362 ; file 0,50 à 2,712 / 2,412 / 2,112 / 1,812 / 1,512. Les mesurer au mètre.
+7. Vider le tiroir comme l'écran le demande (plateau vidé, P1, P2 et P3 relevés, tiroir déverrouillé et tiré,
    seaux sortis, tout remis), puis confirmer à l'écran : l'inventaire des files repart à zéro.
 
 ## Étape 5 bis : la bande du haut (seaux pleins sur le plateau, tâche 35 bis)
 
-1. `vidange-stockage places seau_a` : « Bande du haut y 0,215 : 4 places (centres x 2,3, 2,028, 1,756,
-   1,484) » et « Capacité d'un lot : 18 seaux ». Mêmes lignes pour B (5 places, lot de 20), C (4, lot de
-   16), D (4, lot de 18).
+1. `vidange-stockage places seau_a` : « Bande du haut y 0,215 : 6 places (centres x 2,73, 2,458, 2,186,
+   1,914, 1,642, 1,37) » et « Capacité d'un lot : 26 seaux ». Mêmes lignes pour B (7 places, lot de 28),
+   C (5, lot de 22), D (6, lot de 23).
 2. Bande vide (pas de pile de fin de lot dessus), tapis enlevé. Seau A plein sur le plateau du chariot :
    `vidange-remplissage --galet-range --agitateur-au-garage ranger seau_a bande_haut` (voir
    `essai-remplissage.md`, étape 4). Attendu : le seau entre par le bord de P1 (x 1,155) et s'arrête vers
-   x 1,484.
-3. Recommencer jusqu'à 4 seaux : à chaque poussée, les seaux avancent d'une place (contact des rebords).
-   Avec 4 seaux, **mesurer** le bord du seau du bout : il doit rester à x ≤ **2,44** (jamais sur le hublot,
-   x 2,50). Mesurer aussi l'axe de chaque seau en y : 0,215 à **7 mm** près. Noter les vrais centres et
+   x 1,37.
+3. Recommencer jusqu'à 6 seaux : à chaque poussée, les seaux avancent d'une place (contact des rebords).
+   Avec 6 seaux, **mesurer** le bord du seau du bout : il doit rester à x ≤ **2,87** (jamais sur le hublot,
+   verre de x 2,88 à 2,98). Mesurer aussi l'axe de chaque seau en y : 0,215 à **7 mm** près. Noter les vrais centres et
    corriger `stockage → bande_haut → places` si besoin (`vidange --verifier` refuse un seau qui dépasse
-   2,44). Régler `remplissage → rangement → bande_haut → pousseur_m` pour que le seau poussé arrive à sa
+   2,87). Régler `remplissage → rangement → bande_haut → pousseur_m` pour que le seau poussé arrive à sa
    place.
 4. La photo du plafond après chaque poussée n'est pas encore lue par la vision (un faux répond les places
    attendues, le journal le dit) : quand la vision saura la lire, décaler un seau de 1 cm en y à la main ;
@@ -133,3 +133,17 @@ Quand le cycle se lancera depuis l'écran :
 Passer `exemple: false` dans la partie `stockage` de `machine.yaml` quand tous les chiffres marqués EXEMPLE
 ont été vérifiés. Lancer `vidange --verifier` : une erreur (piles qui se chevauchent, file trop longue pour
 le tiroir...) dit laquelle.
+
+## Étape 7 : le stockage agrandi de 43 cm (tâche 35 ter)
+
+Testé sur le vrai matériel : non. À faire quand les 3 panneaux et le tiroir agrandi sont montés.
+
+1. Boucle : fermer tiroir, P1, P2, P3 ; `vidange-es surveiller` doit voir la boucle fermée. Ouvrir P3 seul
+   (microrupteur à x 2,765) : elle s'ouvre ; idem pour P2 (x 2,1375), P1 (x 1,510) et le tiroir.
+2. Tiroir : butée à x 3,012 (face d'appui). Remplir une file de A : la première place (x 2,8785) sur les files
+   0,50 et 0,785 ; sur la file 0,215, le pousseur s'arrête au codeur sur la 2e place (x 2,6065) et la place
+   sous la caméra du fond reste vide. Même chose pour D (x 2,872 / 2,592). Mesurer les centres au mètre.
+3. Capacité du lot : A 26, B 28, C 22, D 23 ; `vidange-stockage places seau_a` (et b, c, d).
+4. Bocaux : 14 par rangée paire (x 1,2075 à 2,6375), 13 par rangée impaire : 122 places. Coin des suspects :
+   [8,13] à x 2,6375 doit être à la portée de la griffe (x ≤ 2,738).
+5. Boîtes à capsules en (2,95 ; 0,53) et (2,95 ; 0,80), hublot en (2,93 ; 0,22).

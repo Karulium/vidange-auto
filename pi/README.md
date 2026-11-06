@@ -598,7 +598,7 @@ vidange-remplissage --faux etat          # l'outil d'essai, sur un faux FluidNC
 Le Stockage (gelé le 27/10/2026) est **passif** : aucun moteur, aucun capteur de présence. Le Pi **calcule**
 les places à partir de `reglages/machine.yaml` (partie `stockage`, vérifiée au démarrage) et tient
 l'**inventaire** de chaque place (table `inventaire_stockage` du registre). Une seule entrée :
-`boucle_stockage` (3 microrupteurs NF en série : tiroir rentré et verrouillé, P1 et P2 fermés).
+`boucle_stockage` (4 microrupteurs NF en série : tiroir rentré et verrouillé, P1, P2 et P3 fermés).
 
 ```
 vidange-simulateur stockage              # 15 seaux pris sur 3 piles, 14 rangés, tiroir vidé, reprise
