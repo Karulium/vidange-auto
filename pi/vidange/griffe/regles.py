@@ -225,9 +225,7 @@ class ReglesGriffe:
         camera = g.camera_bocal
         # Seule la partie haute de la tête (les bras) arrive à la hauteur du boîtier : elle seule
         # peut le toucher.
-        haut_seul = (
-            g.tete.demi_longueur_haut if pose.z - g.tete.haut_sous_axes <= camera.z_bas else None
-        )
+        haut_seul = self._longueur_au_niveau(pose, pose.z - camera.z_bas)
         if bas < camera.bas_z_max - _EGAL and self._touche(pose, camera.x, camera.y, haut_seul):
             return (
                 f"la tête toucherait le boîtier de la caméra du bocal (x {_m(camera.x[0])} à "
@@ -244,12 +242,27 @@ class ReglesGriffe:
         refus = self._refus_rotation(pose)
         if refus is not None:
             return refus
+        if pose.b > _EGAL and not self.bloquee(pose.a) and self._au_dessus_du_seau(pose):
+            return (
+                f"godet ouvert au-dessus du seau du remplissage : tête à {_m(pose.a)}°, il faut "
+                "bras le long du pont (0 ou 180°), sinon elle touche le boîtier de la caméra"
+            )
         refus = regles_poste.refus_griffe(
             poste, pose.x, pose.y, bas, contexte.volet_releve, self.encombrement(pose)
         )
         if refus is not None:
             return refus
         return self._refus_fut(pose, bas)
+
+    def _longueur_au_niveau(self, pose: Pose, profondeur: float) -> float | None:
+        """Demi-longueur de la tête jusqu'à `profondeur` sous les axes ; None : la tête entière."""
+        tete = self.griffe.tete
+        if pose.b <= _EGAL:
+            return tete.demi_longueur_haut if profondeur <= tete.haut_sous_axes_ferme else None
+        for jusqu_a, longueur in tete.profil_ouvert:
+            if profondeur <= jusqu_a + _EGAL:
+                return longueur
+        return None
 
     def hors_ouverture(self, x: float, y: float) -> bool:
         """Le mât est-il trop loin de l'axe du fût pour descendre, godet fermé, par l'ouverture
@@ -299,6 +312,12 @@ class ReglesGriffe:
                     f"les axes à {_m(pose.z)} m ; au plus {_m(rayon)} m"
                 )
         return None
+
+    def _au_dessus_du_seau(self, pose: Pose) -> bool:
+        seau_x, seau_y = self.griffe.seau_remplissage
+        return (
+            math.hypot(pose.x - seau_x, pose.y - seau_y) <= self.griffe.vidage.zone_seau_m + _EGAL
+        )
 
     def _refus_rotation(self, pose: Pose) -> str | None:
         rotation = self.griffe.rotation

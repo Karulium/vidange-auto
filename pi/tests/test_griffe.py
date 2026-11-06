@@ -189,7 +189,7 @@ def test_boitier_de_la_camera_du_bocal():
     # Godet ouvert : seuls les bras (0,117) comptent tant que les joues (0,09 sous les axes) sont
     # sous le bas du boîtier (0,975), donc jusqu'à des axes à 1,065 ; plus haut, les coquilles
     # ouvertes (0,165) aussi.
-    ouvert = Pose(x=0.92, y=0.38, z=1.06, a=90, b=1.0)
+    ouvert = Pose(x=0.80, y=0.38, z=1.06, a=90, b=1.0)
     assert refus(ouvert) is None
     # Le mât est hors de la bande y 0,22-0,28, mais la tête la recouvre (bras le long du pont).
     assert "caméra du bocal" in refus(Pose(x=0.95, y=0.34, z=0.98, a=0, b=0.5))
@@ -239,14 +239,35 @@ def test_essuyage_au_vidage_loin_du_boitier_de_la_camera():
         assert refus(essuyage(nom, 90)) is None
 
 
-def test_vidage_au_poste_du_remplissage_sans_refus():
-    # Mât en (0,925 ; 0,42), godet grand ouvert, tête droite ou tournée de 45° : les 4 formats.
+def test_vidage_au_poste_du_remplissage():
+    # Mât en (0,925 ; 0,42), godet grand ouvert, tête à 0° ou 180° : les 4 formats passent.
     x, y = GRIFFE.seau_remplissage
     for seau in GRIFFE.formats.values():
         z = seau.haut_z + GRIFFE.vidage.au_dessus_haut_m
-        for angle in (0, GRIFFE.vidage.rotation_deg):
-            assert refus(Pose(x=x, y=y, z=z, a=angle, b=1.0)) is None
+        pose = Pose(x=x, y=y, z=z, a=0, b=1.0)
+        assert refus(pose) is None
+        assert refus(pose.avec(a=180)) is None
+        # Tournée de 45°, godet ouvert : refusé ; godet fermé, la rotation reste possible.
+        assert "godet ouvert au-dessus du seau" in refus(pose.avec(a=45))
+        assert "godet ouvert au-dessus du seau" in refus(pose.avec(a=135))
+    # Rotation godet ouvert au-dessus du seau : refusée.
+    depart = Pose(x=x, y=y, z=1.0, a=0, b=1.0)
+    assert "godet ouvert au-dessus du seau" in REGLES.refus_mouvement(
+        depart, depart.avec(a=45), PRODUCTION
+    )
+    assert GRIFFE.vidage.rotation_deg == 0
     assert GRIFFE.essuyage.ouverture_godet == 0.5
+
+
+def test_tete_godet_ouvert_s_elargit_sous_les_axes():
+    # Boîtier de z 0,975 à 1,068, y 0,22-0,28 ; mât à y 0,40, godet grand ouvert, bras le long du
+    # pont. Bas du boîtier à 0,025 sous les axes : 0,117 de chaque côté, y 0,283, dégagé. À
+    # 0,05 sous les axes : 0,135, y 0,265, contre le boîtier.
+    ouvert = Pose(x=0.95, y=0.40, z=1.0, a=0, b=1.0)
+    assert refus(ouvert) is None
+    assert "caméra du bocal" in refus(ouvert.avec(z=1.025))
+    # Godet fermé : toute la tête reste à 0,117 au plus jusqu'à 0,09 sous les axes.
+    assert "caméra du bocal" not in (refus(ouvert.avec(z=1.025, b=0)) or "")
 
 
 def test_dans_le_fut():

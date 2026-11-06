@@ -382,15 +382,17 @@ griffe:
   # réel 0,174 : le rectangle 0,165 × 0,086 le couvre. Partie haute (au-dessus des axes et jusqu'à
   # 0,03 sous eux) : 0,117 au plus le long du bras, godet ouvert ou fermé (les joues des coquilles
   # ouvertes, à 0,165, sont 9 à 12 cm sous les axes). Depuis la tâche 18 ter, la partie haute va
-  # jusqu'à 0,09 sous les axes (haut des joues) : le boîtier de la caméra du bocal est descendu de
-  # 7 mm (z_bas 0,975) et le vidage (axes à 1,01) le frôlait. À CONFIRMER (question de la PR).
+  # jusqu'en bas godet fermé (0,09 sous les axes dans le calcul) ; godet ouvert, la tête
+  # s'élargit dès 0,03 sous les axes (0,127 à −0,045, 0,135 à −0,060, 0,148 à −0,075, 0,165 de
+  # −0,090 à −0,105 : griffe.json, réponse du fil Griffe).
   tete:
     demi_longueur_ferme: 0.111
     demi_longueur_ouvert: 0.165
     demi_largeur: 0.086
     rayon_balaye: 0.139
     demi_longueur_haut: 0.117
-    haut_sous_axes: 0.09
+    haut_sous_axes_ferme: 0.09
+    profil_ouvert: [[0.03, 0.117], [0.045, 0.127], [0.06, 0.135], [0.075, 0.148], [0.105, 0.165]]
   # Pont : x ≥ 0,233 (0,223 de la fiche + 1 cm, Portique 01/11).
   pont_x_min: 0.233
   # Rotation de la tête (fiche) : libre si axes ≤ 1,075 ; de 1,075 à 1,11 libre godet fermé et
@@ -516,7 +518,8 @@ griffe:
   # 45° au plus ; haut du seau au-dessus de 0,88 : vidage tête bloquée, sans tourner.
   vidage:
     au_dessus_haut_m: 0.23
-    rotation_deg: 45
+    rotation_deg: 0
+    zone_seau_m: 0.10
     rotation_haut_max_z: 0.88
   # 7. Tassement : godet refermé à vide, appui ≈ 60 N (fiche) à quelques endroits pendant que le
   # seau tourne (3 appuis, remontée 2 cm, 2 s : EXEMPLES).

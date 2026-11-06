@@ -300,9 +300,13 @@ class TeteGriffe(Modele):
     # Rayon balayé en tournant, godet fermé.
     rayon_balaye: float = Field(gt=0)
     # Partie haute de la tête (tout ce qui est au-dessus de « axes − haut_sous_axes ») : seuls
-    # les bras dépassent du mât, de demi_longueur_haut le long du bras.
+    # les bras dépassent du mât, de demi_longueur_haut le long du bras. Godet fermé, c'est vrai
+    # jusqu'en bas (haut_sous_axes_ferme) ; godet ouvert, la tête s'élargit en descendant sous
+    # les axes : profil_ouvert = [profondeur sous les axes jusqu'à laquelle la demi-longueur
+    # tient, demi-longueur] (griffe.json), croissant ; au-delà, la tête ouverte entière.
     demi_longueur_haut: float = Field(gt=0)
-    haut_sous_axes: float = Field(ge=0)
+    haut_sous_axes_ferme: float = Field(ge=0)
+    profil_ouvert: list[tuple[float, float]] = Field(min_length=1)
 
     @model_validator(mode="after")
     def _verifier(self) -> "TeteGriffe":
@@ -410,6 +414,10 @@ class VidageGriffe(Modele):
     rotation_deg: float = Field(ge=0)
     # Haut du seau au-dessus de ça : vidage tête bloquée, sans tourner.
     rotation_haut_max_z: float
+    # Au-dessus du seau du remplissage (mât à moins de ça de seau_remplissage), godet ouvert, la
+    # tête reste bras le long du pont (A = 0 ou 180°, tolérance rotation → tolerance_deg) : tournée,
+    # elle touche le boîtier de la caméra du bocal.
+    zone_seau_m: float = Field(gt=0)
 
 
 class TassementGriffe(Modele):
