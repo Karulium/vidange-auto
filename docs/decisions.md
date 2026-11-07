@@ -1946,3 +1946,10 @@ du bas du godet), `programme.yaml` (`fiabilite → objet_tenu → attente_vannes
   - `vidange-entonnoir versement` : 1 bocal posé à la main (`bocal_0_0`), 3 posés par la machine grâce au chemin
     (`bocal_0_1`, `bocal_1_0`, `bocal_2_0`) ; `bocal_2_1` par la table. Question 4 de la PR n° 102 (`bocal_2_1`
     dans le carré « contact » de la carte à 1,265) : réglée, il est libre à 1,29.
+- **Réponses à la PR n° 103** (tâche 45 decies, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Deuxième vanne « souffler » : question posée au fil Préhension ; si elle existe, elle est câblée sous le nom
+     `vanne_souffler` et fermée au démarrage sans changer le code.
+  2. Chien de garde de 2 s : pas pour l'instant (confort, le Pi ferme la vanne à chaque démarrage) ; à revoir si les
+     vannes passent sur une carte à programme.
+  3. Attente de 5 s de la carte au démarrage (`fiabilite → objet_tenu → attente_vannes_s`, EXEMPLE) : gardée, mesurée
+     à l'essai (§ 4 ter).
