@@ -1485,6 +1485,8 @@ signaux:
     type: pwm
     tension: 3.3
     module: micropore
+  # Fermeture des seaux (tâche 41) : angle de l'AXE du servo ; rangé / travail et étalonnage dans
+  # pi/reglages/machine.yaml (fermeture → bras). Le signal n'est jamais coupé, même à l'arrêt.
   servo_fermeture_seaux:
     exemple: true
     description: Signal du servo DS3225 de la Fermeture des seaux (voie de la PCA9685)

@@ -18,6 +18,10 @@ le solveur (tâche 23). C'est le scénario « remplissage » du simulateur, et u
     doser                  le Mycélium dose la couche (il mène le chariot : poste, dosage, retour
                            au vidage)
     revenir_au_vidage      couche suivante : retour au vidage (plateau à sa hauteur)
+    ranger_le_bras         (avec la Fermeture, tâche 41) au démarrage : bras du galet rangé,
+                           plateau en bas
+    fermer_le_seau         (avec la Fermeture) après la dernière couche : le couvercle posé est
+                           clipsé (vidange.fermeture) ; une alerte laisse le seau « à vérifier »
     ranger                 anse à son angle, chariot à sa file plateau en bas, le pousseur pousse ;
                            ou sur la bande du haut (plateau à 0,4985), quand le tiroir est plein
     fin                    plus de seau
@@ -153,6 +157,26 @@ def module_remplissage(
             ),
         )
 
+    # Fermeture (tâche 41) : au démarrage le bras est rangé (plateau en bas), puis chaque seau plein
+    # est fermé. Le couvercle est posé par la préhension avant (geste à écrire avec le solveur).
+    fermeture: tuple[Etape, ...] = ()
+    ranger_le_bras: tuple[Etape, ...] = ()
+    if remplissage.fermeture_branchee:
+        bas = Condition(
+            "plateau assez bas pour tourner le bras de fermeture (zéro de la montée fait)",
+            lambda: remplissage.refus_bras_galet() is None,
+        )
+        ranger_le_bras = (
+            Etape(
+                "ranger_le_bras",
+                QUOI_FAIRE,
+                action=lambda: remplissage.lancer(remplissage.geste_ranger_bras),
+                fin=fin,
+                delai_max=GESTE,
+                entree=(chariot.pretes, bas),
+            ),
+        )
+
     def geste(nom: str, fabrique, ensuite=None, entree=()) -> Etape:
         return Etape(
             nom,
@@ -162,6 +186,11 @@ def module_remplissage(
             delai_max=GESTE,
             entree=(chariot.pretes, *boucle, *micropore, *entree),
             ensuite=ensuite,
+        )
+
+    if remplissage.fermeture_branchee:
+        fermeture = (
+            geste("fermer_le_seau", remplissage.geste_fermer, entree=(libre, manivelle_en_bas)),
         )
 
     def geste_tete(nom: str, fabrique, ensuite=None) -> Etape:
@@ -220,7 +249,8 @@ def module_remplissage(
         if plan.couche < remplissage.format(plan.seau.format).couches:
             plan.couche += 1
             return "revenir_au_vidage"
-        return "ranger"
+        # Fermeture (tâche 41) : le couvercle posé sur le seau plein est clipsé avant le rangement.
+        return "fermer_le_seau" if remplissage.fermeture_branchee else "ranger"
 
     def ranger():
         place = plan.file_en_cours = file_du_seau()
@@ -301,6 +331,7 @@ def module_remplissage(
     return Module(
         nom="remplissage",
         etapes=(
+            *ranger_le_bras,
             *debut,
             geste(
                 "aller_a_la_pose",
@@ -335,6 +366,7 @@ def module_remplissage(
                 lambda: "verser",
                 entree=(libre, manivelle_en_bas),
             ),
+            *fermeture,
             geste(
                 "ranger", ranger, apres_rangement, entree=(libre, manivelle_en_bas, file_permise)
             ),

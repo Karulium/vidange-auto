@@ -179,6 +179,7 @@ class Remplissage:
         assert machine.remplissage is not None and machine.griffe is not None
         self.reglages = machine.remplissage
         self.formats = machine.griffe.formats
+        self.fermeture = machine.fermeture
         self.course_a = machine.axes["plateau_a"].course
         self.course_z = machine.axes["plateau_z"].course
         self.durees = machine.durees
@@ -196,6 +197,11 @@ class Remplissage:
         self._bras_galet = bras_galet_range
         self._bras_spray = bras_spray_sorti
         self._micropore = micropore_rentre
+        # La Fermeture (tâche 41, brancher_fermeture) : le couvercle est-il contre le rouleau ?
+        self._en_contact: Callable[[], bool] = lambda: False
+        self.fermeture_branchee = False
+        self._fermer: Callable[[], Geste] | None = None
+        self._ranger_bras: Callable[[], Geste] | None = None
         self.vision = vision
         self._photo = photo
         self._permission = permission
@@ -221,6 +227,9 @@ class Remplissage:
         self._au_vidage: Callable[[], Geste] | None = None
         self._fin_du_seau: Callable[[SeauPlateau], None] | None = None
         self._a_l_arret: list[Callable[[], None]] = []
+        self._prehension: Prehension | None = None
+        # Outil en ligne de commande, sans préhension : l'opérateur dit l'avoir vue loin.
+        self.prehension_loin_a_la_main = False
 
     # ------------------------------------------------------------ état
 
@@ -234,6 +243,8 @@ class Remplissage:
             bras_spray_sorti=self._bras_spray(),
             hauteur_seau=hauteur,
             micropore_escamote=self._micropore(),
+            fermeture_en_contact=self._en_contact(),
+            fermeture_branchee=self.fermeture_branchee,
         )
 
     def position(self) -> Pose:
@@ -718,9 +729,72 @@ class Remplissage:
         self._a_l_arret.append(arreter)
         self.micropore_branche = True
 
+    def brancher_fermeture(
+        self,
+        bras_range: Callable[[], bool | None],
+        en_contact: Callable[[], bool],
+        fermer: Callable[[], Geste],
+        ranger: Callable[[], Geste],
+        arreter: Callable[[], None],
+    ) -> None:
+        """La Fermeture des seaux (tâche 41) : bras du galet vu rangé (règles 4 et 5), couvercle
+        contre le rouleau (règle 11), son geste, l'arrêt. Le geste `geste_fermer` amène le seau à
+        sa hauteur d'approche, au y de la fermeture, puis la Fermeture joue ses pas."""
+        self._bras_galet = bras_range
+        self._en_contact = en_contact
+        self._fermer, self._ranger_bras = fermer, ranger
+        self._a_l_arret.append(arreter)
+        self.fermeture_branchee = True
+
+    def geste_fermer(self) -> Geste:
+        """Fermer le seau (couvercle posé dessus par la préhension) : barres ouvertes, pousseur
+        rentré, plateau à la hauteur d'approche du format, chariot au y de la fermeture ; puis les
+        pas de la Fermeture (vidange.fermeture)."""
+        seau = self.seau
+        if seau is None:
+            raise ErreurEtape("remplissage : pas de seau sur le plateau")
+        if self._fermer is None or self.fermeture is None:
+            raise ErreurEtape("remplissage : la fermeture des seaux n'est pas branchée")
+        reglage = self.fermeture
+        if seau.format in reglage.formats:
+            yield from self._barres_ouvertes()
+            yield from self._plateau(
+                reglage.h_approche(seau.format, self.course_z[0]), "plateau à l'approche du rouleau"
+            )
+            yield from self._a_la_place(reglage.chariot_y, "chariot à la fermeture")
+        yield from self._fermer()
+
+    def geste_ranger_bras(self) -> Geste:
+        """Au démarrage (zéro de la montée fait, plateau en bas) : le bras de la fermeture rangé."""
+        if self._ranger_bras is None:
+            raise ErreurEtape("remplissage : la fermeture des seaux n'est pas branchée")
+        yield from self._ranger_bras()
+
     def brancher_prehension(self, prehension: Prehension) -> None:
         """La préhension applique la règle 9 à chacun de ses pas (et en mode manuel)."""
         prehension.verrou_chariot = self.refus_prehension
+        self._prehension = prehension
+
+    def prehension_degagee(self) -> str | None:
+        """Pour la fermeture : le bras peut quitter le rangé ? None = oui. Il faut que la préhension
+        ait lâché le couvercle ET soit remontée au-dessus de `prehension_libre_z`, ou soit partie
+        ailleurs (pas au-dessus du chariot). Sinon, ou si on ne la connaît pas : refus."""
+        prehension = self._prehension
+        if prehension is None and self.prehension_loin_a_la_main:
+            return None
+        if prehension is None or self.fermeture is None:
+            return "la préhension n'est pas connue ici : par prudence le bras reste rangé"
+        pose = prehension.pose
+        if pose is None:
+            return "position de la préhension pas connue : par prudence le bras reste rangé"
+        if prehension.objet is not None:
+            return "la préhension tient encore le couvercle"
+        if not self.regles.au_dessus_du_chariot(pose.x, pose.y, self.chariot.position()):
+            return None
+        libre = self.fermeture.prehension_libre_z
+        if pose.z <= libre:
+            return f"la préhension est à z {pose.z:g}, pas encore remontée au-dessus de {libre:g}"
+        return None
 
     # ------------------------------------------------------------ les gestes des seaux
 

@@ -16,11 +16,13 @@ sont (`double`) : ils sont séparés quand la tête tire le seau du dessus (pris
 (ALM).
 """
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from vidange.chef import Condition
+from vidange.griffe.bras import G
 from vidange.mycelium.mycelium import Bocal, Mycelium
 from vidange.mycelium.regles import EtatChariot
 from vidange.mycelium.simulation import AgitateurSimule, FauxPorteBocal
@@ -37,6 +39,7 @@ from vidange.simulateur.axes import EtatAxes
 from vidange.simulateur.simulateur import ErreurSimulation, Simulateur
 
 if TYPE_CHECKING:
+    from vidange.fermeture.simulation import FermetureDuSimulateur
     from vidange.micropore.simulation import MicroporeDuSimulateur
 
 CARTE = "chariot"
@@ -72,6 +75,9 @@ class ChariotSimule:
         # Fond du seau tenu au-dessus du plateau (None : rien) ; sans cette fonction, le plateau
         # touche tout de suite.
         self.fond_z: Callable[[], float | None] | None = None
+        # Effort du couvercle contre le rouleau (Fermeture, tâche 41) : N selon la hauteur du
+        # plateau et selon qu'il tourne ; sans cette fonction, aucun effort.
+        self.effort_n: Callable[[float, bool], float] | None = None
         # Pannes.
         self.separation_ratee = False
         self.barriere_muette = False
@@ -80,10 +86,15 @@ class ChariotSimule:
         self.pretes = Condition("cartes simulées prêtes", lambda: True)
         self.surveillance = Condition("cartes simulées sans alarme", lambda: True)
 
+    def _poids_a(self, z: float, tourne: bool = False) -> float:
+        """Le poids lu (kg) quand le plateau est à z."""
+        seaux = (2 if self.double else 1) * self.poids_un_seau if self.seau_pose else 0.0
+        effort = 0.0 if self.effort_n is None else self.effort_n(z, tourne) / G
+        return seaux + self.contenu_kg + effort
+
     @property
     def poids_kg(self) -> float:
-        seaux = (2 if self.double else 1) * self.poids_un_seau if self.seau_pose else 0.0
-        return seaux + self.contenu_kg
+        return self._poids_a(self.position().z)
 
     @poids_kg.setter
     def poids_kg(self, valeur: float) -> None:
@@ -109,6 +120,9 @@ class ChariotSimule:
                 # Le plateau s'arrête au fond du seau : il le porte.
                 cible, contact = cible.avec(z=fond), True
                 self.seau_pose = True
+        depasse = False
+        if self.effort_n is not None and (pas.contact_kg is not None or pas.poids_max_kg):
+            cible, contact, depasse = self._butee_effort(pas, depart, cible, contact)
         rentre = self.reglages.pousseur_rentre_m
         if "pousseur" in pas.cibles and abs(cible.pousseur - rentre) > 0.05:
             self.seau_pose, self.double, self.contenu_kg = False, False, 0.0
@@ -118,6 +132,8 @@ class ChariotSimule:
                 vitesses[cle] = min(vitesses[cle], getattr(self.reglages.vitesses, pas.vitesse))
         if pas.vitesse_a is not None:
             vitesses["a"] = min(vitesses["a"], pas.vitesse_a)
+        if pas.vitesse_z is not None:
+            vitesses["z"] = min(vitesses["z"], pas.vitesse_z)
         axes = {AXES[cle]: getattr(cible, cle) for cle in cles_du_pas(pas.cibles)}
         self._arrivees = self._etat.aller_vers(
             pas.texte, axes, {AXES[cle]: vitesse for cle, vitesse in vitesses.items()}
@@ -133,8 +149,31 @@ class ChariotSimule:
             self._arrivees = self._etat.attendre(CARTE, attente)
         self._pas = pas
         self._resultat = Resultat(
-            pose=cible, contact=contact, poids_kg=self.poids_kg if pas.pesee else None
+            pose=cible,
+            contact=contact,
+            poids_kg=self._poids_a(cible.z, "a" in pas.cibles) if pas.pesee else None,
+            depasse=depasse,
         )
+
+    def _butee_effort(
+        self, pas: Pas, depart: Pose, cible: Pose, contact: bool
+    ) -> tuple[Pose, bool, bool]:
+        """Le plateau (qui monte, ou qui tourne) s'arrête au contact (le poids gagne contact_kg) ou
+        à l'effort maximal (le poids lu atteint poids_max_kg) : là où le couvercle pousse."""
+        tourne = "a" in pas.cibles and cible.a != depart.a
+        depart_kg = self._poids_a(depart.z)
+        pas_m = 0.0002
+        n = max(1, math.ceil(abs(cible.z - depart.z) / pas_m))
+        for i in range(0 if tourne else 1, n + 1):
+            z = depart.z + (cible.z - depart.z) * i / n
+            kg = self._poids_a(z, tourne)
+            if pas.poids_max_kg and kg >= pas.poids_max_kg:
+                # Arrêt tout de suite (une rotation n'a pas commencé).
+                return (cible.avec(z=z, a=depart.a) if tourne else cible.avec(z=z)), False, True
+            if pas.contact_kg is not None and kg >= depart_kg + pas.contact_kg:
+                self.seau_pose = True
+                return cible.avec(z=z), True, False
+        return cible, contact, False
 
     def fini(self) -> bool:
         return self._pas is None or self._etat.arrives(self._arrivees)
@@ -142,7 +181,13 @@ class ChariotSimule:
     def resultat(self) -> Resultat:
         assert self._resultat is not None
         if self._resultat.poids_kg is not None:
-            return Resultat(self._resultat.pose, self._resultat.contact, self.poids_kg)
+            tourne = self._pas is not None and "a" in self._pas.cibles
+            return Resultat(
+                self._resultat.pose,
+                self._resultat.contact,
+                self._poids_a(self.position().z, tourne),
+                self._resultat.depasse,
+            )
         return self._resultat
 
     def pauser(self) -> None:
@@ -209,12 +254,15 @@ class ScenarioRemplissage:
     vision: FausseVisionSeau
     # La vraie tête du micropore sur le faux boîtier du chariot (None : pas de micropore).
     micropore: "MicroporeDuSimulateur | None" = None
+    # La vraie fermeture des seaux sur le faux boîtier (None : pas de fermeture).
+    fermeture: "FermetureDuSimulateur | None" = None
 
 
 def remplissage_du_simulateur(
     simulateur: Simulateur,
     cycle: int | None = None,
     seaux_simules: list[SeauRemplissageSimule] | None = None,
+    avec_fermeture: bool = False,
     **options: Any,
 ) -> ScenarioRemplissage:
     """Le remplissage sur la machine imaginaire, avec les seaux de simulateur.yaml
@@ -247,7 +295,13 @@ def remplissage_du_simulateur(
         return mycelium.refus_chariot()
 
     options.setdefault("plateau_fut_en_place", lambda: not poste.echange_en_cours)
-    options.setdefault("bras_galet_range", lambda: True)
+    fermeture_possible = False
+    if avec_fermeture:
+        from vidange.fermeture.simulation import fermeture_possible as possible
+
+        fermeture_possible = possible(simulateur) and "bras_galet_range" not in options
+    if not fermeture_possible:
+        options.setdefault("bras_galet_range", lambda: True)
     from vidange.micropore.simulation import micropore_du_simulateur, micropore_possible
 
     avec_micropore = "micropore_rentre" not in options and micropore_possible(simulateur)
@@ -336,6 +390,13 @@ def remplissage_du_simulateur(
         micropore = micropore_du_simulateur(
             simulateur, remplissage, chariot, registre=options.get("registre")
         )
+    fermeture = None
+    if fermeture_possible:
+        from vidange.fermeture.simulation import fermeture_du_simulateur
+
+        fermeture = fermeture_du_simulateur(
+            simulateur, remplissage, chariot, registre=options.get("registre")
+        )
     plan = Plan(
         seaux=[
             SeauAFaire(seau.seau, seau.format, seau.variete, seau.file, cycle) for seau in liste
@@ -346,4 +407,6 @@ def remplissage_du_simulateur(
         debut_seau=debut_seau,
         versement=versement,
     )
-    return ScenarioRemplissage(remplissage, prehension, mycelium, plan, chariot, vision, micropore)
+    return ScenarioRemplissage(
+        remplissage, prehension, mycelium, plan, chariot, vision, micropore, fermeture
+    )

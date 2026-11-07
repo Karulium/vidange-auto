@@ -541,6 +541,13 @@ def principal(
             "servos, moteur d'avance d'EXEMPLE : les régler aux essais "
             "(pi/systeme/essai-micropore.md), puis passer « exemple » à false."
         )
+    fermeture = reglages.machine.fermeture
+    if fermeture is not None and fermeture.exemple:
+        journal.warning(
+            "machine.yaml, fermeture : étalonnage du servo du bras, Hf et Hc, efforts, rotation, "
+            "rampe et position du chariot d'EXEMPLE : les régler au premier essai sur les 4 vrais "
+            "seaux (pi/systeme/essai-fermeture.md), puis passer « exemple » à false."
+        )
     camera_dosage = reglages.machine.camera_dosage
     if camera_dosage is not None and camera_dosage.exemple:
         journal.warning(

@@ -1015,3 +1015,43 @@ non (procédure `spray/essai-materiel.md`, puis `pi/systeme/essai-spray.md`).
   8. Contact appris une fois par format (pas par rangée) : gardé, vérifié à l'essai.
   À faire plus tard : vision de la caméra du micropore (QR, trous, contrôle de chaque pièce), branchement dans le
   programme principal, bouton « rouleau » à l'écran et dans l'API.
+- **Fermeture des seaux, côté Pi** (tâche 41, 07/11/2026, niveau 1, tranché par Claude ; les questions de la PR sont
+  encore ouvertes) :
+  1. Le bras est tourné par le servo de la PCA9685 (`servo_fermeture_seaux`), angles de l'AXE du servo. Étalonnage
+     (`fermeture → bras → butee_servo_deg`) : angle où le doigt touche le plat ; travail = butée + surcourse,
+     rangé = butée − 160° (EXEMPLES, à étalonner à la mise en service).
+  2. Le bras est « rangé » pour le Pi seulement s'il l'a ordonné, que l'attente (0,5 s) est passée et que la carte
+     du plateau est vivante et n'a pas redémarré depuis `stabilisation_s` ; jamais ordonné depuis le démarrage du
+     Pi : « inconnu », le plateau ne monte pas au-dessus de la limite du bras (règle 5). Le premier ordre se donne
+     sans rampe, plateau en bas (zéro de la montée d'abord).
+  3. Nouvelle règle 11 du chariot : pas de rotation trigo du plateau tant que le couvercle touche le rouleau
+     (`fermeture → rotation → sens_horaire` donne le signe de l'angle de l'axe A).
+  4. Position du chariot pendant la fermeture : pas trouvée dans les fichiers du Remplissage, posée en réglage
+     (`fermeture → chariot_y`, EXEMPLE 0,50 comme la pose du couvercle).
+  5. Diamètre du couvercle dans la table des formats (`griffe → formats → diametre_couvercle`) ; le contrôle de la
+     bande du haut vérifie le bord du couvercle du 1er seau (≤ `bord_x_max`).
+  6. Une erreur de fermeture (pas de contact, contact trop tôt, couvercle bloqué, carte redémarrée) n'arrête pas le
+     cycle : retour à l'approche, bras rangé, alerte et seau « fermeture à vérifier ». Seul « le couvercle reste
+     contre le rouleau » met le module en alarme (le bras ne bouge pas).
+- **Fermeture des seaux, réponses à la PR n° 86** (tâche 41, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Chariot en y 0,50 pendant la fermeture (EXEMPLE, comme la pose du couvercle) : gardé ; demandé au fil
+     Remplissage (07/11) si la place est bonne et si le bras ne gêne rien.
+  2. Fermeture ratée : le cycle continue, seau marqué « fermeture à vérifier » (pour ne pas bloquer la machine la
+     nuit) : gardé.
+  3. Pose du couvercle sur le seau plein par la préhension : ce geste n'existe pas encore dans le code. Il devient la
+     tâche 41 bis (à écrire depuis la fiche du module qui le fait, avant le premier cycle complet).
+  4. Bande du haut et tiroir : pas des places A 0,272 (couvercle 0,28) et C 0,30 (couvercle 0,315), soit 8 et 15 mm
+     de recouvrement vus de dessus. Réponse du fil Stockage (07/11) : impossible, les couvercles voisins sont à la même
+     hauteur et se touchent bord à bord ; le vrai pas est le Ø du couvercle (A 0,28, C 0,315, D 0,28, B le sien).
+     Les pas 0,272 et 0,30 étaient faux. Avec un couvercle A de 0,28, le 7e seau A d'une file du tiroir manque
+     d'environ 2,4 cm : compter 6 A par file tant que Karulium n'a pas mesuré le couvercle A (≤ 0,276 pour 7).
+     Correction des places et contrôle au démarrage : tâche 35 quater.
+  5. Réponse du fil Remplissage (07/11) : `fermeture → chariot_y` 0,50 est FIGÉ (règle 1 de
+     remplissage/fiche/regles-positions.md : c'est là que la préhension pose le couvercle). Deux conditions
+     entrent dans le logiciel (un test chacune, tâche 41) : a) le bras ne quitte le rangé que si la préhension a
+     lâché le couvercle ET est remontée au-dessus de z 0,60 (`fermeture → prehension_libre_z`, figé), ou est
+     partie ailleurs ; si la préhension n'est pas connue, il reste rangé par prudence ; b) le chariot (chariot_y)
+     ne roule jamais quand le bras n'est pas vu rangé (refus avec la raison). La rotation du bras seulement
+     plateau ≤ 0,26 (c) était déjà faite. Pour info : le bras balaie un disque de rayon ≈ 0,15 autour de son axe
+     (repère du chariot x 0,09 ; y 0,293), à z 0,51-0,55 ; à Y 0,50 rien de fixe dans cette zone (calcul du
+     Remplissage sur la géométrie B1, pas un balayage de la Maquette) : à vérifier à la main à l'essai.

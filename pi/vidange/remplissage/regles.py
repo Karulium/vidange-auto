@@ -39,7 +39,11 @@ chaque barre ; deux barres écartées de plus de `barres → ecart_max_m` : tout
    l'approche : vidange.remplissage.remplissage) ;
 10. (tâche 40, micropore) le plateau ne monte ni ne descend que tête du micropore VUE escamotée
    au ToF (`micropore_escamote` vrai) ; sa rotation reste permise (le micropore se pose en
-   tournant le seau).
+   tournant le seau) ;
+11. (tâche 41, fermeture des seaux) tant que le couvercle est contre le rouleau
+   (`fermeture_en_contact`), le plateau ne tourne JAMAIS en sens trigo : le bras quitterait sa
+   butée et le servo prendrait l'effort. Le sens horaire est celui de machine.yaml → fermeture →
+   rotation → sens_horaire.
 Un mouvement est vérifié point par point (tous les pas_verification_m), axes ensemble en ligne
 droite comme le fait FluidNC. Tous les chiffres viennent de machine.yaml (`remplissage`).
 
@@ -114,6 +118,10 @@ class Contexte:
     # Tête du micropore (tâche 40) vue escamotée au ToF ; None : pas connue (pas de mesure, carte
     # redémarrée et pas encore relue...).
     micropore_escamote: bool | None = None
+    # Le couvercle est contre le rouleau de la fermeture (tâche 41) : rotation trigo refusée.
+    fermeture_en_contact: bool = False
+    # La Fermeture est branchée : le chariot ne roule en y que si le bras est vu rangé.
+    fermeture_branchee: bool = False
 
 
 def _m(valeur: float) -> str:
@@ -127,6 +135,10 @@ class ReglesRemplissage:
         self.verrous = machine.remplissage.verrous
         self.bout_max_y = machine.poste_fut.remplissage_y_bout_max
         self.courses = {cle: machine.axes[nom].course for cle, nom in AXES.items()}
+        # Signe de l'angle du plateau pour le sens horaire (None : pas de fermeture).
+        self.sens_horaire = (
+            None if machine.fermeture is None else machine.fermeture.rotation.sens_horaire
+        )
 
     # ------------------------------------------------------------ où est le chariot
 
@@ -243,6 +255,9 @@ class ReglesRemplissage:
         if refus is not None:
             return refus
         roule = abs(arrivee.y - depart.y) > _EGAL
+        if roule and contexte.fermeture_branchee and contexte.bras_galet_range is not True:
+            etat = "pas connu" if contexte.bras_galet_range is None else "pas rangé"
+            return f"le chariot ne roule pas : bras de fermeture {etat}, il doit être vu rangé"
         if roule and (self.pres_du_poste(depart.y) or self.pres_du_poste(arrivee.y)):
             if contexte.refus_mycelium is not None:
                 return f"le chariot ne roule pas près du poste : {contexte.refus_mycelium}"
@@ -250,6 +265,9 @@ class ReglesRemplissage:
         if monte and self.pres_du_poste(arrivee.y) and contexte.refus_mycelium is not None:
             return f"le plateau ne monte pas près du poste : {contexte.refus_mycelium}"
         refus = self.refus_micropore_plateau(depart, arrivee, contexte)
+        if refus is not None:
+            return refus
+        refus = self.refus_rotation_trigo(depart, arrivee, contexte)
         if refus is not None:
             return refus
         refus = self.refus_ecart_barres(depart)
@@ -292,6 +310,18 @@ class ReglesRemplissage:
             f"tête du micropore {etat} au capteur de distance : le plateau ne monte ni ne "
             "descend avant qu'elle soit vue escamotée"
         )
+
+    def refus_rotation_trigo(self, depart: Pose, arrivee: Pose, contexte: Contexte) -> str | None:
+        """Règle 11 (tâche 41) : pas de rotation trigo du plateau tant que le couvercle touche le
+        rouleau de la fermeture."""
+        if not contexte.fermeture_en_contact or self.sens_horaire is None:
+            return None
+        if (arrivee.a - depart.a) * self.sens_horaire < -_EGAL:
+            return (
+                "le couvercle est contre le rouleau de la fermeture : le plateau ne tourne jamais "
+                "en sens trigo (seulement horaire)"
+            )
+        return None
 
     def refus_bras_galet(self, pose: Pose) -> str | None:
         """Le bras du galet (fermeture, tâche 41) ne tourne que plateau ≤ 0,26 (règle 5)."""

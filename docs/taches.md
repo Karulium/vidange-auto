@@ -942,6 +942,13 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   seule entrée (nom et description). Vérifié au démarrage : capacité A 26, B 28, C 22, D 23 ; aucune place hors
   du tiroir (1,10-3,012) ni de la bande (bord ≤ 2,87) ; coin des suspects dans le quinconce. Tests : reprendre ceux
   du stockage aux nouveaux chiffres, un lot plein de chaque format dans le simulateur. `vidange --verifier` passe.
+- [ ] **35 quater. Places du stockage au pas du couvercle** — Modèle : Sonnet, effort bas. **À faire quand le fil
+  Stockage aura corrigé `stockage/logiciel/places-agrandi-43.md`** (et après la mesure du couvercle A par Karulium).
+  Deux couvercles voisins d'un même format sont à la même hauteur : ils se touchent bord à bord avant les seaux. Le
+  pas des places (bande du haut et tiroir) est donc au moins le Ø du couvercle (A 0,28, C 0,315 au lieu de 0,272 et
+  0,30). Recopier les nouvelles places dans `machine.yaml`, recalculer la capacité d'un lot (6 A par file du tiroir
+  tant que le couvercle A n'est pas mesuré ≤ 0,276), et ajouter au contrôle du démarrage : pas ≥ Ø du couvercle,
+  dernier bord de couvercle de la bande du haut ≤ 2,87, centre du seau du fond du tiroir ≤ butée − rayon du corps.
 - [x] **36. Portique : axes du pont et des deux Z, prise d'origine, vitesses, garage, carte n° 1** — Modèle : Opus,
   effort moyen. **Avant le solveur (tâche 23).**
   Sources (recopiées ici le 01/11/2026) : fiche du module « Portique », **gelé le 28/10/2026**, et le fichier écrit
@@ -1444,7 +1451,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   La pesée garde son rythme : la vérifier dans un test.
   Côté Pi : lecture et écriture de ces registres dans `pi/vidange/materiel/carte_pesee.py`, avec le faux, plus les
   signaux dans `docs/entrees-sorties.yaml` (`exemple: true`).
-- [ ] **41. Fermeture des seaux** — Modèle : Sonnet, effort moyen. À faire après la tâche 40.
+- [x] **41. Fermeture des seaux** — Modèle : Sonnet, effort moyen. À faire après la tâche 40.
   Source, recopiée ici le 06/11/2026 : `fermeture-seaux/logiciel/fermeture-seaux-pour-logiciel.md` du projet
   mécanique (module gelé).
   - Le servo DS3225 tourne le bras à vide, entre rangé (−160°, sens horaire) et travail (sur sa butée, 2,5° au-delà).
@@ -1466,6 +1473,9 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   - effort au-delà de F_max ⇒ arrêt et descente ;
   - rotation trigo refusée en contact ;
   - redémarrage dans le bon ordre.
+- [ ] **41 bis. Pose du couvercle sur le seau plein** — Modèle : Sonnet, effort moyen. À écrire d'abord : demander au
+  fil du module qui fait ce geste (Préhension ou Remplissage) un fichier `<module>/logiciel/...-pour-logiciel.md`.
+  Ne pas inventer le geste. Avant le premier cycle complet (`docs/decisions.md`, PR n° 86, point 3).
 - [ ] **42. Air comprimé** — Modèle : Sonnet, effort bas. Source, recopiée ici le 06/11/2026 :
   `air/logiciel/air-comprime-pour-logiciel.md` du projet mécanique (module gelé le 28/10).
   - Un seul signal du Pi : `relais_compresseur`, une sortie relais vers un contacteur. Il est ouvert pendant l'ozone

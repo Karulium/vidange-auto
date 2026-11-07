@@ -574,6 +574,9 @@ class FormatSeau(Modele):
     # Pour le Stockage (obligatoire s'il y a la partie « stockage ») : de combien monte le bord
     # quand on ajoute un seau à une pile (m).
     pas_pile_m: float | None = Field(default=None, gt=0)
+    # Diamètre du couvercle (m) : pour la Fermeture des seaux (tâche 41) et le contrôle de la
+    # bande du haut du Stockage (bord du couvercle ≤ bord_x_max, décisions, PR n° 54).
+    diametre_couvercle: float | None = Field(default=None, gt=0)
 
 
 class Griffe(Modele):
@@ -2868,6 +2871,138 @@ class GestesAppris(Modele):
     historique: list[ChangementAppris] = Field(default_factory=list)
 
 
+# ------------------------------------------------------------- fermeture des seaux (tâche 41)
+
+
+class RampeBras(Modele):
+    """Le bras ne reçoit jamais un saut : il va à son angle par petits ordres, à cette vitesse."""
+
+    # Il fait `degres` en `duree_s` ; un ordre toutes les `pas_s`.
+    degres: float = Field(gt=0)
+    duree_s: float = Field(gt=0)
+    pas_s: float = Field(gt=0)
+
+
+class BrasFermeture(Modele):
+    """Le bras du galet, tourné à vide par un servo DS3225 (aucun capteur sur le bras). Les angles
+    du BRAS sont en degrés, 0 au travail (le doigt sur sa butée), trigo positif (vu de dessus) ;
+    ceux du SERVO sont ceux de son axe (0 à 270°), par l'étalonnage `butee_servo_deg`."""
+
+    # Angle rangé du bras (négatif : sens horaire depuis le travail).
+    range_deg: float = Field(lt=0, gt=-360)
+    # Au travail, le servo va de tant (°) au-delà de la butée, en sens trigo.
+    surcourse_deg: float = Field(ge=0, le=10)
+    # +1 : l'angle de l'axe du servo grandit quand le bras tourne en sens trigo ; -1 : il baisse.
+    sens_servo: Literal[-1, 1]
+    # ÉTALONNAGE (à la mise en service) : angle de l'axe du servo où le doigt touche le plat des
+    # paliers. Rangé = cet angle + sens × range_deg ; travail = cet angle + sens × surcourse.
+    butee_servo_deg: float
+    rampe: RampeBras
+    # Attente après chaque ordre (s).
+    attente_s: float = Field(gt=0)
+    # Après un redémarrage de la carte (servos relâchés), le bras compte rangé de nouveau après (s).
+    stabilisation_s: float = Field(gt=0)
+    # Le Pi renvoie l'angle au moins tous les tant (s) : la carte veut un ordre toutes les 2 s.
+    battement_s: float = Field(gt=0)
+
+
+class MonteeFermeture(Modele):
+    """Les chiffres de la montée en appui, vus par la balance du plateau du chariot."""
+
+    # Vitesse de montée de l'approche jusqu'à Hf (m/s).
+    vitesse_m_s: float = Field(gt=0)
+    # Contact : l'effort au-dessus du poids d'avant (N). F = (P − P0) × 9,81.
+    force_contact_n: float = Field(gt=0)
+    # Arrêt et descente au-delà de cet effort (N), sans jamais dépasser la limite de la cellule.
+    force_max_n: float = Field(gt=0)
+    force_max_limite_n: float = Field(gt=0)
+    # Le clip s'enfonce de tant (m) : Hc = Hf − cet enfoncement (cotes des seaux).
+    enfoncement_clip_m: float = Field(gt=0)
+    # Approche : Hc − cette marge (m), mais jamais sous la course basse du plateau.
+    marge_approche_m: float = Field(gt=0)
+    # Le contact est attendu dans Hc ± fenetre_contact_m ; avant Hc − contact_trop_tot_m : trop tôt.
+    fenetre_contact_m: float = Field(gt=0)
+    contact_trop_tot_m: float = Field(gt=0)
+    # Après les ordres au servo, le temps laissé à la balance pour se stabiliser est celui de
+    # remplissage → pesee → attente_s.
+
+
+class RotationFermeture(Modele):
+    """Le clipsage : le plateau tourne à Hf, TOUJOURS en sens horaire."""
+
+    # Signe de l'angle du plateau (axe A de FluidNC) pour le sens HORAIRE vu de dessus.
+    sens_horaire: Literal[-1, 1]
+    tours: float = Field(gt=0)
+    tr_min: float = Field(gt=0)
+
+
+class FormatFermeture(Modele):
+    """Hf : hauteur du dessus du plateau, seau clipsé, pour un format (m, vérifié sur les seaux)."""
+
+    hf_m: float = Field(gt=0)
+
+
+class Fermeture(Modele):
+    """Fermeture des seaux (module gelé, fermeture-seaux-pour-logiciel.md du 01/11/2026) : un bras
+    porte un rouleau ; le PLATEAU monte et tourne pour clipser le couvercle, sous la surveillance
+    de la balance. Rien n'est câblé en dur pour ce module (la force vient du plateau, limité par
+    ses propres protections) : ces réglages protègent la machine, jamais les personnes."""
+
+    exemple: bool = False
+    # Voie de la PCA9685 (pesees.yaml → i2c) du servo DS3225 du bras.
+    servo: Nom
+    # Position du chariot en y pendant la fermeture (m) : figée par le Remplissage (règle 1 de
+    # regles-positions.md : c'est là que la préhension pose le couvercle).
+    chariot_y: float
+    # Le bras ne quitte le rangé que si la préhension a lâché le couvercle et est remontée au-dessus
+    # de ce z (m, figé d'après le Remplissage), ou est partie ailleurs.
+    prehension_libre_z: float
+    bras: BrasFermeture
+    montee: MonteeFermeture
+    rotation: RotationFermeture
+    formats: dict[Nom, FormatFermeture] = Field(min_length=1)
+
+    def hc(self, format: str) -> float:
+        """Hauteur du plateau où le couvercle touche le rouleau."""
+        return self.formats[format].hf_m - self.montee.enfoncement_clip_m
+
+    def h_approche(self, format: str, course_basse: float) -> float:
+        """Hauteur du plateau avant le geste : Hc − marge, mais pas sous la course basse."""
+        return max(self.hc(format) - self.montee.marge_approche_m, course_basse)
+
+    def servo_travail_deg(self) -> float:
+        return self.bras.butee_servo_deg + self.bras.sens_servo * self.bras.surcourse_deg
+
+    def servo_range_deg(self) -> float:
+        return self.bras.butee_servo_deg + self.bras.sens_servo * self.bras.range_deg
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Fermeture":
+        erreurs = []
+        m = self.montee
+        if m.force_max_n > m.force_max_limite_n:
+            erreurs.append(
+                f"montee → force_max_n ({m.force_max_n:g}) : au plus {m.force_max_limite_n:g} N "
+                "(limite de la cellule de 30 kg avec un seau plein)"
+            )
+        if m.force_contact_n >= m.force_max_n:
+            erreurs.append("montee : force_contact_n doit être plus petit que force_max_n")
+        if m.contact_trop_tot_m <= m.fenetre_contact_m:
+            erreurs.append("montee : contact_trop_tot_m doit être plus grand que fenetre_contact_m")
+        if m.marge_approche_m <= m.contact_trop_tot_m:
+            erreurs.append(
+                "montee : marge_approche_m doit être plus grand que contact_trop_tot_m (sinon le "
+                "contact « trop tôt » ne peut pas se voir)"
+            )
+        if m.enfoncement_clip_m <= m.fenetre_contact_m:
+            erreurs.append("montee : enfoncement_clip_m doit être plus grand que fenetre_contact_m")
+        if self.bras.battement_s >= 2:
+            erreurs.append("bras → battement_s : sous 2 s (la carte garde les angles après 2 s)")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -2917,6 +3052,10 @@ class Machine(Modele):
     # Micropore : tête sur le chariot de remplissage (None : pas de micropore). Demande la griffe
     # (formats) et le remplissage (plateau, règles 9 et C2).
     micropore: Micropore | None = None
+    # Fermeture des seaux : bras du galet sur le chariot de remplissage (None : pas de fermeture).
+    # Demande la griffe (formats), le remplissage (plateau, règle 5) et le micropore n'est pas
+    # nécessaire.
+    fermeture: Fermeture | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -2991,6 +3130,7 @@ class Machine(Modele):
         erreurs += self._verifier_portique()
         erreurs += self._verifier_spray()
         erreurs += self._verifier_micropore()
+        erreurs += self._verifier_fermeture()
         if self.camera_dosage is not None and (self.prehension is None or self.mycelium is None):
             erreurs.append(
                 "camera_dosage : il faut aussi les parties « prehension » et « mycelium »"
@@ -3941,6 +4081,21 @@ class Machine(Modele):
                 )
             )
         if bande.active:
+            for format, centres in bande.places.items():
+                seau = formats.get(format)
+                if seau is None or not centres:
+                    continue
+                if seau.diametre_couvercle is None:
+                    erreurs.append(
+                        f"stockage → bande_haut : le format « {format} » n'a pas de "
+                        "diametre_couvercle (griffe → formats)"
+                    )
+                elif centres[0] + seau.diametre_couvercle / 2 > bande.bord_x_max + 1e-9:
+                    erreurs.append(
+                        f"stockage → bande_haut → places → {format} : le bord du couvercle du 1er "
+                        f"seau ({centres[0] + seau.diametre_couvercle / 2:g}) dépasse "
+                        f"{bande.bord_x_max:g} (hublot)"
+                    )
             rangement = self.remplissage.rangement.bande_haut
             if rangement is None:
                 erreurs.append(
@@ -4049,6 +4204,63 @@ class Machine(Modele):
                 erreurs.append(
                     f"micropore → avance : la lettre {avance.lettre} de la carte "
                     f"« {avance.carte} » est déjà celle de l'axe « {nom} »"
+                )
+        return erreurs
+
+    def _verifier_fermeture(self) -> list[str]:
+        """Chaque format de la fermeture est un format de la griffe (avec sa hauteur et son
+        diamètre de couvercle) ; Hf, l'approche et le chariot tiennent dans les courses et dans la
+        règle 5 (bras du galet : plateau ≤ galet_plateau_max_z)."""
+        fermeture = self.fermeture
+        if fermeture is None:
+            return []
+        if self.griffe is None or self.remplissage is None:
+            return ["fermeture : il faut aussi les parties « griffe » (formats) et « remplissage »"]
+        erreurs = []
+        remplissage = self.remplissage
+        bas, haut = self.axes["plateau_z"].course
+        debut_y, fin_y = self.axes["remplissage_y"].course
+        if not debut_y <= fermeture.chariot_y <= fin_y:
+            erreurs.append(
+                f"fermeture → chariot_y : {fermeture.chariot_y:g} m hors de la course du chariot "
+                f"({debut_y:g} à {fin_y:g} m)"
+            )
+        limite_bras = remplissage.verrous.galet_plateau_max_z
+        for nom in fermeture.formats:
+            seau = self.griffe.formats.get(nom)
+            if seau is None:
+                erreurs.append(f"fermeture → formats : format de seau inconnu « {nom} »")
+                continue
+            if seau.diametre_couvercle is None:
+                erreurs.append(f"fermeture → formats → {nom} : il faut diametre_couvercle (griffe)")
+            if seau.hauteur is None:
+                erreurs.append(f"fermeture → formats → {nom} : il faut la hauteur du seau (griffe)")
+                continue
+            hf = fermeture.formats[nom].hf_m
+            h_app = fermeture.h_approche(nom, bas)
+            if not bas <= hf <= haut:
+                erreurs.append(
+                    f"fermeture → formats → {nom} : Hf {hf:g} m hors de la course du plateau "
+                    f"({bas:g} à {haut:g} m)"
+                )
+            if hf > limite_bras:
+                erreurs.append(
+                    f"fermeture → formats → {nom} : Hf {hf:g} m, le bras du galet ne tourne que "
+                    f"plateau ≤ {limite_bras:g} (règle 5)"
+                )
+            trop_tot = fermeture.hc(nom) - fermeture.montee.contact_trop_tot_m
+            if h_app >= trop_tot:
+                erreurs.append(
+                    f"fermeture → formats → {nom} : l'approche ({h_app:g} m) doit être sous "
+                    f"Hc − contact_trop_tot_m ({trop_tot:g} m) : sinon un contact trop tôt ne se "
+                    "voit pas"
+                )
+            if fermeture.chariot_y < remplissage.dosage_y - remplissage.tolerance_y_m and (
+                hf + seau.hauteur > remplissage.verrous.poste_bord_max_z
+            ):
+                erreurs.append(
+                    f"fermeture → formats → {nom} : au poste, le bord du seau serait à "
+                    f"{hf + seau.hauteur:g} m (au plus {remplissage.verrous.poste_bord_max_z:g})"
                 )
         return erreurs
 
@@ -4750,6 +4962,15 @@ class MicroporeSimule(Modele):
     premier_trou_deg: float = 20.0
 
 
+class FermetureSimulee(Modele):
+    """Le couvercle imaginaire de la Fermeture des seaux (scénario « remplissage »)."""
+
+    # Raideur du couvercle contre le rouleau (N par m de plateau au-dessus du contact).
+    raideur_n_par_m: float = Field(gt=0)
+    # Écart (m) entre la vraie hauteur de contact et Hc (négatif : le couvercle touche plus tôt).
+    ecart_contact_m: float = 0.0
+
+
 class ScenarioSimule(Modele):
     """Un scénario : capteurs actionnés au départ et événements, à la place de ceux du haut."""
 
@@ -4792,6 +5013,8 @@ class ReglagesSimulateur(Modele):
     nettoyage: NettoyageSimule | None = None
     # La tête du micropore imaginaire (gestes appris, trous vus par la caméra).
     micropore: MicroporeSimule | None = None
+    # Le couvercle imaginaire de la Fermeture des seaux.
+    fermeture: FermetureSimulee | None = None
 
 
 # ---------------------------------------------------------- accelerometre.yaml
@@ -5944,6 +6167,7 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
             if seau.format not in formats
         ]
     erreurs += _verifier_micropore_entre_fichiers(valeurs)
+    erreurs += _verifier_fermeture_entre_fichiers(valeurs)
     if simulateur.depart is not None and simulateur.depart not in machine.positions:
         erreurs.append(
             f"simulateur.yaml, depart : position « {simulateur.depart} » absente de machine.yaml"
@@ -6008,6 +6232,42 @@ def _verifier_micropore_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
             f"simulateur.yaml, micropore → appris : {erreur}"
             for erreur in verifier_appris(simulateur.micropore.appris, micropore, plage)
         ]
+    return erreurs
+
+
+def _verifier_fermeture_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
+    """Le servo de la fermeture est une voie de la PCA9685 de pesees.yaml, et ses angles (travail,
+    rangé) tiennent dans la plage de cette voie."""
+    machine, pesees = valeurs["machine"], valeurs["pesees"]
+    assert isinstance(machine, Machine) and isinstance(pesees, ReglagesPesees)
+    fermeture = machine.fermeture
+    if fermeture is None:
+        return []
+    i2c = pesees.i2c
+    if i2c is None:
+        return ["machine.yaml, fermeture : il faut l'I2C de pesees.yaml (servo du bras)"]
+    voie = i2c.pca9685.voies.get(fermeture.servo)
+    if voie is None:
+        return [
+            f"machine.yaml, fermeture → servo : voie « {fermeture.servo} » absente de pesees.yaml "
+            "(i2c → pca9685 → voies)"
+        ]
+    erreurs = []
+    for quoi, angle in (
+        ("travail", fermeture.servo_travail_deg()),
+        ("rangé", fermeture.servo_range_deg()),
+    ):
+        if not voie.angle_min_deg <= angle <= voie.angle_max_deg:
+            erreurs.append(
+                f"machine.yaml, fermeture → bras : l'angle du servo « {quoi} » ({angle:g}°) est "
+                f"hors de la plage de la voie ({voie.angle_min_deg:g} à {voie.angle_max_deg:g}°, "
+                "pesees.yaml) : revoir butee_servo_deg"
+            )
+    if machine.micropore is not None and fermeture.servo in (
+        machine.micropore.servo_escamotage,
+        machine.micropore.servo_lame,
+    ):
+        erreurs.append("machine.yaml, fermeture → servo : la voie est déjà celle du micropore")
     return erreurs
 
 

@@ -631,6 +631,9 @@ griffe:
   # les petits seaux (un bocal pour 2 seaux de la même variété au plus, Karulium 26/10).
   # Pour le Stockage : pas_pile_m = de combien monte le bord quand on ajoute un seau à une pile
   # (fiche du Stockage, gelée le 27/10).
+  # diametre_couvercle = diamètre du couvercle (fichier du fil Stockage, décisions, PR n° 54 :
+  # A 0,28, B 0,23, C 0,315, D 0,28) : la Fermeture des seaux (tâche 41) et le contrôle de la bande
+  # du haut (bord du couvercle ≤ 2,87) s'en servent.
   formats:
     seau_a:
       haut_z: 0.78
@@ -643,6 +646,7 @@ griffe:
       hauteur: 0.25
       mycelium_kg: 0.15
       pas_pile_m: 0.030
+      diametre_couvercle: 0.28
     # Seau de 5 L : tassement de la dernière couche seulement, tête centrée, bas du godet au plus
     # 8 cm sous le bord (fiche).
     seau_b:
@@ -657,6 +661,7 @@ griffe:
       mycelium_kg: 0.10
       seaux_par_bocal: 2
       pas_pile_m: 0.030
+      diametre_couvercle: 0.23
     seau_c:
       haut_z: 0.78
       rayon_haut: 0.1475
@@ -668,6 +673,7 @@ griffe:
       hauteur: 0.235
       mycelium_kg: 0.15
       pas_pile_m: 0.035
+      diametre_couvercle: 0.315
     seau_d:
       haut_z: 0.78
       rayon_haut: 0.1375
@@ -679,6 +685,7 @@ griffe:
       hauteur: 0.265
       mycelium_kg: 0.15
       pas_pile_m: 0.045
+      diametre_couvercle: 0.28
   format_par_defaut: seau_a
   # Vidage de la griffe dans le seau du chariot de remplissage (agitateur fixe, 01/11/2026) :
   # mât en (0,925 ; 0,42), seau au vidage (remplissage → vidage_y), jamais au poste.
@@ -1876,6 +1883,64 @@ micropore:
       rangees:
         - {hauteur_m: 0.195, rayon_paroi_m: 0.133, trous: 4}
         - {hauteur_m: 0.07, rayon_paroi_m: 0.1245, trous: 4, fond: true}
+
+# Fermeture des seaux (tâche 41, module gelé le 01/11/2026, fermeture-seaux-pour-logiciel.md). Un
+# bras à plat, porté par le poteau du chariot de remplissage, tient un rouleau en silicone ; un
+# servo DS3225 le tourne TOUJOURS À VIDE entre « rangé » (−160°, sens horaire) et « travail » (le
+# doigt sur sa butée). C'est le PLATEAU qui ferme : il monte jusqu'à Hf, le couvercle touche le
+# rouleau (Hc) et se clipse, puis il tourne en sens HORAIRE pour clipser tout le tour. Jamais de
+# rotation trigo tant qu'il y a contact. Aucun capteur sur le bras : la balance du plateau vérifie.
+# Rien n'est câblé en dur pour ce module. Chiffres VRAIS (figés) de la fiche, sauf ceux marqués
+# EXEMPLE : Hf et Hc se vérifient au premier essai sur les 4 vrais seaux.
+fermeture:
+  exemple: true
+  # Voie de la PCA9685 du boîtier du chariot (pesees.yaml → i2c) ; le + vient de bec_servo.
+  servo: servo_fermeture_seaux
+  # y du chariot pendant la fermeture : FIGÉ par le Remplissage (règle 1 de regles-positions.md :
+  # c'est là que la préhension pose le couvercle). Le chariot ne roule jamais bras pas vu rangé.
+  chariot_y: 0.50
+  # Le bras quitte le rangé seulement si la préhension a lâché le couvercle ET est remontée
+  # au-dessus de ce z (figé d'après le Remplissage), ou est partie ailleurs.
+  prehension_libre_z: 0.60
+  bras:
+    # Rangé : −160° (figé, choix de Karulium du 24/10). Surcourse au travail 2 à 3° (figé en plage ;
+    # 2,5° EXEMPLE).
+    range_deg: -160
+    surcourse_deg: 2.5
+    # EXEMPLES, à étalonner à la mise en service (vidange-fermeture, essai-fermeture.md) : sens
+    # du servo et angle de son AXE où le doigt touche le plat des paliers.
+    sens_servo: 1
+    butee_servo_deg: 200
+    # Rampe : 160° en 1,0 s (le servo seul ferait ≈ 0,4 s) ; attente de 0,5 s après chaque ordre
+    # (EXEMPLES). Le premier ordre après un démarrage arrive sans rampe.
+    rampe: {degres: 160, duree_s: 1.0, pas_s: 0.1}
+    attente_s: 0.5
+    stabilisation_s: 1.0
+    battement_s: 1.0
+  montee:
+    # Montée en appui de H_app à Hf : 5 mm/s. F_contact 10 N (≈ 1 kg de plus sur la balance).
+    # F_max : 200 N au plus (figé), réglage 150 N. Le clip s'enfonce de 6 mm (figé, tiré des cotes
+    # des seaux). Approche à Hc − 0,020. Contact attendu dans Hc ± 0,005 ; avant Hc − 0,010 :
+    # « trop tôt ». Les autres : EXEMPLES.
+    vitesse_m_s: 0.005
+    force_contact_n: 10
+    force_max_n: 150
+    force_max_limite_n: 200
+    enfoncement_clip_m: 0.006
+    marge_approche_m: 0.020
+    fenetre_contact_m: 0.005
+    contact_trop_tot_m: 0.010
+  # Clipsage : sens HORAIRE (figé), 2 tours à 6 tr/min (EXEMPLES). sens_horaire = signe de l'angle
+  # du plateau (axe A de FluidNC) pour l'horaire vu de dessus : EXEMPLE (−1 si A positif est trigo),
+  # à vérifier à la mise en service.
+  rotation: {sens_horaire: -1, tours: 2, tr_min: 6}
+  # Hf, plateau seau clipsé (figé, géométrie ; à vérifier sur les vrais seaux au premier essai).
+  # Hc = Hf − 0,006 ; H_app = Hc − 0,020 (A et D : 0,175, la course basse).
+  formats:
+    seau_a: {hf_m: 0.201}
+    seau_b: {hf_m: 0.251}
+    seau_c: {hf_m: 0.214}
+    seau_d: {hf_m: 0.194}
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :
