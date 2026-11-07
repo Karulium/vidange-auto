@@ -618,6 +618,14 @@ def principal(
             "contrôle, du vide et délais d'EXEMPLE : les mesurer sur l'entonnoir reçu "
             "(pi/systeme/essai-entonnoir.md), puis passer « exemple » à false."
         )
+    versement = None if griffe is None else griffe.versement_bocal
+    if versement is not None and versement.exemples():
+        journal.warning(
+            "machine.yaml, griffe → versement_bocal : %s en EXEMPLE (proposés ou à mesurer) : "
+            "les régler au premier essai avec du maïs chaud (pi/systeme/essai-versement-bocal.md), "
+            "puis passer leur « exemple » à false.",
+            ", ".join(versement.exemples()),
+        )
     couvercle = reglages.machine.couvercle
     if couvercle is not None and couvercle.exemple:
         journal.warning(

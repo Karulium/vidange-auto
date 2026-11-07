@@ -48,11 +48,18 @@ from vidange.reglages import FormatSeau, Machine
 journal = donner_journal("griffe")
 
 Geste = Generator[Pas, Resultat, None]
+# Une pesée à l'arrêt (versement dans un bocal) : des pas d'attente, puis la charge pendue (N).
+Pesee = Generator[Pas, Resultat, float]
 Sorte = Literal["raclage", "fond", "paroi", "chasse_neige", "centre"]
 
 QUOI_FAIRE = (
     "Regarder la vidéo de la griffe : est-elle bloquée, le godet est-il plein de substrat collé ? "
     "Corriger, puis acquitter et donner le Go : le geste est refait depuis le début."
+)
+QUOI_FAIRE_DOSE = (
+    "La griffe n'arrive pas à prendre la dose du bocal dans le fût : regarder la vidéo (maïs collé "
+    "en bloc, fût presque vide ?). Corriger, puis acquitter et donner le Go : les prises "
+    "recommencent."
 )
 # Écart sous lequel deux positions sont égales (m).
 _EGAL = 1e-6
@@ -67,6 +74,18 @@ class ActionFond:
     y: float = 0.0
     # Orientation voulue de la tête (°), ou None : celle du moment.
     a: float | None = None
+
+
+@dataclass(frozen=True)
+class DoseDonnee:
+    """Une dose donnée au lieu de celle d'une couche de seau (bocal de semence, maïs : sans
+    mâchouiller ni s'entrouvrir). Hors de [min_kg, max_kg], la prise est rendue au fût et
+    refaite à côté ; après `reprises_max` reprises, alerte. `peser` : la pesée à l'arrêt."""
+
+    min_kg: float
+    max_kg: float
+    reprises_max: int
+    peser: Callable[[], Pesee]
 
 
 @dataclass(frozen=True)
@@ -167,6 +186,11 @@ class Griffe:
         self.garde = garde
         self.plan = Plan(format=self.reglages.format_par_defaut)
         self.pose: Pose | None = None
+        # Tare « godet vide » de la dernière prise d'une dose donnée (N), pesée à l'arrêt.
+        self.tare_n: float | None = None
+        # Dose donnée : on vise tant de fois le milieu de la plage (corrigé après chaque prise
+        # pesée, tant que la densité du fût n'est pas apprise : la plage est étroite).
+        self.correction_dose = 1.0
         self._geste: Geste | None = None
         self._pas: Pas | None = None
         self._depuis = 0.0
@@ -471,11 +495,13 @@ class Griffe:
         actions += [ActionFond("centre", centre_x, centre_y)] * fond.centre_prises
         return actions
 
-    def _prochaine_prise(self) -> PrisePrevue:
+    def _prochaine_prise(self, dose: DoseDonnee | None = None) -> PrisePrevue:
         plan, reglages = self.plan, self.reglages
         reste = max(self.format.dose_kg - plan.couche_kg, 0.0)
         poids = reste / self.doses.prises_par_couche(reste) if reste > 0 else self.format.dose_kg
-        if plan.en_fond and plan.fond:
+        if dose is not None:
+            poids = (dose.min_kg + dose.max_kg) / 2 * self.correction_dose
+        if plan.en_fond and plan.fond and dose is None:
             action = plan.fond[0]
             fond = reglages.fond
             paroi = action.sorte == "paroi"
@@ -499,7 +525,7 @@ class Griffe:
             a=self._vers_le_centre(x, y),
             poids_kg=poids,
             enfoncement_m=reglages.prise.enfoncement_m,
-            bouchees=reglages.machouiller.bouchees if self._machouiller() else 0,
+            bouchees=reglages.machouiller.bouchees if self._machouiller() and not dose else 0,
             ouverture_max=1.0,
             contact_n=reglages.descente.seuil_contact_n,
             poussee_n=None,
@@ -522,10 +548,12 @@ class Griffe:
         """Au-dessus du fût, à la hauteur des trajets (godet fermé, tête bloquée)."""
         yield from self._aller_au_dessus(*self.fut.centre_fut)
 
-    def geste_prendre(self) -> Geste:
-        """Descendre au contact, mâchouiller, prendre en plongée, remonter, peser, ajuster."""
+    def geste_prendre(self, dose: DoseDonnee | None = None) -> Geste:
+        """Descendre au contact, mâchouiller, prendre en plongée, remonter, peser, ajuster.
+        `dose` : une dose donnée (bocal de semence), pesée à l'arrêt ; la tare « godet vide »
+        (godet ouvert, vide, au-dessus du substrat) est gardée dans `tare_n`."""
         plan, reglages = self.plan, self.reglages
-        prevue = self._prochaine_prise()
+        prevue = self._prochaine_prise(dose)
         bas_offset = reglages.bas_godet_sous_axes
         assert self.pose is not None
         niveau = plan.niveau_z if plan.niveau_z is not None else self.fut.fut_bord_z
@@ -557,9 +585,13 @@ class Griffe:
                 and self.regles.refus_pose(tourne.avec(b=1.0), contexte) is None
             ):
                 yield Pas("tourner la tête", {"a": a})
-        ouvert = yield Pas("ouvrir le godet", {"b": 1.0}, pesee=True)
-        assert ouvert.charge_n is not None
-        charge_vide = ouvert.charge_n
+        ouvert = yield Pas("ouvrir le godet", {"b": 1.0}, pesee=dose is None)
+        if dose is None:
+            assert ouvert.charge_n is not None
+            charge_vide = ouvert.charge_n
+        else:
+            charge_vide = yield from dose.peser()
+            self.tare_n = charge_vide
         fond_z = plan.fond_z if plan.fond_z is not None else self.fut.fut_fond_interieur_z
         z_min = max(self.course_z[0], fond_z - reglages.descente.butee_sous_fond_m + bas_offset)
         contact = yield Pas(
@@ -618,13 +650,20 @@ class Griffe:
         pese = yield Pas(
             "remonter et peser",
             {"z": min(ferme.pose.z + prise.remontee_m, reglages.trajet.z)},
-            attente_s=prise.pesee_attente_s,
-            pesee=True,
+            attente_s=prise.pesee_attente_s if dose is None else 0.0,
+            pesee=dose is None,
         )
-        poids = self._poids(pese, charge_vide)
+        if dose is None:
+            poids = self._poids(pese, charge_vide)
+        else:
+            poids = ((yield from dose.peser()) - charge_vide) / G
+            if poids > 0:
+                self.correction_dose *= (dose.min_kg + dose.max_kg) / 2 / poids
         essais = 0
         while (
-            poids > prevue.poids_kg * (1 + prise.tolerance) and essais < prise.entrouvrir_essais_max
+            dose is None
+            and poids > prevue.poids_kg * (1 + prise.tolerance)
+            and essais < prise.entrouvrir_essais_max
         ):
             # Trop lourd : s'entrouvrir au-dessus du fût jusqu'au bon poids.
             essais += 1
@@ -641,8 +680,35 @@ class Griffe:
             plan.vide = True
             yield from self._fermer_apres_vide()
             return
+        fond = niveau - self.fut.fut_fond_interieur_z <= reglages.fond.passe_hauteur_m
+        if dose is not None and fond and poids < prise.utile_min_kg:
+            # Dose donnée (pas de passe de fond) : contact au fond, presque rien pris.
+            journal.info("Griffe : prise de %.3f kg au fond du fût : fût vide", poids)
+            plan.vide = True
+            yield from self._fermer_apres_vide()
+            return
+        if dose is not None and not dose.min_kg <= poids <= dose.max_kg:
+            if plan.reprises >= dose.reprises_max:
+                plan.reprises = 0
+                yield Pas("rendre la prise au fût", {"b": 1.0})
+                raise ErreurEtape(
+                    f"griffe : pas de dose de {dose.min_kg:g} à {dose.max_kg:g} kg après "
+                    f"{dose.reprises_max + 1} prises (dernière : {poids:.3f} kg)",
+                    QUOI_FAIRE_DOSE,
+                )
+            # Hors de la plage : la prise est rendue au fût, puis refaite à côté.
+            plan.reprises += 1
+            plan.reprendre = True
+            plan.point += 1
+            yield Pas("rendre la prise au fût", {"b": 1.0})
+            return
         trop_leger = poids < prevue.poids_kg * (1 - prise.tolerance)
-        if prevue.lieu == "couche" and trop_leger and plan.reprises < prise.reprises_max:
+        if (
+            dose is None
+            and prevue.lieu == "couche"
+            and trop_leger
+            and plan.reprises < prise.reprises_max
+        ):
             plan.reprises += 1
             plan.reprendre = True
             plan.point += 1
@@ -881,6 +947,7 @@ class Griffe:
         """Le poste est prêt : une nouvelle vidange commence."""
         self.plan = Plan(format=self._prochain_format() or self.reglages.format_par_defaut)
         self.doses.nouveau_fut()
+        self.correction_dose = 1.0
         return "revenir_au_fut"
 
     def apres_retour(self) -> str:

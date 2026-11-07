@@ -13,14 +13,16 @@
 Les gestes se répètent (verser, lire, prendre, poser) jusqu'au dernier bocal. Quand l'entonnoir
 est perdu (absent, introuvable, vide perdu), son étape part en alarme ; après « acquitter » et le
 Go, elle ne fait plus rien et le module revient à `demander_la_pose` : le geste 1 recommence, sur
-le bocal à remplir. Le versement de la griffe est celui de ses propres étapes (Griffe) : ici une
-case vide `verser(bocal)` qu'elle remplira. `photo` : les étapes du Portique qui garent le pont
-pour la photo du plafond (`portique.etapes_photo("stockage")`), placées avant chaque lecture de la
-caméra.
+le bocal à remplir. Le versement est le geste de la griffe (`versement` : vidange.griffe.versement,
+tâche 43 bis) ; sans lui, `verser(bocal)` et `versement_fini()` (un faux dans le simulateur).
+Refait après une alarme, le versement d'un bocal commencé CONTINUE (jamais une 2e dose).
+`photo` : les étapes du Portique qui garent le pont pour la photo du plafond
+(`portique.etapes_photo("stockage")`), placées avant chaque lecture de la caméra.
 """
 
 from collections.abc import Callable
 from dataclasses import replace
+from typing import Protocol
 
 from vidange.chef import Condition, ErreurEtape, Etape, Module
 from vidange.entonnoir.entonnoir import (
@@ -43,6 +45,27 @@ QUOI_FAIRE_VERSER = (
 )
 
 
+class VersementDuBocal(Protocol):
+    """Le versement de la griffe (vidange.griffe.versement.Versement)."""
+
+    # Conditions avant de verser (cartes prêtes, poste du fût prêt...).
+    entree: tuple[Condition, ...]
+
+    def verser(self, bocal: str) -> object: ...
+
+    def fini(self) -> bool: ...
+
+    def commence(self, bocal: str) -> bool:
+        """Le versement de ce bocal a déjà commencé : le refaire, c'est le continuer."""
+        ...
+
+    def pauser(self) -> None: ...
+
+    def reprendre(self) -> None: ...
+
+    def arreter(self) -> None: ...
+
+
 def module_entonnoir(
     entonnoir: Entonnoir,
     prehension: Prehension,
@@ -51,8 +74,11 @@ def module_entonnoir(
     versement_fini: Callable[[], bool] = lambda: True,
     air: Condition | None = None,
     photo: tuple[Etape, ...] = (),
+    versement: VersementDuBocal | None = None,
 ) -> Module:
     entonnoir.demarrer_lot(bocaux)
+    if versement is not None:
+        verser, versement_fini = versement.verser, versement.fini
     tete = prehension.tete
     fin_geste = Condition("geste de la préhension fini", prehension.geste_fini)
 
@@ -61,6 +87,10 @@ def module_entonnoir(
 
     def verser_ici() -> None:
         bocal = entonnoir.place
+        if versement is not None and versement.commence(bocal):
+            # Refait après une alarme ou une coupure : le même versement continue.
+            versement.verser(bocal)
+            return
         refus = entonnoir.refus_versement(bocal)
         if refus is not None:
             raise ErreurEtape(f"entonnoir : {refus}", QUOI_FAIRE_VERSER)
@@ -105,7 +135,7 @@ def module_entonnoir(
             action=verser_ici,
             fin=Condition("versement de la griffe fini", versement_fini),
             delai_max=DELAI_VERSEMENT,
-            entree=(entonnoir.verse_permis,),
+            entree=(entonnoir.verse_permis, *(versement.entree if versement else ())),
         ),
         *photo_col,
         Etape(
@@ -139,11 +169,27 @@ def module_entonnoir(
             demande_go=True,
         ),
     )
+
+    def pauser() -> None:
+        prehension.pauser()
+        if versement is not None:
+            versement.pauser()
+
+    def reprendre() -> None:
+        prehension.reprendre()
+        if versement is not None:
+            versement.reprendre()
+
+    def arreter() -> None:
+        prehension.arreter()
+        if versement is not None:
+            versement.arreter()
+
     return Module(
         nom="entonnoir",
         etapes=etapes,
         surveillances=(tete.surveillance,),
-        pauser=prehension.pauser,
-        reprendre=prehension.reprendre,
-        arreter=prehension.arreter,
+        pauser=pauser,
+        reprendre=reprendre,
+        arreter=arreter,
     )

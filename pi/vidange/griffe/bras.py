@@ -72,6 +72,8 @@ class Pas:
     cibles: dict[str, float] = field(default_factory=dict)
     # Vitesse lente de l'axe Z (nom dans machine.yaml → griffe → vitesses), sinon la plus rapide.
     vitesse: str | None = None
+    # Vitesse de la vis à billes du godet (m/s), sinon la plus rapide (versement dans un bocal).
+    vitesse_b: float | None = None
     # Arrêt dès que la charge baisse de tant (N) : contact, appui, force limitée.
     arret_si_baisse_n: float | None = None
     # Descente vers la surface du substrat (pour le simulateur : sinon, une poussée).
@@ -97,6 +99,8 @@ class Bras(Protocol):
     surveillance: Condition
 
     def position(self) -> Pose: ...
+
+    def moyenne_n(self, duree_s: float) -> float: ...
 
     def executer(self, pas: Pas, cible: Pose) -> None: ...
 
@@ -149,7 +153,7 @@ class Conversion:
             b=(valeurs["griffe_b"] - ferme) / (ouvert - ferme),
         )
 
-    def vitesses(self, vitesse: str | None) -> dict[str, float]:
+    def vitesses(self, vitesse: str | None, vitesse_b: float | None = None) -> dict[str, float]:
         """Vitesse maximale de chaque axe (m/s ou °/s) pour un pas."""
         v = self.griffe.vitesses
         vitesses = {
@@ -161,6 +165,8 @@ class Conversion:
         }
         if vitesse is not None:
             vitesses["griffe_z"] = min(v.griffe_z, getattr(v, vitesse))
+        if vitesse_b is not None:
+            vitesses["griffe_b"] = min(v.griffe_b, vitesse_b)
         return vitesses
 
     def facteur(self, nom: str) -> float:
@@ -246,6 +252,16 @@ class BrasFluidnc:
         journal.info("Griffe : arrêt, %s", pourquoi)
         self.liaison.annuler_deplacement()
 
+    def moyenne_n(self, duree_s: float) -> float:
+        """Moyenne des lectures de la pesée des `duree_s` dernières secondes (pesée à l'arrêt du
+        versement dans un bocal)."""
+        maintenant = self._horloge()
+        with self._verrou:
+            lectures = [charge for quand, charge in self._lectures if maintenant - quand <= duree_s]
+        if not lectures:
+            raise ErreurEtape("pesée de la griffe sans lecture", QUOI_FAIRE_PESEE)
+        return sum(lectures) / len(lectures)
+
     def _charge_recente(self, combien: int) -> float | None:
         if not self._lectures:
             return None
@@ -266,10 +282,16 @@ class BrasFluidnc:
             ) from None
         return self.conversion.depuis_axes(valeurs)
 
-    def _ligne(self, depart: dict[str, float], cible: Pose, vitesse: str | None) -> dict:
+    def _ligne(
+        self,
+        depart: dict[str, float],
+        cible: Pose,
+        vitesse: str | None,
+        vitesse_b: float | None = None,
+    ) -> dict:
         """Positions (mm ou °) par lettre, et vitesse F de FluidNC pour aller à la cible."""
         valeurs = self.conversion.vers_axes(cible)
-        vitesses = self.conversion.vitesses(vitesse)
+        vitesses = self.conversion.vitesses(vitesse, vitesse_b)
         duree = max(
             (abs(valeurs[nom] - depart[nom]) / vitesses[nom] for nom in valeurs), default=0.0
         )
@@ -282,7 +304,7 @@ class BrasFluidnc:
 
     def executer(self, pas: Pas, cible: Pose) -> None:
         depart = self.conversion.vers_axes(self.position())
-        ligne = self._ligne(depart, cible, pas.vitesse)
+        ligne = self._ligne(depart, cible, pas.vitesse, pas.vitesse_b)
         with self._verrou:
             self._pas, self._arrete, self._muette = pas, False, False
             self._cible, self._f = ligne["positions"], ligne["f"]

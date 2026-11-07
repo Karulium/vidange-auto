@@ -1180,6 +1180,45 @@ caméra en chiffres de la fiche) et objet `entonnoir` dans `prehension → objet
   5. Reprise d'un lot après une coupure : seul `entonnoir_place` est gardé pour l'instant ; la reprise se fera avec
      l'inventaire des bocaux remplis (à prévoir quand le programme principal branchera le mode bocaux).
 
+## Versement de la griffe dans un bocal (tâche 43 bis, 07/11/2026)
+
+Source : fiche du fil Griffe `griffe/logiciel/versement-bocal.md` (07/11). Code : `pi/vidange/griffe/versement.py`
+(`Versement`, branché dans `module_entonnoir(..., versement=...)`) ; réglages : `machine.yaml → griffe →
+versement_bocal` ; outil : `vidange-entonnoir versement` ; essai : `pi/systeme/essai-versement-bocal.md` (testé
+sur le vrai matériel : non). Le geste n'a jamais été essayé avec du vrai maïs.
+
+- **Figés** (sans `exemple`) : dose ≈ 300 g ; mât au-dessus du centre du col (caméra) à 0,05 au plus ; tête à
+  A = 0, aucune rotation ; axes des coquilles à 1,025 (plage 1,02-1,07) ; ouverture de fermé à 20° ; garde du
+  boîtier de la caméra du bocal (mât à y 0,21-0,29 → x ≥ 1,207) ; pesée à l'arrêt seulement (après 0,3 s,
+  moyenne sur 0,5 s). **Proposés** (EXEMPLE) : `dose` (290-310 g, 6 prises au plus), `ouverture` (10 mm/s,
+  1,5 s, remontée de 2 cm avant de fermer), `secousses` (3 aller-retour 15°↔25° à 30 mm/s, puis 35°), `fin`
+  (tare ± 10 g stable 0,5 s ; pesée instable : 10 g entre 2 lectures à 0,3 s, 3 essais). **Vides** (EXEMPLE, à
+  mesurer) : `godet` (position de la vis pour chaque angle) et `bouchage` (distance du capteur au cône vide,
+  marge 2 cm).
+- **Garde du boîtier de la caméra du bocal** : règle de la griffe (`ReglesGriffe`, chaque pose), pour le mât de
+  x 0,997 (début du boîtier) à 1,207 dans la bande y ; vérifiée au démarrage (bande qui couvre le boîtier,
+  raclette hors du boîtier, chaque bocal de la bande à x ≥ 1,207).
+- **Tare « godet vide »** (choix de Claude) : pas de chiffre ni de fichier ; elle est **pesée à chaque prise**,
+  godet ouvert et vide au-dessus du maïs, à l'arrêt. Elle est donc refaite à la mise en service et après chaque
+  lavage, sans étape à part. L'essai vérifie qu'elle ne change pas avec la hauteur (chaîne, câbles).
+- **Prise d'une dose** (`Griffe.geste_prendre(dose)`) : maïs, sans mâchouiller ni s'entrouvrir ; pesée à l'arrêt
+  dans le fût ; hors de la plage (trop léger OU trop lourd), la prise est rendue au fût et refaite à côté ; tant
+  que la densité du fût n'est pas apprise, la griffe corrige la dose visée d'après la dernière pesée (sinon
+  6 prises ne suffisent pas). Contact au fond avec moins de `prise → utile_min_kg` : fût vide (pas de passe de
+  fond en mode bocaux), alerte, le poste du fût dit « Fût vide : N bocaux ».
+- **Jamais une 2e dose** : la phase « ouvert » (godet ouvert au-dessus du bocal) et « fait » sont gardées dans
+  `donnees/versement.json`. Refait après une alarme ou une coupure, le versement d'un bocal commencé continue
+  (repesée, puis fin) ; avant l'ouverture, il recommence par une prise (ce qui reste retombe au fût). Coupure en
+  plein versement d'un autre bocal : ce bocal est noté « suspect », alerte, puis Go.
+- **Alertes** (le module de l'entonnoir part en alarme, Go de Karulium) : grains collés (griffe immobile, godet
+  ouvert, jamais refermé au-dessus du bocal), entonnoir bouché (bocal « suspect », griffe remontée godet vide
+  fermé ; au Go, le lot continue), pesée instable, dose impossible, fût vide, bocal refusé par les règles (avant
+  toute prise). Pause et alarme du module arrêtent aussi la griffe (sans la retirer : son godet reste tel quel).
+- **Pas fait** : le branchement dans le programme principal (la griffe n'y est pas construite, tâche 23 ;
+  `Sources.versement_bocal` reste vide) ; la lecture du capteur de distance de la tête (VL53L1X, case vide
+  `distance_m`, sans lui le bouchage n'est pas vérifié et le journal le dit) ; la dose versée est notée au
+  registre sans le code du bocal (mesure « dose_bocal »), en attendant l'inventaire des bocaux remplis.
+
 ## Programme principal, mode seaux (tâche 45, 07/11/2026)
 
 Code : `pi/vidange/cycle/` ; lot du simulateur : `pi/reglages/simulateur.yaml → cycle` (EXEMPLE) ; essai :

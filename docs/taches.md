@@ -1588,7 +1588,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
     Préhension (tâche 36 bis).
   - Les hauteurs « exemple » se mesurent sur l'entonnoir reçu.
   - Tests : les cas du § 5 de la source.
-- [ ] **43 bis. Versement de la griffe dans un bocal de semence (mode bocaux)** — Modèle : Opus, effort moyen.
+- [x] **43 bis. Versement de la griffe dans un bocal de semence (mode bocaux)** — Modèle : Opus, effort moyen.
   Source : `/mnt/project-files/griffe/logiciel/versement-bocal.md` (fil Griffe, 07/11/2026 ; lire ce seul fichier, et
   le résumer dans la PR). Remplit la case vide `verser(bocal)` de l'Entonnoir (`pi/vidange/entonnoir/module.py`)
   avec un geste de la griffe (`pi/vidange/griffe/`).

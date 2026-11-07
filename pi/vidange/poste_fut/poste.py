@@ -584,8 +584,9 @@ class PosteFut:
                 self._dire(message)
             return message
 
-    def finir_vidange(self, nombre_seaux: int) -> str:
-        """Fût vide (dit par la griffe) : poids total vidé, alerte, fin du cycle."""
+    def finir_vidange(self, nombre_seaux: int, quoi: str = "seaux") -> str:
+        """Fût vide (dit par la griffe) : poids total vidé, alerte, fin du cycle. `quoi` : ce que
+        la griffe a rempli (« bocaux » en mode bocaux)."""
         with self._verrou:
             restant = self.poids_restant_kg()
             total = None
@@ -596,7 +597,7 @@ class PosteFut:
             else:
                 poids = f"{_kg(self._doses)} kg d'après les doses (pesée absente)"
             message = (
-                f"Fût vide : {nombre_seaux} seaux, {poids}. Relever le volet, desserrer les "
+                f"Fût vide : {nombre_seaux} {quoi}, {poids}. Relever le volet, desserrer les "
                 "freins, sortir le plateau."
             )
             self._clore("termine", total, message)

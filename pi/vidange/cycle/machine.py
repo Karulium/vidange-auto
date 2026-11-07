@@ -159,7 +159,11 @@ GRIFFE_DU_LOT = (
     "enchaînement de la griffe avec la préhension et le seau du chariot pas écrit (solveur, tâche "
     "23)"
 )
-VERSEMENT_BOCAL = "versement de la griffe dans le bocal pas écrit (solveur, tâche 23)"
+VERSEMENT_BOCAL = (
+    "versement de la griffe dans le bocal pas branché : son geste est écrit (vidange.griffe."
+    "versement, tâche 43 bis), mais la griffe n'est pas encore construite par le programme "
+    "principal (enchaînement avec la préhension, solveur, tâche 23)"
+)
 PHOTO_DU_PLAFOND = (
     "lecture de la photo du plafond (entonnoir sur le bocal, centre du col) pas écrite"
 )
