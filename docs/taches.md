@@ -787,6 +787,26 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      constante, puis montée en haut. Après le lâcher, la tête seule remonte tout droit. Vérifier et compléter ce que
      la 45 septies a fait (elle couvre 10a et 10b).
   Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
+- [ ] **45 nonies. Reprise après coupure avec un objet tenu, et bocal_0_1 posé par la machine** — Modèle : Opus,
+  effort moyen. Deux réponses des fils du 07/11/2026 (à recopier dans `docs/decisions.md`) :
+  1. **Objet tenu à la ventouse à la coupure** (fil Préhension) : les électrovannes « aspirer » et « souffler » sont
+     normalement fermées et un clapet anti-retour garde le vide ; l'objet reste d'abord tenu puis peut tomber au bout
+     d'un temps inconnu (sous la face 0,545, un couvercle C tomberait de travers sur le seau). Vaut pour tout objet à
+     la ventouse (seau, couvercle, Pétri) ; un objet aux électroaimants (capsule, bocal par son couvercle percé) tombe
+     tout de suite. À faire :
+     - check-list de reprise : « vérifier la tête et le seau : enlever à la main l'objet tenu ou tombé avant le Go » ;
+     - au redémarrage, **avant tout mouvement**, le Pi lit le capteur de vide de la préhension : plus bas que
+       −20 kPa (réglage), quelque chose est encore tenu → l'écran et la page disent « objet encore tenu » et le Pi
+       attend (pas de Go possible tant que c'est le cas) ;
+     - **jamais** de « souffler » automatique au redémarrage.
+  2. **bocal_0_1 posé par la machine** (Maquette, remesure du 07/11 : `griffe/logiciel/griffe-entrainee-entonnoir-
+     maquette.md` et `griffe/logiciel/carte-griffe-butee-haute-bocaux.txt` dans `/mnt/project-files/`, lire ces seuls
+     fichiers) : mât de la griffe = x bocal − 0,176, en butée haute (axes 1,265). Rectangles où le mât est libre :
+     y ≥ 0,32 ; x ≥ 1,22 ; x ≥ 1,10 avec y ≤ 0,10 ; x 0,79-0,97 avec y 0,22-0,40. bocal_0_1 (mât 1,1415 ; 0,06) est
+     libre, par le chemin : descendre en y dans x ≥ 1,22, puis aller en −x à y ≤ 0,10. Remplir
+     `griffe → y_min_mat → exceptions_butee_haute` (tâche 45 octies) avec ces rectangles et ce chemin ; bocal_0_0,
+     bocal_1_0 et bocal_2_0 restent posés à la main (contact ou moins de 1 cm).
+  Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
 - [x] **23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi** — Modèle : Opus, effort
   moyen. Base : `pi/vidange/simulateur/solveur.py` (place prête), `simulateur/planning.py`, `chef/zones.py`,
   decisions « La fiabilité d'abord ». Bibliothèque : `ortools` (CP-SAT, gratuite, roues pour le Pi 5 en
