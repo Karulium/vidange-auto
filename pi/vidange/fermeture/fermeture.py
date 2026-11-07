@@ -270,6 +270,12 @@ class Fermeture:
         bras = self.bras
         if destination == "range" and bras.est_range() is True:
             return
+        if destination == "travail":
+            libre = remplissage.prehension_degagee()
+            if libre is not None:
+                raise ErreurEtape(
+                    f"fermeture : le bras ne quitte pas le rangé : {libre}", QUOI_FAIRE_PLATEAU
+                )
         refus = remplissage.refus_bras_galet()
         if refus is not None:
             raise ErreurEtape(f"fermeture : servo du bras refusé : {refus}", QUOI_FAIRE_PLATEAU)

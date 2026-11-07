@@ -93,15 +93,24 @@ géométrie. Il faut les vérifier une fois sur chaque format.
 1. Seau et couvercle comme à l'étape 5 (couvercle posé, pas clipsé). Réduire d'abord les efforts pour le
    premier essai : `montee → force_max_n: 60` (remettre 150 après).
 2. Lancer :
-   `vidange-remplissage --manivelle-en-bas --micropore-rentre fermer seau_a`.
+   `vidange-remplissage --manivelle-en-bas --micropore-rentre --prehension-loin fermer seau_a`.
+   (`--prehension-loin` = « je vois que la préhension a lâché le couvercle et qu'elle est remontée, ou partie
+   ailleurs » : l'outil ne connaît pas la préhension, et sans cette phrase le bras reste rangé. Dans le vrai
+   programme, c'est le logiciel qui le sait : il ne sort le bras que préhension lâchée et au-dessus de
+   `fermeture → prehension_libre_z`. De même, le chariot ne roule pas tant que le bras n'est pas vu rangé.)
    L'outil fait comme le programme au démarrage : plateau tout en bas, bras rangé (sans rampe), puis plateau
    à l'approche, chariot au y de la fermeture, bras au travail, pesée, montée lente jusqu'au contact, montée
    jusqu'à Hf, **2 tours en sens horaire**, descente, bras rangé.
-3. Regarder : le couvercle est-il clipsé **tout le tour** ? Si un coin reste ouvert, augmenter
+3. **Vérifier à la main que le bras ne touche rien** : plateau à l'approche, chariot au y de la fermeture, tourner
+   le bras lentement (`vidange-fermeture --plateau-bas servo ...` par petits angles) et regarder qu'aucune pièce
+   ne le touche. Il balaie un disque de rayon ≈ 0,15 m autour de son axe (repère du chariot x 0,09 ; y 0,293), à
+   z 0,51-0,55 ; au y 0,50, le calcul du Remplissage (géométrie B1, pas un balayage de la Maquette) ne trouve
+   rien de fixe dans cette zone : à confirmer à la main.
+4. Regarder : le couvercle est-il clipsé **tout le tour** ? Si un coin reste ouvert, augmenter
    `rotation → tours` (2 d'exemple) ou ralentir `tr_min`.
-4. Le journal et la sortie disent l'effort au clipsage (« couvercle clipsé à Hf, effort … N »). Noter-le : il
+5. Le journal et la sortie disent l'effort au clipsage (« couvercle clipsé à Hf, effort … N »). Noter-le : il
    permet de choisir `force_max_n` (au moins 1,5 fois cet effort, jamais plus de 200 N : refusé au démarrage).
-5. Retirer le couvercle (de l'effort noté ci-dessus dépend la facilité) et recommencer pour B, C, D.
+6. Retirer le couvercle (de l'effort noté ci-dessus dépend la facilité) et recommencer pour B, C, D.
 
 ## Étape 7 : les erreurs, une par une
 

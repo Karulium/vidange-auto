@@ -227,6 +227,9 @@ class Remplissage:
         self._au_vidage: Callable[[], Geste] | None = None
         self._fin_du_seau: Callable[[SeauPlateau], None] | None = None
         self._a_l_arret: list[Callable[[], None]] = []
+        self._prehension: Prehension | None = None
+        # Outil en ligne de commande, sans préhension : l'opérateur dit l'avoir vue loin.
+        self.prehension_loin_a_la_main = False
 
     # ------------------------------------------------------------ état
 
@@ -241,6 +244,7 @@ class Remplissage:
             hauteur_seau=hauteur,
             micropore_escamote=self._micropore(),
             fermeture_en_contact=self._en_contact(),
+            fermeture_branchee=self.fermeture_branchee,
         )
 
     def position(self) -> Pose:
@@ -769,6 +773,28 @@ class Remplissage:
     def brancher_prehension(self, prehension: Prehension) -> None:
         """La préhension applique la règle 9 à chacun de ses pas (et en mode manuel)."""
         prehension.verrou_chariot = self.refus_prehension
+        self._prehension = prehension
+
+    def prehension_degagee(self) -> str | None:
+        """Pour la fermeture : le bras peut quitter le rangé ? None = oui. Il faut que la préhension
+        ait lâché le couvercle ET soit remontée au-dessus de `prehension_libre_z`, ou soit partie
+        ailleurs (pas au-dessus du chariot). Sinon, ou si on ne la connaît pas : refus."""
+        prehension = self._prehension
+        if prehension is None and self.prehension_loin_a_la_main:
+            return None
+        if prehension is None or self.fermeture is None:
+            return "la préhension n'est pas connue ici : par prudence le bras reste rangé"
+        pose = prehension.pose
+        if pose is None:
+            return "position de la préhension pas connue : par prudence le bras reste rangé"
+        if prehension.objet is not None:
+            return "la préhension tient encore le couvercle"
+        if not self.regles.au_dessus_du_chariot(pose.x, pose.y, self.chariot.position()):
+            return None
+        libre = self.fermeture.prehension_libre_z
+        if pose.z <= libre:
+            return f"la préhension est à z {pose.z:g}, pas encore remontée au-dessus de {libre:g}"
+        return None
 
     # ------------------------------------------------------------ les gestes des seaux
 

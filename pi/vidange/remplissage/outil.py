@@ -110,6 +110,12 @@ def main(arguments: list[str] | None = None) -> int:
     )
     lecteur.add_argument("--galet-range", action="store_true", help="bras du galet vu rangé")
     lecteur.add_argument(
+        "--prehension-loin",
+        action="store_true",
+        help="je vois que la préhension est lâchée et remontée (« fermer » : l'outil n'a pas la "
+        "préhension, sans cette option le bras reste rangé)",
+    )
+    lecteur.add_argument(
         "--micropore-rentre", action="store_true", help="tête du micropore vue rentrée"
     )
     lecteur.add_argument("commande", choices=list(ATTENDUS))
@@ -174,6 +180,7 @@ def main(arguments: list[str] | None = None) -> int:
                 bras_galet_range=lambda: True if options.galet_range else None,
                 micropore_rentre=lambda: True if options.micropore_rentre else None,
             )
+            remplissage.prehension_loin_a_la_main = options.prehension_loin
             if options.commande == "fermer":
                 options.fermeture = _brancher_fermeture(reglages, materiel, remplissage, arret)
             return _faire(options, remplissage, chariot)

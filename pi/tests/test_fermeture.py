@@ -372,6 +372,66 @@ def test_trigo_refuse_par_le_remplissage_tant_que_le_couvercle_touche_le_rouleau
         remplissage.arreter()
 
 
+def test_le_bras_ne_quitte_le_range_que_si_la_prehension_a_lache_et_est_remontee():
+    from types import SimpleNamespace
+
+    libre_z = FERMETURE.prehension_libre_z
+    with Simulateur(REGLAGES, LISTE, "remplissage") as simulation:
+        scenario = remplissage_du_simulateur(simulation, avec_fermeture=True)
+        remplissage, fermeture = scenario.remplissage, scenario.fermeture.fermeture
+        position = remplissage.chariot.position()
+        axe_x = MACHINE.remplissage.axe_x
+        # Au-dessus du chariot (même x, y du chariot).
+        dessus = {"x": axe_x, "y": position.y + 0.05, "a": 0.0}
+
+        def prehension(z, objet=None, **pose):
+            return SimpleNamespace(pose=SimpleNamespace(**{**dessus, "z": z, **pose}), objet=objet)
+
+        # Rangement d'abord (plateau en bas), pour que le bras soit connu.
+        remplissage.lancer(fermeture.geste_ranger)
+        remplissage.arreter()
+        cas = [
+            (None, "pas connue"),  # préhension pas branchée : par prudence, refus
+            (prehension(libre_z + 0.1, objet=object()), "tient encore"),
+            (prehension(libre_z - 0.05), "pas encore remontée"),
+            (prehension(libre_z), "pas encore remontée"),  # pile à la limite : pas au-dessus
+            (SimpleNamespace(pose=None, objet=None), "pas connue"),
+        ]
+        for prehension_ici, texte in cas:
+            remplissage._prehension = prehension_ici
+            assert texte in remplissage.prehension_degagee()
+            with pytest.raises(ErreurEtape, match="ne quitte pas le rangé"):
+                remplissage.lancer(lambda: fermeture._aller("travail"))
+            remplissage.arreter()
+        # Le bras n'a pas bougé : il garde l'angle du rangé.
+        bras = scenario.fermeture.bras
+        assert bras.angle == bras.angle_range()
+        # Lâché et remontée au-dessus du seuil : permis ; parti ailleurs (hors du chariot) : permis.
+        for libre in (
+            prehension(libre_z + 0.01),
+            prehension(libre_z - 0.3, x=axe_x + 5.0),
+            prehension(libre_z - 0.3, y=position.y + 9.0),
+        ):
+            remplissage._prehension = libre
+            assert remplissage.prehension_degagee() is None
+
+
+def test_le_chariot_ne_roule_jamais_bras_pas_vu_range():
+    regles = ReglesRemplissage(MACHINE)
+    depart = Pose(y=0.30, z=0.25, a=0.0, barres=0.30, pousseur=0.0)
+    arrivee = replace(depart, y=0.50)
+    base = Contexte(True, None, None, micropore_escamote=True, fermeture_branchee=True)
+    # Bras pas connu (démarrage) ou pas rangé : le chariot ne roule pas, raison claire.
+    for range_, etat in ((None, "pas connu"), (False, "pas rangé")):
+        refus = regles.refus_mouvement(depart, arrivee, replace(base, bras_galet_range=range_))
+        assert refus is not None and "ne roule pas" in refus and etat in refus
+    # Vu rangé : il roule. Sans fermeture branchée, la règle ne s'applique pas.
+    assert regles.refus_mouvement(depart, arrivee, replace(base, bras_galet_range=True)) is None
+    assert regles.refus_mouvement(depart, arrivee, replace(base, fermeture_branchee=False)) is None
+    # Sans rouler (même y), le bras pas rangé ne gêne pas ce mouvement-là.
+    assert regles.refus_mouvement(depart, replace(depart, a=45.0), base) is None
+
+
 def hauteurs_apres(pas, texte_debut):
     i = next(i for i, (t, _, _) in enumerate(pas) if t.startswith(texte_debut))
     return [cible.z for _, cible, _ in pas[i:]]
@@ -581,7 +641,14 @@ def test_outil_remplissage_fermer_avec_le_faux(capsys, monkeypatch):
     monkeypatch.setattr("vidange.remplissage.outil.PosteFut", PosteEnPlace)
     assert (
         outil_remplissage(
-            ["--faux", "--manivelle-en-bas", "--micropore-rentre", "fermer", "seau_a"]
+            [
+                "--faux",
+                "--manivelle-en-bas",
+                "--micropore-rentre",
+                "--prehension-loin",
+                "fermer",
+                "seau_a",
+            ]
         )
         == 0
     )

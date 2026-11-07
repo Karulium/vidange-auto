@@ -1896,9 +1896,12 @@ fermeture:
   exemple: true
   # Voie de la PCA9685 du boîtier du chariot (pesees.yaml → i2c) ; le + vient de bec_servo.
   servo: servo_fermeture_seaux
-  # y du chariot pendant la fermeture : EXEMPLE, 0,50 comme la pose du seau vide et du couvercle
-  # (remplissage → pose_y). La fiche laisse ce choix au Remplissage (question de la PR).
+  # y du chariot pendant la fermeture : FIGÉ par le Remplissage (règle 1 de regles-positions.md :
+  # c'est là que la préhension pose le couvercle). Le chariot ne roule jamais bras pas vu rangé.
   chariot_y: 0.50
+  # Le bras quitte le rangé seulement si la préhension a lâché le couvercle ET est remontée
+  # au-dessus de ce z (figé d'après le Remplissage), ou est partie ailleurs.
+  prehension_libre_z: 0.60
   bras:
     # Rangé : −160° (figé, choix de Karulium du 24/10). Surcourse au travail 2 à 3° (figé en plage ;
     # 2,5° EXEMPLE).

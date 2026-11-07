@@ -120,6 +120,8 @@ class Contexte:
     micropore_escamote: bool | None = None
     # Le couvercle est contre le rouleau de la fermeture (tâche 41) : rotation trigo refusée.
     fermeture_en_contact: bool = False
+    # La Fermeture est branchée : le chariot ne roule en y que si le bras est vu rangé.
+    fermeture_branchee: bool = False
 
 
 def _m(valeur: float) -> str:
@@ -253,6 +255,9 @@ class ReglesRemplissage:
         if refus is not None:
             return refus
         roule = abs(arrivee.y - depart.y) > _EGAL
+        if roule and contexte.fermeture_branchee and contexte.bras_galet_range is not True:
+            etat = "pas connu" if contexte.bras_galet_range is None else "pas rangé"
+            return f"le chariot ne roule pas : bras de fermeture {etat}, il doit être vu rangé"
         if roule and (self.pres_du_poste(depart.y) or self.pres_du_poste(arrivee.y)):
             if contexte.refus_mycelium is not None:
                 return f"le chariot ne roule pas près du poste : {contexte.refus_mycelium}"

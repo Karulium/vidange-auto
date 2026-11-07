@@ -1046,3 +1046,12 @@ non (procédure `spray/essai-materiel.md`, puis `pi/systeme/essai-spray.md`).
      Les pas 0,272 et 0,30 étaient faux. Avec un couvercle A de 0,28, le 7e seau A d'une file du tiroir manque
      d'environ 2,4 cm : compter 6 A par file tant que Karulium n'a pas mesuré le couvercle A (≤ 0,276 pour 7).
      Correction des places et contrôle au démarrage : tâche 35 quater.
+  5. Réponse du fil Remplissage (07/11) : `fermeture → chariot_y` 0,50 est FIGÉ (règle 1 de
+     remplissage/fiche/regles-positions.md : c'est là que la préhension pose le couvercle). Deux conditions
+     entrent dans le logiciel (un test chacune, tâche 41) : a) le bras ne quitte le rangé que si la préhension a
+     lâché le couvercle ET est remontée au-dessus de z 0,60 (`fermeture → prehension_libre_z`, figé), ou est
+     partie ailleurs ; si la préhension n'est pas connue, il reste rangé par prudence ; b) le chariot (chariot_y)
+     ne roule jamais quand le bras n'est pas vu rangé (refus avec la raison). La rotation du bras seulement
+     plateau ≤ 0,26 (c) était déjà faite. Pour info : le bras balaie un disque de rayon ≈ 0,15 autour de son axe
+     (repère du chariot x 0,09 ; y 0,293), à z 0,51-0,55 ; à Y 0,50 rien de fixe dans cette zone (calcul du
+     Remplissage sur la géométrie B1, pas un balayage de la Maquette) : à vérifier à la main à l'essai.

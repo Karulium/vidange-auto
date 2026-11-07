@@ -2951,8 +2951,12 @@ class Fermeture(Modele):
     exemple: bool = False
     # Voie de la PCA9685 (pesees.yaml → i2c) du servo DS3225 du bras.
     servo: Nom
-    # Position du chariot en y pendant la fermeture (m) : pas décidée par le Remplissage, posée ici.
+    # Position du chariot en y pendant la fermeture (m) : figée par le Remplissage (règle 1 de
+    # regles-positions.md : c'est là que la préhension pose le couvercle).
     chariot_y: float
+    # Le bras ne quitte le rangé que si la préhension a lâché le couvercle et est remontée au-dessus
+    # de ce z (m, figé d'après le Remplissage), ou est partie ailleurs.
+    prehension_libre_z: float
     bras: BrasFermeture
     montee: MonteeFermeture
     rotation: RotationFermeture
