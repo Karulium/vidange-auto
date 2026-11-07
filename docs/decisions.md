@@ -1041,5 +1041,8 @@ non (procédure `spray/essai-materiel.md`, puis `pi/systeme/essai-spray.md`).
   3. Pose du couvercle sur le seau plein par la préhension : ce geste n'existe pas encore dans le code. Il devient la
      tâche 41 bis (à écrire depuis la fiche du module qui le fait, avant le premier cycle complet).
   4. Bande du haut et tiroir : pas des places A 0,272 (couvercle 0,28) et C 0,30 (couvercle 0,315), soit 8 et 15 mm
-     de recouvrement vus de dessus. Question posée au fil Stockage (07/11) ; rien n'est changé en attendant, les
-     places restent dans les réglages.
+     de recouvrement vus de dessus. Réponse du fil Stockage (07/11) : impossible, les couvercles voisins sont à la même
+     hauteur et se touchent bord à bord ; le vrai pas est le Ø du couvercle (A 0,28, C 0,315, D 0,28, B le sien).
+     Les pas 0,272 et 0,30 étaient faux. Avec un couvercle A de 0,28, le 7e seau A d'une file du tiroir manque
+     d'environ 2,4 cm : compter 6 A par file tant que Karulium n'a pas mesuré le couvercle A (≤ 0,276 pour 7).
+     Correction des places et contrôle au démarrage : tâche 35 quater.
