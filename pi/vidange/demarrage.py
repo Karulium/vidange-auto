@@ -631,6 +631,13 @@ def principal(
             "machine.yaml, camera_dosage : temps de pivot, impulsions et sortie PWM d'EXEMPLE : "
             "les régler aux essais (pi/systeme/essai-vision.md), puis passer « exemple » à false."
         )
+    solveur = reglages.machine.solveur
+    if solveur is not None and solveur.exemple:
+        journal.warning(
+            "machine.yaml, solveur : temps de calcul, pas et écart d'EXEMPLE (%s) : les régler "
+            "après les premiers lots, puis passer « exemple » à false.",
+            "actif" if solveur.actif else "pas actif : ordre normal du chef",
+        )
     if reglages.vision.exemple:
         journal.warning(
             "vision.yaml contient des valeurs d'EXEMPLE (exemple: true) : positions des caméras, "

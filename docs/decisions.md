@@ -1549,3 +1549,25 @@ exemples (hauteur du bocal, angles, 360° au plus, essai à 120° puis tous les 
   3. Variété dans le formulaire du lot : gardée.
   4. Stockage bloqué sur la vraie machine tant que la photo de la bande du haut n'est pas lue (tâche 22 ter) : gardé.
   5. Vanne de la tête coupée au premier départ du lot (machine à vide, mesure du vide recalée) : gardé.
+
+## Solveur d'ordonnancement (tâche 23, 07/11/2026)
+
+Choix tranchés par Claude (PR de la tâche 23), en attendant les réponses de Karulium :
+1. **Ce que le chef reçoit** : pour chaque zone tenue par plusieurs modules, l'ordre de passage et l'heure prévue
+   (`vidange/chef/programme.py`). Il ne s'en sert que pour choisir qui passe le premier quand plusieurs modules
+   attendent la même zone ; un module pas prêt laisse passer les autres (le programme ne bloque personne et
+   n'autorise rien de plus). Seulement si `solveur → actif` (faux par défaut) ; pas noté dans le carnet : après
+   une coupure, ordre normal.
+2. **Recul à l'ordre normal**, noté au journal : première alarme, module qui prend une zone hors de son tour,
+   passage plus tôt ou plus tard que prévu de plus de `solveur → ecart_max_s` (EXEMPLE 30 s).
+3. **Tâches** : tirées d'un lot joué dans l'ordre normal ; ce qu'une étape a attendu (condition) est gardé : la fin
+   d'une tâche d'un autre module finie au même instant, sinon le même temps d'attente. Une zone est tenue sans
+   trou d'une étape à la dernière qui la tient encore. Le Go est un point d'arrêt.
+4. **Vérification** : le simulateur rejoue le programme ; rejeté si le cycle s'arrête, si le chef quitte le
+   programme, si une zone est tenue deux fois, si les étapes faites ne sont pas les mêmes, si l'ordre du cycle
+   d'un seau n'est pas suivi, ou s'il est plus long que l'ordre normal.
+5. **Gain sur le lot simulé de 18 seaux : 0 s.** Le Remplissage et le Mycélium s'y suivent par des conditions,
+   aucune zone n'y est partagée ; le solveur servira quand la griffe et la préhension (même pont) seront écrites.
+   `vidange-simulateur cycle --solveur` le montre.
+6. **Sur la vraie machine, aucun programme n'est encore calculé** (question n° 1 de la PR) : le chef sait le jouer,
+   le programme principal ne le lui donne pas encore.

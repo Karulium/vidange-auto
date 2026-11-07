@@ -25,6 +25,9 @@ dependencies = [
     # Vision (tâche 22) : QR, repères ArUco, calibration. Sans écran (pas de Qt) : « headless ».
     "opencv-python-headless>=4.8,<5",
     "numpy>=1.24",
+    # Solveur d'ordonnancement (tâche 23) : OR-Tools CP-SAT de Google, gratuit, avec des roues
+    # toutes faites pour le Pi 5 (Linux arm64) en Python 3.11.
+    "ortools>=9.10,<10",
 ]
 
 [project.optional-dependencies]

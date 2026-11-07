@@ -162,20 +162,22 @@ def test_reglages_du_simulateur_verifies(reglages):
 def test_taches_pour_le_solveur():
     liste = taches(simuler())
     assert [tache.nom for tache in liste] == [
-        "exemple.aller_au_repos",
-        "exemple.entrer_dans_la_zone_a",
-        "exemple.revenir_au_repos",
+        "exemple.aller_au_repos#1",
+        "exemple.entrer_dans_la_zone_a#1",
+        "exemple.revenir_au_repos#1",
     ]
     assert [tache.apres for tache in liste] == [
         None,
-        "exemple.aller_au_repos",
-        "exemple.entrer_dans_la_zone_a",
+        "exemple.aller_au_repos#1",
+        "exemple.entrer_dans_la_zone_a#1",
     ]
     assert [tache.demande_go for tache in liste] == [False, True, False]
     assert liste[1].zones == ("exemple_zone_a",)
     assert liste[0].duree_s == pytest.approx(ALLER_AU_REPOS)
-    with pytest.raises(NotImplementedError, match="tâche 23"):
-        ordonner(liste)
+    # Le Go est un point d'arrêt : seule la 1re étape est ordonnée.
+    ordo = ordonner(liste, 5, 0.1)
+    assert ordo is not None
+    assert list(ordo.debuts) == ["exemple.aller_au_repos#1"]
 
 
 def test_heures_et_durees_lisibles():

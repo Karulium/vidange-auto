@@ -733,7 +733,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   main ce que contient le stockage (bocaux de semence par variété et par place, capsules et couvercles percés dans les
   boîtes, piles de seaux vides par format, couvercles), avec le Go de Karulium avant d'écrire ; le lot (tâche 45
   quater, `refus_taille_lot`) lit ces nombres. Journal de chaque correction. Tests et procédure courte.
-- [ ] **23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi** — Modèle : Opus, effort
+- [x] **23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi** — Modèle : Opus, effort
   moyen. Base : `pi/vidange/simulateur/solveur.py` (place prête), `simulateur/planning.py`, `chef/zones.py`,
   decisions « La fiabilité d'abord ». Bibliothèque : `ortools` (CP-SAT, gratuite, roues pour le Pi 5 en
   Python 3.11), ajoutée à `pi/pyproject.toml`.

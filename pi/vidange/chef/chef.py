@@ -12,6 +12,7 @@
     chef.interdire(refus)      # refus(geste) : pourquoi ce geste est interdit maintenant, ou None
     chef.permission("dosage_semence")  # demandée par un module avant un geste : None = permis
     chef.conditions_generales.append(Condition("store fermé", test))  # pour toutes les étapes
+    chef.jouer_programme(programme)  # programme du solveur (tâche 23) : None = accepté
 
 Plusieurs modules peuvent tourner en même temps : ils se partagent les zones réservées.
 Un module « exclusif » (lieu sûr) passe avant tous les autres : tant qu'il est en route,
@@ -35,6 +36,12 @@ ouverture d'une capsule, versement dans un seau ouvert) sont demandés au chef a
 le Nettoyage pendant la purge, raison « purge en cours »). Les conditions générales (store de
 l'enceinte fermé...) sont attendues avant chaque étape de chaque module, comme ses conditions
 d'entrée. Rien de cela ne protège personne : la sécurité est câblée.
+
+Programme du solveur (tâche 23, `vidange.chef.programme`) : seulement si `solveur → actif` dans
+machine.yaml. Il ne change que l'ordre dans lequel le chef regarde les modules qui attendent la même
+zone ; au premier écart (alarme, tour pas suivi, heure trop loin de celle prévue), le chef revient
+à son ordre normal et le note au journal (`recul_programme`). Le programme n'est pas noté dans le
+carnet : après une coupure, c'est l'ordre normal.
 """
 
 import json
@@ -47,6 +54,7 @@ from typing import Any, Literal
 
 from vidange.chef.carnet import Carnet
 from vidange.chef.etapes import Condition, ErreurChef, ErreurEtape, Etape, Module
+from vidange.chef.programme import JeuProgramme, Programme
 from vidange.chef.zones import Reservations
 from vidange.journal import donner_journal
 from vidange.quoi_faire import ERREUR_PROGRAMME, pour_erreur
@@ -97,6 +105,8 @@ class EtatModule:
     attend: str
     zones: tuple[str, ...]
     alarme: Alarme | None
+    # La zone que le module attend parce qu'un autre la tient, ou "" (planning du simulateur).
+    attend_zone: str = ""
 
 
 @dataclass(frozen=True)
@@ -130,6 +140,8 @@ class _Deroulement:
     # La pause a été transmise au module (il faudra lui transmettre la reprise).
     mis_en_pause: bool = False
     attend: str = ""
+    # La zone attendue parce qu'un autre module la tient, ou "".
+    attend_zone: str = ""
     alarme: Alarme | None = None
     # Ce que le module veut retrouver après une coupure (seau en cours...), noté dans le carnet.
     memoire: dict[str, Any] = field(default_factory=dict)
@@ -165,6 +177,11 @@ class Chef:
         horloge: Callable[[], float] = time.monotonic,
     ) -> None:
         self._durees = machine.durees
+        self._solveur = machine.solveur
+        # Le programme du solveur en train d'être joué (None : ordre normal).
+        self._jeu: JeuProgramme | None = None
+        # Pourquoi le chef est revenu à son ordre normal (None : pas de recul).
+        self.recul_programme: str | None = None
         self._reglages = reglages
         self._zones = Reservations(machine.zones)
         self._carnet = carnet
@@ -224,6 +241,83 @@ class Chef:
             f"permission du chef : {GESTES_PROTEGES[geste]} (pas de purge en cours)",
             lambda: self.permission(geste) is None,
         )
+
+    # ------------------------------------------------------------ programme du solveur
+
+    def jouer_programme(self, programme: Programme) -> str | None:
+        """Joue un programme du solveur, vérifié avant par le simulateur. Rend None s'il est pris,
+        sinon pourquoi le chef garde son ordre normal (aussi noté au journal)."""
+        with self._verrou:
+            refus = self._refus_programme(programme)
+            if refus is not None:
+                journal.warning("Programme du solveur pas joué : %s. Ordre normal du chef.", refus)
+                return refus
+            assert self._solveur is not None
+            self.recul_programme = None
+            self._jeu = JeuProgramme(programme, self._horloge(), self._solveur.ecart_max_s)
+            journal.info(
+                "Programme du solveur joué : %d passage(s) dans %d zone(s), %.1f s prévues",
+                programme.nombre_passages,
+                len(programme.passages),
+                programme.temps_total_s,
+            )
+            self._verifier_fin_programme()
+            return None
+
+    def _refus_programme(self, programme: Programme) -> str | None:
+        if self._solveur is None:
+            return "machine.yaml n'a pas de partie « solveur »"
+        if not self._solveur.actif:
+            return "solveur → actif est faux dans machine.yaml"
+        if self._jeu is not None:
+            return "un programme est déjà en jeu"
+        inconnues = self._zones.verifier(programme.passages)
+        if inconnues:
+            return f"zone(s) absente(s) de machine.yaml : {', '.join(inconnues)}"
+        return None
+
+    @property
+    def programme_en_jeu(self) -> bool:
+        return self._jeu is not None
+
+    def _reculer(self, raison: str) -> None:
+        """Retour à l'ordre normal du chef (décision « La fiabilité d'abord »)."""
+        if self._jeu is None:
+            return
+        self._jeu = None
+        self.recul_programme = raison
+        journal.warning("Programme du solveur abandonné : %s. Retour à l'ordre normal.", raison)
+
+    def _verifier_fin_programme(self) -> None:
+        if self._jeu is not None and self._jeu.fini:
+            self._jeu = None
+            journal.info("Programme du solveur joué jusqu'au bout")
+
+    def _ordre(self) -> list[_Deroulement]:
+        """Les modules dans l'ordre où ce tour les regarde. Sans programme : l'ordre de lancement.
+
+        Avec un programme, seuls les modules qui attendent une zone changent de place entre eux
+        (celui dont c'est le tour passe le premier) ; les autres gardent la leur."""
+        tous = list(self._deroulements.values())
+        jeu = self._jeu
+        if jeu is None:
+            return tous
+        places = [n for n, d in enumerate(tous) if self._zones_voulues(d)]
+        if len(places) < 2:
+            return tous
+        voulants = sorted(
+            (tous[n] for n in places), key=lambda d: jeu.rang(d.nom, self._zones_voulues(d))
+        )
+        for n, d in zip(places, voulants, strict=True):
+            tous[n] = d
+        return tous
+
+    def _zones_voulues(self, d: _Deroulement) -> list[str]:
+        """Les zones que le module va réserver à son étape, et qu'il ne tient pas encore."""
+        if d.statut != "en_cours" or d.phase == "fin":
+            return []
+        tenues = self._zones.tenues_par(d.nom)
+        return [zone for zone in d.etape.reserver if zone not in tenues]
 
     # ------------------------------------------------------------ modules
 
@@ -425,6 +519,7 @@ class Chef:
                     attend=self._attente(d, exclusif),
                     zones=tuple(self._zones.tenues_par(d.nom)),
                     alarme=d.alarme,
+                    attend_zone=d.attend_zone if d.statut == "en_cours" else "",
                 )
                 for d in self._deroulements.values()
             )
@@ -452,7 +547,11 @@ class Chef:
             ecoule = 0.0 if self._dernier is None else max(maintenant - self._dernier, 0.0)
             self._dernier = maintenant
             exclusif = self._exclusif_actif()
-            for deroulement in list(self._deroulements.values()):
+            if self._jeu is not None:
+                retard = self._jeu.retard(maintenant)
+                if retard is not None:
+                    self._reculer(retard)
+            for deroulement in self._ordre():
                 # Une alarme d'un module peut mettre les autres en pause pendant ce tour.
                 if self._en_pause:
                     return
@@ -504,13 +603,23 @@ class Chef:
         for condition in (*self.conditions_generales, *d.etape.entree):
             if not condition.test():
                 d.attend = condition.texte
+                d.attend_zone = ""
                 return False
+        nouvelles = self._zones_voulues(d)
         conflit = self._zones.reserver(d.etape.reserver, d.nom)
         if conflit is not None:
             zone, tenant = conflit
             d.attend = f"zone « {zone} » libre (tenue par « {tenant} »)"
+            d.attend_zone = zone
             return False
         d.attend = ""
+        d.attend_zone = ""
+        if self._jeu is not None and nouvelles:
+            ecart = self._jeu.passage(d.nom, nouvelles, self._horloge())
+            if ecart is not None:
+                self._reculer(ecart)
+            else:
+                self._verifier_fin_programme()
         return True
 
     def _verifier_delai(self, d: _Deroulement, nom_delai: str | None, quoi: str) -> None:
@@ -546,6 +655,8 @@ class Chef:
     def _alarme(self, d: _Deroulement, message: str, quoi_faire: str | None = None) -> None:
         d.statut = "alarme"
         d.attend = ""
+        d.attend_zone = ""
+        self._reculer(f"alarme de « {d.nom} »")
         d.alarme = Alarme(
             module=d.nom,
             etape=d.etape.nom,

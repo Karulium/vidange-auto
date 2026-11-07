@@ -31,6 +31,10 @@ class LignePlanning:
     mouvements: list[Mouvement] = field(default_factory=list)
     # Zones tenues par le module pendant le geste.
     zones: tuple[str, ...] = ()
+    # Zones attendues parce qu'un autre module les tenait (solveur, tâche 23).
+    zones_attendues: list[str] = field(default_factory=list)
+    # L'étape a attendu une condition d'entrée (autre chose qu'une zone ou le Go).
+    attend_condition: bool = False
 
     @property
     def attente_go(self) -> float:
@@ -61,6 +65,10 @@ class Planning:
     probleme: str = ""
     # Réglages d'exemple (valeurs inventées).
     exemple: bool = False
+    # Un programme du solveur a été donné au chef (tâche 23), et pourquoi il a été abandonné ("" :
+    # suivi jusqu'au bout).
+    programme_joue: bool = False
+    recul_programme: str = ""
 
     @property
     def fini(self) -> bool:
