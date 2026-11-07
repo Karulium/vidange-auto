@@ -826,6 +826,23 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   3. Le Portique (`portique/logiciel/bras-traine.md`, corrigé) donne le bas du godet en butée haute vers 1,087 :
      vérifier contre le chiffre du dépôt et corriger si besoin.
   Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
+- [ ] **45 undecies. Lâcher de la ventouse par « souffler » (2 électrovannes)** — Modèle : Opus, effort moyen.
+  Réponses des fils du 07/11/2026 (à recopier dans `docs/decisions.md`, en corrigeant le point 2 de « Entonnoir,
+  réponses à la PR n° 88 », qui est faux) :
+  1. **Deux électrovannes** (fil Préhension, fiche achats/modules/prehension.json, étape 9) : `ev_aspirer` envoie l'air
+     au venturi, `ev_souffler` remet la ventouse à l'air avec un peu d'air ; 2/2 24 V normalement fermées, plus un
+     clapet anti-retour. Fermer « aspirer » ne lâche **rien** (le clapet garde le vide). **Lâcher = ouvrir
+     `ev_souffler` ≈ 0,2 à 0,5 s, puis attendre que le vide remonte au-dessus de −5 kPa.** Vaut pour tous les lâchers
+     de la ventouse (entonnoir, couvercle, seau, Pétri, et ce que d'autres modules prennent à la ventouse) : les
+     trouver tous et les corriger.
+  2. **Câblage** (Implantation, `implantation/logiciel/sorties-carte-4.md` dans `/mnt/project-files/`, lire ce seul
+     fichier) : carte FluidNC n° 4, `ev_aspirer` (ex-`vanne_vide`) = sortie P0, `ev_souffler` = sortie P1 (M62/M64/M65
+     P0 et P1), sorties auxiliaires 24 V n° 1 et 2, sur le 24 V coupé (fermées à l'arrêt d'urgence). P2 réservée au
+     frein du Z de la préhension, P3 libre. Les numéros de GPIO viendront de la configuration de la carte achetée ;
+     P0 et P1 ne changent pas.
+  3. **Le logiciel empêche les deux vannes d'être ouvertes en même temps** (refus clair, vérifié aussi dans les tests).
+  4. Le nom `vanne_souffler` attendu par la tâche 45 decies (fermeture au démarrage) devient la vraie vanne.
+  Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
 - [x] **23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi** — Modèle : Opus, effort
   moyen. Base : `pi/vidange/simulateur/solveur.py` (place prête), `simulateur/planning.py`, `chef/zones.py`,
   decisions « La fiabilité d'abord ». Bibliothèque : `ortools` (CP-SAT, gratuite, roues pour le Pi 5 en
