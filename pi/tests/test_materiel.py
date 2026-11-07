@@ -40,7 +40,8 @@ def test_au_depart_rien_n_est_actionne_et_tout_est_au_repos(faux_et_materiel):
     assert materiel.lire("voyant_buzzer") is False
     assert faux.commande("voyant_buzzer") is False
     # La carte relais est « à l'envers » (niveau_actif: bas) : au repos, la broche est haute.
-    assert faux.bus["/dev/i2c-1"].appareils[0x20].niveau("P0") is True
+    assert faux.bus["/dev/i2c-1"].appareils[0x20].niveau("P1") is True
+    assert faux.gpios["/dev/gpiochip0"].niveau("GPIO23") is True
 
 
 def test_entrees_actionnees(faux_et_materiel):
@@ -77,19 +78,33 @@ def test_sens_des_entrees(entrees_sorties, niveau_actif, repos):
 
 def test_commande_d_une_sortie(faux_et_materiel):
     faux, materiel = faux_et_materiel
+    materiel.ecrire("voyant_pret_fut", True)
+    assert faux.commande("voyant_pret_fut") is True
+    assert materiel.lire("voyant_pret_fut") is True
+    # Niveau actif bas : relais commandé = broche basse.
+    assert faux.bus["/dev/i2c-1"].appareils[0x20].niveau("P1") is False
+    materiel.mettre_au_repos()
+    assert faux.commande("voyant_pret_fut") is False
+
+
+def test_le_voyant_buzzer_est_sur_un_gpio_direct_sans_i2c(faux_et_materiel):
+    faux, materiel = faux_et_materiel
     materiel.ecrire("voyant_buzzer", True)
     assert faux.commande("voyant_buzzer") is True
-    assert materiel.lire("voyant_buzzer") is True
-    # Niveau actif bas : relais commandé = broche basse.
-    assert faux.bus["/dev/i2c-1"].appareils[0x20].niveau("P0") is False
+    # Niveau actif bas : relais commandé = broche basse ; la carte à relais I2C n'est pas touchée.
+    assert faux.gpios["/dev/gpiochip0"].niveau("GPIO23") is False
+    assert faux.bus["/dev/i2c-1"].appareils[0x20].niveau("P0") is True
+    assert faux.bus["/dev/i2c-1"].appareils[0x20].niveau("P1") is True
     materiel.mettre_au_repos()
     assert faux.commande("voyant_buzzer") is False
 
 
 def test_a_la_fermeture_les_sorties_reviennent_au_repos(entrees_sorties):
     faux, materiel = ouvrir(entrees_sorties)
+    materiel.ecrire("voyant_pret_fut", True)
     materiel.ecrire("voyant_buzzer", True)
     materiel.fermer()
+    assert faux.commande("voyant_pret_fut") is False
     assert faux.commande("voyant_buzzer") is False
     assert faux.bus["/dev/i2c-1"].ferme
 
@@ -106,15 +121,16 @@ def test_carte_relais_en_gpio_direct(entrees_sorties):
     relais_par(
         entrees_sorties,
         "    liaison:\n      type: gpio\n      fichier: /dev/gpiochip0\n"
-        "      broches:\n        K1: GPIO23\n        K2: GPIO24\n",
+        "      broches:\n        K1: GPIO13\n        K2: GPIO21\n",
     )
     faux, materiel = ouvrir(entrees_sorties)
     gpio = faux.gpios["/dev/gpiochip0"]
     # GPIO12 : le battement du Pi, sur la carte « pi » elle-même.
-    assert gpio.sorties == {"GPIO12": False, "GPIO23": False, "GPIO24": False}
-    materiel.ecrire("voyant_buzzer", True)
-    assert gpio.niveau("GPIO23") is True
-    assert faux.commande("voyant_buzzer") is True
+    # GPIO23 : le module relais du voyant-buzzer (niveau actif bas : haut au repos).
+    assert gpio.sorties == {"GPIO12": False, "GPIO21": False, "GPIO23": True}
+    materiel.ecrire("voyant_pret_fut", True)
+    assert gpio.niveau("GPIO21") is True
+    assert faux.commande("voyant_pret_fut") is True
 
 
 def test_carte_relais_par_un_mcp23017(entrees_sorties):
@@ -126,10 +142,10 @@ def test_carte_relais_par_un_mcp23017(entrees_sorties):
     remplacer(entrees_sorties, "appareil: pcf8574", "appareil: mcp23017")
     faux, materiel = ouvrir(entrees_sorties)
     puce = faux.bus["/dev/i2c-1"].appareils[0x20]
-    assert puce.niveau("B3") is True  # au repos (actif bas)
-    materiel.ecrire("voyant_buzzer", True)
-    assert puce.niveau("B3") is False
-    assert faux.commande("voyant_buzzer") is True
+    assert puce.niveau("B4") is True  # au repos (actif bas)
+    materiel.ecrire("voyant_pret_fut", True)
+    assert puce.niveau("B4") is False
+    assert faux.commande("voyant_pret_fut") is True
 
 
 def entrees_par_un_pcf8574(entrees_sorties):
@@ -227,7 +243,7 @@ def test_puce_absente_au_demarrage(entrees_sorties):
     liste = charger_entrees_sorties(entrees_sorties)
     faux = FausseFabrique(liste)
     faux.bus["/dev/i2c-1"].appareils[0x20].debranche = True
-    attendu = "puce I2C 0x20 .* \\(signaux voyant_buzzer, voyant_pret_fut\\)"
+    attendu = "puce I2C 0x20 .* \\(signaux voyant_pret_fut\\)"
     with pytest.raises(ErreurMateriel, match=attendu):
         Materiel(liste, faux)
 

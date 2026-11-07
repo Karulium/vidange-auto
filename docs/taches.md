@@ -859,7 +859,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      attend et informe (jamais une protection logicielle présentée comme une sécurité).
   Vérifié au démarrage (sorties en double, sortie absente) ; procédure d'essai sur le vrai matériel ; « testé sur le
   vrai matériel : non ».
-- [ ] **45 tredecies. Relais du Pi et voyant-buzzer sur son propre relais** — Modèle : Sonnet, effort bas. Fiches de
+- [x] **45 tredecies. Relais du Pi et voyant-buzzer sur son propre relais** — Modèle : Sonnet, effort bas. Fiches de
   l'Implantation du 07/11/2026 (`/mnt/project-files/implantation/logiciel/relais-du-pi.md`, `sorties-carte-3.md`,
   `sorties-carte-4.md` ; lire ces seuls fichiers) ; à recopier dans `docs/decisions.md` :
   1. **Validé par l'Implantation** : carte n° 3 P6 verrou du plateau, P7 vanne 3 voies des rampes (carte n° 3 pleine,

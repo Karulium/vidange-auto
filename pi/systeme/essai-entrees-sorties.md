@@ -102,11 +102,27 @@ la commande s'arrête sur elle : donner alors seulement les signaux à essayer, 
 
 - [ ] Toutes les entrées branchées réagissent, dans le bon sens
 
-## Étape 6 : relais (voyant-buzzer)
+## Étape 6 : relais (voyant-buzzer, puis relais du Pi)
 
+Le voyant-buzzer n'est PAS sur la carte à 8 relais n° 1 : il a son propre module relais 1 voie
+(`relais_buzzer`), branché sur un GPIO direct du Pi (GPIO23 en EXEMPLE) et alimenté en 24 V non coupé.
+Testé sur le vrai matériel : non.
+
+0. Avant de commander : vérifier que le fil de commande du module est bien sur le GPIO écrit dans
+   `docs/entrees-sorties.yaml` (carte `relais_buzzer`, repère K1), que le module est alimenté en 24 V
+   **non coupé** (le buzzer doit marcher bouton d'arrêt d'urgence enfoncé), et que la voie K1 de la carte à
+   8 relais n° 1 n'a plus aucun fil de voyant.
 1. Taper `vidange-es commander voyant_buzzer oui`. Attendu : clic du relais, le voyant s'allume et le buzzer sonne.
 2. Appuyer sur Entrée : le relais retombe, le voyant s'éteint.
-3. Si le relais colle au départ et retombe avec `oui` : `niveau_actif` de la carte relais est faux (haut ↔ bas).
+3. Si le relais colle au départ et retombe avec `oui` : `niveau_actif` de la carte `relais_buzzer` est faux
+   (haut ↔ bas). Si le buzzer ne répond pas du tout : changer le GPIO dans la liste (jamais 2, 3, 4, 5, 8, 9,
+   14, 15, 18, 19 : le démarrage le refuse).
+3 bis. Panne de l'I2C : débrancher la carte à 8 relais n° 1 (ou le fil SDA), puis `vidange-es commander
+   voyant_buzzer oui`. Attendu : le buzzer sonne quand même.
+3 ter. Relais du Pi sur l'I2C (`relais_1` K2 voyant du bouton « Prêt », `relais_2` K1 à K8) : un par un,
+   `vidange-es commander <nom> oui`, **seulement si ce qu'il commande est sans danger** (compresseur, ozone,
+   UV, chauffage : à vide ou débranchés). Vérifier que la voie qui répond est celle de la fiche de
+   l'Implantation (relais-du-pi.md, rappelée dans docs/decisions.md).
 4. Pour chaque autre relais branché plus tard, même essai **seulement si ce qu'il commande est sans danger**.
 5. Vérifier qu'au démarrage du Pi (avant tout programme) **aucun relais ne colle**. Sinon, le signaler :
    il faut changer la carte relais ou sa liaison, pour qu'un Pi qui redémarre ne commande rien.
