@@ -77,6 +77,13 @@ class Simulateur:
             carte = self.fabrique.carte_spray(spray.signal)
             carte.regler_horloge(self._horloge)
             carte.appliquer(spray)
+        # Le boîtier du chariot (servos du micropore et de la fermeture, ToF) sur la fausse carte
+        # du plateau du remplissage, avec les voies de pesees.yaml (tâche 40).
+        i2c = reglages.pesees.i2c
+        if i2c is not None and i2c.carte in self.fabrique.branchements:
+            self.fabrique.carte_pesee(i2c.carte).brancher_boitier(
+                [(voie.angle_min_deg, voie.angle_max_deg) for voie in i2c.pca9685.voies.values()]
+            )
         # Le tour des pesées du bus, à l'heure du simulateur (la pesée du poste du fût).
         self.pesees = TourPesees(reglages.pesees, self.materiel, horloge=self._horloge)
         self._axes = EtatAxes(reglages.machine, self._reglages, horloge=self._horloge)

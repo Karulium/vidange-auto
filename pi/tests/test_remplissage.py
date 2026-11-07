@@ -42,6 +42,7 @@ PERMIS = Contexte(
     plateau_fut_en_place=True,
     refus_mycelium=None,
     bras_galet_range=True,
+    micropore_escamote=True,
 )
 # Au poste, plateau en bas, barres ouvertes, pousseur rentré.
 POSTE = Pose(y=0.135, z=0.175, a=0.0, barres=0.30, pousseur=0.0)
@@ -304,7 +305,7 @@ def test_regle_7_chariot_du_fut_absent():
 
 
 def test_regle_8_manivelle_en_bas_pres_du_poste():
-    refuse = Contexte(True, "manivelle du mycélium à 0°", True)
+    refuse = Contexte(True, "manivelle du mycélium à 0°", True, micropore_escamote=True)
     # Rouler près du poste : refusé ; loin du poste (0,50 → 0,785) : permis.
     assert "manivelle du mycélium" in REGLES.refus_mouvement(POSTE, POSTE.avec(y=0.40), refuse)
     # Recul à y 0,40 : à 0,39, le chariot est encore sous le bocal.
@@ -723,7 +724,8 @@ def test_regle_9_dans_la_prehension():
 
 def test_la_prehension_applique_la_regle_9():
     with Simulateur(REGLAGES, LISTE, "remplissage") as simulation:
-        scenario = remplissage_du_simulateur(simulation)
+        # Tête du micropore vue rentrée (la vraie est essayée dans test_micropore.py).
+        scenario = remplissage_du_simulateur(simulation, micropore_rentre=lambda: True)
         remplissage, prehension = scenario.remplissage, scenario.prehension
         remplissage.brancher_prehension(prehension)
         poste = simulation.poste_fut()
@@ -759,6 +761,9 @@ def test_le_vrai_chariot_remplace_le_faux_retourneur():
             plateau_fut_en_place=lambda: True,
             refus_mycelium=lambda: None,
             bras_galet_range=lambda: True,
+            # Règle 10 (tâche 40) : le plateau ne bouge en hauteur que tête du micropore vue
+            # escamotée.
+            micropore_rentre=lambda: True,
         )
         # Le chariot va au retourneur avant le lavage des couvercles.
         remplissage.lancer(remplissage.geste_mode_couvercles)
@@ -967,9 +972,9 @@ def test_pose_sans_contact_du_plateau():
 
 def test_pose_refusee_micropore_pas_rentre():
     """Pendant la pose, la tête descend barres à l'approche (exception à la règle 9), mais
-    jamais tête du micropore sortie."""
+    jamais tête du micropore sortie (et, règle 10, le plateau ne monte même pas à l'approche)."""
     planning, scenario = jouer_scenario(micropore_rentre=lambda: False)
-    assert not planning.fini and "tête du micropore rentrée" in planning.probleme
+    assert not planning.fini and "tête du micropore pas escamotée" in planning.probleme
     assert not any(m.position.startswith("pose :") for m in scenario.chariot._etat.mouvements)
 
 

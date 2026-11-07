@@ -601,8 +601,8 @@ vidange-remplissage --faux etat          # l'outil d'essai, sur un faux FluidNC
   `refus_bras_galet` (tâche 41), `refus_bras_spray` (39), `refus_prehension` (Préhension).
 - **Registre** : au rangement, le type du seau et son poids plein (`mesures`, `poids_seau_plein`) ; les doses
   et la variété viennent du Mycélium.
-- Cases vides : bras du galet, bras du spray, tête du micropore (prudents : refusés tant qu'ils ne sont pas
-  connus), caméra du QR du flanc (`VisionSeau`), places des files (Stockage, tâche 35).
+- Cases vides : bras du galet, bras du spray (prudents : refusés tant qu'ils ne sont pas connus ; la tête du
+  micropore : tâche 40, plus bas), caméra du QR du flanc (`VisionSeau`), places des files (Stockage, tâche 35).
 - Les faux `FauxChariot` (Mycélium) et `FauxRetourneur` (Lavage) restent pour leurs tests.
 
 ## Stockage (tâche 35)
@@ -696,6 +696,49 @@ chef.lancer(module_spray(spray, seau_au_poste, griffe_partie, micropore_escamote
 - `GET /api/spray`, `POST /api/spray/{sans_spray|cartouche?emplacement=N|alcool_rempli}`.
 - `vidange-spray etat | origine | sortir | ranger | dose | nettoyer | agiter | arret | effacer | zero |
   etalonner` pour les essais (`systeme/essai-spray.md`).
+
+## Micropore (tâche 40)
+
+La tête du micropore (module gelé le 28/10/2026) pose un morceau de ruban sur chaque trou du seau, au poste du
+remplissage. Ses 2 servos (escamotage, lame) et son capteur de distance (VL6180X) passent par l'I2C de la
+carte de pesée du plateau (tâche 40 bis, `vidange.materiel.carte_pesee`) ; le moteur d'avance du ruban est
+l'axe X, relatif, de la carte FluidNC n° 3 (`mycelium_lavage`). Réglages : `machine.yaml → micropore`
+(EXEMPLES marqués), gestes appris : `donnees/micropore-appris.yaml` (écrit par `vidange-micropore`, chaque
+changement noté et annulable, jamais dans `pi/reglages/`).
+
+```python
+tete = TeteMicropore(reglages.machine.micropore, reglages.pesees.i2c, materiel, appris)
+micropore = Micropore(
+    reglages.machine,
+    tete,
+    AvanceFluidnc(liaison_3, micropore.avance),
+    vision,
+    appris,
+    registre,
+    donnees / "micropore.json",
+)
+micropore.brancher(remplissage)  # règle 10, gestes au poste et au vidage, fin du seau
+fond.ajouter(tete.observer)  # battement des angles, redémarrages de la carte
+module_spray(spray, ..., micropore_escamote=micropore.escamotee)
+```
+
+- **Règle 10** (`ReglesRemplissage.refus_micropore_plateau`) : le plateau ne monte ni ne descend que tête
+  **vue escamotée** : angle escamoté demandé, lame au repos, et une distance du ToF lue après le dernier ordre
+  au moins à `escamotee_mm − tolerance`. La rotation reste permise (c'est elle qui pose).
+- **Carte redémarrée** (compteur de démarrages changé, pas forcément de +1) : les angles sont renvoyés tout
+  de suite, le ToF ne compte qu'après `stabilisation_s`. Un morceau en cours est refait, tête escamotée et
+  vue avant. Les angles sont aussi renvoyés toutes les `battement_s` (la carte les garde 2 s).
+- **Au poste** (premier passage du seau) : tour de repérage (QR, trous), rangées du haut, gestes 3 à 11 de
+  la source pour chaque trou ; trou vu découvert : `nouveaux_essais` de plus, puis alerte. **Au vidage**
+  (y 0,42) : la rangée du fond, quand la balance voit `fond_poids_min_kg` de substrat (la règle C2 l'interdit
+  au poste). Pas de contact au ToF : la tête recule, plus de pose sur ce seau.
+- Format inconnu ou pas appris, bord trop grand, rouleau vide, QR différent : rempli **sans** micropore.
+  Chaque problème : alarme au registre et seau marqué « micropore à vérifier : … ». Au rangement : rangées
+  pas posées signalées, mesure `micropore_morceaux`.
+- Compteur du rouleau dans `donnees/micropore.json`, alerte une fois sous `rouleau → alerte_sous`.
+- Caméra (`VisionMicropore`) : case vide ; le simulateur a sa fausse caméra (`FausseVisionMicropore`).
+- `vidange-micropore etat | servo | escamote | apprendre | lame | charger | historique | annuler` pour les
+  essais et l'apprentissage (`systeme/essai-micropore.md`).
 
 ## Cartes de pesée du bus RS485 (tâche 22 bis)
 

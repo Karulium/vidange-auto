@@ -1773,6 +1773,110 @@ spray:
     chien_de_garde_ms: 1000
     periode_affichage_ms: 1000
 
+# Micropore (tâche 40 ; module gelé le 28/10/2026, micropore/logiciel/micropore-pour-logiciel.md
+# du projet mécanique, recopié le 06/11/2026). La tête est fixée SUR le chariot de remplissage :
+# elle avance vers la paroi du seau (servo d'escamotage) et recule de 30 mm ; un pignon pousse le
+# ruban (moteur d'avance) ; une lame le coupe. C'est le plateau du chariot qui monte et tourne le
+# seau. Un morceau de 30 mm par trou. Rien ici n'est une sécurité (fin de course haut du plateau,
+# butée de la tête et biellette à ressort sont mécaniques ou câblés).
+# Les ANGLES des gestes (escamoté, approche, contact, appui, caméra → rouleau) sont APPRIS par
+# format, par Karulium (outil vidange-micropore) : ils sont dans donnees/micropore-appris.yaml,
+# jamais ici. Chiffres figés de la source, sauf ceux marqués EXEMPLE.
+micropore:
+  exemple: true
+  # Signaux : voies de la PCA9685 et ToF de la carte du plateau (pesees.yaml → i2c,
+  # entrees-sorties.yaml) ; la caméra (vision.yaml → cameras).
+  servo_escamotage: servo_escamotage_micropore
+  servo_lame: servo_lame_micropore
+  tof_signal: tof_micropore
+  camera: micropore
+  # Moteur d'avance : NEMA 11 sur un TMC2209 en pas/direction, carte FluidNC n° 3, lettre X
+  # (EXEMPLE : la lettre libérée par la glissière de l'agitateur, retirée le 01/11). Axe relatif,
+  # sans origine ni codeur (fluidnc/mycelium_lavage.yaml).
+  avance: {signal: avance_micropore, carte: mycelium_lavage, lettre: X}
+  # Centre du ruban (rangée posée) : plateau = ruban_z − hauteur de la rangée (figé). Jamais plus
+  # haut que 0,575 (règle 9 : course de plateau_z) ; au poste, bord du seau ≤ 0,68 (règle C2).
+  ruban_z: 0.591
+  # Bord du seau accepté pour la pose : Ø ≤ 29,5 cm (figé) ; parois que la tête atteint : 8,5 à
+  # 14,5 cm de l'axe du seau (figé).
+  bord_diametre_max_m: 0.295
+  paroi_rayon_m: [0.085, 0.145]
+  # ToF VL6180X : 77 mm tête escamotée, 8 mm en butée (figés). Le reste : EXEMPLES.
+  tof:
+    escamotee_mm: 77
+    butee_mm: 8
+    tolerance_escamotee_mm: 4
+    # Contact : la distance ne baisse plus (2 à 3 mm) alors que le servo avance.
+    contact_ecart_max_mm: 3
+    # Précision 1 à 2 mm (figé) : 1,5 retenu.
+    precision_mm: 1.5
+    age_max_ms: 200
+    fraicheur_s: 1.0
+  # Servos (EXEMPLES, à régler au montage) : course de la tête par degré du DS3225 (palonnier de
+  # 45 mm : 45 × π / 180 ≈ 0,785 mm/°) ; lame MG90S : repos (lame haute) et bas, 107° d'écart
+  # (course 30,9 mm ; anciennes valeurs +55° / −39° autour du milieu), ≈ 0,16 s par sens.
+  servos:
+    mm_par_degre: 0.785
+    sens_avance: 1
+    mouvement_s: 0.4
+    lame_repos_deg: 145
+    lame_bas_deg: 38
+    lame_s: 0.16
+    stabilisation_s: 1.0
+    battement_s: 1.0
+    attente_max_s: 3.0
+    # Apprendre un format : pas de 0,5° (≈ 0,4 mm), contact après 8 pas (≈ 3 mm de course libre)
+    # sans baisse du ToF de plus de tof → precision_mm.
+    pas_apprentissage_deg: 0.5
+    apprentissage_pas_plats: 8
+  # Pose d'un morceau (mm). Figés : approche 2, appui 7, recul du contrôle 2, avance 13, pose 17
+  # puis 13. EXEMPLES : trou à 15 mm avant le rouleau, tension 0,5, vitesses, sens de rotation.
+  pose:
+    approche_mm: 2
+    appui_mm: 7
+    controle_recul_mm: 2
+    avance_mm: 13
+    avant_coupe_mm: 17
+    apres_coupe_mm: 13
+    trou_avant_rouleau_mm: 15
+    tension_mm: 0.5
+    vitesse_pose_mm_s: 20
+    vitesse_avance_mm_s: 20
+    sens_rotation: 1
+    nouveaux_essais: 1
+  # Rangée du fond : au moins ≈ 4 kg de substrat dans le seau (≈ 2 godets ; EXEMPLE).
+  fond_poids_min_kg: 4.0
+  # Rouleau de 9,1 m ≈ 300 morceaux ≈ 37 seaux ; alerte « changer le rouleau » sous 150 (EXEMPLES).
+  rouleau: {morceaux: 300, alerte_sous: 150}
+  # Rangées de trous par format (2 rangées de 4 trous Ø ≈ 1 cm : EXEMPLE ; la vraie carte des
+  # trous vient de la caméra, seau par seau). Hauteur du centre des trous au-dessus du fond du seau
+  # (PAS FIGÉE, à mesurer sur les seaux) : rangée du haut ≈ 3 cm sous le col, rangée du fond ≈ 7 cm
+  # du fond. Rayon de la paroi à cette hauteur (seau conique, cotes de Karulium du 05/10 : Ø haut /
+  # Ø bas / hauteur, col). Un format absent ici : rempli sans micropore, alerte.
+  formats:
+    # Superlift 267/229/250, col 3 cm.
+    seau_a:
+      rangees:
+        - {hauteur_m: 0.19, rayon_paroi_m: 0.129, trous: 4}
+        - {hauteur_m: 0.07, rayon_paroi_m: 0.120, trous: 4, fond: true}
+    # 5 L 230/190/200, col 2,5 cm. Plein, il ne pèse que ≈ 3 kg de substrat : la rangée du fond
+    # attend 1,5 kg (EXEMPLE, question de la PR).
+    seau_b:
+      fond_poids_min_kg: 1.5
+      rangees:
+        - {hauteur_m: 0.145, rayon_paroi_m: 0.1095, trous: 4}
+        - {hauteur_m: 0.07, rayon_paroi_m: 0.102, trous: 4, fond: true}
+    # 10 L large 295/255/235, col 4 cm.
+    seau_c:
+      rangees:
+        - {hauteur_m: 0.165, rayon_paroi_m: 0.1415, trous: 4}
+        - {hauteur_m: 0.07, rayon_paroi_m: 0.1335, trous: 4, fond: true}
+    # 10 L haut 275/240/270 (hauteur 0,265 dans la griffe), col 4 cm.
+    seau_d:
+      rangees:
+        - {hauteur_m: 0.195, rayon_paroi_m: 0.133, trous: 4}
+        - {hauteur_m: 0.07, rayon_paroi_m: 0.1245, trous: 4, fond: true}
+
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :
 #   - prise_origine: <carte>   prise d'origine ($H) d'une carte FluidNC (fluidnc.yaml) ;

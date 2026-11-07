@@ -1493,6 +1493,17 @@ signaux:
     type: pwm
     tension: 3.3
     module: fermeture_seaux
+  # Moteur d'avance du ruban du Micropore (tâche 40) : NEMA 11 galette, courroie GT2 1:1 vers le
+  # pignon MK8, pilote TMC2209 dans l'armoire en pas/direction, sans codeur ni origine (axe
+  # relatif). Carte n° 3, lettre dans pi/reglages/machine.yaml (micropore → avance).
+  avance_micropore:
+    exemple: true
+    description: Pas et sens du TMC2209 du moteur d'avance du ruban du Micropore (carte n° 3)
+    carte: fluidnc_mycelium_lavage
+    broche: [S15, S16]
+    type: logique
+    tension: 5
+    module: micropore
   tof_micropore:
     exemple: true
     description: Capteur de distance VL6180X (escamotage de la tête du Micropore)

@@ -6,8 +6,8 @@
 #
 # Repère : la position machine de chaque axe est celle de pi/reglages/machine.yaml
 # (mm = mètres × 1000 ; degrés pour la manivelle).
-#   X : PLUS UTILISÉ. L'agitateur est fixe depuis le 01/11/2026 (fiche Mycélium v10) : la
-#       glissière, son NEMA 17, son pilote et ses 2 fins de course sont retirés de la carte.
+#   X : avance du ruban du Micropore (tâche 40 ; plus la glissière de l'agitateur, retirée le
+#       01/11/2026). Axe RELATIF (le Pi l'envoie en « G91 ») : pas d'origine, pas de limites.
 #   A : manivelle. NEMA 34 à codeur, pilote HBS86H en 48 V. Elle tourne sans fin, dans les deux
 #       sens : pas de limites logicielles. Jusqu'à 300 tr/min (fiche) = 108 000 °/min.
 #       Le capteur origine_manivelle voit du MÉTAL quand la manivelle n'est PAS en haut, rien sur
@@ -92,6 +92,24 @@ axes:
         use_enable: false
         step_pin: gpio.13
         direction_pin: gpio.15
+        disable_pin: NO_PIN
+
+  x:
+    # Avance du ruban du Micropore (tâche 40), en mm de ruban. EXEMPLE : 200 pas × 16 micro-pas
+    # par tour, pignon MK8 de ≈ 7 mm de diamètre utile (courroie 1:1) ≈ 22 mm de ruban par tour
+    # → 145,5 pas par mm (à mesurer sur le pignon reçu, pi/systeme/essai-micropore.md).
+    steps_per_mm: 145.5
+    max_rate_mm_per_min: 3000
+    acceleration_mm_per_sec2: 500
+    max_travel_mm: 1000
+    soft_limits: false
+    motor0:
+      hard_limits: false
+      pulloff_mm: 0
+      standard_stepper:
+        # EXEMPLES de broches.
+        step_pin: gpio.12
+        direction_pin: gpio.14
         disable_pin: NO_PIN
 
   a:

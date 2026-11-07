@@ -73,7 +73,11 @@ def test_glissiere_retiree_des_entrees_sorties_et_de_fluidnc():
     ):
         assert nom not in LISTE.signaux
     texte = (DOSSIER_PI.parent / "fluidnc" / "mycelium_lavage.yaml").read_text()
-    assert "\n  x:\n" not in texte and "\n  y:\n" in texte and "\n  a:\n" in texte
+    assert "\n  y:\n" in texte and "\n  a:\n" in texte
+    # X n'est plus la glissière : c'est l'avance du ruban du Micropore (tâche 40), sans fin de
+    # course ni origine.
+    axe_x = texte.split("\n  x:\n")[1].split("\n  a:\n")[0]
+    assert "Micropore" in axe_x and "limit_" not in axe_x and "homing" not in axe_x
 
 
 def test_course_de_l_agitation_verifiee(reglages):

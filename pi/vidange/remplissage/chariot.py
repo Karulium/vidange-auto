@@ -67,6 +67,9 @@ class Pas:
     cibles: dict[str, float] = field(default_factory=dict)
     # Vitesse lente (« centrage » : barres, « contact » : plateau), sinon celle de chaque axe.
     vitesse: Literal["centrage", "contact"] | None = None
+    # Rotation du plateau à cette vitesse au plus (°/s : pose du micropore, la paroi à la vitesse
+    # du ruban) ; None : sa vitesse normale.
+    vitesse_a: float | None = None
     # Le plateau monte jusqu'à ce que la balance gagne tant de kg (contact du fond d'un seau).
     contact_kg: float | None = None
     # Attente après le mouvement (s), puis pesée (médiane des dernières lectures).
@@ -245,6 +248,8 @@ class ChariotFluidnc:
             vitesse = self._vitesses[cle]
             if pas.vitesse is not None and cle in VITESSES_LENTES[pas.vitesse]:
                 vitesse = min(vitesse, getattr(self.reglages.vitesses, pas.vitesse))
+            if cle == "a" and pas.vitesse_a is not None:
+                vitesse = min(vitesse, pas.vitesse_a)
             duree = max(duree, abs(ecart) / vitesse)
             carres += (
                 self._vers_carte(cle, getattr(cible, cle))

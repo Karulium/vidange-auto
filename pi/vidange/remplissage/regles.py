@@ -36,7 +36,10 @@ chaque barre ; deux barres écartées de plus de `barres → ecart_max_m` : tout
    (manivelle en bas, arrêtée) ;
 9. la préhension ne descend sous ≈ 0,84 au-dessus du chariot qu'avec barres ouvertes et tête du
    micropore rentrée (sauf en mode couvercles et pendant la pose d'un seau vide, barres à
-   l'approche : vidange.remplissage.remplissage).
+   l'approche : vidange.remplissage.remplissage) ;
+10. (tâche 40, micropore) le plateau ne monte ni ne descend que tête du micropore VUE escamotée
+   au ToF (`micropore_escamote` vrai) ; sa rotation reste permise (le micropore se pose en
+   tournant le seau).
 Un mouvement est vérifié point par point (tous les pas_verification_m), axes ensemble en ligne
 droite comme le fait FluidNC. Tous les chiffres viennent de machine.yaml (`remplissage`).
 
@@ -108,6 +111,9 @@ class Contexte:
     # Bras du spray (tâche 39) sorti, et hauteur du seau sur le plateau (m).
     bras_spray_sorti: bool = False
     hauteur_seau: float | None = None
+    # Tête du micropore (tâche 40) vue escamotée au ToF ; None : pas connue (pas de mesure, carte
+    # redémarrée et pas encore relue...).
+    micropore_escamote: bool | None = None
 
 
 def _m(valeur: float) -> str:
@@ -243,6 +249,9 @@ class ReglesRemplissage:
         monte = arrivee.z > depart.z + _EGAL and arrivee.z > self.reglages.plateau_en_bas_z
         if monte and self.pres_du_poste(arrivee.y) and contexte.refus_mycelium is not None:
             return f"le plateau ne monte pas près du poste : {contexte.refus_mycelium}"
+        refus = self.refus_micropore_plateau(depart, arrivee, contexte)
+        if refus is not None:
+            return refus
         refus = self.refus_ecart_barres(depart)
         if refus is not None:
             # Une barre a glissé ou a été bougée seule : rien ne bouge avant la prise d'origine.
@@ -271,6 +280,18 @@ class ReglesRemplissage:
         return None
 
     # ------------------------------------------------------------ pour les autres modules
+
+    @staticmethod
+    def refus_micropore_plateau(depart: Pose, arrivee: Pose, contexte: Contexte) -> str | None:
+        """Règle 10 (tâche 40) : le plateau ne monte ni ne descend que tête du micropore vue
+        escamotée au ToF."""
+        if abs(arrivee.z - depart.z) <= _EGAL or contexte.micropore_escamote is True:
+            return None
+        etat = "pas connue" if contexte.micropore_escamote is None else "pas escamotée"
+        return (
+            f"tête du micropore {etat} au capteur de distance : le plateau ne monte ni ne "
+            "descend avant qu'elle soit vue escamotée"
+        )
 
     def refus_bras_galet(self, pose: Pose) -> str | None:
         """Le bras du galet (fermeture, tâche 41) ne tourne que plateau ≤ 0,26 (règle 5)."""

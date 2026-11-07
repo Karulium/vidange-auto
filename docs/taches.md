@@ -1401,7 +1401,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
     se tait plus de 2 s pendant un spray.
   - Broches : EXEMPLES dans les réglages, en attendant l'Implantation.
   Tests sur PC avec faux HX711, faux capteur et faux moteur.
-- [ ] **40. Micropore, côté Pi** — Modèle : Opus, effort moyen. À faire après la tâche 39 bis.
+- [x] **40. Micropore, côté Pi** — Modèle : Opus, effort moyen. À faire après la tâche 39 bis.
   Source, recopiée ici le 06/11/2026 : `micropore/logiciel/micropore-pour-logiciel.md` du projet mécanique (module
   gelé le 28/10). Elle donne les gestes 1 a (pose : tour de repérage, approche, avance de 13 mm, appui vu au ToF,
   pose de 17 mm, tension, coupe, fin, contrôle à la caméra), 1 b (tête escamotée pendant le spray, l'inspection et

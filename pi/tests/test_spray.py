@@ -201,14 +201,18 @@ def test_la_carte_du_spray_a_son_bus(entrees_sorties):
 def test_bras_pas_range_chariot_immobile():
     regles = ReglesRemplissage(MACHINE)
     pose = Pose(y=0.135, z=0.40, a=0, barres=0.30, pousseur=0.0)
-    sorti = Contexte(True, None, True, bras_spray_sorti=True, hauteur_seau=0.25)
+    sorti = Contexte(
+        True, None, True, bras_spray_sorti=True, hauteur_seau=0.25, micropore_escamote=True
+    )
     refus = regles.refus_mouvement(pose, pose.avec(z=0.30), sorti)
     assert "seule la rotation du seau" in refus and "plateau_z" in refus
     assert "barres" in regles.refus_mouvement(pose, pose.avec(barres=0.32), sorti)
     assert "remplissage_y" in regles.refus_mouvement(pose, pose.avec(y=0.155), sorti)
     # La rotation du seau reste permise.
     assert regles.refus_mouvement(pose, pose.avec(a=200), sorti) is None
-    range_ = Contexte(True, None, True, bras_spray_sorti=False, hauteur_seau=0.25)
+    range_ = Contexte(
+        True, None, True, bras_spray_sorti=False, hauteur_seau=0.25, micropore_escamote=True
+    )
     assert regles.refus_mouvement(pose, pose.avec(z=0.30), range_) is None
 
 
