@@ -1673,6 +1673,9 @@ Choix tranchés par Claude (PR de la tâche 23), en attendant les réponses de K
      (07/11) : le finir avec le fût suivant ?
   3. Vérification des zones de la griffe traînée par le pont, même en butée haute : gardée ; question posée au fil
      Portique.
-  4. « Griffe partie du poste » (mât hors du seau du vidage) suffit pour sortir le bras du spray : gardé ; question
-     posée au fil Spray.
+  4. « Griffe partie du poste » ne suffit pas (fil Spray, 07/11/2026) : le bras du spray ne sort et ne rentre que si
+     aucune partie de la tête de la griffe, de la préhension ou de ce qu'elles tiennent n'est dans la zone
+     **x 0,66-0,95, y −0,03-0,24, z < 0,85** (EXEMPLE, à vérifier par un balayage de la Maquette). C'est la zone qui
+     fait foi, pas le moment. À coder dans une tâche suivante (45 septies) ; d'ici là, sur la vraie machine, aucun
+     lot ne part (réglages de la griffe en EXEMPLE).
   5. Délai d'une couche `durees → remplissage_couche_griffe_max` : 30 min (EXEMPLE) pour les premiers essais.
