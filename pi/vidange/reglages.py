@@ -5264,6 +5264,17 @@ class ReglagesMisesAJour(Modele):
     pi: ReglagesMajPi
 
 
+class ReglagesLot(Modele):
+    """Lancer un lot depuis la page web, puis le Go à l'écran (tâche 45 quater)."""
+
+    # Un lot proposé et pas lancé est oublié au bout de (s).
+    proposition_max_s: float = Field(gt=0)
+    # Boîtier du chariot (micropore, fermeture) lu et battu tous les (s), pendant un lot.
+    fond_periode_s: float = Field(gt=0, le=1)
+    # Le lot tourne-t-il encore ? Regardé tous les (s).
+    suivi_periode_s: float = Field(gt=0, le=5)
+
+
 class Programme(Modele):
     """programme.yaml : réglages du programme lui-même (pas de la machine)."""
 
@@ -5277,6 +5288,7 @@ class Programme(Modele):
     cameras: ReglagesCameras
     distance: ReglagesDistance
     mises_a_jour: ReglagesMisesAJour
+    lot: ReglagesLot
 
     @model_validator(mode="after")
     def _verifier_video(self) -> "Programme":
@@ -5582,10 +5594,6 @@ class BocalNeufSimule(Modele):
     devisse_deg: float = Field(gt=0)
     filet_deg: float = Field(gt=0)
     raideur_n_m: float = Field(gt=0)
-    # Un bocal sert un seau : un lot de 20 seaux dépasse les 18 places de semence et les 18 capsules
-    # de la boîte. Vrai : Karulium recharge les places vides, vide la boîte des capsules et remplit
-    # celle des couvercles percés entre deux bocaux (machine imaginaire).
-    reapprovisionne: bool = False
 
 
 class CycleSimule(Modele):
@@ -6941,6 +6949,18 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
             f"programme.yaml, distance → avance_s ({avance:g} s) doit valoir au moins 2 fois "
             f"periode_etat_s de fluidnc.yaml ({periode_etat:g} s)"
         )
+    # Pendant un lot, le boîtier du chariot doit recevoir son battement à temps (tâche 45 quater).
+    battements = []
+    if machine.micropore is not None:
+        battements.append(("micropore → servos", machine.micropore.servos.battement_s))
+    if machine.fermeture is not None:
+        battements.append(("fermeture → bras", machine.fermeture.bras.battement_s))
+    erreurs += [
+        f"programme.yaml, lot → fond_periode_s ({programme.lot.fond_periode_s:g} s) doit être "
+        f"plus court que machine.yaml, {ou} → battement_s ({battement:g} s)"
+        for ou, battement in battements
+        if programme.lot.fond_periode_s >= battement
+    ]
     if machine.mycelium is not None:
         # Le Pi lit le capteur de la manivelle à chaque état de la carte : le pas entre deux
         # lectures doit rester sous la moitié de l'écart permis sur la largeur de la zone.

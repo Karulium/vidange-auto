@@ -467,7 +467,7 @@ def test_l_ordre_du_cycle_est_couvercle_puis_fermeture_puis_stockage():
     assert len(probleme) == 1 and "ordre" in probleme[0]
 
 
-def test_le_lot_de_20_seaux_passe_sans_alarme_avec_couvercle_et_fermeture():
+def test_le_lot_de_seaux_passe_sans_alarme_avec_couvercle_et_fermeture():
     from vidange.cycle.simulation import jouer_cycle
 
     with Simulateur(REGLAGES, LISTE, "cycle") as simulateur:
@@ -475,10 +475,13 @@ def test_le_lot_de_20_seaux_passe_sans_alarme_avec_couvercle_et_fermeture():
         monde: MondeCouvercle = simulateur_monde(mode)
     assert planning.probleme == ""
     assert problemes == []
+    cycle = REGLAGES.simulateur.cycle
+    seaux = cycle.seaux
     etapes = [ligne.etape for ligne in planning.lignes]
-    assert etapes.count("poser_le_couvercle") == 20 and etapes.count("fermer_le_seau") == 20
+    assert etapes.count("poser_le_couvercle") == seaux and etapes.count("fermer_le_seau") == seaux
     assert "couvercle" in mode.postes_lances and "fermeture" in mode.postes_lances
-    assert monde.prises == [1] * 20 and monde.nombre == 4 and monde.tombes == 0
+    assert monde.prises == [1] * seaux and monde.nombre == cycle.couvercles - seaux
+    assert monde.tombes == 0
 
 
 def simulateur_monde(mode):

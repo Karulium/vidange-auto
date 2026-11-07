@@ -279,6 +279,16 @@ class Spray:
                 return True
             return self._horloge() - self._lu_a > self.reglages.liaison.muette_s
 
+    def brancher_chariot(
+        self, refus_chariot: Callable[[], str | None], tourner_seau: Callable[[float], object]
+    ) -> None:
+        """Le chariot du lot (programme principal, tâche 45 quater) : le Spray est construit au
+        démarrage, le Remplissage avec le lot (Remplissage.refus_bras_spray et
+        tourner_pour_spray)."""
+        with self._verrou:
+            self._refus_chariot = refus_chariot
+            self._tourner_seau = tourner_seau
+
     def bras_spray_sorti(self) -> bool:
         """Pour le Remplissage : False seulement quand la carte vient de dire « bras rangé »
         (capteur), bras arrêté, et qu'aucun « sortir » n'est en route. Carte muette : True."""

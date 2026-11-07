@@ -94,6 +94,9 @@ class PiecesSimulees:
     d'EXEMPLE sont permis (comme pour tout le simulateur)."""
 
     vraie_machine = False
+    # Le Stockage imaginaire est construit avec chaque lot : la taille du lot est contrôlée là
+    # (ModeSeaux.modules_du_lot), pas avant.
+    stockage = None
 
     def __init__(self, simulateur: Simulateur) -> None:
         self.simulateur = simulateur

@@ -240,10 +240,22 @@ class ModeBocaux:
         self.en_cours = en_cours
         return [noter_apres_chaque_etape(module, self._noter)]
 
+    def refus_lancer(self, lot: LotBocaux) -> str | None:
+        """Pourquoi CE lot de bocaux ne peut pas partir maintenant (None : il peut) : mauvais mode,
+        autre lot en route, poste pas prêt, aucun bocal (tâche 45 quater : bouton de la page web,
+        Go de l'écran)."""
+        refus = refus_lancement(self.chef, self.mode_actuel, "production", "lot de bocaux refusé")
+        if refus is not None:
+            return refus
+        refus = self.refus_lot()
+        if refus is not None:
+            return f"lot de bocaux refusé : {refus}"
+        return None if lot.bocaux else "lot de bocaux refusé : aucun bocal"
+
     def lancer_lot(self, lot: LotBocaux) -> list[str]:
         """Donne le module du lot au chef (règle 6 : un lot est proposé puis lancé après le Go
-        de Karulium : c'est à celui qui appelle de l'avoir eu)."""
-        refus = refus_lancement(self.chef, self.mode_actuel, "production", "lot de bocaux refusé")
+        de Karulium : c'est à celui qui appelle de l'avoir eu, vidange.cycle.lancement)."""
+        refus = self.refus_lancer(lot)
         if refus is not None:
             raise ErreurChef(refus)
         modules = self.modules_du_lot(lot)

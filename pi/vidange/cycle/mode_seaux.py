@@ -3,6 +3,7 @@
     mode = ModeSeaux(reglages, pieces, chef)      # pieces : vrai matériel ou simulateur
     mode.etats                                    # chaque poste d'ORDRE_SEAU : prêt, ou pas
     mode.refus_lot()                              # None : un lot peut partir ; sinon pourquoi
+    mode.refus_lancer(lot)                        # et CE lot (mode, autre lot, taille du lot)
     mode.lancer_lot(lot)                          # les modules du lot donnés au chef
     mode.modules_a_reprendre(carnet.lire())       # après une coupure : le lot du carnet
 
@@ -29,8 +30,16 @@ tâches : air comprimé (`chef.condition_permission("air")`, avant de prendre un
 venturi), purge et store (permissions et conditions générales du chef, déjà données aux pièces),
 préhension dégagée et bras rangé (Fermeture, par le Remplissage). Rien de cela ne protège
 personne : la sécurité est câblée.
+
+Taille d'un lot (tâche 45 quater, en attendant la réponse de Karulium à la question de capacité) :
+un bocal de semence neuf par seau, et Karulium ne recharge pas en milieu de lot. Un lot ne dépasse
+donc jamais les bocaux de semence de sa variété posés au stockage, les places libres de la boîte
+des capsules ni les couvercles percés (18 au plus avec les réglages d'aujourd'hui). Un seul endroit
+le contrôle : `refus_taille_lot`. Si Karulium choisit une pause de rechargement avec Go, c'est là
+qu'on dira « pause au seau n » au lieu de refuser.
 """
 
+from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Protocol
@@ -46,10 +55,13 @@ from vidange.prehension.prehension import Prehension
 from vidange.reglages import Reglages
 from vidange.remplissage.module import Plan, SeauAFaire, module_remplissage
 from vidange.remplissage.remplissage import Remplissage, SeauPlateau
+from vidange.stockage import places
 
 if TYPE_CHECKING:
     from vidange.couvercle.couvercle import Couvercle
+    from vidange.reglages import Machine
     from vidange.spray.spray import Spray
+    from vidange.stockage.stockage import Stockage
 
 journal = donner_journal("mode_seaux")
 
@@ -83,6 +95,41 @@ PARTIES: dict[str, tuple[str, ...]] = {
     "stockage": ("stockage",),
     "lavage": ("lavage",),
 }
+
+
+def refus_taille_lot(machine: "Machine", stockage: "Stockage | None", lot: "Lot") -> str | None:
+    """Le seul contrôle du nombre de seaux d'un lot (tâche 45 quater) : un bocal de semence neuf
+    par seau (sa capsule va dans la boîte des capsules, un couvercle percé le referme), sans
+    rechargement en milieu de lot. None : le lot tient ; sinon pourquoi pas. Sans bocal neuf
+    (machine.yaml → bocal_neuf) ou sans Stockage : pas de limite ici."""
+    if machine.bocal_neuf is None or stockage is None:
+        return None
+    inventaire = stockage.inventaire
+    boites = machine.bocal_neuf.boites
+    nombre = len(lot.seaux)
+    capsules = places.capacite_boite(machine) - inventaire.boites.get(boites.capsules, 0)
+    couvercles = inventaire.boites.get(boites.couvercles_perces, 0)
+    for variete, voulus in Counter(seau.variete for seau in lot.seaux).items():
+        poses = sum(
+            1 for place in places.places_semence(machine) if inventaire.bocaux.get(place) == variete
+        )
+        if voulus > poses:
+            return (
+                f"lot de {nombre} seaux : {voulus} seaux « {variete} » mais {poses} bocaux de "
+                f"semence « {variete} » posés au stockage (un bocal par seau, pas de rechargement "
+                "en milieu de lot)"
+            )
+    if nombre > capsules:
+        return (
+            f"lot de {nombre} seaux : seulement {capsules} places libres dans la boîte des "
+            f"capsules « {boites.capsules} » (une capsule par seau) ; vider la boîte et le dire"
+        )
+    if nombre > couvercles:
+        return (
+            f"lot de {nombre} seaux : seulement {couvercles} couvercles percés dans la boîte "
+            f"« {boites.couvercles_perces} » (un par seau)"
+        )
+    return None
 
 
 @dataclass(frozen=True)
@@ -128,6 +175,9 @@ class Pieces(Protocol):
 
     # Vrai matériel : des réglages d'EXEMPLE y sont interdits.
     vraie_machine: bool
+    # Le Stockage dont le lot prendra les seaux, les bocaux de semence et les capsules, s'il est
+    # connu avant le lot (taille du lot) ; None : il est construit avec le lot (simulateur).
+    stockage: "Stockage | None"
 
     def manque(self, poste: str) -> str | None:
         """Ce qui manque pour ce poste ici (matériel, vision pas écrite...), ou None."""
@@ -265,6 +315,11 @@ class ModeSeaux:
             self.pret("spray"),
             self.pret("couvercle"),
         )
+        if memoire is None:
+            # Un lot repris après une coupure garde sa taille (ses bocaux sont déjà comptés).
+            refus = refus_taille_lot(self.reglages.machine, pieces.plan.magasin, lot)
+            if refus is not None:
+                raise ErreurChef(f"lot de seaux refusé : {refus}")
         plan = pieces.plan
         plan.fin_de_lot = lot.fin_de_lot
         if memoire is not None:
@@ -291,10 +346,32 @@ class ModeSeaux:
         self.en_cours = en_cours
         return list(en_cours.modules)
 
+    def refus_lancer(self, lot: Lot) -> str | None:
+        """Pourquoi CE lot ne peut pas partir maintenant (None : il peut) : mauvais mode, autre lot
+        en route, poste pas prêt, format inconnu, plus de seaux que de bocaux de semence ou de
+        capsules (refus_taille_lot). Le bouton de la page web et le Go de l'écran le demandent."""
+        refus = refus_lancement(self.chef, self.mode_actuel, "production", "lot de seaux refusé")
+        if refus is not None:
+            return refus
+        refus = self.refus_lot()
+        if refus is not None:
+            return f"lot de seaux refusé : {refus}"
+        griffe = self.reglages.machine.griffe
+        formats = {} if griffe is None else griffe.formats
+        if lot.format not in formats or any(seau.format != lot.format for seau in lot.seaux):
+            return (
+                f"lot de seaux refusé : format « {lot.format} » inconnu (machine.yaml, griffe → "
+                f"formats : {', '.join(formats)})"
+            )
+        if not lot.seaux:
+            return "lot de seaux refusé : aucun seau"
+        refus = refus_taille_lot(self.reglages.machine, self.pieces.stockage, lot)
+        return None if refus is None else f"lot de seaux refusé : {refus}"
+
     def lancer_lot(self, lot: Lot) -> list[str]:
         """Donne les modules du lot au chef (règle 6 : un lot est proposé puis lancé après le Go
-        de Karulium : c'est à celui qui appelle de l'avoir eu)."""
-        refus = refus_lancement(self.chef, self.mode_actuel, "production", "lot de seaux refusé")
+        de Karulium : c'est à celui qui appelle de l'avoir eu, vidange.cycle.lancement)."""
+        refus = self.refus_lancer(lot)
         if refus is not None:
             raise ErreurChef(refus)
         modules = self.modules_du_lot(lot)

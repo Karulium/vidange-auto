@@ -331,19 +331,6 @@ class MondeBocalNeuf:
             return self.m8_voit_le_bocal
         return self._m8_avant()
 
-    def reapprovisionner(self, variete: str, couvercles: int) -> None:
-        """Karulium recharge (machine imaginaire du lot) : les places de semence vides ont un bocal
-        neuf, la boîte des capsules est vidée, celle des couvercles percés remplie."""
-        inventaire = self.stockage.inventaire
-        for place in self.places:
-            if place not in inventaire.bocaux:
-                self.stockage.poser_bocal(place, variete)
-        boites = self.neuf.reglages.boites
-        if inventaire.boites[boites.capsules] >= places.capacite_boite(self.machine) - 1:
-            inventaire.changer_boite(boites.capsules, 0)
-        if inventaire.boites[boites.couvercles_perces] <= 1:
-            inventaire.changer_boite(boites.couvercles_perces, couvercles)
-
     def _reprendre_le_vide(self) -> None:
         porte_bocal = self.prehension.porte_bocal
         assert porte_bocal is not None
@@ -392,8 +379,6 @@ def bocal_neuf_du_simulateur(
         pose = bocal_pose()
         if simule_mycelium is not None:
             scenario.mycelium.agitateur.bocal_kg = simule_mycelium.bocal_kg
-        if simule.reapprovisionne:
-            monde.reapprovisionner(cycle.variete, simule.couvercles_perces)
         return pose
 
     neuf.bocal = bocal  # type: ignore[method-assign]

@@ -226,3 +226,15 @@ mises_a_jour:
     branche: main
     # Chaque étape (téléchargement, installation, vérification) dure au plus (s).
     duree_max_s: 900
+
+# Lancer un lot (tâche 45 quater) : bouton « Lot de seaux » ou « Lot de bocaux » sur la page web
+# (le Pi propose), puis Go sur l'écran de l'armoire (Karulium dit Go).
+lot:
+  # Un lot proposé sur la page web et pas lancé à l'écran est oublié au bout de (s).
+  proposition_max_s: 600
+  # Pendant un lot, le boîtier du chariot (tête du micropore, bras de la fermeture) est lu et
+  # reçoit son battement tous les (s) : moins que leur battement_s de machine.yaml.
+  fond_periode_s: 0.2
+  # Le Pi regarde tous les (s) si le lot tourne encore : boucles de fond arrêtées sur alarme
+  # (relancées après l'acquittement) et à la fin du lot.
+  suivi_periode_s: 0.5

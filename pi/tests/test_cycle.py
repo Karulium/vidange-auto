@@ -55,6 +55,7 @@ class PiecesDeLaMachine:
     """Des pièces sur la vraie machine, auxquelles rien ne manquerait."""
 
     vraie_machine = True
+    stockage = None
 
     def manque(self, poste):
         return None
@@ -338,9 +339,10 @@ def test_lot_complet_simule_sans_alarme(reglages_depot, liste):
         faits = list(mode.en_cours.pieces.plan.faits)
     assert planning.probleme == ""
     assert problemes == []
-    assert faits == [f"S{numero:04d}" for numero in range(301, 321)]
-    assert [ligne.etape for ligne in planning.lignes].count("ranger") == 20
-    # Lot complet : 6 seaux déjà dans la file 1, 14 au tiroir, 6 sur la bande, puis fin de lot.
+    seaux = reglages_depot.simulateur.cycle.seaux
+    assert faits == [f"S{numero:04d}" for numero in range(301, 301 + seaux)]
+    assert [ligne.etape for ligne in planning.lignes].count("ranger") == seaux
+    # Lot de 18 : 6 seaux déjà dans la file 1, 14 au tiroir, 4 sur la bande, puis fin de lot.
     assert magasin.messages[-1].startswith("fin de lot")
     assert magasin.seaux_pleins() == 0
 
@@ -376,8 +378,9 @@ def test_dans_le_lot_simule_spray_et_micropore_suivent_l_ordre_corrige(reglages_
     )
     etapes = [ligne.etape for ligne in planning.lignes if ligne.module == "remplissage"]
     # Une dose de spray par seau, une seule fois.
-    assert etapes.count("spray_pulveriser") == 20
-    assert len(doses) == 20
+    seaux = reglages_depot.simulateur.cycle.seaux
+    assert etapes.count("spray_pulveriser") == seaux
+    assert len(doses) == seaux
     # Le 1er seau : QR, centrage, poste, spray, rangées du haut, puis la 1re couche.
     premier = etapes[: etapes.index("verser")]
     suite = [
@@ -391,7 +394,7 @@ def test_dans_le_lot_simule_spray_et_micropore_suivent_l_ordre_corrige(reglages_
     assert [e for e in premier if e in suite] == suite
     seuil = reglages_depot.machine.micropore.fond_poids_min_kg
     codes = {code for code, _, _ in poses}
-    assert len(codes) == 20
+    assert len(codes) == seaux
     for code in codes:
         du_seau = [(quoi, kg) for c, quoi, kg in poses if c == code]
         hauts = [kg for quoi, kg in du_seau if quoi == "haut"]

@@ -725,10 +725,14 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   ouvert (bocal qui tourne sur la tôle nue : tapis silicone, couple d'ouverture à mesurer) : l'étape 5a couvre
   l'échec. Ne pas inventer le geste. Construire aussi le Mycélium (agitateur, porte-bocal) dans `cycle/machine.py`
   et brancher `nouveau_bocal` dans le cycle. Tests : les cas d'erreur de la fiche et le lot simulé sans alarme.
-- [ ] **45 quater. Programme principal : le lot complet sur les vraies cartes** — Modèle : Opus, effort moyen. Après
+- [x] **45 quater. Programme principal : le lot complet sur les vraies cartes** — Modèle : Opus, effort moyen. Après
   la 19 quater. Écrire `PiecesMachine.remplissage`, `entonnoir` et `lavage_bocaux` (PR 93), lancer les boucles de
   fond des pièces (balance, vide, battement des servos) avec le lot, et le bouton « Lot de seaux » / « Lot de
   bocaux » sur la page web puis le Go à l'écran (`docs/decisions.md`, PR 89, question 1).
+- [ ] **45 quinquies. Inventaire du stockage depuis la page web** — Modèle : Sonnet, effort bas. Saisir et corriger à la
+  main ce que contient le stockage (bocaux de semence par variété et par place, capsules et couvercles percés dans les
+  boîtes, piles de seaux vides par format, couvercles), avec le Go de Karulium avant d'écrire ; le lot (tâche 45
+  quater, `refus_taille_lot`) lit ces nombres. Journal de chaque correction. Tests et procédure courte.
 - [ ] 23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi
 
 ## Partie 3 : fonctions en plus, voir `docs/fonctionnalites.md`
