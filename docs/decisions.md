@@ -1133,3 +1133,14 @@ caméra en chiffres de la fiche) et objet `entonnoir` dans `prehension → objet
 - **Pas fait** : le vrai versement de la griffe (case vide `verser(bocal)` du module), le branchement dans le
   programme principal (comme les tâches 34 à 41), l'inventaire du Stockage (bocaux remplis) et la reprise d'un
   lot après une coupure : seul `entonnoir_place` est gardé.
+- **Entonnoir, réponses à la PR n° 88** (tâche 43, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Pont qui roule tête basse en tenant l'entonnoir (levée 0,060 au-dessus de la pose, garde de 4 cm sur les cols
+     voisins) : exception gardée, car c'est le geste figé de la fiche de l'Entonnoir, et limitée à cet objet.
+  2. Pas de vanne `ev_souffler` : lâcher en fermant la vanne du vide (deuxième essai, puis alerte). Rien à ajouter
+     avant l'essai.
+  3. Deuxième essai de pose avec le même centre (pas de nouvelle photo possible, l'entonnoir est dans la tête) :
+     gardé.
+  4. Bocaux « suspects » (pose ratée deux fois) : le lot continue ; à la fin du lot, leur liste s'affiche et
+     Karulium les vérifie à la main. Le rangement à part viendra avec l'inventaire des bocaux.
+  5. Reprise d'un lot après une coupure : seul `entonnoir_place` est gardé pour l'instant ; la reprise se fera avec
+     l'inventaire des bocaux remplis (à prévoir quand le programme principal branchera le mode bocaux).
