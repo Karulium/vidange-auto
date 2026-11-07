@@ -1666,3 +1666,13 @@ Choix tranchés par Claude (PR de la tâche 23), en attendant les réponses de K
 - **Restent des cases vides** : ce qu'on fait d'un seau commencé quand le fût se vide ; le capteur de distance de
   la tête de la griffe (VL53L1X, bouchage de l'entonnoir) ; le QR du bocal par la caméra de la tête ; l'erreur du
   codeur de la rotation de la tête ; la photo du plafond ; le lavage lancé après le lot.
+- **La griffe dans les lots, réponses à la PR n° 99** (tâche 45 sexies, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Dose « d'avance » pendant le spray ou le dosage : non pour l'instant (la fiabilité d'abord) ; à revoir avec le
+     solveur quand les vrais temps seront mesurés.
+  2. Seau commencé quand le fût se vide : alarme, le seau est fini à la main (gardé) ; question posée à Karulium
+     (07/11) : le finir avec le fût suivant ?
+  3. Vérification des zones de la griffe traînée par le pont, même en butée haute : gardée ; question posée au fil
+     Portique.
+  4. « Griffe partie du poste » (mât hors du seau du vidage) suffit pour sortir le bras du spray : gardé ; question
+     posée au fil Spray.
+  5. Délai d'une couche `durees → remplissage_couche_griffe_max` : 30 min (EXEMPLE) pour les premiers essais.
