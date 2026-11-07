@@ -843,6 +843,22 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   3. **Le logiciel empêche les deux vannes d'être ouvertes en même temps** (refus clair, vérifié aussi dans les tests).
   4. Le nom `vanne_souffler` attendu par la tâche 45 decies (fermeture au démarrage) devient la vraie vanne.
   Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
+- [ ] **45 duodecies. Sorties des cartes n° 3 et n° 4, chauffage du lavage par un relais du Pi** — Modèle : Sonnet,
+  effort moyen. Fiches de l'Implantation du 07/11/2026 (dans `/mnt/project-files/implantation/logiciel/`, lire ces
+  seuls fichiers : `sorties-carte-3.md`, `sorties-carte-4.md`) ; à recopier dans `docs/decisions.md` :
+  1. **Carte n° 4** : P0 `vanne_vide` (ev_aspirer), P1 `vanne_souffler`, P2 frein du Z de la préhension, P3 libre,
+     **P4 électroaimants des capsules** (3 en parallèle, 24 V coupé). Le jet d'air du col et le chauffage ne sont
+     **pas** sur cette carte (la tâche 45 undecies les y avait mis en P5 et P6 : les enlever).
+  2. **Carte n° 3** (lavage) : P0 et P1 pont en H du demi-tour (**jamais les deux ensemble**, refus clair comme pour
+     les deux vannes de la ventouse), P2 relais de la pompe de vidange, P3 électrovanne d'eau, P4 vanne à bille,
+     P5 jet d'air du col. Vérifier ce que le dépôt a déjà pour cette carte et l'aligner.
+  3. **Chauffage du lavage** (thermoplongeur 2 kW) : pas sur FluidNC ; commandé par le Pi par un relais qui pilote le
+     SSR. Voie du relais du Pi en EXEMPLE (fiche future `relais-du-pi.md`). La sécurité est câblée : `relais_flotteur`
+     (flotteur du fût de lavage) est en série dans la commande du SSR ; son 2ᵉ contact recopie le flotteur sur une
+     entrée de la carte n° 3. Le logiciel n'allume le chauffage que si « flotteur haut » et « pompe arrêtée », sinon il
+     attend et informe (jamais une protection logicielle présentée comme une sécurité).
+  Vérifié au démarrage (sorties en double, sortie absente) ; procédure d'essai sur le vrai matériel ; « testé sur le
+  vrai matériel : non ».
 - [x] **23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi** — Modèle : Opus, effort
   moyen. Base : `pi/vidange/simulateur/solveur.py` (place prête), `simulateur/planning.py`, `chef/zones.py`,
   decisions « La fiabilité d'abord ». Bibliothèque : `ortools` (CP-SAT, gratuite, roues pour le Pi 5 en
