@@ -946,9 +946,14 @@ class PiecesMachine:
         plan = Plan(seaux=list(lot.seaux), versement_s=griffe.versement_s, magasin=self.stockage)
         # Le bras du spray ne bouge que zone libre : la griffe, la préhension et ce qu'elles
         # tiennent, là où elles sont (fil Spray, 07/11/2026).
+        # Et tant que le bras n'est pas vu rangé, ni l'une ni l'autre n'y entre (tâche 45 octies).
         zone = ZoneDuBras(
-            machine, griffe=None if vraie is None else vraie.griffe, prehension=prehension
+            machine,
+            griffe=None if vraie is None else vraie.griffe,
+            prehension=prehension,
+            bras_au_repos=None if spray is None else (lambda: not spray.bras_spray_sorti()),
         )
+        zone.brancher()
         return PiecesRemplissage(
             remplissage,
             prehension,

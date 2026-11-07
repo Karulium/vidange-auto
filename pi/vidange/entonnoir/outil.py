@@ -130,13 +130,10 @@ def _griffe_trainee(machine: Machine, regles) -> list[str]:
     if griffe is None or entonnoir is None or prehension is None:
         return []
     assert griffe.versement_bocal is not None
-    ecart = prehension.decalage_mat_x - griffe.decalage_mat_x
     refus = []
     for nom, (x, y) in places.places_bocaux(machine).items():
-        mat_y = y + entonnoir.decalage_oreille_y_m
-        pose = Pose(
-            x=x + entonnoir.decalage_oreille_x_m - ecart, y=mat_y, z=griffe.trajet.z, a=0, b=0
-        )
+        mat_x, mat_y = machine.mat_griffe_entonnoir(x, y)
+        pose = Pose(x=mat_x, y=mat_y, z=griffe.trajet.z, a=0, b=0)
         contexte = contexte_du_bocal(griffe.versement_bocal, regles, Contexte(), mat_y)
         raison = regles.refus_pose(pose, contexte)
         if raison is not None:

@@ -176,6 +176,17 @@ class Prehension:
         # bouge le pont ou le chariot Y traîne aussi le mât de la griffe (même chariot) ; ses
         # règles de position à elle sont vérifiées. Sans griffe branchée : rien.
         self.verrou_pont: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
+        # Verrou de la zone du bras du spray (vidange.spray.zone, tâche 45 octies) : tant que le
+        # bras n'est pas vu rangé, un pas qui entrerait dans sa zone ATTEND (raison, ou None), au
+        # plus attente_spray_max_s, puis alarme. Sans spray : rien.
+        self.verrou_spray: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
+        # Plus haut où la tête peut remonter tout droit après un choc, objet tenu (None : pas de
+        # limite). Donné par le geste en cours : la pose du couvercle C, tant qu'il est tenu
+        # (fiche de la pose, § 5.1 : toute remontée avant le lâcher refait le chemin décalé).
+        self.remontee_droite_max_z: Callable[[Pose], float | None] = lambda pose: None
+        self.attente_spray_max_s = 0.0
+        self._attente_spray: str | None = None
+        self._attente_depuis = 0.0
         # Ce que tient la tête, son poids pesé (N), et le vide de la dernière prise (kPa).
         self.objet: Objet | None = None
         self.poids_porte_n = 0.0
@@ -205,6 +216,16 @@ class Prehension:
         if porte_bocal.ouverts():
             return "ouverts"
         return "serres" if porte_bocal.serre() else None
+
+    def trajet_en_cours(self) -> tuple[Pose, Pose] | None:
+        """(départ, cible) du pas qui bouge la tête en ce moment ; None sans pas parti (un pas qui
+        attend le bras du spray n'est pas parti)."""
+        pas, pose = self._pas, self.pose
+        if self._geste is None or pas is None or pose is None or isinstance(pas, Attente):
+            return None
+        if not pas.cibles or self._attente_spray is not None:
+            return None
+        return pose, pose.avec(**pas.cibles)
 
     def occupee(self) -> bool:
         """Un geste est en cours (la tête sert déjà : personne d'autre ne la lance)."""
@@ -324,6 +345,15 @@ class Prehension:
         if refus is not None:
             self._geste = self._pas = None
             raise ErreurEtape(f"préhension, « {pas.texte} » refusé : {refus}", QUOI_FAIRE)
+        attente = self.verrou_spray(self.pose, cible) if pas.cibles else None
+        if attente is not None:
+            # Le bras du spray bouge : le pas attend (geste_fini le relance).
+            if self._attente_spray is None:
+                self._attente_depuis = self._horloge()
+                journal.info("Préhension : « %s » attend : %s", pas.texte, attente)
+            self._attente_spray = attente
+            return
+        self._attente_spray = None
         journal.debug("Préhension : %s", pas.texte)
         if "x" in pas.cibles or "y" in pas.cibles:
             self._regler_acceleration()
@@ -354,6 +384,22 @@ class Prehension:
         while self._geste is not None:
             pas = self._pas
             assert pas is not None and self.pose is not None
+            if self._attente_spray is not None:
+                if self._pause_depuis is not None:
+                    return False
+                if self._horloge() - self._attente_depuis > self.attente_spray_max_s:
+                    raison, self._attente_spray = self._attente_spray, None
+                    self._geste = self._pas = None
+                    raise ErreurEtape(
+                        f"préhension, « {pas.texte} » : attend depuis plus de "
+                        f"{self.attente_spray_max_s:g} s : {raison}",
+                        QUOI_FAIRE,
+                    )
+                assert isinstance(pas, Pas)
+                self._envoyer(pas)
+                if self._attente_spray is not None:
+                    return False
+                continue
             ecoule = self._horloge() - self._depuis
             if isinstance(pas, Attente):
                 depasse = False
@@ -391,13 +437,16 @@ class Prehension:
         # Le temps de la pause ne compte pas dans l'attente en cours (délais, durées).
         if self._pause_depuis is not None:
             self._depuis += self._horloge() - self._pause_depuis
+            self._attente_depuis += self._horloge() - self._pause_depuis
             self._pause_depuis = None
         self.tete.reprendre()
 
     def arreter(self) -> None:
         """Alarme : le mouvement s'arrête. Après un choc, la tête remonte lentement (droit vers
-        le haut, de remontee_choc_m au plus), et une photo est notée avec l'alerte."""
+        le haut, de remontee_choc_m au plus, et pas plus haut que `remontee_droite_max_z` avec
+        un objet tenu), et une photo est notée avec l'alerte."""
         self._geste = self._pas = None
+        self._attente_spray = None
         self.tete.arreter()
         if not self.tete.choc:
             return
@@ -408,6 +457,9 @@ class Prehension:
                 pose.z + self.reglages.force.remontee_choc_m,
                 self.regles.hauteur_trajet(self.objet, pose.y),
             )
+            plafond = None if self.objet is None else self.remontee_droite_max_z(pose)
+            if plafond is not None:
+                haut = min(haut, plafond)
             if haut <= pose.z + _EGAL:
                 return
             cible = pose.avec(z=haut)

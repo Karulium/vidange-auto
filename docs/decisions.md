@@ -1752,6 +1752,67 @@ la PR n° 99 », point 4). Code : `pi/vidange/griffe/` (règles, versement), `pi
      fût) ; d'ici là, lots de 3 bocaux au plus.
   3. Verrou de la zone du bras du spray pendant qu'il bouge (griffe et préhension n'y entrent pas) : fait dans la
      tâche 45 octies, sans attendre la Maquette (seuls les chiffres de la zone sont EXEMPLE).
-  4. Remontée du couvercle C avec la tête : chemin décalé à l'envers (gardé) ; question posée au fil Préhension.
+  4. Remontée du couvercle C avec la tête : chemin décalé à l'envers, confirmé par le fil Préhension (07/11/2026) pour
+     toute remontée avec le couvercle encore tenu ; après le lâcher, la tête seule remonte tout droit (tâche 45 octies).
   5. Décalage du mât de la griffe (dépôt −0,187, fiches de la Maquette et de la Préhension 0,175) : signalé à la
      Maquette.
+
+## Tête à 0° en mode bocaux, verrou de la zone du spray, couvercle C (tâche 45 octies, 07/11/2026)
+
+Code : `pi/vidange/griffe/` (griffe, versement, règles), `pi/vidange/spray/zone.py`, `pi/vidange/prehension/
+prehension.py`, `pi/vidange/couvercle/couvercle.py`, `pi/vidange/cycle/` (machine, simulation) ; réglages
+`machine.yaml` ; essais : `essai-versement-bocal.md` (étape 8), `essai-spray.md` (étape 11), `essai-couvercle.md`
+(étape 4, point 8). Testé sur le vrai matériel : non.
+
+- **Défaut de la tête à −180° (cause)** : à chaque prise, la griffe tourne sa raclette vers le centre du fût
+  (angle qui dépend du point de prise) ; en remontant, elle se mettait « bras le long du pont » à l'orientation
+  bloquée la PLUS PROCHE (0° ou ±180°, `_vers_le_haut`). Une prise à −100° sortait donc à −180°, et le versement
+  (tête à A = 0, fiche) refusait. Ça dépendait du point de prise, d'où le 4e bocal. **Corrigé** : en mode bocaux,
+  chaque prise finit tête à `versement_bocal → a_deg` (0°), godet fermé, **dans le fût** (où les demi-tours sont
+  permis), avant la sortie (`Griffe._tete_a_dans_le_fut`) ; si la tête ne peut pas tourner là où elle est, elle va
+  d'abord au centre du fût. Hors du fût avec un autre angle : alarme, jamais de sortie tournée. Les tests de lot
+  sont revenus à 8 bocaux (plus de limite à 3). Le mode seaux ne change pas.
+- **Verrou de la zone du bras du spray (choix de Claude)** : tant que la carte ne voit pas le bras **rangé et
+  arrêté** (`not Spray.bras_spray_sorti()` : il sort, il est sorti pour la dose, il rentre, ordre en route, carte
+  muette), aucun pas de la griffe ou de la préhension n'**entre** dans `spray → bras → zone` : la tête, ce qu'elle
+  tient, et l'outil traîné par le pont (enveloppe en butée haute, charge), vérifiés le long du pas. Le pas
+  **attend** (il ne part pas) puis part tout seul ; au-delà de `zone → attente_max_s` (120 s, EXEMPLE, au moins
+  2 × `temps_max_s`, vérifié au démarrage) : alarme. Un outil déjà dans la zone peut en sortir. Et l'inverse : un
+  pas déjà parti qui va dans la zone la rend occupée pour le bras (« sortir » et « ranger » attendent). Pause : rien
+  ne part, le temps ne compte pas.
+- **Pas par les zones du chef** : un module tient une zone du chef pour toute une étape ; les étapes de la griffe
+  (une couche) et de la préhension (un geste) ne passent dans la zone du bras que quelques secondes, et la question
+  est géométrique (encombrement, charge, outil traîné). Les réserver bloquerait le spray pendant des étapes
+  entières.
+- **Couvercle C, toute remontée avant le lâcher (fil Préhension, 07/11/2026, fiche § 5.1)** : « montée droite à
+  10 mm/s jusqu'à la face 0,545, décalage à y 0,498 à face constante, puis montée en haut ; après le lâcher, la
+  tête seule remonte tout droit ». Ce que la 45 septies faisait pour 10a et 10b, avec en plus : la montée jusqu'à
+  0,545 est à 10 mm/s (`descente_decalee → vitesse_m_s`) ; une **pose refaite** après une alarme ou une coupure,
+  couvercle C encore tenu dans le chemin décalé, commence par ce chemin à l'envers (avant, elle montait droit) ;
+  la **remontée lente après un choc** ne dépasse pas la face 0,545 tant que l'outil n'est pas revenu à y 0,498
+  (`Prehension.remontee_droite_max_z`, donné par la pose et remis à rien au lâcher).
+- **Réponse de la Maquette (07/11/2026 15:36, `griffe/logiciel/griffe-entrainee-entonnoir-maquette.md`)** :
+  1. L'écart du dépôt est juste : griffe = pont − 0,187, préhension = pont + 0,129 (préhension = griffe + 0,316) ;
+     rien à changer dans le code ; la table « y minimum du mât » est en x du mât de la griffe. La fiche
+     `tete-basse-versement-bocaux.md` de la Préhension mélange 0,175 et 0,129 : à corriger par la Préhension.
+  2. Pose de l'entonnoir, griffe traînée en butée haute (axes 1,265) : `bocal_0_0` et `bocal_0_1` CONTACT avec la
+     plaque du chariot de l'agitateur, `bocal_1_0` 4 mm de l'écrou M6 du porte-bocal : ces 3 restent posés à la
+     main. `bocal_2_0` : « libre, plus de 1 cm ».
+- **Choix de Claude pour `bocal_2_0` (tâche 45 octies)** : la Maquette a placé le mât de la griffe à x bocal −
+  0,316 (0,8915) ; or la ventouse tient l'**oreille** de l'entonnoir à x bocal + 0,140 (figé), donc le mât de la
+  griffe est à x bocal + 0,140 − 0,316 = **1,0315** pour `bocal_2_0`, 14 cm plus loin. La mesure n'est pas à la
+  bonne place : **pas d'exception pour l'instant**, `bocal_2_0` reste posé à la main (question à la Maquette, PR
+  de la 45 octies). Le moyen est prêt : `griffe → y_min_mat → exceptions_butee_haute` (vide), une zone du mât par
+  bocal, figée d'après la mesure, qui doit couvrir la pose finale et le chemin d'approche ; elle ne vaut qu'en
+  butée haute, godet fermé, bras le long du pont. Le démarrage refuse une exception dont la zone ne contient pas le
+  vrai mât pour ce bocal (`Machine.mat_griffe_entonnoir`), ou qui contient celui d'un autre bocal.
+- **Réponses à la PR n° 101** (tâche 45 octies, 07/11/2026, niveau 1, tranché par Claude) :
+  1. `bocal_2_0` : la mesure de la Maquette mettait le mât de la griffe à x bocal − 0,316 (tête de préhension au-dessus
+     du bocal), alors que la tête est à x bocal + 0,140 pour tenir l'oreille de l'entonnoir : le vrai mât est à
+     (1,0315 ; 0,2506). Remesure demandée à la Maquette (en butée haute, avec le chemin d'approche, rectangle
+     « libre ») ; d'ici là, `exceptions_butee_haute` reste vide et Karulium pose l'entonnoir à la main.
+  2. Verrou de la zone du spray aussi pendant la dose (bras sorti et immobile) : oui (c'est déjà le cas : le verrou
+     tient tant que le bras n'est pas vu rangé et arrêté).
+  3. Coupure avec le couvercle C tenu sous la face 0,545 : question posée au fil Préhension (la ventouse garde-t-elle
+     le couvercle sans courant ?). D'ici sa réponse, ligne de la check-list de reprise : enlever le couvercle à la main
+     avant le Go s'il est encore tenu.

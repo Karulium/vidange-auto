@@ -127,6 +127,24 @@ la Maquette ne l'a pas balayée). Le Pi le vérifie avant « sortir » **et** av
 4. Si l'attente dure plus que `durees → spray_bras_max` (10 s) : alarme, normal ; acquitter, Go quand la zone
    est libre.
 
+## Étape 11 : le verrou de la zone pendant que le bras bouge (tâche 45 octies)
+
+**Testé sur le vrai matériel : non.** Tant que la carte ne voit pas le bras **rangé et arrêté** (il sort, il est
+sorti pour la dose, il rentre), aucun pas de la griffe ou de la préhension n'entre dans la zone (x 0,66 à 0,95,
+y −0,03 à 0,24, sous z 0,85) : ni la tête, ni ce qu'elle tient, ni l'outil traîné par le pont. Le pas **attend**
+(rien ne bouge, journal : « … attend : … entrerait dans la zone du bras du spray pendant que le bras bouge »),
+puis part tout seul quand le bras est vu rangé. Au-delà de `spray → bras → zone → attente_max_s` (120 s,
+EXEMPLE) : alarme. Et un pas déjà parti vers la zone empêche le bras de bouger, comme si l'outil y était.
+
+1. Vitesses de la griffe et de la préhension divisées par 4, Karulium à l'arrêt d'urgence, seau vide A au poste.
+2. Page web, pilotage manuel : bras du spray sorti (`vidange-spray sortir 64.3 --etabli`). Demander à la griffe
+   (en butée haute, au-dessus de la zone, mât vers x 0,80, y 0,10) de descendre à `z 0,95` : elle **ne doit pas
+   bouger**, le journal dit qu'elle attend. Ranger le bras (`vidange-spray ranger`) : la griffe descend toute
+   seule dès que la carte voit le bras rangé.
+3. Même chose avec la tête de préhension qui tient un seau vide pendu, poussée de y 0,45 vers y 0,30.
+4. Sans bras sorti : les mêmes mouvements partent tout de suite.
+5. Dire à Claude si 120 s est trop long ou trop court (une sortie, une dose et un rangement, avec de la marge).
+
 ## À la fin
 
 - Écrire dans la PR (ou dire à Claude) : les valeurs recopiées, les temps mesurés, le débit, tout ce qui a
