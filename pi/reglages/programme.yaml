@@ -49,8 +49,13 @@ fiabilite:
   # Reprise avec un objet encore tenu à la ventouse (tâche 45 nonies, seuil : machine.yaml →
   # prehension → vide → tenu_au_demarrage_kpa) : le capteur de vide est relu tous les (s) jusqu'à
   # ce que l'objet soit enlevé à la main ; ensuite, plus jamais pendant cette marche.
+  # Avant cette lecture, les vannes de la ventouse (« aspirer », « souffler ») sont FERMÉES
+  # (tâche 45 decies, seule commande du démarrage) : attente au plus attente_vannes_s que la
+  # carte de la préhension se connecte, puis sa réponse à chaque ordre. EXEMPLE (à régler à
+  # l'essai : pi/systeme/essai-fiabilite.md, § 4 ter).
   objet_tenu:
     periode_s: 1
+    attente_vannes_s: 5
 
 # API du Pi et page web locale (téléphone, PC), protégées par la clé « cle_api » du fichier de secrets.
 # Sans clé, l'API ne démarre pas (la machine, elle, tourne quand même).

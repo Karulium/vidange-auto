@@ -1889,3 +1889,67 @@ vrai matériel : non.
      reste permis ; rien n'est changé pour `bocal_2_1` d'ici sa réponse (l'étape 9 de l'essai mesure ce jeu).
   5. Après l'enlèvement de l'objet à la main, le geste repris part en alarme ou refait sa prise : suffisant pour
      l'instant.
+
+## Vannes de la ventouse fermées au démarrage, carte de la griffe en butée haute à 1,29 (tâche 45 decies, 07/11/2026)
+
+Code : `pi/vidange/fiabilite/objet_tenu.py` (`VannesAuDemarrage`), `pi/vidange/demarrage.py`, `pi/vidange/reglages.py`
+(vérification des exceptions) ; réglages `machine.yaml` (`griffe → y_min_mat → exceptions_butee_haute`, commentaires
+du bas du godet), `programme.yaml` (`fiabilite → objet_tenu → attente_vannes_s`) ; essais : `essai-fiabilite.md`
+(§ 4 ter), `essai-versement-bocal.md` (étape 10). Testé sur le vrai matériel : non.
+
+- **Réponse du fil Préhension (07/11/2026), vannes au démarrage** : après un plantage du Pi, « aspirer » peut rester
+  ouverte (rien de matériel ne la coupe ; pas dangereux : le venturi souffle, l'objet reste tenu). Au démarrage,
+  fermer **les deux** vannes (« aspirer » et « souffler ») est sans risque (le clapet garde le vide), puis lire le
+  vide (tâche 45 nonies). **Jamais ouvrir « souffler »** au démarrage. C'est une **exception écrite** à la règle
+  « rien n'est commandé au démarrage » : seulement ces deux fermetures. Le chien de garde dans la carte des
+  électrovannes (fermer « aspirer » seule si le Pi ne parle plus depuis ≈ 2 s) est un confort.
+- **Choix de Claude (vannes)** :
+  - Les vannes sont des sorties de la carte FluidNC de la préhension (`fluidnc.yaml → cartes → … → sorties`) : le Pi
+    envoie « M65 » (sortie coupée) pour chaque vanne de la ventouse qui y est déclarée, une fois, liaisons lancées,
+    **avant** la lecture du vide et avant le chef (donc avant tout Go et tout mouvement). Jamais « M64 ».
+  - Le dépôt n'a qu'une vanne, `vanne_vide` (« aspirer » ; réponse à la PR n° 88 : pas de `ev_souffler`, « souffler »
+    = vanne fermée). Le code ferme aussi `vanne_souffler` **le jour où elle sera câblée** (même nom dans
+    `docs/entrees-sorties.yaml` et `fluidnc.yaml`) : question à Karulium (PR de la 45 decies).
+  - Attente au plus `fiabilite → objet_tenu → attente_vannes_s` (5 s, EXEMPLE) que la carte se connecte, puis sa
+    réponse à chaque ordre. Carte absente, muette, en alarme (FluidNC refuse « M65 » ; le Pi ne la débloque pas),
+    ou ligne en EXEMPLE sur la vraie machine : rien n'attend plus, la check-list dit « vannes de la ventouse » en
+    **attention** (la vanne est refermée au premier départ de la tête de préhension, avec le lot, comme avant).
+    Pas de refus du Go : le Go n'ouvre rien tout seul.
+  - Les électroaimants des capsules ne sont **pas** touchés (seulement les deux fermetures de vannes).
+  - Chien de garde de la carte des électrovannes : son programme n'est pas dans le dépôt (les vannes sont sur la
+    carte FluidNC de la préhension, réglages seulement) : rien préparé, noté dans « ce qui reste » de la PR.
+- **Réponse de la Maquette (07/11/2026 17 h, carte refaite à axes 1,29, v45.121,
+  `griffe/logiciel/griffe-entrainee-entonnoir-maquette.md` et `carte-griffe-butee-haute-bocaux.txt`)** : la butée
+  haute juste est **axes 1,29** (bas du godet fermé ≈ 1,087), la valeur du dépôt ; la carte à 1,265 utilisée par la
+  45 nonies est périmée. Mât de la griffe = x bocal − 0,176, même y, godet fermé, tête à 0°, mode bocaux, union de
+  toutes les poses du cycle. De x 0,78 à 1,30 et y 0,04 à 0,40, **un seul rectangle interdit : x ≤ 1,07 et
+  y ≤ 0,11** (chariot de l'agitateur) ; partout ailleurs, le mât est libre à plus de 1 cm (caméra du dosage
+  comprise). `bocal_0_0` (1,0315 ; 0,06) contact : posé à la main ; `bocal_0_1` (1,1415 ; 0,06), `bocal_1_0`
+  (1,0865 ; 0,1553), `bocal_2_0` (1,0315 ; 0,2506) et `bocal_2_1` (1,1415 ; 0,2506) libres.
+- **Réponse du fil Portique (07/11/2026, `portique/logiciel/bras-traine.md`, corrigé)** : bas du godet en butée haute
+  ≈ **1,087**. Vérifié : c'est le bas du godet **fermé** (0,203 sous les axes à 1,29) ; le dépôt compte 0,213 partout
+  (le plus bas, à 20°), soit **1,077**, 1 cm plus bas par prudence. Rien à changer (commentaires de `machine.yaml`
+  mis à jour). Les « 1,265 / 1,065 » des 45 nonies venaient d'avant le raccourcissement du mât (23/10).
+- **Choix de Claude (carte à 1,29)** :
+  - Le rectangle interdit est compté jusqu'à **x 1,08** (la carte y met « n », moins de 1 cm) : x ≤ 1,08 et
+    y ≤ 0,11. Libres de la mesure : au-dessus, x 0,78-1,30 et y 0,12-0,40 ; à droite, x 1,09-1,30 et y 0,04-0,40.
+  - On garde le moyen des tâches 45 octies et 45 nonies (une zone par bocal, figée, où la table « butée haute » ne
+    compte pas) plutôt que d'ouvrir toute la carte : la table v45.111 vaut aussi hors du mode bocaux, et la mesure
+    est celle du mode bocaux. Trois zones, une par rangée, du mât du bocal jusqu'à x 1,30 :
+    `bocal_0_1` x 1,09-1,30, y 0,04-0,11 ; `bocal_1_0` x 1,08-1,30, y 0,12-0,20 ; `bocal_2_0` x 1,02-1,30,
+    y 0,21-0,29. Aucune ne touche le rectangle interdit. `bocal_2_1` n'en a pas besoin (la table le permet).
+  - Le chemin est **gardé**, le même pour toutes (`entree_x` 1,22, où la table permet tout y) : la table seule
+    refuse encore une partie de la carte libre, et un trajet tout droit d'ailleurs vers `bocal_0_1` passerait au-
+    dessus du chariot de l'agitateur (x ≤ 1,08, y ≤ 0,11). Il ne passe plus près de la caméra du dosage.
+  - Démarrage, en plus : chaque zone doit être tout entière dans un rectangle libre de la mesure, et toutes les
+    zones ont le même `entree_x` (sinon le trajet d'une zone à l'autre irait en diagonale).
+  - `vidange-entonnoir versement` : 1 bocal posé à la main (`bocal_0_0`), 3 posés par la machine grâce au chemin
+    (`bocal_0_1`, `bocal_1_0`, `bocal_2_0`) ; `bocal_2_1` par la table. Question 4 de la PR n° 102 (`bocal_2_1`
+    dans le carré « contact » de la carte à 1,265) : réglée, il est libre à 1,29.
+- **Réponses à la PR n° 103** (tâche 45 decies, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Deuxième vanne « souffler » : question posée au fil Préhension ; si elle existe, elle est câblée sous le nom
+     `vanne_souffler` et fermée au démarrage sans changer le code.
+  2. Chien de garde de 2 s : pas pour l'instant (confort, le Pi ferme la vanne à chaque démarrage) ; à revoir si les
+     vannes passent sur une carte à programme.
+  3. Attente de 5 s de la carte au démarrage (`fiabilite → objet_tenu → attente_vannes_s`, EXEMPLE) : gardée, mesurée
+     à l'essai (§ 4 ter).

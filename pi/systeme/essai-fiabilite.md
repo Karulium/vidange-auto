@@ -84,6 +84,39 @@ tomber. Ce test ne protège que la machine et le seau : **la sécurité des pers
 - [ ] Débrancher le capteur de vide, redémarrer : pas d'attente, mais la check-list dit « capteur de vide
       illisible … » en « attention », avec « vérifier la tête de préhension et le seau ».
 
+## 4 ter. Vannes de la ventouse fermées au démarrage (tâche 45 decies)
+
+**Testé sur le vrai matériel : non.** Les tests automatiques n'utilisent qu'une fausse carte FluidNC. Il faut la
+carte de la préhension branchée, sa vanne `vanne_vide` (« aspirer ») câblée sans `exemple` dans
+`docs/entrees-sorties.yaml` et dans `pi/reglages/fluidnc.yaml`, et l'air comprimé. Fil Préhension (07/11) :
+après un plantage du Pi, « aspirer » peut rester ouverte (rien de matériel ne la coupe ; pas dangereux : le
+venturi souffle). Au démarrage, le Pi **ferme** « aspirer » (et « souffler » le jour où elle sera câblée),
+**puis** lit le vide. C'est la seule commande du démarrage : il n'ouvre jamais rien et ne bouge rien. Ce test ne
+protège que la machine : **la sécurité des personnes reste câblée**.
+
+- [ ] Programme arrêté (`sudo systemctl stop vidange`), moteurs hors tension, rien contre la ventouse. Ouvrir
+      la vanne « aspirer » à la main depuis la console de la carte de la préhension (`M64 P<numéro de
+      vanne_vide dans fluidnc.yaml>`) : le venturi souffle (on l'entend). Laisser la carte sous tension et
+      sans la débrancher : c'est l'état d'après un plantage du Pi.
+- [ ] `sudo systemctl start vidange`. Dans les 5 s (`fiabilite → objet_tenu → attente_vannes_s`), le venturi
+      **s'arrête de souffler**. Le journal dit « Démarrage : vannes de la ventouse fermées (vanne_vide) ;
+      rien d'autre n'est commandé ». La check-list (page web) a un point **ok** « vannes de la ventouse :
+      fermées au démarrage ».
+- [ ] **Rien n'a bougé, rien n'a soufflé** pour lâcher (aucune prise d'origine, aucun mouvement) ; le
+      retour en lieu sûr attend le Go comme d'habitude.
+- [ ] Recommencer avec un **seau vide tenu à la main** contre la ventouse pendant que « aspirer » est
+      ouverte, puis lâcher le seau (il reste tenu), puis `sudo systemctl start vidange` : la vanne se
+      ferme, le seau **reste tenu** (le clapet garde le vide), puis le § 4 bis se déroule (« objet encore
+      tenu », pas de Go). Enlever le seau à la main.
+- [ ] Carte de la préhension débranchée (câble USB), redémarrer : pas d'attente longue, la check-list dit
+      « vannes de la ventouse » en **attention** (« vanne_vide pas fermée(s) : … »), avec « ne jamais ouvrir
+      « souffler » pour lâcher un objet à la reprise : l'enlever à la main ».
+- [ ] Mesurer le temps entre le lancement et la fermeture (journal). S'il faut plus de 5 s à la carte pour se
+      connecter, le dire à Claude (réglage `attente_vannes_s`).
+- [ ] Dire à Claude si la carte de la préhension redémarre quand le Pi ouvre son port USB (ses sorties se
+      coupent alors toutes seules) et si elle démarre en alarme (FluidNC refuse alors « M65 » : la
+      check-list le dit en attention).
+
 ## 5. Santé du Pi
 
 - [ ] Comparer avec le Pi lui-même : `vcgencmd measure_temp` (température) et `vcgencmd get_throttled`

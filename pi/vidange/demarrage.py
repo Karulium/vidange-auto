@@ -83,6 +83,7 @@ from vidange.fiabilite import (
     Onduleur,
     Sante,
     Sondes,
+    VannesAuDemarrage,
     module_lieu_sur,
 )
 from vidange.fiabilite.checklist import (
@@ -772,14 +773,25 @@ def principal(
     # Les angles gardés (rotations de la griffe et de la tête) : un seul fichier, un seul gardien.
     angles = AnglesGardes(dossier_donnees / NOM_ANGLES)
     vraie_machine = raccords.fabrique is None
-    # Reprise après une coupure (tâche 45 nonies) : AVANT tout mouvement, la ventouse tient-elle
-    # encore quelque chose ? Tant que oui, aucun Go (rien n'est commandé : jamais de « souffler »).
+    presence = presence_fluidnc(reglages.fluidnc, raccords.ports)
+    # Reprise après une coupure (tâches 45 nonies et 45 decies) : AVANT tout mouvement, les
+    # vannes de la ventouse sont FERMÉES (seule commande permise au démarrage ; jamais ouvrir
+    # « souffler »), puis le vide est lu : la ventouse tient-elle encore quelque chose ? Tant que
+    # oui, aucun Go. La fermeture et la lecture se font une fois les liaisons lancées (plus bas).
     objet_tenu = preparer_objet_tenu(
         reglages, materiel if erreur_materiel is None else None, entrees_sorties, vraie_machine
     )
+    vannes: VannesAuDemarrage | None = None
     if objet_tenu is not None:
-        objet_tenu.regarder()
         chef.empecher_go(objet_tenu.refus_go)
+        vannes = VannesAuDemarrage(
+            reglages.fluidnc,
+            liaisons,
+            entrees_sorties,
+            presence,
+            vraie_machine,
+            fiabilite.objet_tenu.attente_vannes_s,
+        )
     # Les cartes du chariot et de la tête (tâche 45 ter) : construites si elles sont là (présence
     # regardée maintenant, une fois), sinon chaque poste qui en a besoin dit pourquoi.
     cartes = construire_cartes(
@@ -789,7 +801,7 @@ def principal(
         pesees,
         poste,
         vraie_machine,
-        presence_fluidnc(reglages.fluidnc, raccords.ports),
+        presence,
         mode=lambda: mode.actuel,
         donnees=dossier_donnees,
         garde=angles,
@@ -940,6 +952,11 @@ def principal(
     try:
         for liaison in liaisons.values():
             liaison.demarrer()
+        if vannes is not None and objet_tenu is not None:
+            # Les deux fermetures (tâche 45 decies), PUIS la lecture du vide (tâche 45 nonies) :
+            # avant le chef, donc avant tout Go et tout mouvement.
+            vannes.fermer()
+            objet_tenu.regarder()
         compte_tours = None
         if materiel is not None and SIGNAL_COMPTE_TOURS in entrees_sorties.signaux:
             # Une erreur de lecture est vue par le portique : il demande alors une confirmation.
@@ -987,6 +1004,7 @@ def principal(
             {
                 "réglages": lambda: constats_reglages(reglages, entrees_sorties),
                 "objet tenu": lambda: constats_objet_tenu(objet_tenu),
+                "vannes de la ventouse": lambda: [] if vannes is None else vannes.constats(),
                 "entrées/sorties": lambda: constats_materiel(
                     materiel if erreur_materiel is None else None,
                     erreur_materiel,

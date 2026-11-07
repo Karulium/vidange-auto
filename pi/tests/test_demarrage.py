@@ -221,6 +221,33 @@ def test_l_api_demarre_avec_la_cle_et_s_arrete_avec_le_programme(
     assert "API arrêtée" in journal
 
 
+def test_au_demarrage_seules_les_vannes_de_la_ventouse_sont_fermees(
+    reglages, entrees_sorties, tmp_path
+):
+    # Tâche 45 decies : le Pi a planté vanne « aspirer » ouverte ; au démarrage, il la ferme
+    # (seule commande permise), puis lit le vide. Rien n'est ouvert, rien ne bouge.
+    raccords, messages, _ = raccords_faux(entrees_sorties)
+    prehension = raccords.ports["prehension"].__self__
+    vanne = charger_reglages(reglages).fluidnc.cartes["prehension"].sorties["vanne_vide"]
+    prehension.sorties[vanne] = True
+    arguments = [*options(reglages, tmp_path), "--entrees-sorties", str(entrees_sorties)]
+    arret = threading.Event()
+    fil = threading.Thread(target=lambda: principal(arguments, arret, raccords))
+    fil.start()
+    try:
+        attendre(lambda: "READY=1" in messages)
+        assert prehension.sorties[vanne] is False
+        assert f"M65 P{vanne}" in prehension.lignes_recues
+        commandes = [ligne for ligne in prehension.lignes_recues if not ligne.startswith("?")]
+        assert not [ligne for ligne in commandes if ligne.startswith(("M64", "M62", "$J", "$H"))]
+        assert prehension.prises_origine == []
+    finally:
+        arret.set()
+        fil.join(10)
+    journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
+    assert "vannes de la ventouse fermées (vanne_vide)" in journal
+
+
 def test_sans_cle_la_machine_demarre_sans_api(reglages, tmp_path):
     arret = threading.Event()
     arret.set()

@@ -286,7 +286,8 @@ class ExceptionButeeHaute(Modele):
     x = `entree_x` (en x seulement dans la zone, en y seulement à x = `entree_x`), dans un des
     rectangles `libres` de la mesure. Vérifiée au démarrage : le mât de la griffe pour cette
     pose est dans la zone ; la zone ne permet le mât d'aucun autre bocal que la table refuse ;
-    l'entrée est dans la zone et la ligne x = `entree_x` dans un rectangle libre."""
+    la zone est dans un rectangle libre (tâche 45 decies) ; l'entrée est dans la zone et la
+    ligne x = `entree_x` dans un rectangle libre."""
 
     bocal: Nom
     x: Intervalle
@@ -4151,12 +4152,22 @@ class Machine(Modele):
                         f"({mx:g} ; {my:g}) : une exception ne vaut que pour un bocal"
                     )
             erreurs += self._verifier_chemin_exception(nom, exception)
+        entrees = sorted({exception.entree_x for exception in exceptions})
+        if len(entrees) > 1:
+            # D'une zone à l'autre, le trajet va de l'entrée de l'une à celle de l'autre : avec
+            # deux entree_x différents, il irait en diagonale (tâche 45 decies).
+            erreurs.append(
+                "griffe → y_min_mat → exceptions_butee_haute : un seul entree_x pour toutes les "
+                f"zones (vu : {', '.join(f'{x:g}' for x in entrees)}), sinon le trajet d'une zone "
+                "à l'autre irait en diagonale"
+            )
         return erreurs
 
     @staticmethod
     def _verifier_chemin_exception(nom: str, exception: ExceptionButeeHaute) -> list[str]:
-        """L'entrée de la zone (x = entree_x) est dans la zone, et la ligne x = entree_x, sur
-        toute la hauteur de la zone, dans un rectangle libre de la mesure."""
+        """La zone est tout entière dans un rectangle libre de la mesure (tâche 45 decies : on y
+        va tout droit), l'entrée de la zone (x = entree_x) est dans la zone, et la ligne
+        x = entree_x, sur toute la hauteur de la zone, dans un rectangle libre de la mesure."""
         erreurs = []
         (x0, x1), (y0, y1) = exception.x, exception.y
         for numero, libre in enumerate(exception.libres, start=1):
@@ -4165,6 +4176,17 @@ class Machine(Modele):
                 erreurs.append(f"{nom} → libres n° {numero} : x et y du plus petit au plus grand")
         if erreurs:
             return erreurs
+        if not any(
+            libre.x[0] - 1e-9 <= x0
+            and x1 <= libre.x[1] + 1e-9
+            and libre.y[0] - 1e-9 <= y0
+            and y1 <= libre.y[1] + 1e-9
+            for libre in exception.libres
+        ):
+            erreurs.append(
+                f"{nom} : la zone (x {x0:g}-{x1:g}, y {y0:g}-{y1:g}) n'est dans aucun rectangle "
+                "libre de la mesure : la table n'y compte pas, il faut qu'elle soit libre"
+            )
         entree = exception.entree_x
         if not x0 - 1e-9 <= entree <= x1 + 1e-9:
             erreurs.append(
@@ -5542,10 +5564,14 @@ class ReglagesBilan(Modele):
 
 
 class ReglagesObjetTenu(Modele):
-    """Reprise après une coupure avec un objet tenu à la ventouse (tâche 45 nonies)."""
+    """Reprise après une coupure avec un objet tenu à la ventouse (tâches 45 nonies et 45
+    decies)."""
 
     # Tant qu'un objet est encore tenu au démarrage, le capteur de vide est relu tous les (s).
     periode_s: float = Field(gt=0, le=10)
+    # Fermeture des vannes de la ventouse au démarrage : attente au plus (s) que la carte se
+    # connecte, puis sa réponse à chaque ordre (le démarrage attend d'autant, au pire).
+    attente_vannes_s: float = Field(gt=0, le=30)
 
 
 class ReglagesFiabilite(Modele):

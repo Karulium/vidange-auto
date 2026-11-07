@@ -374,11 +374,12 @@ class ReglesGriffe:
         self, x0: float, y0: float, x1: float, y1: float
     ) -> list[tuple[float, float]]:
         """Les points de passage du mât (sans l'arrivée) d'un trajet du pont qui entre dans la
-        zone d'une exception de la table en butée haute, ou qui en sort (tâche 45 nonies, chemin
-        de la Maquette pour bocal_0_1) : en x seulement dans la zone jusqu'à `entree_x`, puis en
+        zone d'une exception de la table en butée haute, ou qui en sort (tâches 45 nonies et 45
+        decies, chemin de la Maquette) : en x seulement dans la zone jusqu'à `entree_x`, puis en
         y seulement à x = `entree_x` (rectangle libre de la mesure), puis vers l'arrivée. Vide :
         ni le départ ni l'arrivée n'ont besoin d'une exception (ou les deux de la même : le
-        trajet reste dans la zone, un rectangle)."""
+        trajet reste dans la zone, un rectangle libre). Deux zones avec le même `entree_x` : on
+        passe de l'une à l'autre en y seulement, à x = `entree_x`."""
         tables = self.griffe.y_min_mat
         depart, arrivee = tables.exception_requise(x0, y0), tables.exception_requise(x1, y1)
         if depart is arrivee:

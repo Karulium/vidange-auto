@@ -408,7 +408,9 @@ griffe:
   decalage_mat_x: -0.187
   # Bas du godet sous les axes (STEP de la tête, PR n° 23) : 0,203 fermé, 0,211 à 10°, 0,213 à
   # 20° (le plus bas), 0,204 grand ouvert. On prend 0,213 partout, par prudence : en butée haute
-  # (axes à 1,29), le bas est compté à 1,077. Le bas de la tête est pris égal au bas du godet.
+  # (axes à 1,29), le bas est compté à 1,077, 1 cm sous le bas du godet FERMÉ, 1,087 (Maquette et
+  # Portique, bras-traine.md corrigé le 07/11 : même chiffre, rien à changer). Le bas de la tête
+  # est pris égal au bas du godet.
   bas_godet_sous_axes: 0.213
   # Encombrement de la tête vu de dessus, autour du mât (fiche, PR n° 23). Bras le long du pont :
   # 0,111 de chaque côté du mât le long du bras godet fermé, 0,165 dès qu'il est ouvert ; rayon
@@ -456,8 +458,8 @@ griffe:
   godet_ouvert_sans_y_min: [1.10, 2.70]
   # Trajet fût ↔ poste de remplissage, jamais en diagonale (fiche) : d'abord en x, mât à
   # y ≥ 0,36, puis en y seulement une fois le mât à x ≥ 0,86 ; retour dans l'ordre inverse.
-  # Hauteur des trajets : butée haute des axes (bas du godet à 1,077, au-dessus de l'ouverture
-  # du fût à 1,07).
+  # Hauteur des trajets : butée haute des axes (bas du godet fermé à 1,087, compté à 1,077, au-
+  # dessus de l'ouverture du fût à 1,07).
   trajet:
     z: 1.29
     mat_y_min: 0.36
@@ -486,33 +488,50 @@ griffe:
       # (Maquette v45.120, 07/11 : sinon elle interdit à tort la colonne de bocaux x 1,2075).
       - {x: [1.15, 1.204], y_min: [0.30, 0.30, 0.30]}
       - {x: [1.20, 1.22], y_min: [0.0, 0.015, 0.055]}
-    # Exceptions à la table « butée haute » (tâches 45 octies et 45 nonies) : zones du mât (godet
-    # fermé, bras le long du pont) mesurées par la Maquette pour la pose de l'entonnoir sur UN
-    # bocal, griffe traînée. La table n'y compte pas. Un trajet du pont qui y entre ou en sort
-    # passe par x = entree_x : en x seulement dans la zone, en y seulement à x = entree_x (dans un
-    # rectangle « libres » de la mesure). Vérifié au démarrage : le mât pour ce bocal est dans la
-    # zone (x bocal + 0,140 − 0,316), aucun autre bocal que la table refuse, entree_x dans la zone
-    # et la ligne x = entree_x dans un rectangle libre.
-    # Remesure de la Maquette du 07/11 (v45.121, griffe/logiciel/griffe-entrainee-entonnoir-
-    # maquette.md, carte au cm carte-griffe-butee-haute-bocaux.txt) : bocal_0_1 (mât 1,1415 ; 0,06)
-    # LIBRE par le chemin : arriver par R1 ou R2, descendre en y dans R2 (x ≥ 1,22) jusqu'à
-    # y ≤ 0,10, puis en −x dans R3. bocal_0_0 (contact), bocal_1_0 (moins de 1 cm) et bocal_2_0
-    # (contact, couvercle de la caméra du dosage) : pose à la main. Chiffres de la mesure, figés.
+    # Exceptions à la table « butée haute » (tâches 45 octies, 45 nonies et 45 decies) : zones du
+    # mât (godet fermé, bras le long du pont) mesurées par la Maquette pour la pose de l'entonnoir
+    # sur UN bocal, griffe traînée. La table n'y compte pas. Un trajet du pont qui y entre ou en
+    # sort passe par x = entree_x : en x seulement dans la zone, en y seulement à x = entree_x
+    # (dans un rectangle « libres » de la mesure). Vérifié au démarrage : le mât pour ce bocal est
+    # dans la zone (x bocal + 0,140 − 0,316), aucun autre bocal que la table refuse, la zone dans
+    # un rectangle libre, entree_x dans la zone et la ligne x = entree_x dans un rectangle libre.
+    # Carte refaite par la Maquette à la VRAIE butée haute, axes 1,29 (07/11 17 h, v45.121, mode
+    # bocaux, union de toutes les poses du cycle ; griffe/logiciel/griffe-entrainee-entonnoir-
+    # maquette.md et carte-griffe-butee-haute-bocaux.txt ; celle à 1,265 est périmée) : de x 0,78
+    # à 1,30 et y 0,04 à 0,40, un seul rectangle interdit, x ≤ 1,07 et y ≤ 0,11 (chariot de
+    # l'agitateur ; « moins de 1 cm » jusqu'à x 1,08 : compté interdit). Partout ailleurs, le mât
+    # est libre à plus de 1 cm (caméra du dosage comprise). bocal_0_0 (mât 1,0315 ; 0,06 :
+    # contact) reste posé à la main ; bocal_2_1 est déjà permis par la table. Une zone par
+    # rangée, du mât du bocal jusqu'à x 1,30, et le même chemin pour toutes, par x 1,22 (la table
+    # y permet tout y) : on ne touche jamais au rectangle interdit. Chiffres de la mesure, figés.
     exceptions_butee_haute:
       - bocal: bocal_0_1
-        # R3, le couloir du bas (x ≥ 1,10 et y ≤ 0,10).
-        x: [1.10, 1.30]
-        y: [0.04, 0.10]
-        # Bord de R2 (x ≥ 1,22) : on descend en y à ce x, jamais à travers la caméra du dosage
-        # (x 0,98-1,21, y 0,17-0,31).
+        # Rangée 0 (mât 1,1415 ; 0,06), à droite du rectangle interdit.
+        x: [1.09, 1.30]
+        y: [0.04, 0.11]
         entree_x: 1.22
-        # Rectangles libres de la mesure (plus de 1 cm), de x 0,79 à 1,30 et y 0,04 à 0,40.
         libres:
-          - {x: [0.79, 1.30], y: [0.32, 0.40]}   # R1
-          - {x: [1.22, 1.30], y: [0.04, 0.40]}   # R2
-          - {x: [1.10, 1.30], y: [0.04, 0.10]}   # R3
-          - {x: [0.79, 0.97], y: [0.22, 0.40]}   # R4
-        source: "Maquette v45.121, 07/11/2026"
+          - {x: [0.78, 1.30], y: [0.12, 0.40]}   # au-dessus du chariot de l'agitateur
+          - {x: [1.09, 1.30], y: [0.04, 0.40]}   # à droite du chariot de l'agitateur
+        source: "Maquette v45.121, axes 1,29, 07/11/2026"
+      - bocal: bocal_1_0
+        # Rangée 1 (mât 1,0865 ; 0,1553), au-dessus du rectangle interdit.
+        x: [1.08, 1.30]
+        y: [0.12, 0.20]
+        entree_x: 1.22
+        libres:
+          - {x: [0.78, 1.30], y: [0.12, 0.40]}
+          - {x: [1.09, 1.30], y: [0.04, 0.40]}
+        source: "Maquette v45.121, axes 1,29, 07/11/2026"
+      - bocal: bocal_2_0
+        # Rangée 2 (mât 1,0315 ; 0,2506).
+        x: [1.02, 1.30]
+        y: [0.21, 0.29]
+        entree_x: 1.22
+        libres:
+          - {x: [0.78, 1.30], y: [0.12, 0.40]}
+          - {x: [1.09, 1.30], y: [0.04, 0.40]}
+        source: "Maquette v45.121, axes 1,29, 07/11/2026"
   # Mât à x < 0,78 et axes de 1,11 à la butée haute : la tête passe dans l'ouverture du poste du
   # fût ; permis seulement le mât à au plus 0,16 / 0,135 / 0,105 de l'axe du fût (godet fermé / à
   # moitié ouvert / grand ouvert). Sous 1,11, ce sont les règles du fût.

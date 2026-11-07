@@ -29,7 +29,9 @@ machine, numéro de série introuvable, carte qui ne répond pas) n'arrête jama
 n'est pas construite, et les postes qui en ont besoin sont « pas lancés : raison » (check-list,
 écran, journal). La présence est regardée une fois, au démarrage : une carte branchée après
 demande de relancer le programme. Rien n'est commandé au démarrage (aucun ordre aux servos ni aux
-sorties) : les boucles en fond de ces pièces partent avec le lot (FondDuLot).
+sorties) : les boucles en fond de ces pièces partent avec le lot (FondDuLot). Seule exception
+écrite (tâche 45 decies) : la FERMETURE des vannes de la ventouse, faite par
+vidange.fiabilite.objet_tenu.VannesAuDemarrage avant la lecture du vide.
 
 Les lots (tâche 45 quater) : `remplissage`, `entonnoir` et `lavage_bocaux` assemblent les modules
 sur ces cartes, comme vidange.cycle.simulation le fait sur les pièces imaginaires (Remplissage,

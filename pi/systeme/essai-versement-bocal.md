@@ -178,6 +178,9 @@ le fût »). Si la tête ne peut pas tourner là où elle est, elle va d'abord a
 
 ## Étape 9 : l'entonnoir posé par la machine sur `bocal_0_1` (tâche 45 nonies)
 
+*Remplacée par l'étape 10 pour les chiffres (la carte à 1,265 de cette étape est périmée) ; à faire avec
+l'étape 10.*
+
 **Testé sur le vrai matériel : non.** La Maquette a remesuré le 07/11 (v45.121) : pour poser l'entonnoir sur
 `bocal_0_1`, la tête de préhension tient l'oreille à x bocal + 0,140, donc le mât de la griffe (même pont, en
 butée haute, godet fermé, tête à 0°) est à **(1,1415 ; 0,06)**, au-dessus du couloir du bas, libre à plus de
@@ -206,9 +209,41 @@ chemin de la griffe traînée »), à l'aller comme au retour, et la griffe sort
 6. Si une mesure de l'étape 2 dit autre chose que la Maquette, ne pas changer `machine.yaml` soi-même : les
    chiffres de `griffe → y_min_mat → exceptions_butee_haute` sont ceux de la mesure (figés).
 
+## Étape 10 : la carte de la griffe en butée haute refaite à 1,29 (tâche 45 decies)
+
+**Testé sur le vrai matériel : non.** La Maquette a refait la carte à la **vraie** butée haute, axes 1,29 (bas du
+godet fermé ≈ 1,087 ; le dépôt le compte à 1,077 par prudence). Mât de la griffe = x bocal − 0,176, même y,
+godet fermé, tête à 0°. De x 0,78 à 1,30 et y 0,04 à 0,40, **un seul rectangle interdit : x ≤ 1,07 et y ≤ 0,11**
+(au-dessus du chariot de l'agitateur ; le dépôt le compte jusqu'à x 1,08). Partout ailleurs : libre à plus de
+1 cm, caméra du dosage comprise. Seul `bocal_0_0` reste posé à la main ; `bocal_0_1`, `bocal_1_0`,
+`bocal_2_0` sont posés par la machine par le chemin (descendre en y à **x 1,22**, puis aller en −x à la
+rangée du bocal) ; `bocal_2_1` était déjà permis.
+
+1. `vidange-entonnoir versement` : « Bocaux où la Préhension ne peut pas poser l'entonnoir … : 1 »
+   (`bocal_0_0`), puis « Bocaux posés par la machine grâce au chemin d'une exception : 3 » (`bocal_0_1`,
+   `bocal_1_0`, `bocal_2_0`).
+2. Console d'abord, moteurs sous tension, vitesses divisées par 4, Karulium à l'arrêt d'urgence : griffe en
+   butée haute (axes 1,29), godet fermé, tête à 0°. Mesurer **au réglet** la hauteur du bas du godet : environ
+   1,087 (le dire si c'est plus bas que 1,077).
+3. Amener le pont pour que le mât de la griffe soit à x 1,22, y 0,35, puis en y seulement jusqu'à la rangée,
+   puis en x seulement jusqu'au mât du bocal, pour chacun : `bocal_2_0` (1,0315 ; 0,2506), `bocal_1_0`
+   (1,0865 ; 0,1553), `bocal_0_1` (1,1415 ; 0,06), `bocal_2_1` (1,1415 ; 0,2506). À chaque arrêt, mesurer le
+   jeu entre le bas de la griffe et : la plaque du chariot de l'agitateur (SK12, tige Ø 12), le porte-bocal,
+   le couvercle du boîtier de la caméra du dosage. Il doit rester **plus de 1 cm** partout. Si moins :
+   arrêter, noter l'endroit, le dire à Claude.
+4. Même essai en lot, dans cet ordre (Claude donne la commande qui force l'ordre) : entonnoir posé à la main
+   sur `bocal_2_1`, puis la machine le pose sur `bocal_2_0`, `bocal_1_0`, `bocal_0_1`, puis `bocal_0_2`, et
+   la griffe verse dans chacun. Regarder la griffe à chaque trajet : en x **ou** en y près de l'agitateur,
+   jamais en diagonale, jamais au-dessus du chariot de l'agitateur (x ≤ 1,08 avec y ≤ 0,11).
+5. Sur `bocal_0_0`, l'entonnoir se pose encore **à la main** : le Pi s'arrête en alarme « le mât de la
+   griffe, traîné par le pont, irait là » plutôt que d'y aller.
+6. Si une mesure dit autre chose que la Maquette, ne pas changer `machine.yaml` soi-même : les chiffres de
+   `griffe → y_min_mat → exceptions_butee_haute` sont ceux de la mesure (figés).
+
 ## Ce qu'il faut renvoyer à Claude
 
 Les valeurs de B (étape 1), les 3 charges de l'étape 2, la hauteur des dents et le jeu au boîtier (étape 3), ce
 qui reste dans le godet et ce qui a marché (étape 4), le nombre de prises dans la plage (étape 5), les jeux
 mesurés à l'étape 7 (mur, pièces du pont, support du servo, sous la tête de préhension), la vraie course du
-chariot Y vers le mur, les jeux mesurés à l'étape 9 (chemin de `bocal_0_1`), les vidéos.
+chariot Y vers le mur, les jeux mesurés à l'étape 9 (chemin de `bocal_0_1`), la hauteur du bas du godet et les jeux de l'étape 10,
+les vidéos.
