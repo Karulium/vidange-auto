@@ -807,6 +807,25 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      `griffe → y_min_mat → exceptions_butee_haute` (tâche 45 octies) avec ces rectangles et ce chemin ; bocal_0_0,
      bocal_1_0 et bocal_2_0 restent posés à la main (contact ou moins de 1 cm).
   Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
+- [ ] **45 decies. Vannes de la préhension fermées au démarrage, carte de la griffe en butée haute à 1,29** — Modèle :
+  Opus, effort moyen. Réponses des fils du 07/11/2026 (à recopier dans `docs/decisions.md`) :
+  1. **Vannes au démarrage** (fil Préhension) : après un plantage du Pi, « aspirer » peut rester ouverte (rien de
+     matériel ne la coupe ; pas dangereux : venturi qui souffle, objet tenu). Au démarrage, fermer **les deux** vannes
+     (« aspirer » et « souffler ») est sans risque (le clapet garde le vide), puis lire le vide (tâche 45 nonies).
+     **Jamais ouvrir « souffler »** au démarrage. C'est une exception écrite à la règle « rien n'est commandé au
+     démarrage » : seulement ces deux fermetures. Le chien de garde dans la carte des électrovannes (fermer
+     « aspirer » seule si le Pi ne parle plus depuis ≈ 2 s) est un confort : le préparer seulement si le programme de
+     cette carte est dans le dépôt, sinon le noter dans « ce qui reste ».
+  2. **Carte de la griffe en butée haute refaite à 1,29** (Maquette, `griffe/logiciel/griffe-entrainee-entonnoir-
+     maquette.md` et `griffe/logiciel/carte-griffe-butee-haute-bocaux.txt` dans `/mnt/project-files/`, lire ces seuls
+     fichiers ; la carte à 1,265 utilisée par la 45 nonies est périmée) : mât de la griffe = x bocal − 0,176 ; un seul
+     rectangle interdit, **x ≤ 1,07 avec y ≤ 0,11** (chariot de l'agitateur) ; partout ailleurs entre x 0,78-1,30 et
+     y 0,04-0,40, libre à plus de 1 cm (caméra du dosage comprise). `bocal_0_0` reste posé à la main ; `bocal_0_1`,
+     `bocal_1_0`, `bocal_2_0` et `bocal_2_1` sont posés par la machine. Refaire `exceptions_butee_haute` en
+     conséquence (le chemin spécial de `bocal_0_1` n'est plus utile s'il ne passe plus par le rectangle interdit).
+  3. Le Portique (`portique/logiciel/bras-traine.md`, corrigé) donne le bas du godet en butée haute vers 1,087 :
+     vérifier contre le chiffre du dépôt et corriger si besoin.
+  Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
 - [x] **23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi** — Modèle : Opus, effort
   moyen. Base : `pi/vidange/simulateur/solveur.py` (place prête), `simulateur/planning.py`, `chef/zones.py`,
   decisions « La fiabilité d'abord ». Bibliothèque : `ortools` (CP-SAT, gratuite, roues pour le Pi 5 en
