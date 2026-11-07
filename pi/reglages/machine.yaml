@@ -312,6 +312,8 @@ durees:
   mycelium_agitation_max: 300
   # Un geste de la préhension (prise, pose, vissage, porte-bocal) : au plus 5 min. EXEMPLE.
   prehension_geste_max: 300
+  # Entonnoir (tâche 43) : un versement de la griffe dans un bocal, au plus 10 min. EXEMPLE.
+  entonnoir_versement_max: 600
   # Lavage : un geste de la tête (laver un seau ≈ 60 à 70 s, fiche) ; remplir ou vider le fût de
   # lavage (le remplissage a son propre temps maximal, lavage → eau). EXEMPLES.
   lavage_geste_max: 300
@@ -902,6 +904,12 @@ prehension:
     # Seau retourné (bord en bas), tenu pour le lavage : la ventouse est sur son fond, il pend
     # sous la face. Son rayon et sa hauteur viennent de la table des formats.
     seau_retourne: {rayon_m: 0.1335, dessus_m: 0, dessous_m: 0.25, poids_n: 5, tolerance_n: 2}
+    # Entonnoir à bocaux (tâche 43), tenu par son oreille (ventouse, aimants éteints) : l'oreille
+    # est à la face, le cône pend dessous (oreille_z − pointe_z de la partie « entonnoir »).
+    # Rayon 0,09 : celui que le Stockage emploie pour son axe (x ≥ 1,205 près du boîtier de la
+    # caméra du bocal). Poids : 0,9 kg au plus (cahier CDC-ENT-250), à peser sur la pièce reçue ;
+    # il n'est pas contrôlé, seulement pesé pour la détection de choc. EXEMPLES.
+    entonnoir: {rayon_m: 0.09, dessus_m: 0, dessous_m: 0.159, poids_n: 8.8, tolerance_n: 4}
   # Vissage d'une capsule Twist-Off (fiche) : appui 80 N, accepté 60 à 100 N, au-delà de 150 N
   # arrêt et alerte (le pilote limite Z à 250 N). Angle, course et descente : EXEMPLES.
   vissage:
@@ -1941,6 +1949,52 @@ fermeture:
     seau_b: {hf_m: 0.251}
     seau_c: {hf_m: 0.214}
     seau_d: {hf_m: 0.194}
+
+# Entonnoir à bocaux (tâche 43 ; fiche entonnoir-pour-logiciel.md du 06/11/2026, v3 du 28/10 :
+# entonnoir inox Ø 250 du commerce, douille coupée à Ø 70, oreille 316L 3 mm de 80 × 80 soudée à
+# plat). Aucun capteur, aucun moteur : la Préhension le prend par l'oreille (ventouse, électro-
+# aimants éteints), la caméra du plafond le situe, la griffe le remplit. Pas de poste de repos :
+# il reste sur le dernier bocal rempli ; Karulium le pose et l'enlève à la main.
+# Repère du portique ; « z » = face de la ventouse. Chiffres FIGÉS de la fiche : décalage de
+# l'oreille, levée, bord du col, garde, précision de la caméra et capture du cône. Les hauteurs
+# de l'entonnoir posé sont des EXEMPLES à mesurer sur la pièce reçue (après la coupe de la douille
+# et la soudure de l'oreille) ; les seuils de contrôle, du vide et les délais aussi. Le seuil de
+# prise (−55 kPa) et celui de la perte (−40 kPa) sont ceux de la Préhension.
+# Un verrou du logiciel ne protège que la machine : la sécurité des personnes reste câblée.
+entonnoir:
+  exemple: true
+  # La ventouse tient l'oreille à x bocal + 0,140, y bocal (l'oreille est toujours côté +x), donc
+  # pont en x bocal + 0,140 − 0,129.
+  decalage_oreille_x_m: 0.140
+  decalage_oreille_y_m: 0.0
+  # Entonnoir posé sur un bocal : haut de l'oreille (= face de la ventouse au contact), pointe,
+  # haut du cône. EXEMPLES, à mesurer à la mise en service.
+  oreille_z: 0.786
+  pointe_z: 0.627
+  cone_haut_z: 0.782
+  # Bord du col du bocal posé sur le tapis (0,497 + 0,146), mesuré.
+  bord_col_z: 0.643
+  # Levée de 0,060 pour le transport : pointe ≈ 0,687, 4,4 cm au-dessus des cols voisins (au moins
+  # 4 cm : fiche).
+  levee_m: 0.060
+  garde_voisins_min_m: 0.04
+  # Descente rapide jusqu'à 2 cm au-dessus du haut de l'oreille, puis vitesse d'approche jusqu'au
+  # contact. Après le lâcher : remontée de 0,030 en vitesse d'approche.
+  approche_m: 0.02
+  remontee_lacher_m: 0.030
+  # Prise : contact plus haut de 10 mm ou plus = « mal posé » ; pas de contact avant 15 mm sous
+  # l'attendu = « absent ». EXEMPLES.
+  prise: {trop_haut_m: 0.010, trop_bas_m: 0.015}
+  # Pose : posé à l'attendu ± 5 mm ; 10 mm de plus ou davantage = la pointe sur le bord du verre.
+  # EXEMPLES.
+  pose: {tolerance_m: 0.005, bord_du_verre_m: 0.010}
+  # Vide : 2 s pour atteindre −55 kPa, puis un seul nouvel essai (remonter de 5 mm) ; lâché quand il
+  # est revenu au-dessus de −5 kPa (attendu 2 s au plus, puis un deuxième souffle de la durée
+  # prehension → vide → relache_s, puis alerte). EXEMPLES.
+  vide: {delai_prise_s: 2, lache_kpa: -5, delai_lacher_s: 2, remontee_reessai_m: 0.005}
+  # Caméra du plafond : ± 5 mm sur le centre du col ; le cône (60°, pointe Ø 70 dans un col Ø 89)
+  # capte 9,5 mm d'erreur. Figés.
+  col: {precision_m: 0.005, capture_m: 0.0095}
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

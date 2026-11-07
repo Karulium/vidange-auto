@@ -341,6 +341,10 @@ cartes:
 #   alarme_rotation_tete, moteur_prehension_z, moteur_rotation_tete, vanne_vide,
 #   electroaimants_capsule, vide_venturi, compte_tours_tete (tâche 36 bis : le tour de la tête
 #   à la prise d'origine de sa rotation).
+# (tâche 43, entonnoir à bocaux : AUCUN signal à lui. Il emploie ceux de la préhension : vanne_vide
+#   (la fiche dit ev_aspirer), contact_tete (contact_ventouse), vide_venturi (vide_prehension) et
+#   electroaimants_capsule, éteints (aimants_prehension). Pas de capteur de présence de l'entonnoir :
+#   le Pi tient son état entonnoir_place.)
 # (tâche 36 bis, griffe : sur la carte FluidNC n° 1, lus dans son état) : origine_godet_griffe,
 #   origine_rotation_griffe.
 # (tâches 34, 34 bis et 34 quater, remplissage : sur la carte FluidNC n° 2 ; le Pi lit

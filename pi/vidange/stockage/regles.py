@@ -119,13 +119,16 @@ class ReglesStockage:
             if self._sur(depart, pile.x, pile.y, pile.rayon + rayon)
             or self._sur(arrivee, pile.x, pile.y, pile.rayon + rayon)
         ]
+        decalage_x = 0.0 if objet is None else objet.decalage_x_m
         for pose in self._points(depart, arrivee):
-            refus = self._refus_camera_bocal(pose, objet, seau, rayon, bouge_xy)
+            # L'objet tenu hors d'axe (entonnoir par son oreille) : ses règles valent pour son axe.
+            centre = pose if decalage_x == 0.0 else pose.avec(x=pose.x + decalage_x)
+            refus = self._refus_camera_bocal(centre, objet, seau, rayon, bouge_xy)
             if refus is not None:
                 return refus
             if not bouge_xy:
                 continue
-            refus = self._refus_boites(pose, objet, rayon)
+            refus = self._refus_boites(centre, objet, rayon)
             if refus is not None:
                 return refus
             if seau:

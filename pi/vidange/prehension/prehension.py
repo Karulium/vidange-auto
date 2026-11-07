@@ -94,6 +94,9 @@ class Attente:
     delai_s: float
     erreur: str
     quoi_faire: str = ""
+    # Vrai : si le délai passe, le geste continue (le résultat dit `delai_depasse`) au lieu de
+    # partir en alarme. Pour un geste qui réessaie (l'Entonnoir).
+    sans_alarme: bool = False
 
 
 Geste = Generator[Pas | Attente, Resultat | None, None]
@@ -148,6 +151,7 @@ class Prehension:
         self.portique = machine.portique
         self.garde = garde
         self.formats = machine.griffe.formats
+        self.entonnoir = machine.entonnoir
         self.course_a = machine.axes["prehension_a"].course
         self.regles = ReglesPrehension(machine)
         self.tete = tete
@@ -264,6 +268,10 @@ class Prehension:
                 valeurs["dessous_m" if nom == "seau_retourne" else "dessus_m"] = seau.hauteur
             if seau.tare_kg is not None:
                 valeurs["poids_n"] = seau.tare_kg * 9.81
+        if nom == "entonnoir" and self.entonnoir is not None:
+            # La ventouse tient l'oreille : l'axe de l'entonnoir est en −x de l'axe de la tête.
+            valeurs["decalage_x_m"] = -self.entonnoir.decalage_oreille_x_m
+            valeurs["decalage_y_m"] = -self.entonnoir.decalage_oreille_y_m
         return Objet.depuis(nom, self.reglages.objets[nom], **valeurs)
 
     # ------------------------------------------------------------ déroulé d'un geste
@@ -316,7 +324,12 @@ class Prehension:
         multipliée par portique → facteur_acceleration_tete_basse quand la face est sous
         tete_basse_z (le mât, plus long de 22 cm, est souple en travers)."""
         assert self.pose is not None
-        seau = self.objet is not None and self.objet.sorte in ("seau", "seau_retourne")
+        # Le seau (l'anse balance) et l'entonnoir (0,5 m/s², « en charge » : fiche de l'Entonnoir).
+        seau = self.objet is not None and self.objet.sorte in (
+            "seau",
+            "seau_retourne",
+            "entonnoir",
+        )
         facteur = 1.0
         portique = self.portique
         if portique is not None and portique.tete_basse_z is not None:
@@ -331,12 +344,17 @@ class Prehension:
             assert pas is not None and self.pose is not None
             ecoule = self._horloge() - self._depuis
             if isinstance(pas, Attente):
+                depasse = False
                 if not pas.test():
                     if ecoule <= pas.delai_s:
                         return False
-                    self._geste = self._pas = None
-                    raise ErreurEtape(f"préhension : {pas.erreur}", pas.quoi_faire or QUOI_FAIRE)
-                resultat = Resultat(pose=self.pose)
+                    if not pas.sans_alarme:
+                        self._geste = self._pas = None
+                        raise ErreurEtape(
+                            f"préhension : {pas.erreur}", pas.quoi_faire or QUOI_FAIRE
+                        )
+                    depasse = True
+                resultat = Resultat(pose=self.pose, delai_depasse=depasse)
             elif not (pas.cibles or pas.brosses):
                 if ecoule < pas.attente_s:
                     return False

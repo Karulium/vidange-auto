@@ -74,6 +74,8 @@ class Objet:
     # Objet pris hors d'axe : son axe est à y de la tête + decalage_y_m (seau d'une pile de la
     # rangée y 0,84 pris tête à 0,83, au bout de la course du chariot).
     decalage_y_m: float = 0.0
+    # Idem en x : l'entonnoir est tenu par son oreille, son axe est à 0,140 m en −x de la tête.
+    decalage_x_m: float = 0.0
 
     @classmethod
     def depuis(cls, sorte: str, reglages: ObjetPrehension, **valeurs: float) -> "Objet":
@@ -124,6 +126,7 @@ class ReglesPrehension:
         self.contact_capsule_z = contact
         self.poste = machine.poste_fut
         self.portique = machine.portique
+        self.entonnoir = machine.entonnoir
         self.camera_bocal = machine.griffe.camera_bocal
         self.courses = {
             "pont": machine.axes["pont_x"].course,
@@ -156,6 +159,9 @@ class ReglesPrehension:
         """La face « en haut » pour un déplacement du pont : la butée haute, ou plus bas si un seau
         tenu l'impose (règle 3), sur toute la longueur du trajet (ses deux bouts en y)."""
         haut = self.reglages.haut_z
+        if objet is not None and objet.sorte == "entonnoir" and self.entonnoir is not None:
+            # Exception voulue par la fiche de l'Entonnoir : il roule à 6 cm au-dessus de sa pose.
+            haut = min(haut, self.entonnoir.face_transport_z)
         if objet is not None and objet.sorte == "seau":
             haut = min([haut, *(self.bord_max_seau(y) - objet.dessus_m for y in ys)])
         for y in ys:
@@ -394,6 +400,15 @@ class ReglesPrehension:
             return (
                 f"déplacement du pont tête basse refusé : face à {_m(depart.z)} m, elle doit "
                 f"être en haut ({_m(hauteur)} m)"
+            )
+        if (
+            abs(arrivee.a - depart.a) > _EGAL
+            and contexte.objet is not None
+            and contexte.objet.sorte == "entonnoir"
+        ):
+            return (
+                "la tête ne tourne jamais en tenant l'entonnoir (l'oreille doit rester côté +x "
+                "pour que la ventouse la retrouve)"
             )
         if abs(arrivee.a - depart.a) > _EGAL and (
             self.entre_les_mors(depart) or self.entre_les_mors(arrivee)
