@@ -1218,6 +1218,18 @@ sur le vrai matériel : non). Le geste n'a jamais été essayé avec du vrai ma�
   `Sources.versement_bocal` reste vide) ; la lecture du capteur de distance de la tête (VL53L1X, case vide
   `distance_m`, sans lui le bouchage n'est pas vérifié et le journal le dit) ; la dose versée est notée au
   registre sans le code du bocal (mesure « dose_bocal »), en attendant l'inventaire des bocaux remplis.
+- **Versement dans un bocal, réponses à la PR n° 98** (tâche 43 bis, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Rangée 1 (y 0,06), godet ouvert permis seulement à y ≥ 0,11 : question posée au fil Griffe (limite à 20° et à
+     35°) ; d'ici sa réponse, aucun bocal de la rangée 1 n'est rempli (refus avant toute prise).
+  2. `bocal_0_0` et `bocal_2_0` (x 1,2075) : question posée à la Maquette (la bande de garde peut-elle s'arrêter à
+     1,205 ?) ; d'ici sa réponse, refusés.
+  3. Prise trop légère : la prise est rendue au fût et refaite (pas de « 2e prise complète » tant que le fil Griffe
+     n'a pas décrit ce geste). Gardé.
+  4. Plage 290-310 g : gardée pour l'essai ; élargie (par exemple 280-320 g) si moins d'une prise sur deux y tombe.
+  5. Dernière rangée (y 0,8224) avec la préhension tête en haut : question posée au fil Préhension (préhension tête
+     basse, face ≤ 0,942, pendant ces versements ?) ; d'ici sa réponse, refusés quand la préhension est en haut.
+  Tant que ces trois réponses manquent, 29 bocaux sur 122 ne sont pas remplis par la griffe
+  (`vidange-entonnoir versement` donne la liste).
 
 ## Programme principal, mode seaux (tâche 45, 07/11/2026)
 
