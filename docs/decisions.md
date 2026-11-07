@@ -1323,3 +1323,9 @@ code lit est déjà dans `machine.yaml` (`entonnoir`, `lavage → lave_bocal`, `
 - **Sécurité** : rien ne change. La chaîne UV-ozone, le store et les portes restent câblés ; le Pi n'a ajouté aucune
   commande, seulement des refus.
 
+- **Mode bocaux et nuit UV-ozone, réponses à la PR n° 91** (tâche 45 bis, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Pas de mode « Bocaux » en plus à l'écran pour l'instant (le lot de bocaux part en mode « production »).
+  2. La nuit UV-ozone reste refusée tant que `nettoyage` est en EXEMPLE : on valide d'abord ses réglages pendant
+     l'essai du Nettoyage (générateur à blanc), puis on enlève `exemple: true`.
+  3. Pas de lot de bocaux sans le versement de la griffe : on attend son geste. À écrire avec la tâche 23 (ou une
+     petite tâche avant elle si la griffe a déjà une fiche pour ce versement).
