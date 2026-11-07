@@ -1538,3 +1538,11 @@ exemples (hauteur du bocal, angles, 360° au plus, essai à 120° puis tous les 
   attendant : 18 seaux au plus par lot, sans pause ; saisie de l'inventaire du stockage (bocaux de semence, boîtes)
   depuis la page web dans une tâche à part ; variété demandée dans le formulaire ; stockage bloqué sans photo de la
   bande ; vanne coupée au premier départ du lot.
+- **Lot sur les vraies cartes, réponses à la PR n° 95** (tâche 45 quater, 07/11/2026, niveau 1, tranché par Claude sauf le point 1) :
+  1. Taille du lot (18 au plus sans pause, ou pause de rechargement avec Go) : question posée à Karulium (07/11) ;
+     d'ici sa réponse, 18 au plus sans pause (code : `refus_taille_lot`, un seul endroit).
+  2. Saisie de l'inventaire du stockage (bocaux de semence, boîtes, piles de seaux) depuis la page web : tâche 45
+     quinquies.
+  3. Variété dans le formulaire du lot : gardée.
+  4. Stockage bloqué sur la vraie machine tant que la photo de la bande du haut n'est pas lue (tâche 22 ter) : gardé.
+  5. Vanne de la tête coupée au premier départ du lot (machine à vide, mesure du vide recalée) : gardé.
