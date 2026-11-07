@@ -21,7 +21,8 @@ Les gestes sont ceux du programme, avec tous leurs verrous (vidange.remplissage.
 plateau du fût est lu (règle 7). L'agitateur du mycélium, le bras du galet et la tête du
 micropore ne sont pas lus : --manivelle-en-bas, --galet-range et --micropore-rentre disent
 qu'on les a vus (sinon le chariot ne roule pas près du poste, le plateau ne monte pas au-dessus
-de 0,26, la préhension ne descend pas). Procédure complète : pi/systeme/essai-remplissage.md. À ne
+de 0,26, la préhension ne descend pas ; sans --micropore-rentre, le plateau ne monte ni ne
+descend : règle 10, tâche 40). Procédure complète : pi/systeme/essai-remplissage.md. À ne
 lancer que programme principal arrêté (une seule liaison par carte).
 """
 

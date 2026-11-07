@@ -142,6 +142,17 @@ def module_remplissage(
         lambda: remplissage.place_permise(y_du_rangement(file_du_seau())),
     )
 
+    # Micropore (tâche 40) : un geste du chariot ne part que tête vue escamotée au ToF (après un
+    # redémarrage de la carte du plateau, il attend qu'elle soit relue plutôt que d'être refusé).
+    micropore: tuple[Condition, ...] = ()
+    if remplissage.micropore_branche:
+        micropore = (
+            Condition(
+                "tête du micropore vue escamotée (capteur de distance)",
+                lambda: remplissage.contexte().micropore_escamote is True,
+            ),
+        )
+
     def geste(nom: str, fabrique, ensuite=None, entree=()) -> Etape:
         return Etape(
             nom,
@@ -149,7 +160,7 @@ def module_remplissage(
             action=lambda: remplissage.lancer(fabrique),
             fin=fin,
             delai_max=GESTE,
-            entree=(chariot.pretes, *boucle, *entree),
+            entree=(chariot.pretes, *boucle, *micropore, *entree),
             ensuite=ensuite,
         )
 

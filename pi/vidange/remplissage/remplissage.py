@@ -51,8 +51,11 @@ en alarme, il ne bouge pas. Les gestes passent d'eux-mêmes par les bons détour
 avant de monter au-dessus de 0,515 ou de pousser, plateau sous 0,48 pour traverser les joues...).
 
 Les modules pas encore écrits sont des cases vides, derrière des fonctions simples (valeurs
-prudentes par défaut) : bras du galet (tâche 41), bras du spray (39), tête du micropore (40),
-caméra (QR du flanc : `VisionSeau`, tâche 22 ter).
+prudentes par défaut) : bras du galet (tâche 41), bras du spray (39), caméra (QR du flanc :
+`VisionSeau`, tâche 22 ter). Le Micropore (tâche 40) se branche par `brancher_micropore` : le
+plateau ne monte ni ne descend que tête vue escamotée au ToF (règle 10), et ses gestes se jouent
+au poste et au vidage (vidange.micropore). Sans lui, `micropore_rentre` dit ce qu'on a vu
+(None : pas connu, le plateau ne bouge pas en hauteur).
 
 Ces verrous ne protègent que la MACHINE : la sécurité des personnes reste câblée.
 """
@@ -211,6 +214,13 @@ class Remplissage:
         # La tête de la griffe tourne-t-elle (règle 14, mode couvercles) ? Branché par
         # brancher_griffe ; sans griffe : non.
         self._griffe_tourne: Callable[[], bool] = lambda: False
+        # Le Micropore (tâche 40, brancher_micropore) : ses gestes au poste et au vidage, ce qu'il
+        # fait quand le seau est rangé et à l'arrêt du module.
+        self.micropore_branche = False
+        self._au_poste: Callable[[], Geste] | None = None
+        self._au_vidage: Callable[[], Geste] | None = None
+        self._fin_du_seau: Callable[[SeauPlateau], None] | None = None
+        self._a_l_arret: list[Callable[[], None]] = []
 
     # ------------------------------------------------------------ état
 
@@ -223,6 +233,7 @@ class Remplissage:
             bras_galet_range=self._bras_galet(),
             bras_spray_sorti=self._bras_spray(),
             hauteur_seau=hauteur,
+            micropore_escamote=self._micropore(),
         )
 
     def position(self) -> Pose:
@@ -339,6 +350,8 @@ class Remplissage:
         self._rotation = False
         self._pose_en_cours = False
         self.chariot.arreter()
+        for arreter in self._a_l_arret:
+            arreter()
 
     def _dans_prehension(self, texte: str, geste: Callable[[], Geste]) -> GestePrehension:
         """Un geste du chariot au milieu d'un geste de la préhension : elle l'attend."""
@@ -484,6 +497,9 @@ class Remplissage:
             if self._pose().z > poste:
                 yield Pas("plateau à la hauteur du poste", {"z": poste})
             yield from self._rouler(self.reglages.poste_y, "seau au poste (spray, micropore)")
+            if self._au_poste is not None:
+                # Micropore (tâche 40) : tour de repérage et rangées du haut, au premier passage.
+                yield from self._au_poste()
         yield from self._a_la_place(self.reglages.dosage_y, "seau sous le bocal du mycélium")
         yield from self._plateau(plateau_z, "plateau à la hauteur du dosage")
 
@@ -685,6 +701,22 @@ class Remplissage:
         if not self.regles.au_dessus_du_chariot(arrivee.x, arrivee.y, pose):
             return None
         return self.regles.refus_descente_prehension(pose, self._micropore())
+
+    def brancher_micropore(
+        self,
+        escamotee: Callable[[], bool | None],
+        au_poste: Callable[[], Geste],
+        au_vidage: Callable[[], Geste],
+        fin_du_seau: Callable[[SeauPlateau], None],
+        arreter: Callable[[], None],
+    ) -> None:
+        """Le Micropore (tâche 40) : tête vue escamotée (règles 9 et 10), ses gestes au poste
+        (après le trajet vers le poste, avant le dosage) et au vidage (avant la hauteur du
+        vidage), le seau rangé, l'arrêt."""
+        self._micropore = escamotee
+        self._au_poste, self._au_vidage, self._fin_du_seau = au_poste, au_vidage, fin_du_seau
+        self._a_l_arret.append(arreter)
+        self.micropore_branche = True
 
     def brancher_prehension(self, prehension: Prehension) -> None:
         """La préhension applique la règle 9 à chacun de ses pas (et en mode manuel)."""
@@ -962,6 +994,9 @@ class Remplissage:
             raise ErreurEtape("remplissage : pas de seau sur le plateau")
         yield from self._barres_ouvertes()
         yield from self._a_la_place(self.reglages.vidage_y, "retour au vidage")
+        if self._au_vidage is not None:
+            # Micropore (tâche 40) : la rangée du fond, quand le seau pèse assez.
+            yield from self._au_vidage()
         yield from self._plateau(
             self.plateau_au_vidage(seau.format), "plateau à la hauteur du vidage"
         )
@@ -1046,6 +1081,8 @@ class Remplissage:
         yield from self._plateau_en_bas()
 
     def _noter(self, seau: SeauPlateau, file: str) -> None:
+        if self._fin_du_seau is not None:
+            self._fin_du_seau(seau)
         poids = self.derniere_pesee_kg
         code = seau.code or "?"
         journal.info(

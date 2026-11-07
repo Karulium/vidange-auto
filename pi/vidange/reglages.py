@@ -2659,6 +2659,215 @@ def courants_tmc2209(courant_a: float, moteur: MoteurBrasCarteSpray) -> tuple[in
     )
 
 
+# ------------------------------------------------------------- micropore (tâche 40)
+
+
+class RangeeMicropore(Modele):
+    """Une rangée de trous d'un format de seau : sa hauteur (centre des trous, au-dessus du fond
+    du seau), le rayon de la paroi à cette hauteur et le nombre de trous attendus. La vraie carte
+    des trous vient de la caméra, seau par seau."""
+
+    hauteur_m: float = Field(gt=0)
+    rayon_paroi_m: float = Field(gt=0)
+    trous: int = Field(ge=1, le=12)
+    # Rangée du fond : posée seulement quand la balance voit assez de substrat dans le seau (le
+    # seau ne glisse pas sous l'appui), au vidage (le bord y dépasse 0,68).
+    fond: bool = False
+
+
+class FormatMicropore(Modele):
+    """Les rangées de trous d'un format de seau (de haut en bas)."""
+
+    rangees: list[RangeeMicropore] = Field(min_length=1)
+    # Rangée du fond : substrat (kg) qu'il faut dans le seau, à la place de fond_poids_min_kg.
+    fond_poids_min_kg: float | None = Field(default=None, gt=0)
+
+
+class TofMicropore(Modele):
+    """Le capteur de distance VL6180X qui vise l'équerre cible : la position de la tête (mm)."""
+
+    # Tête escamotée : ≈ 77 mm ; tête en butée : ≈ 8 mm (figés).
+    escamotee_mm: float = Field(gt=0)
+    butee_mm: float = Field(gt=0)
+    # Vue escamotée si la distance est au moins escamotee_mm − tant (précision 1 à 2 mm).
+    tolerance_escamotee_mm: float = Field(gt=0)
+    # Contact vu : la distance ne baisse plus que de tant au plus entre l'approche et l'appui.
+    contact_ecart_max_mm: float = Field(gt=0)
+    # Précision d'une mesure (mm).
+    precision_mm: float = Field(gt=0)
+    # Une mesure plus vieille que ça n'est pas prise (ms : âge dit par la carte).
+    age_max_ms: int = Field(gt=0)
+    # La dernière lecture du Pi ne compte plus après ce temps (s).
+    fraicheur_s: float = Field(gt=0)
+
+
+class ServosMicropore(Modele):
+    """Les deux servos de la tête, sur la PCA9685 de la carte du plateau."""
+
+    # Course de la tête (mm) par degré du servo d'escamotage, près du contact ; +1 : un angle
+    # plus grand avance la tête vers la paroi (−1 : il la recule).
+    mm_par_degre: float = Field(gt=0)
+    sens_avance: Literal[-1, 1]
+    # Temps laissé au servo d'escamotage pour aller à son angle (s).
+    mouvement_s: float = Field(gt=0)
+    # Lame (MG90S) : angle de repos (lame haute), angle bas (ruban coupé), temps par sens (s).
+    lame_repos_deg: float
+    lame_bas_deg: float
+    lame_s: float = Field(gt=0)
+    # Après un redémarrage de la carte (servos relâchés) : le ToF ne compte qu'après ce temps (s).
+    stabilisation_s: float = Field(gt=0)
+    # Le Pi renvoie les angles au moins tous les tant (s) : la carte veut un ordre toutes les 2 s.
+    battement_s: float = Field(gt=0)
+    # La tête n'est pas vue escamotée au bout de ce temps (s) : le plateau ne bouge pas, alerte.
+    attente_max_s: float = Field(gt=0)
+    # Apprendre un format : le servo avance de tant (°) à la fois ; contact quand la distance du
+    # ToF n'a pas baissé de plus de tof → precision_mm pendant tant de pas de suite (tête libre,
+    # ces pas font au moins 2 × precision_mm : vérifié au démarrage).
+    pas_apprentissage_deg: float = Field(gt=0)
+    apprentissage_pas_plats: int = Field(ge=2)
+
+
+class PoseMicropore(Modele):
+    """Les chiffres de la pose d'un morceau (mm de ruban ou de paroi)."""
+
+    # Rouleau à tant de la paroi à l'approche ; appui : angle du contact + tant de course ;
+    # contrôle : la tête recule de tant.
+    approche_mm: float = Field(gt=0)
+    appui_mm: float = Field(gt=0)
+    controle_recul_mm: float = Field(gt=0)
+    # Avance du bout du ruban (de la lame à sous le rouleau), pose avant la coupe, après la coupe.
+    avance_mm: float = Field(gt=0)
+    avant_coupe_mm: float = Field(gt=0)
+    apres_coupe_mm: float = Field(gt=0)
+    # Trou amené tant avant le rouleau ; recul de tension avant la coupe.
+    trou_avant_rouleau_mm: float = Field(ge=0)
+    tension_mm: float = Field(ge=0)
+    # Vitesse de la paroi (et du ruban) pendant la pose, vitesse du ruban seul (mm/s).
+    vitesse_pose_mm_s: float = Field(gt=0)
+    vitesse_avance_mm_s: float = Field(gt=0)
+    # Sens de rotation du plateau pendant la pose (+1 : angle croissant).
+    sens_rotation: Literal[-1, 1]
+    # Trou découvert (contrôle à la caméra) : nouveaux essais sur ce trou.
+    nouveaux_essais: int = Field(ge=0, le=3)
+
+
+class AvanceMicropore(Modele):
+    """Le moteur d'avance du ruban (NEMA 11 sur TMC2209, en pas/direction) : un axe relatif de
+    FluidNC, sans origine et sans codeur."""
+
+    signal: Nom
+    carte: Nom
+    lettre: Lettre
+
+
+class RouleauMicropore(Modele):
+    """Le rouleau de micropore : morceaux d'un rouleau neuf, alerte « changer le rouleau » sous
+    tant de morceaux (environ un fût)."""
+
+    morceaux: int = Field(ge=1)
+    alerte_sous: int = Field(ge=0)
+
+
+class Micropore(Modele):
+    """Micropore (module gelé le 28/10/2026, micropore-pour-logiciel.md du 06/11) : la tête est
+    sur le chariot de remplissage ; le plateau du chariot tourne et monte le seau. Rien de propre
+    au micropore n'est une sécurité (fin de course haut du plateau et butée de la tête : câblés).
+    Les angles des gestes (escamoté, approche, contact, appui, caméra → rouleau) sont APPRIS par
+    format : ils sont dans le fichier des gestes appris (donnees/micropore-appris.yaml), jamais
+    ici."""
+
+    exemple: bool = False
+    # Signaux (entrees-sorties.yaml ; voies de la PCA9685 et ToF : pesees.yaml → i2c).
+    servo_escamotage: Nom
+    servo_lame: Nom
+    tof_signal: Nom
+    # La caméra du micropore (vision.yaml → cameras).
+    camera: Nom
+    avance: AvanceMicropore
+    # Hauteur du centre du ruban (m, figé) : plateau = ruban_z − hauteur de la rangée.
+    ruban_z: float = Field(gt=0)
+    # Bord du seau accepté pour la pose (diamètre, m) ; parois que la tête atteint (rayon, m).
+    bord_diametre_max_m: float = Field(gt=0)
+    paroi_rayon_m: Intervalle
+    tof: TofMicropore
+    servos: ServosMicropore
+    pose: PoseMicropore
+    # Rangée du fond : substrat (kg) qu'il faut dans le seau (balance du chariot moins la tare).
+    fond_poids_min_kg: float = Field(gt=0)
+    rouleau: RouleauMicropore
+    formats: dict[Nom, FormatMicropore] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Micropore":
+        erreurs = []
+        debut, fin = self.paroi_rayon_m
+        if not 0 < debut < fin:
+            erreurs.append("paroi_rayon_m : du plus petit au plus grand")
+        if self.tof.butee_mm >= self.tof.escamotee_mm - self.tof.tolerance_escamotee_mm:
+            erreurs.append("tof : butee_mm doit être loin sous escamotee_mm − tolerance")
+        if self.rouleau.alerte_sous >= self.rouleau.morceaux:
+            erreurs.append("rouleau : alerte_sous doit être plus petit que morceaux")
+        if self.servos.battement_s >= 2:
+            erreurs.append("servos → battement_s : sous 2 s (la carte garde les angles après 2 s)")
+        if self.servos.lame_repos_deg == self.servos.lame_bas_deg:
+            erreurs.append("servos : lame_repos_deg et lame_bas_deg sont différents")
+        servos = self.servos
+        course = servos.apprentissage_pas_plats * servos.pas_apprentissage_deg * servos.mm_par_degre
+        if course < 2 * self.tof.precision_mm:
+            erreurs.append(
+                "servos : apprentissage_pas_plats × pas_apprentissage_deg × mm_par_degre (course "
+                f"libre de {course:g} mm) doit faire au moins 2 × tof → precision_mm, sinon "
+                "l'apprentissage prend une tête qui avance encore pour un contact"
+            )
+        for nom, format in self.formats.items():
+            for numero, rangee in enumerate(format.rangees, start=1):
+                if not debut <= rangee.rayon_paroi_m <= fin:
+                    erreurs.append(
+                        f"formats → {nom} → rangée {numero} : paroi à {rangee.rayon_paroi_m:g} m "
+                        f"de l'axe, la tête n'atteint que {debut:g} à {fin:g}"
+                    )
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class FormatAppris(Modele):
+    """Les gestes appris d'un format de seau (angles de l'axe du servo d'escamotage, en °)."""
+
+    approche_deg: float
+    contact_deg: float
+    appui_deg: float
+    # Distance du ToF au contact, quand le format a été appris (mm, pour comparer).
+    contact_mm: float = Field(gt=0)
+    # Rotation du plateau (°) qui amène sous le rouleau un trou vu au centre de la caméra.
+    camera_rouleau_deg: float
+
+
+class ChangementAppris(Modele):
+    """Une ligne de l'historique : ce qui a changé (« escamote » ou un format), avant et après."""
+
+    numero: int = Field(ge=1)
+    quand: str
+    qui: str
+    cle: Nom
+    avant: FormatAppris | float | None = None
+    apres: FormatAppris | float | None = None
+    # Changement annulé ensuite (par le changement n° annule_par).
+    annule_par: int | None = None
+    # Ce changement annule le n° annule.
+    annule: int | None = None
+
+
+class GestesAppris(Modele):
+    """Le fichier des gestes appris du micropore (donnees/micropore-appris.yaml) : écrit par le
+    Pi quand Karulium apprend un format, jamais à la main."""
+
+    # Angle « escamoté » du servo d'escamotage (ToF à la position escamotée).
+    escamote_deg: float | None = None
+    formats: dict[Nom, FormatAppris] = Field(default_factory=dict)
+    historique: list[ChangementAppris] = Field(default_factory=list)
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -2705,6 +2914,9 @@ class Machine(Modele):
     # Spray : carte n° 5, flacons, bras de la buse (None : pas de spray). Demande la griffe
     # (table des formats) et le remplissage (règle 6 du bras).
     spray: Spray | None = None
+    # Micropore : tête sur le chariot de remplissage (None : pas de micropore). Demande la griffe
+    # (formats) et le remplissage (plateau, règles 9 et C2).
+    micropore: Micropore | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -2778,6 +2990,7 @@ class Machine(Modele):
         erreurs += self._verifier_stockage()
         erreurs += self._verifier_portique()
         erreurs += self._verifier_spray()
+        erreurs += self._verifier_micropore()
         if self.camera_dosage is not None and (self.prehension is None or self.mycelium is None):
             erreurs.append(
                 "camera_dosage : il faut aussi les parties « prehension » et « mycelium »"
@@ -3807,6 +4020,38 @@ class Machine(Modele):
                     erreurs.append(f"spray → {quoi} : il manque le format « {nom} »")
         return erreurs
 
+    def _verifier_micropore(self) -> list[str]:
+        """Chaque format du micropore est un format de la griffe, chaque rangée tient dans le
+        seau ; le moteur d'avance n'a pas la lettre d'un autre axe de sa carte."""
+        micropore = self.micropore
+        if micropore is None:
+            return []
+        if self.griffe is None or self.remplissage is None:
+            return ["micropore : il faut aussi les parties « griffe » (formats) et « remplissage »"]
+        erreurs = []
+        for nom, format in micropore.formats.items():
+            seau = self.griffe.formats.get(nom)
+            if seau is None:
+                erreurs.append(f"micropore → formats : format de seau inconnu « {nom} »")
+                continue
+            if seau.hauteur is None:
+                erreurs.append(f"micropore → formats → {nom} : il faut la hauteur du seau (griffe)")
+                continue
+            for numero, rangee in enumerate(format.rangees, start=1):
+                if rangee.hauteur_m >= seau.hauteur:
+                    erreurs.append(
+                        f"micropore → formats → {nom} → rangée {numero} : à {rangee.hauteur_m:g} m "
+                        f"du fond, plus haut que le seau ({seau.hauteur:g} m)"
+                    )
+        avance = micropore.avance
+        for nom, axe in self.axes.items():
+            if axe.carte == avance.carte and axe.lettre == avance.lettre:
+                erreurs.append(
+                    f"micropore → avance : la lettre {avance.lettre} de la carte "
+                    f"« {avance.carte} » est déjà celle de l'axe « {nom} »"
+                )
+        return erreurs
+
     def _se_chevauchent(self, nom_a: str, nom_b: str) -> bool:
         """Deux zones se chevauchent si elles se recouvrent sur tous les axes à la fois."""
         zone_a, zone_b = self.zones[nom_a], self.zones[nom_b]
@@ -4495,6 +4740,16 @@ class NettoyageSimule(Modele):
     demi_vie_ozone_s: float = Field(gt=0)
 
 
+class MicroporeSimule(Modele):
+    """La tête du micropore imaginaire (scénario « remplissage ») : ses gestes appris (sur la vraie
+    machine : donnees/micropore-appris.yaml, appris par Karulium) et ce que voit sa caméra."""
+
+    appris: GestesAppris
+    # Le premier trou de chaque rangée est vu à tant (°) de l'angle du plateau au début du tour
+    # de repérage ; les autres sont répartis sur le tour.
+    premier_trou_deg: float = 20.0
+
+
 class ScenarioSimule(Modele):
     """Un scénario : capteurs actionnés au départ et événements, à la place de ceux du haut."""
 
@@ -4535,6 +4790,8 @@ class ReglagesSimulateur(Modele):
     stockage: StockageSimule | None = None
     # L'enceinte imaginaire du Nettoyage (store, air, ozone).
     nettoyage: NettoyageSimule | None = None
+    # La tête du micropore imaginaire (gestes appris, trous vus par la caméra).
+    micropore: MicroporeSimule | None = None
 
 
 # ---------------------------------------------------------- accelerometre.yaml
@@ -5686,10 +5943,102 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
             for seau in simulateur.lavage.seaux
             if seau.format not in formats
         ]
+    erreurs += _verifier_micropore_entre_fichiers(valeurs)
     if simulateur.depart is not None and simulateur.depart not in machine.positions:
         erreurs.append(
             f"simulateur.yaml, depart : position « {simulateur.depart} » absente de machine.yaml"
         )
+    return erreurs
+
+
+def _verifier_micropore_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
+    """Les servos et le ToF du micropore sont ceux de l'I2C de pesees.yaml ; les angles de la lame
+    tiennent dans la plage de sa voie ; la carte du moteur d'avance est dans fluidnc.yaml, la
+    caméra dans vision.yaml ; les gestes appris du simulateur vont avec les formats."""
+    machine, pesees = valeurs["machine"], valeurs["pesees"]
+    fluidnc, vision = valeurs["fluidnc"], valeurs["vision"]
+    simulateur = valeurs["simulateur"]
+    assert isinstance(machine, Machine) and isinstance(pesees, ReglagesPesees)
+    assert isinstance(fluidnc, Fluidnc) and isinstance(vision, ReglagesVision)
+    assert isinstance(simulateur, ReglagesSimulateur)
+    micropore = machine.micropore
+    if micropore is None:
+        return []
+    erreurs = []
+    if micropore.avance.carte not in fluidnc.cartes:
+        erreurs.append(
+            f"machine.yaml, micropore → avance : carte « {micropore.avance.carte} » absente de "
+            "fluidnc.yaml"
+        )
+    if micropore.camera not in vision.cameras:
+        erreurs.append(
+            f"machine.yaml, micropore → camera : « {micropore.camera} » absente de vision.yaml "
+            "(cameras)"
+        )
+    i2c = pesees.i2c
+    if i2c is None:
+        return [*erreurs, "machine.yaml, micropore : il faut l'I2C de pesees.yaml (servos, ToF)"]
+    if i2c.vl6180x.signal != micropore.tof_signal:
+        erreurs.append(
+            f"machine.yaml, micropore → tof_signal : « {micropore.tof_signal} », pesees.yaml dit "
+            f"« {i2c.vl6180x.signal} » (i2c → vl6180x → signal)"
+        )
+    for quoi, voie in (
+        ("servo_escamotage", micropore.servo_escamotage),
+        ("servo_lame", micropore.servo_lame),
+    ):
+        if voie not in i2c.pca9685.voies:
+            erreurs.append(
+                f"machine.yaml, micropore → {quoi} : voie « {voie} » absente de pesees.yaml "
+                "(i2c → pca9685 → voies)"
+            )
+    lame = i2c.pca9685.voies.get(micropore.servo_lame)
+    if lame is not None:
+        for quoi in ("lame_repos_deg", "lame_bas_deg"):
+            angle = getattr(micropore.servos, quoi)
+            if not lame.angle_min_deg <= angle <= lame.angle_max_deg:
+                erreurs.append(
+                    f"machine.yaml, micropore → servos → {quoi} : {angle:g}° hors de la plage de "
+                    f"la voie ({lame.angle_min_deg:g} à {lame.angle_max_deg:g}°, pesees.yaml)"
+                )
+    escamotage = i2c.pca9685.voies.get(micropore.servo_escamotage)
+    if simulateur.micropore is not None and escamotage is not None:
+        plage = (escamotage.angle_min_deg, escamotage.angle_max_deg)
+        erreurs += [
+            f"simulateur.yaml, micropore → appris : {erreur}"
+            for erreur in verifier_appris(simulateur.micropore.appris, micropore, plage)
+        ]
+    return erreurs
+
+
+def verifier_appris(
+    appris: GestesAppris, micropore: Micropore, plage_deg: tuple[float, float]
+) -> list[str]:
+    """Les gestes appris vont avec la tête : angles dans la plage de la voie du servo, dans
+    l'ordre escamoté → approche → contact → appui (dans le sens de l'avance), formats connus."""
+    erreurs = []
+    debut, fin = plage_deg
+    sens = micropore.servos.sens_avance
+
+    def dans(quoi: str, angle: float) -> None:
+        if not debut <= angle <= fin:
+            erreurs.append(f"{quoi} : {angle:g}° hors de la plage du servo ({debut:g} à {fin:g}°)")
+
+    if appris.escamote_deg is not None:
+        dans("escamote_deg", appris.escamote_deg)
+    for nom, format in appris.formats.items():
+        if nom not in micropore.formats:
+            erreurs.append(f"formats → {nom} : format absent de machine.yaml (micropore → formats)")
+        for quoi in ("approche_deg", "contact_deg", "appui_deg"):
+            dans(f"formats → {nom} → {quoi}", getattr(format, quoi))
+        angles = [format.approche_deg, format.contact_deg, format.appui_deg]
+        if appris.escamote_deg is not None:
+            angles.insert(0, appris.escamote_deg)
+        if any(sens * (b - a) <= 0 for a, b in zip(angles, angles[1:], strict=False)):
+            erreurs.append(
+                f"formats → {nom} : les angles ne vont pas dans l'ordre escamoté → approche → "
+                "contact → appui (sens de l'avance de la tête)"
+            )
     return erreurs
 
 

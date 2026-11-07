@@ -410,6 +410,9 @@ class FauxBoitierChariot:
         self.ordres = 0
         # Plus d'ordre depuis ce temps : la carte garde les angles et le dit.
         self.silence_max_ms = 2000
+        # Pour le simulateur (tête du micropore imaginaire) : la distance du ToF d'après les
+        # angles des servos ; None : `distance_mm`.
+        self.tof_selon_angles: Callable[[tuple[float | None, ...]], int | None] | None = None
 
     def redemarrer(self) -> None:
         """La carte repart (chien de garde, coupure) : compteur changé, servos sortie coupée."""
@@ -439,6 +442,9 @@ class FauxBoitierChariot:
         return 0
 
     def etat(self) -> carte_pesee.BoitierChariot:
+        angles = tuple(carte_pesee.angle_du_registre(v) for v in self.registres_angles)
+        if self.tof_selon_angles is not None:
+            self.distance_mm = self.tof_selon_angles(angles)
         return carte_pesee.BoitierChariot(
             distance_mm=None if self.tof_muet else self.distance_mm,
             etat_tof=carte_pesee.TOF_ETAT_MUET if self.tof_muet else self.etat_tof,
@@ -451,7 +457,7 @@ class FauxBoitierChariot:
             pca9685_demarre_pas=False,
             echecs_i2c=self.echecs_i2c,
             silence_pi_ms=self.silence_pi_ms,
-            angles_deg=tuple(carte_pesee.angle_du_registre(v) for v in self.registres_angles),
+            angles_deg=angles,
         )
 
     @property

@@ -28,8 +28,9 @@ la machine : garder la main sur l'arrêt d'urgence, et les doigts loin des barre
 Dans les commandes ci-dessous, `vidange-fluidnc`, `vidange-pesees` et `vidange-remplissage` veulent dire
 `sudo -u vidange /opt/vidange-auto/pi/.venv/bin/vidange-fluidnc` (et de même pour les autres).
 Les options `--manivelle-en-bas --galet-range --micropore-rentre` de `vidange-remplissage` disent qu'on a
-**vu** la manivelle du mycélium en bas (agitateur fixe depuis le 01/11), le bras du galet rangé et la tête du micropore rentrée (ces
-modules ne sont pas encore écrits) : ne les mettre que si c'est vrai.
+**vu** la manivelle du mycélium en bas (agitateur fixe depuis le 01/11), le bras du galet rangé et la tête du micropore rentrée (l'outil
+ne les lit pas) : ne les mettre que si c'est vrai. Depuis la tâche 40 (règle 10), le plateau ne monte ni ne
+descend sans `--micropore-rentre` : regarder la tête du micropore tout en arrière avant de le mettre.
 
 ## Étape 1 : ce que la carte n° 2 sait faire (console)
 

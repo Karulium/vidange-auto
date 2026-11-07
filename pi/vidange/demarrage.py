@@ -534,6 +534,13 @@ def principal(
             "agitateurs d'EXEMPLE : les régler aux essais (pi/systeme/essai-spray.md), puis "
             "passer « exemple » à false."
         )
+    micropore = reglages.machine.micropore
+    if micropore is not None and micropore.exemple:
+        journal.warning(
+            "machine.yaml, micropore : rangées des seaux, chiffres du capteur de distance et des "
+            "servos, moteur d'avance d'EXEMPLE : les régler aux essais "
+            "(pi/systeme/essai-micropore.md), puis passer « exemple » à false."
+        )
     camera_dosage = reglages.machine.camera_dosage
     if camera_dosage is not None and camera_dosage.exemple:
         journal.warning(

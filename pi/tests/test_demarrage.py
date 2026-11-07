@@ -47,7 +47,8 @@ def test_verifier_des_reglages_corrects(reglages, tmp_path, capsys):
     sortie = capsys.readouterr().err
     assert "Réglages corrects" in sortie
     assert "valeurs d'EXEMPLE" in sortie
-    assert "entrees-sorties.yaml : 124 lignes d'EXEMPLE" in sortie
+    assert "entrees-sorties.yaml : 125 lignes d'EXEMPLE" in sortie
+    assert "machine.yaml, micropore" in sortie
     # La simple vérification n'écrit pas de journal sur le disque.
     assert not (tmp_path / "donnees").exists()
 

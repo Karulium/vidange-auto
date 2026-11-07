@@ -18,7 +18,7 @@ sont (`double`) : ils sont séparés quand la tête tire le seau du dessus (pris
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from vidange.chef import Condition
 from vidange.mycelium.mycelium import Bocal, Mycelium
@@ -35,6 +35,9 @@ from vidange.remplissage.regles import AXES, Pose, cles_du_pas
 from vidange.remplissage.remplissage import Remplissage
 from vidange.simulateur.axes import EtatAxes
 from vidange.simulateur.simulateur import ErreurSimulation, Simulateur
+
+if TYPE_CHECKING:
+    from vidange.micropore.simulation import MicroporeDuSimulateur
 
 CARTE = "chariot"
 
@@ -113,6 +116,8 @@ class ChariotSimule:
         if pas.vitesse is not None:
             for cle in VITESSES_LENTES[pas.vitesse]:
                 vitesses[cle] = min(vitesses[cle], getattr(self.reglages.vitesses, pas.vitesse))
+        if pas.vitesse_a is not None:
+            vitesses["a"] = min(vitesses["a"], pas.vitesse_a)
         axes = {AXES[cle]: getattr(cible, cle) for cle in cles_du_pas(pas.cibles)}
         self._arrivees = self._etat.aller_vers(
             pas.texte, axes, {AXES[cle]: vitesse for cle, vitesse in vitesses.items()}
@@ -202,6 +207,8 @@ class ScenarioRemplissage:
     plan: Plan
     chariot: ChariotSimule
     vision: FausseVisionSeau
+    # La vraie tête du micropore sur le faux boîtier du chariot (None : pas de micropore).
+    micropore: "MicroporeDuSimulateur | None" = None
 
 
 def remplissage_du_simulateur(
@@ -212,9 +219,10 @@ def remplissage_du_simulateur(
 ) -> ScenarioRemplissage:
     """Le remplissage sur la machine imaginaire, avec les seaux de simulateur.yaml
     (`remplissage`, ou `seaux_simules`) : chariot au poste (position remplissage_poste), tête en
-    haut, manivelle du mycélium en bas (position agitateur_attente). Bras du galet rangé, tête du
-    micropore rentrée (modules pas encore écrits). `options` : cases vides de Remplissage
-    (registre, photo...)."""
+    haut, manivelle du mycélium en bas (position agitateur_attente). Bras du galet rangé (module
+    pas encore écrit). Le vrai Micropore (tâche 40) sur le faux boîtier du chariot, si les réglages
+    en ont un et si `micropore_rentre` n'est pas donné (sinon : la tête est ce qu'il dit).
+    `options` : cases vides de Remplissage (registre, photo...)."""
     reglages = simulateur.reglages
     machine = reglages.machine
     simule = reglages.simulateur.remplissage
@@ -240,6 +248,9 @@ def remplissage_du_simulateur(
 
     options.setdefault("plateau_fut_en_place", lambda: not poste.echange_en_cours)
     options.setdefault("bras_galet_range", lambda: True)
+    from vidange.micropore.simulation import micropore_du_simulateur, micropore_possible
+
+    avec_micropore = "micropore_rentre" not in options and micropore_possible(simulateur)
     options.setdefault("micropore_rentre", lambda: True)
     remplissage = Remplissage(
         machine,
@@ -320,6 +331,11 @@ def remplissage_du_simulateur(
     prehension.tete.vanne = vanne_simulee  # type: ignore[method-assign]
     prehension.tete.executer = executer_simule  # type: ignore[method-assign]
     chariot.fond_z = fond_z
+    micropore = None
+    if avec_micropore:
+        micropore = micropore_du_simulateur(
+            simulateur, remplissage, chariot, registre=options.get("registre")
+        )
     plan = Plan(
         seaux=[
             SeauAFaire(seau.seau, seau.format, seau.variete, seau.file, cycle) for seau in liste
@@ -330,4 +346,4 @@ def remplissage_du_simulateur(
         debut_seau=debut_seau,
         versement=versement,
     )
-    return ScenarioRemplissage(remplissage, prehension, mycelium, plan, chariot, vision)
+    return ScenarioRemplissage(remplissage, prehension, mycelium, plan, chariot, vision, micropore)

@@ -195,6 +195,20 @@ nettoyage:
   montee_ozone_ppm_s: 0.1
   demi_vie_ozone_s: 1200
 
+# La tête du micropore imaginaire (scénario « remplissage », tâche 40) : ses gestes appris (sur la
+# vraie machine : donnees/micropore-appris.yaml, appris par Karulium avec vidange-micropore) et
+# l'angle où la caméra voit le premier trou de chaque rangée au tour de repérage. La fausse paroi
+# du seau est là où le contact a été appris (tête escamotée à 40°, 0,785 mm par degré).
+micropore:
+  appris:
+    escamote_deg: 40
+    formats:
+      seau_a: {approche_deg: 73.12, contact_deg: 75.67, appui_deg: 84.59, contact_mm: 49, camera_rouleau_deg: 32}
+      seau_b: {approche_deg: 79.49, contact_deg: 82.04, appui_deg: 90.96, contact_mm: 44, camera_rouleau_deg: 32}
+      seau_c: {approche_deg: 62.93, contact_deg: 65.48, appui_deg: 74.39, contact_mm: 57, camera_rouleau_deg: 32}
+      seau_d: {approche_deg: 70.57, contact_deg: 73.12, appui_deg: 82.04, contact_mm: 51, camera_rouleau_deg: 32}
+  premier_trou_deg: 20
+
 # Capteurs (entrées tout-ou-rien de docs/entrees-sorties.yaml) actionnés au départ.
 capteurs_actionnes: []
 
