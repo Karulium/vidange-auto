@@ -707,7 +707,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   la raison ; reprise après coupure au milieu d'un seau (carnet) ; lot complet simulé sans alarme.
 - [x] **45 bis. Programme principal : mode bocaux et nuit UV-ozone** — Modèle : Sonnet. À faire après la 45 :
   même branchement pour `module_entonnoir`, `module_lavage_bocaux` et la nuit UV-ozone.
-- [ ] **45 ter. Programme principal : construire les vraies cartes du chariot et de la tête** — Modèle : Opus,
+- [x] **45 ter. Programme principal : construire les vraies cartes du chariot et de la tête** — Modèle : Opus,
   effort moyen. Dans `pi/vidange/cycle/machine.py` (`PiecesMachine`), construire depuis `docs/entrees-sorties.yaml`
   et les réglages : carte du plateau du chariot (RP2040-Zero, pesée, PCA9685, ToF), tête de la Préhension, Lavage,
   cartes FluidNC, spray ; c'est ce qui bloque encore les postes « qr_du_flanc », « micropore », « couvercle »,
