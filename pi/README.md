@@ -236,6 +236,7 @@ en une fraction de seconde), et sort le planning : chaque étape, quand elle com
 .venv/bin/vidange-simulateur lavage                  # 3 seaux lavés, eau comprise (« lavage »)
 .venv/bin/vidange-simulateur nettoyage_nuit          # nuit UV-ozone complète (« nuit_uv_ozone »)
 .venv/bin/vidange-simulateur cycle                   # un lot complet de seaux A, même code que la machine
+.venv/bin/vidange-simulateur cycle --solveur         # le même lot, avec et sans le programme du solveur
 ```
 
 - **Durées réglables** dans `reglages/simulateur.yaml` : vitesse et accélération de chaque axe (un déplacement
@@ -251,8 +252,14 @@ en une fraction de seconde), et sort le planning : chaque étape, quand elle com
 - Un module reçoit des axes imaginaires (`simulateur.axes()`) à la place des vrais `Axes`, avec les mêmes noms ;
   son code ne change pas. Pour qu'un nouveau module soit simulable, l'ajouter à `MODULES` dans
   `vidange/simulateur/outil.py`.
-- **Place pour le solveur OR-Tools** (tâche 23) : `vidange/simulateur/solveur.py` tire du planning les tâches
-  (durée du geste, zones tenues, étape d'avant, Go demandé) ; `ordonner()` est à écrire.
+- **Solveur d'ordonnancement** (tâche 23, OR-Tools CP-SAT) : `vidange-simulateur cycle --solveur` joue le lot
+  de seaux dans l'ordre normal du chef, en tire les tâches (`vidange/simulateur/solveur.py` : durée du geste,
+  zones tenues, étape d'avant, attentes vues), cherche l'ordre le plus court jusqu'au prochain Go, rejoue ce
+  programme sur le simulateur et le vérifie (zone tenue deux fois, règle refusée, alarme, écart : rejeté), puis
+  dit le temps avec et sans programme, et le gain. Le chef ne s'en sert que pour choisir qui passe le premier
+  quand plusieurs modules attendent la même zone (`vidange/chef/programme.py`), seulement si
+  `solveur → actif` (faux par défaut), et revient à son ordre normal à la première alarme ou au premier écart
+  de plus de `solveur → ecart_max_s` (noté au journal).
 
 ## Fiabilité (tâche 7)
 

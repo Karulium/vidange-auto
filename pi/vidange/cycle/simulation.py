@@ -65,6 +65,7 @@ from vidange.stockage.simulation import BOUCLE
 from vidange.stockage.stockage import Stockage
 
 if TYPE_CHECKING:
+    from vidange.chef import Programme
     from vidange.remplissage.simulation import ScenarioRemplissage
 
 # Postes joués en faux par le simulateur, vérifiés dans le planning comme les postes lancés : la
@@ -277,14 +278,19 @@ def lot_du_simulateur(simulateur: Simulateur) -> Lot:
     return Lot(cycle.format, seaux)
 
 
-def jouer_cycle(simulateur: Simulateur) -> tuple[ModeSeaux, Planning, list[str]]:
+def jouer_cycle(
+    simulateur: Simulateur, programme: "Programme | None" = None
+) -> tuple[ModeSeaux, Planning, list[str]]:
     """Prépare le mode seaux (même code que la machine), joue le lot, puis vérifie que chaque seau
-    a suivi ORDRE_SEAU. Rend le mode, le planning et les écarts à l'ordre (vide : aucun)."""
+    a suivi ORDRE_SEAU. Rend le mode, le planning et les écarts à l'ordre (vide : aucun).
+
+    `programme` : un programme du solveur donné au chef (tâche 23, vidange.simulateur.solveur)."""
     mode = ModeSeaux(simulateur.reglages, PiecesSimulees(simulateur), simulateur.chef)
     refus = mode.refus_lot()
     if refus is not None:
         raise ErreurSimulation(f"lot de seaux impossible : {refus}")
-    planning = simulateur.jouer(mode.modules_du_lot(lot_du_simulateur(simulateur)))
+    modules = mode.modules_du_lot(lot_du_simulateur(simulateur))
+    planning = simulateur.jouer(modules, programme)
     faites = [f"{ligne.module}.{ligne.etape}" for ligne in planning.lignes]
     verifies = [*mode.postes_lances, *JOUES_EN_FAUX]
     problemes = verifier_ordre(faites, verifies) if planning.fini else []

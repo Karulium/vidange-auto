@@ -3311,6 +3311,32 @@ class BocalNeuf(Modele):
     palier_vide_n: float = Field(gt=0)
 
 
+class Solveur(Modele):
+    """Solveur d'ordonnancement (tâche 23, OR-Tools CP-SAT ; décision « La fiabilité d'abord » du
+    28/10/2026). Il ne change que l'ordre de priorité entre modules qui attendent la même zone :
+    toutes les conditions, zones et refus du chef restent vérifiés comme sans lui."""
+
+    exemple: bool = False
+    # Faux : le chef garde toujours son ordre normal (le simulateur peut quand même comparer).
+    actif: bool = False
+    # Temps de calcul maximal (s). Pas de solution dans ce temps : ordre normal du chef.
+    temps_max_s: float = Field(gt=0)
+    # Pas de temps du calcul (s) : les durées sont arrondies au pas supérieur.
+    pas_s: float = Field(gt=0)
+    # Écart (s) entre l'heure prévue d'un passage dans une zone et l'heure vraie, au-delà duquel
+    # le chef revient à son ordre normal (noté au journal).
+    ecart_max_s: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Solveur":
+        if self.pas_s > self.ecart_max_s:
+            raise ValueError(
+                f"pas_s ({self.pas_s:g} s) plus grand que ecart_max_s ({self.ecart_max_s:g} s) : "
+                "le moindre arrondi ferait revenir à l'ordre normal"
+            )
+        return self
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -3373,6 +3399,8 @@ class Machine(Modele):
     # Bocal neuf de semence pris au stockage et posé sur le porte-bocal (None : pas de geste).
     # Demande la préhension, le stockage, le porte-bocal, le mycélium et la griffe.
     bocal_neuf: BocalNeuf | None = None
+    # Solveur d'ordonnancement (None : jamais de programme, ordre normal du chef).
+    solveur: Solveur | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":

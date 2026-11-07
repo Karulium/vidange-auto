@@ -29,7 +29,7 @@ Un scénario nommé de simulateur.yaml (« echange_fut »...) remplace les capte
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 
-from vidange.chef import Carnet, Chef, Condition, Etape, EtatChef, Module
+from vidange.chef import Carnet, Chef, Condition, Etape, EtatChef, Module, Programme
 from vidange.chef.chef import ATTENTE_GO
 from vidange.entrees_sorties import EntreesSorties
 from vidange.materiel import FausseFabrique, Materiel
@@ -174,8 +174,11 @@ class Simulateur:
 
     # ------------------------------------------------------------ jouer
 
-    def jouer(self, modules: Iterable[Module]) -> Planning:
-        """Lance les modules ensemble et rejoue le cycle jusqu'au bout (ou jusqu'au problème)."""
+    def jouer(self, modules: Iterable[Module], programme: Programme | None = None) -> Planning:
+        """Lance les modules ensemble et rejoue le cycle jusqu'au bout (ou jusqu'au problème).
+
+        `programme` : un programme du solveur (tâche 23), donné au chef avant le lancement ; il
+        faut alors `solveur → actif` (le simulateur du solveur le met, pour comparer)."""
         if self._joue:
             raise ErreurSimulation("un simulateur ne rejoue qu'un cycle : en créer un nouveau")
         self._joue = True
@@ -183,6 +186,10 @@ class Simulateur:
         if not modules:
             raise ErreurSimulation("aucun module à simuler")
         self._verifier_evenements(modules)
+        if programme is not None:
+            refus = self.chef.jouer_programme(programme)
+            if refus is not None:
+                raise ErreurSimulation(f"programme du solveur pas joué : {refus}")
         for evenement in self._evenements:
             if evenement.apres is None:
                 self._a_venir.append((evenement.attente_s, evenement))
@@ -192,6 +199,9 @@ class Simulateur:
             self.chef.lancer(suivi)
             self._commencer_etape(module.nom, 0)
         probleme = self._boucle()
+        recul = self.chef.recul_programme or ""
+        if programme is not None and not recul and self.chef.programme_en_jeu:
+            recul = "des passages du programme n'ont pas été faits"
         return Planning(
             modules=[module.nom for module in modules],
             lignes=sorted(self._lignes, key=lambda ligne: ligne.debut),
@@ -199,6 +209,8 @@ class Simulateur:
             evenements=list(self._faits),
             probleme=probleme,
             exemple=self._reglages.exemple,
+            programme_joue=programme is not None,
+            recul_programme=recul,
         )
 
     def _boucle(self) -> str:
@@ -263,8 +275,13 @@ class Simulateur:
                 cle = (module.module, ligne.numero)
                 if cle not in self._go:
                     self._go[cle] = self.temps + self._reglages.delai_go_s
-            elif module.phase == "entree" and module.attend and module.attend not in ligne.attentes:
-                ligne.attentes.append(module.attend)
+            elif module.phase == "entree" and module.attend:
+                if module.attend not in ligne.attentes:
+                    ligne.attentes.append(module.attend)
+                if not module.attend_zone:
+                    ligne.attend_condition = True
+                elif module.attend_zone not in ligne.zones_attendues:
+                    ligne.zones_attendues.append(module.attend_zone)
 
     def _donner_les_go(self) -> None:
         attendent = set(self.chef.etat().attendent_go)

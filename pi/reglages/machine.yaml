@@ -2111,6 +2111,25 @@ bocal_neuf:
     prises_max: 2
   palier_vide_n: 0.3
 
+# Solveur d'ordonnancement (tâche 23, OR-Tools CP-SAT). Il calcule, sur un lot simulé, l'ordre de
+# passage le plus court dans les zones partagées ; le simulateur rejoue ce programme avant qu'il
+# serve (la moindre zone tenue deux fois, règle refusée ou alarme : programme rejeté). Le chef ne
+# change alors que l'ordre de priorité entre modules qui attendent la même zone ; ses conditions,
+# zones et refus restent vérifiés comme sans programme. Décision « La fiabilité d'abord » : au
+# premier écart de temps au-delà de ecart_max_s ou à la première alarme, retour à l'ordre normal.
+# Comparer sur le lot simulé : vidange-simulateur cycle --solveur.
+# EXEMPLES : temps de calcul, pas et écart à régler après les premiers essais.
+solveur:
+  exemple: true
+  # false : le chef garde toujours son ordre normal (le simulateur peut quand même comparer).
+  actif: false
+  # Temps de calcul maximal (s) ; pas de solution dans ce temps : ordre normal du chef.
+  temps_max_s: 10
+  # Les durées sont arrondies à ce pas (s), au-dessus.
+  pas_s: 0.1
+  # Écart (s) entre l'heure prévue d'un passage dans une zone et l'heure vraie.
+  ecart_max_s: 30
+
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :
 #   - prise_origine: <carte>   prise d'origine ($H) d'une carte FluidNC (fluidnc.yaml) ;

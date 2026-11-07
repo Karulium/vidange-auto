@@ -28,6 +28,10 @@
   vidange-simulateur cycle --lot lavage_bocaux bocaux et capsules lavés au lave-bocal
   vidange-simulateur cycle --lot nuit          une nuit UV-ozone complète (poste « nuit » prêt)
   vidange-simulateur cycle --lot tout          les quatre, l'un après l'autre
+  vidange-simulateur cycle --solveur           le lot de seaux dans l'ordre normal du chef, puis
+                                               avec le programme du solveur (tâche 23), rejoué
+                                               et vérifié : temps avec et sans, gain
+  vidange-simulateur remplissage --solveur     même comparaison pour des modules (ou un groupe)
 
 Les durées se règlent dans reglages/simulateur.yaml (vitesses des axes, délai du Go, capteurs).
 Tourne sur n'importe quel PC, sans la machine. Code de sortie 0 si le cycle va au bout, 1 sinon.
@@ -74,6 +78,7 @@ from vidange.reglages import (
 from vidange.remplissage.module import module_remplissage
 from vidange.remplissage.simulation import remplissage_du_simulateur
 from vidange.simulateur.simulateur import ErreurSimulation, Simulateur
+from vidange.simulateur.solveur import Jouer, comparer
 from vidange.stockage.simulation import stockage_du_simulateur
 
 # Modules qu'on sait simuler : nom → fabrique (simulateur → module).
@@ -203,8 +208,17 @@ def main(arguments: list[str] | None = None) -> int:
     lecteur.add_argument(
         "--scenario", help="scénario de simulateur.yaml (défaut : celui du module, s'il en a un)"
     )
+    lecteur.add_argument(
+        "--solveur",
+        action="store_true",
+        help="compare l'ordre normal du chef et le programme du solveur, rejoué et vérifié",
+    )
     options = lecteur.parse_args(arguments)
     noms = list(dict.fromkeys(options.modules))
+    if options.solveur and options.json:
+        lecteur.error("--solveur ne va pas avec --json")
+    if options.solveur and CYCLE in noms and options.lot != "seaux":
+        lecteur.error("--solveur se joue avec le lot de seaux (--lot seaux)")
     if CYCLE in noms and len(noms) > 1:
         lecteur.error("« cycle » se joue seul (il lance lui-même les modules du lot)")
     scenario = options.scenario
@@ -232,6 +246,8 @@ def main(arguments: list[str] | None = None) -> int:
             update={"delai_go_s": options.delai_go}
         )
         reglages = reglages.model_copy(update={"simulateur": simulateur_reglages})
+    if options.solveur:
+        return _comparer(reglages, liste, scenario if CYCLE not in noms else options.scenario, noms)
     if CYCLE in noms:
         lots = list(LOTS) if options.lot == "tout" else [options.lot]
         scenario = options.scenario
@@ -284,6 +300,45 @@ def _jouer_cycle(
             json.dumps(planning.en_dict(), ensure_ascii=False, indent=1), encoding="utf-8"
         )
     return 0 if planning.fini and not problemes else 1
+
+
+def _comparer(reglages, liste, scenario: str | None, noms: list[str]) -> int:
+    """Ordre normal contre programme du solveur (tâche 23). Pour comparer, le simulateur joue le
+    programme même si `solveur → actif` est faux (seulement ici, en mémoire)."""
+    solveur = reglages.machine.solveur
+    if solveur is None:
+        print("Simulation impossible : machine.yaml n'a pas de partie « solveur »", file=sys.stderr)
+        return 2
+    machine = reglages.machine.model_copy(
+        update={"solveur": solveur.model_copy(update={"actif": True})}
+    )
+    reglages = reglages.model_copy(update={"machine": machine})
+
+    def jouer_le_cycle(programme):
+        with Simulateur(reglages, liste, scenario or LOTS["seaux"][0]) as simulateur:
+            _, planning, problemes = jouer_cycle(simulateur, programme)
+        return planning, problemes
+
+    def jouer_les_modules(programme):
+        with Simulateur(reglages, liste, scenario) as simulateur:
+            modules: list[Module] = []
+            for nom in noms:
+                modules += (
+                    GROUPES[nom](simulateur) if nom in GROUPES else [MODULES[nom](simulateur)]
+                )
+            return simulateur.jouer(modules, programme), []
+
+    jouer: Jouer = jouer_le_cycle if CYCLE in noms else jouer_les_modules
+    try:
+        comparaison = comparer(jouer, solveur)
+    except (ErreurSimulation, ErreurChef) as erreur:
+        print(f"Simulation impossible : {erreur}", file=sys.stderr)
+        return 2
+    cycle = reglages.simulateur.cycle
+    if CYCLE in noms and cycle is not None:
+        print(f"Lot simulé : {cycle.seaux} seaux {cycle.format} ({cycle.variete})")
+    print(comparaison.en_texte())
+    return 0 if comparaison.normal.fini else 1
 
 
 def lancer() -> None:

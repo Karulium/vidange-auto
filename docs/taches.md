@@ -733,7 +733,24 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   main ce que contient le stockage (bocaux de semence par variété et par place, capsules et couvercles percés dans les
   boîtes, piles de seaux vides par format, couvercles), avec le Go de Karulium avant d'écrire ; le lot (tâche 45
   quater, `refus_taille_lot`) lit ces nombres. Journal de chaque correction. Tests et procédure courte.
-- [ ] 23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi
+- [x] **23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi** — Modèle : Opus, effort
+  moyen. Base : `pi/vidange/simulateur/solveur.py` (place prête), `simulateur/planning.py`, `chef/zones.py`,
+  decisions « La fiabilité d'abord ». Bibliothèque : `ortools` (CP-SAT, gratuite, roues pour le Pi 5 en
+  Python 3.11), ajoutée à `pi/pyproject.toml`.
+  1. `ordonner(taches)` : une variable intervalle par tâche, « pas de chevauchement » par zone, « après » par
+     module, temps total le plus court. Une tâche `demande_go` est un point d'arrêt : le solveur n'ordonne que ce
+     qui vient avant le prochain Go (il ne décide jamais à la place de Karulium). Temps de calcul limité par un
+     réglage (`solveur → temps_max_s`, EXEMPLE) ; pas de solution dans ce temps = on garde l'ordre normal du chef.
+  2. Vérification avant envoi : le simulateur rejoue le programme trouvé ; la moindre zone tenue deux fois, règle
+     refusée ou alerte = programme rejeté, ordre normal du chef, et le journal dit pourquoi.
+  3. Jeu par le Pi : le programme ne change **que l'ordre de priorité** quand plusieurs modules attendent la même
+     zone ; toutes les conditions, zones et refus du chef restent vérifiés comme avant (le programme ne peut rien
+     autoriser de plus). Réglage `solveur → actif` (faux par défaut) ; recul automatique à l'ordre normal à la
+     première alerte ou au premier écart de temps au-delà d'un seuil (EXEMPLE), noté au journal.
+  4. Le gain (temps total avec et sans programme, sur un lot simulé de 18 seaux) est affiché par
+     `vidange --simuler` ou équivalent, pour que Karulium voie si ça vaut la peine.
+  Hors de la tâche : le versement de la griffe dans un bocal (case vide `verser(bocal)` de l'Entonnoir, fiche
+  demandée à la Griffe) et la montée en vitesse (tâche 30).
 
 ## Partie 3 : fonctions en plus, voir `docs/fonctionnalites.md`
 
