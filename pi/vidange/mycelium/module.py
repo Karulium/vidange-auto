@@ -36,7 +36,9 @@ QUOI_FAIRE_CHARIOT = (
 )
 
 
-def module_mycelium(mycelium: Mycelium) -> Module:
+def module_mycelium(mycelium: Mycelium, prehension_permise: tuple[Condition, ...] = ()) -> Module:
+    """`prehension_permise` : ce que le bocal neuf (geste de la Préhension) attend en plus, par
+    exemple la griffe garée (même pont, tâche 45 sexies)."""
     agitateur = mycelium.agitateur
     # Bocal neuf par la Préhension : sa tête (et ses cartes) doit être prête.
     pose = mycelium.pose_bocal_neuf
@@ -96,7 +98,7 @@ def module_mycelium(mycelium: Mycelium) -> Module:
                 mycelium.apres_bocal,
                 quoi_faire="Mettre un bocal neuf de la bonne variété dans le porte-bocal, puis "
                 "acquitter et donner le Go.",
-                entree=() if pose is None else (pose.pretes,),
+                entree=() if pose is None else (pose.pretes, *prehension_permise),
             ),
             geste("retourner_le_bocal", mycelium.geste_retourner_le_bocal, entree=(ecarte,)),
             chariot(

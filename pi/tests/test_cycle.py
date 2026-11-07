@@ -87,7 +87,7 @@ def test_un_seul_endroit_dit_l_ordre_du_cycle_d_un_seau():
     ]
     # Les gestes pas encore écrits restent des cases vides : jamais lancés.
     vides = {poste.nom for poste in ORDRE_SEAU if poste.case_vide}
-    assert vides == {"griffe", "lavage"}
+    assert vides == {"lavage"}
     # Sur la vraie machine, pas de lot sans spray ni micropore (question 3 de la PR n° 89 en
     # attente), ni sans couvercle et fermeture.
     obligatoires = {poste.nom for poste in ORDRE_SEAU if poste.obligatoire}
@@ -189,7 +189,8 @@ def test_avec_le_faux_materiel_les_modules_attendus_sont_prets(reglages_depot, l
         "stockage",
     ]
     assert mode.refus_lot() is None
-    assert "tâche 23" in mode.etats["griffe"].raison
+    # La vraie griffe est essayée à part (tests/test_cycle_griffe.py) : ici, jouée en faux.
+    assert "jouée en faux" in mode.etats["griffe"].raison
     assert "vidange-simulateur poste_fut" in mode.etats["fut"].raison
 
 

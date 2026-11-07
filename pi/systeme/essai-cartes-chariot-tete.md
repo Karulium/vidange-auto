@@ -21,8 +21,8 @@ Une pièce qui manque n'empêche jamais le programme de démarrer : la check-lis
 postes qui en ont besoin sont « pas lancé : raison ». **La présence est regardée une seule fois, au démarrage** :
 après avoir branché une carte, il faut relancer le programme.
 
-À savoir : même avec toutes les cartes, **aucun lot ne part encore** sur la vraie machine. Restent : la griffe
-(tâche 23), la pose du bocal de semence neuf (Mycélium), la lecture de la photo du plafond (entonnoir, bocaux
+À savoir : même avec toutes les cartes, **aucun lot ne part encore** sur la vraie machine. Restent : les cartes de
+la griffe (elle est enchaînée au lot depuis la tâche 45 sexies), la pose du bocal de semence neuf (Mycélium), la lecture de la photo du plafond (entonnoir, bocaux
 sales). C'est voulu : le programme le dit.
 
 La sécurité (arrêt d'urgence, portes, store) reste câblée, comme d'habitude.

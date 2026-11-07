@@ -93,10 +93,11 @@ maïs. Il faut vérifier qu'elle ne change pas avec la hauteur (câbles et chaî
 3. Noter combien de prises tombent entre 290 et 310 g. Si c'est moins d'une sur deux, la plage est trop
    étroite pour ce godet : dire à Claude quelle plage est acceptable pour les bocaux (`dose → plage_kg`).
 
-## Étape 6 : un lot de 3 bocaux (quand la griffe sera branchée)
+## Étape 6 : un lot de 3 bocaux
 
-Le geste automatique est écrit (`vidange/griffe/versement.py`), mais **le programme principal ne le lance pas
-encore** : la griffe n'y est pas construite (enchaînement avec la préhension, tâche 23). Quand ce sera fait :
+Le geste automatique est écrit (`vidange/griffe/versement.py`) et, depuis la tâche 45 sexies, le programme
+principal le construit sur la griffe des cartes (poste « versement » du mode bocaux). Le lot ne part que si les
+autres postes du mode bocaux sont prêts (l'écran dit « pas lancé : raison » sinon). Pour l'essayer :
 
 1. Rejouer d'abord sur le PC : `pytest -q pi/tests/test_versement_bocal.py` (tout doit passer).
 2. Lot `bocal_1_2`, `bocal_1_3`, `bocal_2_1`, vitesses divisées par 4, Karulium à l'arrêt d'urgence.

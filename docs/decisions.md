@@ -1214,10 +1214,10 @@ sur le vrai matériel : non). Le geste n'a jamais été essayé avec du vrai ma�
   ouvert, jamais refermé au-dessus du bocal), entonnoir bouché (bocal « suspect », griffe remontée godet vide
   fermé ; au Go, le lot continue), pesée instable, dose impossible, fût vide, bocal refusé par les règles (avant
   toute prise). Pause et alarme du module arrêtent aussi la griffe (sans la retirer : son godet reste tel quel).
-- **Pas fait** : le branchement dans le programme principal (la griffe n'y est pas construite, tâche 23 ;
-  `Sources.versement_bocal` reste vide) ; la lecture du capteur de distance de la tête (VL53L1X, case vide
+- **Pas fait** : la lecture du capteur de distance de la tête (VL53L1X, case vide
   `distance_m`, sans lui le bouchage n'est pas vérifié et le journal le dit) ; la dose versée est notée au
-  registre sans le code du bocal (mesure « dose_bocal »), en attendant l'inventaire des bocaux remplis.
+  registre sans le code du bocal (mesure « dose_bocal »), en attendant l'inventaire des bocaux remplis. Le
+  branchement dans le programme principal est fait par la tâche 45 sexies (pas par le solveur, tâche 23).
 - **Versement dans un bocal, réponses à la PR n° 98** (tâche 43 bis, 07/11/2026, niveau 1, tranché par Claude) :
   1. Rangée 1 (y 0,06), godet ouvert permis seulement à y ≥ 0,11 : question posée au fil Griffe (limite à 20° et à
      35°) ; d'ici sa réponse, aucun bocal de la rangée 1 n'est rempli (refus avant toute prise).
@@ -1248,7 +1248,7 @@ Code : `pi/vidange/cycle/` ; lot du simulateur : `pi/reglages/simulateur.yaml �
   poste dont il a besoin pas prêt. Jamais de geste inventé.
 - **Choix de la tâche 45 (tranchés par Claude, en attendant les réponses de Karulium, PR de la tâche 45)** :
   1. Cases vides d'`ORDRE_SEAU` : la griffe (son enchaînement avec la préhension sur le même pont et avec le seau du
-     chariot est le travail du solveur, tâche 23 ; dans le simulateur, chaque versement reste une rotation du seau),
+     chariot est écrit par la tâche 45 sexies, pas par le solveur ; dans le lot simulé, chaque versement reste une rotation du seau),
      le spray (à quel passage au poste il dose n'est écrit nulle part ; **réponse du 07/11 : section suivante**), le
      couvercle (tâche 41 bis, donc pas de
      fermeture), le lavage des vides (travail à part, règle 7 du plafond).
@@ -1318,7 +1318,7 @@ Réponses des fils mécaniques (Spray, Micropore, Guidage caméra) et de Karuliu
   2. La lecture « pendant la rotation » : le plateau lit d'abord le QR là où il est ; s'il n'est pas lu, il fait un
      tour complet et relit (la caméra lit pendant ce tour ; la vraie lecture continue est la 40 ter).
   3. La griffe « partie du poste » (condition de la sortie du bras) : dans le simulateur il n'y a pas de griffe au
-     poste, elle est vue partie ; sur la machine, la griffe reste une case vide (tâche 23), donc pas de lot.
+     poste, elle est vue partie ; sur la machine, c'est le mât de la griffe hors du seau du vidage (tâche 45 sexies).
 - **Pose du couvercle, réponses à la PR n° 90** (tâche 41 bis, 07/11/2026, niveau 1, tranché par Claude) :
   1. Couvercle C à 2,3 mm de la tête du micropore escamotée : la Préhension a demandé au Micropore de reculer de 1 cm
      (07/11). En attendant, descente lente du C de la face 0,67 à 0,57 (fiche) ; à corriger dans les réglages à la
@@ -1349,9 +1349,9 @@ code lit est déjà dans `machine.yaml` (`entonnoir`, `lavage → lave_bocal`, `
   « production », laver les bocaux en mode « lavage » (c'est déjà ce que demande `Lavage.refus_mode`), la nuit en
   mode « UV-ozone ». Pas de lot si un autre lot est en route (`postes.py → refus_lancement`) ; pas de changement de
   mode pendant un lot (déjà vrai : `ModeMachine.refus`).
-- **Lot de bocaux** : postes `fut`, `entonnoir` (cœur), `versement`, `lavage_bocaux`. `versement` reste une
-  **case vide** (enchaînement de la griffe avec la préhension, solveur, tâche 23), comme `griffe` pour les seaux :
-  sur la vraie machine, **aucun lot de bocaux ne part** ; le simulateur joue le versement en faux (`verse_s`). Sur la
+- **Lot de bocaux** : postes `fut`, `entonnoir` (cœur), `versement`, `lavage_bocaux`. `versement` est
+  construit sur la griffe des cartes depuis la tâche 45 sexies (`vidange.griffe.versement`) ; le simulateur joue le
+  versement en faux (`verse_s`). Sur la
   machine, l'entonnoir manque aussi parce que la Préhension (cartes de la tête) n'est pas construite par le
   programme principal et que la lecture de la photo du plafond n'est pas écrite.
 - **Lavage des bocaux** : poste à part (il n'a pas besoin de la griffe). Sur la machine il manque : Lavage et
@@ -1378,8 +1378,8 @@ code lit est déjà dans `machine.yaml` (`entonnoir`, `lavage → lave_bocal`, `
   1. Pas de mode « Bocaux » en plus à l'écran pour l'instant (le lot de bocaux part en mode « production »).
   2. La nuit UV-ozone reste refusée tant que `nettoyage` est en EXEMPLE : on valide d'abord ses réglages pendant
      l'essai du Nettoyage (générateur à blanc), puis on enlève `exemple: true`.
-  3. Pas de lot de bocaux sans le versement de la griffe : on attend son geste. À écrire avec la tâche 23 (ou une
-     petite tâche avant elle si la griffe a déjà une fiche pour ce versement).
+  3. Pas de lot de bocaux sans le versement de la griffe : on attend son geste. Écrit par la tâche 43 bis,
+     branché au programme principal par la tâche 45 sexies.
 
 ## Vision du micropore (tâche 40 ter, 07/11/2026)
 
@@ -1574,7 +1574,7 @@ exemples (hauteur du bocal, angles, 360° au plus, essai à 120° puis tous les 
 - **Seaux sans nom d'avance** : les seaux d'un lot lancé depuis la page web prennent le QR lu sur leur flanc.
 - **`PiecesMachine.remplissage`** assemble le Remplissage, le spray, le Micropore, la Fermeture, le Mycélium, le
   bocal neuf, le couvercle et le plan à partir des vraies cartes. Il reste « pas lancé : raison » tant que manquent
-  l'enchaînement de la griffe (tâche 23), le QR du bocal par la caméra de la tête de la griffe, l'erreur du codeur
+  les cartes de la griffe (enchaînée depuis la tâche 45 sexies), le QR du bocal par la caméra de la tête de la griffe, l'erreur du codeur
   de la rotation de la tête (carte n° 4) ou une carte en EXEMPLE. **`entonnoir`** et **`lavage_bocaux`** attendent la
   photo du plafond (bande du haut, entonnoir, bocaux sales) et le versement de la griffe. Le stockage aussi : sur la
   vraie machine, pas de lot sans la photo de la bande.
@@ -1629,3 +1629,40 @@ Choix tranchés par Claude (PR de la tâche 23), en attendant les réponses de K
   2. `solveur → ecart_max_s` : 30 s (EXEMPLE) pour les premiers lots, resserré quand les durées seront recalées sur
      les vrais temps.
   3. Une Pause pendant un programme : retour à l'ordre normal du chef (gardé, simple et sûr).
+
+## Programme principal, la griffe dans les lots (tâche 45 sexies, 07/11/2026)
+
+- **Construite au démarrage** comme les autres pièces (`PiecesMachine`, pièce « griffe ») : bras FluidNC sur la
+  carte du portique, pesée RS485 de la griffe, poste du fût. Une absente dit « griffe : pas lancé : raison » ; le
+  démarrage continue. `Sources.griffe` et `Sources.versement_bocal` à None veulent dire maintenant « la vraie »
+  (un faux ne sert qu'aux essais). Postes : `griffe` (seaux) demande griffe, tête et chariot ; `versement`
+  (bocaux) demande griffe et tête. La boucle de fond du bras part au Go avec les autres.
+- **Mode seaux** (`vidange/cycle/griffe_du_lot.py`, `GriffeDuSeau`) : module « griffe » du lot à côté du
+  Remplissage et du Mycélium. L'étape « verser » du Remplissage dit à la griffe quelle couche le seau attend et
+  finit quand elle est versée et tassée (seau arrêté) ; délai `durees → remplissage_couche_griffe_max` (EXEMPLE
+  1800 s). Le Mycélium et les gestes de la tête du Remplissage attendent la griffe garée. Le carnet garde le seau
+  en cours et les couches versées (reprise après coupure).
+- **Mode bocaux** : `vidange.griffe.versement` (tâche 43 bis) branché comme versement du lot, sur la griffe des
+  cartes (maïs, sans mâchouiller), fichier `donnees/versement.json`.
+- Les zones et les règles du Portique restent celles du chef et des règles de chaque bras : rien de nouveau n'est
+  inventé, seulement vérifié aussi quand un bras traîne l'autre.
+- **Choix de Claude (PR de la tâche 45 sexies)**, en attendant les réponses de Karulium :
+  1. La griffe ne descend dans le fût (raclage, prise) que quand un seau l'attend au vidage : sinon, griffe dans
+     le fût avec sa dose et Préhension qui a besoin du pont, chacun attend l'autre (ou le mât est traîné dans le
+     fût). On perd la prise « d'avance » pendant le spray et le dosage du mycélium.
+  2. Pont partagé : un pas de la Préhension qui bouge le pont ou le chariot traîne la griffe (en butée haute) ;
+     les règles de **position** de la griffe sont vérifiées le long du trajet (pas ses règles de trajet). Un pas
+     de la griffe qui bouge le pont fait vérifier toutes les règles de mouvement de la tête de préhension.
+     Position inconnue : refusé. Un pas refusé ne part pas (alarme).
+  3. Fût vide en plein lot : la griffe finit le seau commencé (tassement, essuyage), puis attend le « Prêt » d'un
+     nouveau fût et continue au seau suivant. Un seau qui n'a pas toutes ses couches arrête l'étape « verser » sur
+     une alarme (case vide : question n° 2). Dernier seau du lot plein, fût pas vide : le module finit.
+  4. « Griffe partie du poste » (sortie du bras du spray, pose du couvercle) = le mât de la griffe hors du seau du
+     vidage (`griffe → vidage → zone_seau_m`), pas « au-dessus du fût » : la Préhension traîne la griffe loin du
+     fût quand elle prend ou pose un seau.
+  5. La Préhension, avant de descendre à sa hauteur de trajet, sort d'abord de l'isolation du fût face en haut
+     (nouveau pas « sortir de l'isolation du fût, face en haut ») : sinon, traînée au-dessus du fût par la griffe,
+     elle descendait dans l'isolation.
+- **Restent des cases vides** : ce qu'on fait d'un seau commencé quand le fût se vide ; le capteur de distance de
+  la tête de la griffe (VL53L1X, bouchage de l'entonnoir) ; le QR du bocal par la caméra de la tête ; l'erreur du
+  codeur de la rotation de la tête ; la photo du plafond ; le lavage lancé après le lot.

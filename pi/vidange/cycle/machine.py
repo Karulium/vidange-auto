@@ -1,4 +1,4 @@
-"""Les pièces du programme principal sur la machine (tâches 45, 45 bis et 45 ter).
+"""Les pièces du programme principal sur la machine (tâches 45, 45 bis, 45 ter et 45 sexies).
 
     cartes = construire_cartes(reglages, materiel, liaisons, pesees, poste, vraie_machine, ...)
     pieces = PiecesMachine(poste, materiel, vraie_machine, ..., cartes=cartes)
@@ -20,7 +20,10 @@ vidange-prehension, vidange-micropore, vidange-lavage) :
 - « agitateur » et « porte_bocal » (tâche 19 quater) : l'agitateur du Mycélium (carte FluidNC
   « mycelium_lavage » et balance du plateau) et son porte-bocal (mors, demi-tour), que la Préhension
   voit aussi (zone du porte-bocal, manivelle en bas) ;
-- « spray » : la carte ESP32 n° 5 du spray (bus rs485_spray), qui répond.
+- « spray » : la carte ESP32 n° 5 du spray (bus rs485_spray), qui répond ;
+- « griffe » (tâche 45 sexies) : le bras de la griffe (5 axes de la carte FluidNC du portique,
+  BrasFluidnc) et sa pesée (carte RP2040-Zero « pesee_griffe », bus rs485_pesee), sous la
+  surveillance du poste du fût ; elle lit aussi la porte du coffret du spray (règle 3).
 Une pièce absente (signal pas dans la liste, ligne `exemple: true` ou réglage d'EXEMPLE sur la vraie
 machine, numéro de série introuvable, carte qui ne répond pas) n'arrête jamais le démarrage : elle
 n'est pas construite, et les postes qui en ont besoin sont « pas lancés : raison » (check-list,
@@ -33,9 +36,15 @@ sur ces cartes, comme vidange.cycle.simulation le fait sur les pièces imaginair
 Mycélium et son bocal neuf, Micropore, Fermeture, Couvercle, Spray, Stockage ; Entonnoir ; lave-
 bocal). `FondDuLot` lance leurs boucles en fond avec le lot et les arrête à sa fin ou sur alarme.
 
+La griffe (tâche 45 sexies) est assemblée avec chaque lot : dans un lot de seaux,
+vidange.cycle.griffe_du_lot.GriffeDuSeau l'enchaîne au Remplissage, au Mycélium et à la Préhension
+(même pont) ; dans un lot de bocaux, vidange.griffe.versement.Versement (tâche 43 bis) verse dans le
+bocal où est l'entonnoir. `Sources.griffe` et `Sources.versement_bocal` restent pour les essais (un
+faux à la place de la vraie griffe).
+
 Ce qui manque encore pour qu'un lot parte sur la machine, sans rien inventer (`Sources` : None sur
 la machine, un faux dans les essais ; le poste dit « pas lancé : raison ») :
-- griffe : son enchaînement avec la préhension et le seau du chariot (solveur, tâche 23) ;
+- griffe : ses réglages sont encore en EXEMPLE (machine.yaml → griffe, versement_bocal) ;
 - mycélium : le geste du bocal neuf de semence est écrit (vidange.bocal_neuf, tâche 19 quater),
   mais il lui manque deux sources que la machine n'a pas encore : la lecture du QR du bocal par la
   caméra de la tête de la griffe, et l'erreur du codeur de la rotation de la tête (calage du
@@ -45,7 +54,7 @@ la machine, un faux dans les essais ; le poste dit « pas lancé : raison ») :
 - stockage : il faut le signal de la boucle du tiroir et des panneaux, et (vraie machine) la
   lecture de la photo du plafond de la bande du haut ;
 - entonnoir : la lecture de la photo du plafond (l'entonnoir est-il sur le bocal ? où est le
-  centre du col ?) et le versement de la griffe dans le bocal ne sont pas écrits ;
+  centre du col ?) n'est pas écrite ;
 - lavage des bocaux : la liste des bocaux sales vient de la caméra du plafond (règle 7), pas
   écrite ;
 - nuit UV-ozone : tout est là (le Nettoyage tourne déjà) ; elle ne manque que si le Nettoyage n'est
@@ -63,6 +72,7 @@ from vidange.bocal_neuf.bocal_neuf import BocalNeuf
 from vidange.chef import Chef, ErreurChef, ErreurEtape
 from vidange.chef.chef import ATTENTE_GO
 from vidange.couvercle.couvercle import Couvercle
+from vidange.cycle.griffe_du_lot import GriffeDuSeau, brancher_pont
 from vidange.cycle.mode_bocaux import LotBocaux, PiecesEntonnoir, PiecesLavageBocaux
 from vidange.cycle.mode_seaux import Lot, PiecesRemplissage
 from vidange.entonnoir.entonnoir import Entonnoir, VisionEntonnoir
@@ -73,6 +83,10 @@ from vidange.fermeture.fermeture import Fermeture
 from vidange.fiabilite.constats import Constat, lancer_boucle
 from vidange.fluidnc import Liaison
 from vidange.fluidnc.ports import CarteIntrouvable, lister_ports_usb, trouver_port
+from vidange.griffe.bras import BrasFluidnc
+from vidange.griffe.griffe import Griffe
+from vidange.griffe.versement import NOM_FICHIER as NOM_VERSEMENT
+from vidange.griffe.versement import Versement
 from vidange.journal import donner_journal
 from vidange.lavage.bocaux import LavageBocaux
 from vidange.lavage.eau import NOM_EAU, EauLavage
@@ -125,6 +139,7 @@ from vidange.reglages import (
 from vidange.remplissage.chariot import ALARMES_BARRES, BARRIERE, ChariotFluidnc, signaux_chariot
 from vidange.remplissage.module import Plan
 from vidange.remplissage.remplissage import Remplissage
+from vidange.spray.spray import PORTE as PORTE_SPRAY
 from vidange.spray.spray import Spray
 from vidange.stockage.simulation import BOUCLE
 from vidange.stockage.stockage import Stockage, VisionBande
@@ -156,14 +171,14 @@ CODEUR = (
     "(calage du moteur) pas encore lue"
 )
 GRIFFE_DU_LOT = (
-    "enchaînement de la griffe avec la préhension et le seau du chariot pas écrit (solveur, tâche "
-    "23)"
+    "griffe pas construite au démarrage (bras sur la carte du portique, pesée de la griffe) : "
+    "pas de lot de seaux"
 )
 VERSEMENT_BOCAL = (
-    "versement de la griffe dans le bocal pas branché : son geste est écrit (vidange.griffe."
-    "versement, tâche 43 bis), mais la griffe n'est pas encore construite par le programme "
-    "principal (enchaînement avec la préhension, solveur, tâche 23)"
+    "versement de la griffe dans le bocal : griffe pas construite au démarrage (bras sur la carte "
+    "du portique, pesée de la griffe)"
 )
+VERSEMENT_ABSENT = "machine.yaml n'a pas de partie « griffe → versement_bocal »"
 PHOTO_DU_PLAFOND = (
     "lecture de la photo du plafond (entonnoir sur le bocal, centre du col) pas écrite"
 )
@@ -182,6 +197,7 @@ CARTE_PONT = "portique"
 CARTE_TETE = "prehension"
 PESEE_PLATEAU = "pesee_plateau_remplissage"
 PESEE_TETE = "pesee_prehension"
+PESEE_GRIFFE = "pesee_griffe"
 CARTE_MYCELIUM = "mycelium_lavage"
 VIDE = "vide_venturi"
 
@@ -194,6 +210,9 @@ PIECES_DES_POSTES: dict[str, tuple[str, ...]] = {
     "fermeture": ("chariot", "bras_fermeture"),
     "spray": ("spray",),
     "mycelium": ("tete", "agitateur", "porte_bocal"),
+    # Même pont que la préhension : la griffe ne part pas sans la tête (règles de l'autre).
+    "griffe": ("griffe", "tete", "chariot"),
+    "versement": ("griffe", "tete"),
     "entonnoir": ("tete",),
     "lavage_bocaux": ("tete", "lavage"),
 }
@@ -209,6 +228,7 @@ NOMS_DES_PIECES = {
     "tete": "tête de la Préhension",
     "lavage": "Lavage (eau du fût, brosses)",
     "spray": "carte du spray",
+    "griffe": "griffe (bras sur la carte du portique, pesée de la griffe)",
 }
 SUJET = "cartes du chariot et de la tête"
 QUOI_FAIRE_CARTE = (
@@ -235,7 +255,11 @@ class CartesMachine:
     tete: TeteFluidnc | None = None
     prehension: Prehension | None = None
     lavage: Lavage | None = None
+    bras_griffe: BrasFluidnc | None = None
     absentes: dict[str, str] = field(default_factory=dict)
+    # Pour la griffe des lots : le mode de la machine et les angles gardés (rotation de sa tête).
+    mode: Callable[[], str] = lambda: "production"
+    garde: AnglesGardes | None = None
 
     def manque(self, *pieces: str) -> str | None:
         """Pourquoi la première de ces pièces qui manque n'est pas là ; None : toutes là."""
@@ -371,7 +395,7 @@ def construire_cartes(
     `mode` : ModeMachine.actuel (Lavage) ; `garde` : les angles gardés (rotation de la tête) ;
     `erreur_codeur` : l'erreur du codeur de la rotation de la tête (°), pour le calage du moteur
     (None : pas encore lue sur la machine ; un faux dans les essais)."""
-    cartes = CartesMachine()
+    cartes = CartesMachine(mode=mode, garde=garde)
     if materiel is None:
         for piece in NOMS_DES_PIECES:
             cartes.absentes[piece] = CARTES_PAS_CONSTRUITES
@@ -532,6 +556,17 @@ def construire_cartes(
             panneau_rabattu=poste.panneau_vu_rabattu,
         )
 
+    def griffe() -> None:
+        if machine.griffe is None:
+            raise Absente("machine.yaml n'a pas de partie « griffe »")
+        if poste is None:
+            raise Absente("poste du fût pas suivi : la griffe ne vide le fût que sous sa garde")
+        # La porte du coffret du spray : griffe interdite en x < 0,50 et y < 0,40 (règle 3).
+        faire.signaux(PESEE_GRIFFE, PORTE_SPRAY)
+        liaison = faire.carte_fluidnc(CARTE_PONT)
+        force = faire.balance(PESEE_GRIFFE)
+        cartes.bras_griffe = BrasFluidnc(machine, liaison, force)
+
     def spray() -> None:
         if machine.spray is None:
             raise Absente("machine.yaml n'a pas de partie « spray »")
@@ -557,14 +592,15 @@ def construire_cartes(
         ("tete", tete),
         ("lavage", lavage),
         ("spray", spray),
+        ("griffe", griffe),
     ):
         essayer(piece, construire)
     return cartes
 
 
 class GriffeDuLot(Protocol):
-    """Ce que le lot de seaux demande à la griffe (case vide d'ORDRE_SEAU : son enchaînement avec
-    la préhension et le seau du chariot, solveur, tâche 23). Les essais donnent un faux."""
+    """Ce que le lot de seaux demande à une griffe jouée en faux (essais) : la vraie est
+    vidange.cycle.griffe_du_lot.GriffeDuSeau, construite par PiecesMachine.remplissage."""
 
     # Le seau tourne tant de secondes pendant chaque versement (étape « verser »).
     versement_s: float
@@ -575,7 +611,8 @@ class GriffeDuLot(Protocol):
 
 
 class VersementBocal(Protocol):
-    """Le versement de la griffe dans le bocal où est l'entonnoir (case vide, tâche 23)."""
+    """Le versement de la griffe dans le bocal où est l'entonnoir, joué en faux (essais) : le
+    vrai est vidange.griffe.versement.Versement, construit par PiecesMachine.entonnoir."""
 
     def verser(self, bocal: str) -> object: ...
 
@@ -586,16 +623,18 @@ class VersementBocal(Protocol):
 class Sources:
     """Ce que la machine n'a pas encore (cases vides, sans rien inventer) : None tant que ce n'est
     pas écrit, et le poste qui en a besoin dit « pas lancé : raison ». Sur la vraie machine,
-    vidange.demarrage les laisse toutes à None ; les essais donnent des faux."""
+    vidange.demarrage les laisse toutes à None ; les essais donnent des faux. `griffe` et
+    `versement_bocal` : None, c'est la vraie griffe des cartes (tâche 45 sexies) ; un faux la
+    remplace dans les essais."""
 
-    # Enchaînement de la griffe avec le seau du chariot (tâche 23).
+    # Une griffe jouée en faux (essais) ; None : la vraie, enchaînée au lot (tâche 45 sexies).
     griffe: GriffeDuLot | None = None
     # QR d'un bocal de semence lu par la caméra de la tête de la griffe (place → QR, ou None).
     qr_du_bocal: Callable[[str], str | None] | None = None
     # Photo du plafond : seaux pleins de la bande du haut (Stockage) ; entonnoir et col (bocaux).
     bande: VisionBande | None = None
     entonnoir: VisionEntonnoir | None = None
-    # Versement de la griffe dans un bocal (tâche 23).
+    # Un versement joué en faux (essais) ; None : le vrai, sur la griffe des cartes (43 bis).
     versement_bocal: VersementBocal | None = None
     # Bocaux sales et capsules à laver, vus par la caméra du plafond (règle 7).
     bocaux_sales: Callable[[], Sequence[ObjetLaveBocalSimule]] | None = None
@@ -719,6 +758,16 @@ class PiecesMachine:
             return CARTE_SPRAY if self.spray is None else self.manque_cartes(poste)
         if poste == "mycelium":
             return self.manque_cartes(poste) or self.manque_bocal_neuf()
+        if poste == "griffe" and self.sources.griffe is not None:
+            return None
+        if poste == "versement":
+            if self.sources.versement_bocal is not None:
+                return None
+            if self.machine is not None and (
+                self.machine.griffe is None or self.machine.griffe.versement_bocal is None
+            ):
+                return VERSEMENT_ABSENT
+            return self.manque_cartes(poste)
         if poste == "stockage":
             if self.materiel is None or BOUCLE not in self.materiel.branchements:
                 return f"pas de signal « {BOUCLE} » ouvert (entrées/sorties)"
@@ -783,22 +832,28 @@ class PiecesMachine:
         """Le lot de seaux sur les vraies cartes, assemblé comme vidange.cycle.simulation sur les
         pièces imaginaires : Remplissage (chariot, caméra du micropore), Mycélium (agitateur,
         porte-bocal) et son bocal neuf de semence (Préhension, Stockage), Micropore, Fermeture,
-        Couvercle, Spray. Ce qui manque (griffe, QR du bocal, codeur de la rotation, photo du
+        Couvercle, Spray, et la griffe (GriffeDuSeau, tâche 45 sexies ; un faux des essais s'il
+        est dans `sources`). Ce qui manque (griffe, QR du bocal, codeur de la rotation, photo du
         plafond...) : ErreurChef, avec la raison."""
         cartes = self._pieces_du_lot("chariot", "tete", "agitateur", "porte_bocal")
         machine = self.machine
         assert machine is not None
-        griffe = self.sources.griffe
+        fausse = self.sources.griffe
+        manque_griffe = None
+        if fausse is None:
+            manque_griffe = cartes.manque("griffe") or (
+                None if cartes.bras_griffe is not None else GRIFFE_DU_LOT
+            )
         for raison in (
             self.manque_bocal_neuf(),
-            None if griffe is not None else GRIFFE_DU_LOT,
+            manque_griffe,
             self.manque("stockage"),
             self.manque_inspection(),
             None if self.poste is not None else "poste du fût pas suivi",
         ):
             if raison is not None:
                 raise ErreurChef(f"lot de seaux impossible : {raison}")
-        assert griffe is not None and self.stockage is not None and self.poste is not None
+        assert self.stockage is not None and self.poste is not None
         chariot, prehension = cartes.chariot, cartes.prehension
         assert chariot is not None and prehension is not None
         poste = self.poste
@@ -866,6 +921,26 @@ class PiecesMachine:
             )
         )
         couvercle = Couvercle(machine, stockage=self.stockage) if avec_couvercle else None
+        vraie: GriffeDuSeau | None = None
+        if fausse is None:
+            assert cartes.bras_griffe is not None
+            camera = mycelium.camera
+            vraie = GriffeDuSeau(
+                machine,
+                cartes.bras_griffe,
+                poste,
+                prehension,
+                remplissage,
+                lot.seaux,
+                registre=self.registre,
+                mode=cartes.mode,
+                porte_spray_ouverte=self.porte_spray_ouverte,
+                dosage_en_cours=mycelium.dosage_en_cours,
+                camera_dosage_pivote=(lambda: False) if camera is None else camera.pivote,
+                garde=cartes.garde,
+            )
+            self.stockage.brancher_griffe(vraie.griffe)
+        griffe: GriffeDuLot = vraie if vraie is not None else fausse  # type: ignore[assignment]
         plan = Plan(seaux=list(lot.seaux), versement_s=griffe.versement_s, magasin=self.stockage)
         return PiecesRemplissage(
             remplissage,
@@ -875,20 +950,66 @@ class PiecesMachine:
             spray=spray,
             griffe_partie=griffe.partie,
             couvercle=couvercle,
+            griffe=vraie,
         )
+
+    def porte_spray_ouverte(self) -> bool:
+        """La porte du coffret du spray (règle 3 de la griffe) ; illisible : comptée ouverte."""
+        if self.materiel is None:
+            return True
+        try:
+            return bool(self.materiel.lire(PORTE_SPRAY))
+        except Exception:
+            return True
+
+    def griffe_des_bocaux(self) -> Griffe:
+        """La griffe d'un lot de bocaux, sur le bras des cartes : maïs, sans mâchouiller ; la
+        tête de préhension (même pont) est vérifiée à chaque pas qui bouge le pont."""
+        cartes = self._pieces_du_lot("griffe", "tete")
+        machine, poste = self.machine, self.poste
+        assert machine is not None and cartes.bras_griffe is not None and poste is not None
+        prehension = cartes.prehension
+        assert prehension is not None
+
+        def face_z() -> float | None:
+            try:
+                return prehension.tete.position().z
+            except Exception:
+                return None
+
+        griffe = Griffe(
+            machine,
+            cartes.bras_griffe,
+            poste,
+            self.registre,
+            mode=cartes.mode,
+            porte_spray_ouverte=self.porte_spray_ouverte,
+            machouiller=lambda: False,
+            prehension_face_z=face_z,
+            garde=cartes.garde,
+        )
+        brancher_pont(griffe, prehension)
+        if self.stockage is not None:
+            self.stockage.brancher_griffe(griffe)
+        return griffe
 
     def entonnoir(self, lot: LotBocaux) -> PiecesEntonnoir:
         """Le lot de bocaux sur la tête de la Préhension : l'entonnoir (son état dans
-        donnees/entonnoir.json), la photo du plafond et le versement de la griffe (cases vides :
-        ErreurChef avec la raison tant qu'ils manquent)."""
+        donnees/entonnoir.json), la photo du plafond (case vide : ErreurChef avec la raison tant
+        qu'elle manque) et le versement de la griffe (vidange.griffe.versement sur la griffe des
+        cartes, tâche 45 sexies ; un faux des essais s'il est dans `sources`)."""
         cartes = self._pieces_du_lot("tete")
         machine = self.machine
         assert machine is not None and cartes.prehension is not None
-        vision, versement = self.sources.entonnoir, self.sources.versement_bocal
+        vision, faux = self.sources.entonnoir, self.sources.versement_bocal
         if vision is None:
             raise ErreurChef(f"lot de bocaux impossible : {PHOTO_DU_PLAFOND}")
-        if versement is None:
-            raise ErreurChef(f"lot de bocaux impossible : {VERSEMENT_BOCAL}")
+        if faux is None:
+            raison = self.manque("versement") or (
+                None if cartes.bras_griffe is not None else VERSEMENT_BOCAL
+            )
+            if raison is not None:
+                raise ErreurChef(f"lot de bocaux impossible : {raison}")
         stockage = self.stockage
 
         def marquer_suspect(bocal: str) -> None:
@@ -901,9 +1022,18 @@ class PiecesMachine:
             vision=vision,
             marquer_suspect=marquer_suspect,
         )
-        return PiecesEntonnoir(
-            entonnoir, cartes.prehension, verser=versement.verser, versement_fini=versement.fini
+        if faux is not None:
+            return PiecesEntonnoir(
+                entonnoir, cartes.prehension, verser=faux.verser, versement_fini=faux.fini
+            )
+        # La distance de la tête (VL53L1X) n'est pas lue : sans elle, le bouchage de l'entonnoir
+        # n'est pas vérifié, et le journal le dit (tâche 43 bis).
+        versement = Versement(
+            self.griffe_des_bocaux(),
+            entonnoir,
+            fichier=None if self.donnees is None else self.donnees / NOM_VERSEMENT,
         )
+        return PiecesEntonnoir(entonnoir, cartes.prehension, versement=versement)
 
     def lavage_bocaux(self) -> PiecesLavageBocaux:
         """Le lave-bocal sur le Lavage de la tête, avec les bocaux sales vus par la caméra du
@@ -917,8 +1047,9 @@ class PiecesMachine:
 
 class FondDuLot:
     """Les boucles en fond des pièces, pendant un lot seulement (rien au démarrage : tâche 45 ter,
-    choix 2) : balance du chariot, balance de l'agitateur, lecture et battement du boîtier du
-    chariot (tête du micropore, bras de la fermeture), vide et force de la tête.
+    choix 2) : balance du chariot, balance de l'agitateur, pesée de la griffe (tâche 45 sexies),
+    lecture et battement du boîtier du chariot (tête du micropore, bras de la fermeture), vide et
+    force de la tête.
 
         fond = FondDuLot(cartes, reglages.programme.lot, chef)
         fond.demarrer(["remplissage", "mycelium"])   # au Go, juste avant le lot ; ErreurChef sinon
@@ -1008,6 +1139,9 @@ class FondDuLot:
         periode = self.reglages.fond_periode_s
         if cartes.chariot is not None:
             self._demarrer("chariot", cartes.chariot.demarrer)
+        if cartes.bras_griffe is not None:
+            # La pesée de la griffe, 80 fois par seconde : elle ne descend jamais sans elle.
+            self._demarrer("griffe", cartes.bras_griffe.demarrer)
         if cartes.agitateur is not None:
             self._demarrer("agitateur", cartes.agitateur.demarrer)
         for nom, piece in (

@@ -12,7 +12,7 @@ vidange.cycle.machine) et au simulateur (`vidange-simulateur cycle`, pièces de
 vidange.cycle.simulation). Seules les pièces changent : ce qui touche le matériel.
 
 Un poste n'est pas lancé, et la check-list et l'écran disent pourquoi, quand :
-- son geste n'est pas encore écrit (`case_vide` d'ORDRE_SEAU : griffe, lavage...) ;
+- son geste n'est pas encore écrit (`case_vide` d'ORDRE_SEAU : lavage des seaux...) ;
 - machine.yaml n'a pas sa partie ;
 - sur la vraie machine, sa partie de machine.yaml est en EXEMPLE (`exemple: true`) ;
 - les pièces disent qu'il manque quelque chose (matériel, vision de la caméra du micropore...) ;
@@ -21,9 +21,11 @@ Jamais de geste inventé : un poste pas prêt est sauté (il n'est pas remplacé
 
 Le lot (les seaux vides à remplir, d'un format) est donné au chef sous deux modules :
 « remplissage » (avec la préhension, le stockage, le micropore et la fermeture branchés) et
-« mycelium ». Où en est le lot (seau en cours, couche, seau sur le plateau) est noté dans le carnet
-du chef après chaque étape : après une coupure, le lot est reconstruit et repris à son étape, après
-le Go de Karulium.
+« mycelium » ; avec la vraie griffe (vidange.cycle.griffe_du_lot, tâche 45 sexies), un troisième,
+« griffe », dont l'étape « verser » du Remplissage attend chaque couche. Où en est le lot (seau
+en cours, couche, seau sur le plateau ; la vidange de la griffe et ses couches) est noté dans le
+carnet du chef après chaque étape : après une coupure, le lot est reconstruit et repris à son
+étape, après le Go de Karulium.
 
 Les conditions entre modules sont branchées ici, comme le disent docs/decisions.md et les
 tâches : air comprimé (`chef.condition_permission("air")`, avant de prendre un seau par le
@@ -59,6 +61,7 @@ from vidange.stockage import places
 
 if TYPE_CHECKING:
     from vidange.couvercle.couvercle import Couvercle
+    from vidange.cycle.griffe_du_lot import GriffeDuSeau
     from vidange.reglages import Machine
     from vidange.spray.spray import Spray
     from vidange.stockage.stockage import Stockage
@@ -67,6 +70,7 @@ journal = donner_journal("mode_seaux")
 
 REMPLISSAGE = "remplissage"
 MYCELIUM = "mycelium"
+GRIFFE = "griffe"
 SUJET = "mode seaux"
 QUOI_FAIRE = (
     "Rien à faire pour l'instant : ce poste sera lancé quand ce qui manque sera écrit ou réglé "
@@ -159,7 +163,8 @@ class PiecesRemplissage:
     """Ce que les pièces construisent pour un lot : le chariot, la tête, le mycélium et le plan
     (avec le Stockage dans `plan.magasin`) ; le spray (None : pas de spray), branché au chariot,
     ce qui dit que la griffe est partie du poste chercher sa 1re prise, et le couvercle (None :
-    pas de pose du couvercle)."""
+    pas de pose du couvercle). `griffe` : la vraie griffe (tâche 45 sexies) ; None : chaque
+    versement est une rotation du seau de `plan.versement_s` (simulateur, essais)."""
 
     remplissage: Remplissage
     prehension: Prehension
@@ -168,6 +173,7 @@ class PiecesRemplissage:
     spray: "Spray | None" = None
     griffe_partie: Callable[[], bool] = lambda: False
     couvercle: "Couvercle | None" = None
+    griffe: "GriffeDuSeau | None" = None
 
 
 class Pieces(Protocol):
@@ -302,9 +308,15 @@ class ModeSeaux:
 
     # ------------------------------------------------------------ le lot
 
-    def modules_du_lot(self, lot: Lot, memoire: Mapping[str, Any] | None = None) -> list[Module]:
-        """Les modules du chef pour ce lot (« remplissage » et « mycelium »). `memoire` : celle
-        du carnet, après une coupure (seau en cours, couche, seau sur le plateau)."""
+    def modules_du_lot(
+        self,
+        lot: Lot,
+        memoire: Mapping[str, Any] | None = None,
+        memoire_griffe: Mapping[str, Any] | None = None,
+    ) -> list[Module]:
+        """Les modules du chef pour ce lot (« remplissage », « mycelium », et « griffe » avec la
+        vraie griffe). `memoire` : celle du carnet, après une coupure (seau en cours, couche,
+        seau sur le plateau) ; `memoire_griffe` : celle de la griffe (sa vidange, ses couches)."""
         refus = self.refus_lot()
         if refus is not None:
             raise ErreurChef(f"lot de seaux impossible : {refus}")
@@ -324,6 +336,9 @@ class ModeSeaux:
         plan.fin_de_lot = lot.fin_de_lot
         if memoire is not None:
             self._retrouver(pieces, memoire)
+        griffe = pieces.griffe
+        if griffe is not None and memoire_griffe:
+            griffe.retrouver(dict(memoire_griffe))
         remplissage = module_remplissage(
             pieces.remplissage,
             pieces.prehension,
@@ -337,12 +352,17 @@ class ModeSeaux:
             spray=pieces.spray,
             griffe_partie=pieces.griffe_partie,
             couvercle=pieces.couvercle,
+            griffe=griffe,
         )
         en_cours = _LotEnCours(lot, pieces)
+        # Le bocal neuf est un geste de la Préhension : même pont que la griffe.
+        garee = () if griffe is None else (griffe.garee,)
         en_cours.modules = [
             self._noter_le_lot(remplissage, en_cours),
-            module_mycelium(pieces.mycelium),
+            module_mycelium(pieces.mycelium, prehension_permise=garee),
         ]
+        if griffe is not None:
+            en_cours.modules.append(griffe.module(lambda: self._noter_griffe(griffe)))
         self.en_cours = en_cours
         return list(en_cours.modules)
 
@@ -413,8 +433,23 @@ class ModeSeaux:
                 memoire.get("numero", 0) + 1,
                 memoire.get("couche", 1),
             )
-            return self.modules_du_lot(lot, memoire)
+            griffe = next(
+                (
+                    n.get("memoire") or {}
+                    for n in etat_carnet.get("modules", [])
+                    if n.get("module") == GRIFFE
+                ),
+                None,
+            )
+            return self.modules_du_lot(lot, memoire, griffe)
         return []
+
+    def _noter_griffe(self, griffe: "GriffeDuSeau") -> None:
+        """Où en est la griffe (sa vidange, les couches versées), dans le carnet du chef."""
+        try:
+            self.chef.memoriser(GRIFFE, **griffe.memoire())
+        except ErreurChef as erreur:
+            journal.error("Griffe pas notée dans le carnet : %s", erreur)
 
     def _retrouver(self, pieces: PiecesRemplissage, memoire: Mapping[str, Any]) -> None:
         plan = pieces.plan

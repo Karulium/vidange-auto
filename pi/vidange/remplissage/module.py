@@ -2,8 +2,10 @@
 
 Il tourne avec le module « mycelium », qui mène le chariot pendant le dosage (Mycelium.demander,
 puis `ecarter` et `amener_au_dosage` du Remplissage). Les versements de la griffe sont ceux d'un
-`Plan` (le seau tourne pendant `versement_s`) : le vrai enchaînement avec la griffe viendra avec
-le solveur (tâche 23). C'est le scénario « remplissage » du simulateur, et un essai.
+`Plan` (le seau tourne pendant `versement_s`) : c'est le scénario « remplissage » du simulateur,
+et un essai. Avec la vraie griffe (`griffe`, vidange.cycle.griffe_du_lot, tâche 45 sexies),
+l'étape « verser » attend qu'elle ait versé et tassé la couche (le seau tourne quand elle le
+demande), et les gestes de la préhension attendent la griffe garée (même pont).
 
     aller_a_la_pose        chariot à y 0,50, barres à l'approche, plateau sous la hauteur de pose
     prendre_le_seau        la préhension prend un seau vide au stockage
@@ -20,7 +22,8 @@ le solveur (tâche 23). C'est le scénario « remplissage » du simulateur, et u
     ramener_au_vidage      y 0,42, plateau à la hauteur du vidage (manivelle du mycélium en bas
                            si le chariot part de près du poste)
     verser                 versement de la griffe au vidage : le seau tourne (permission du chef :
-                           pas pendant la purge de l'enceinte)
+                           pas pendant la purge de l'enceinte) ; avec la vraie griffe, le seau
+                           attend, arrêté, qu'elle ait versé et tassé la couche
     doser                  le Mycélium dose la couche (il mène le chariot : poste, dosage, retour
                            au vidage)
     revenir_au_vidage      couche suivante : retour au vidage (plateau à sa hauteur)
@@ -52,7 +55,7 @@ fermée (elle est aussi surveillée pendant les gestes). Quatre étapes de plus 
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from vidange.chef import Condition, ErreurEtape, Etape, Module
 from vidange.mycelium.mycelium import Demande, Mycelium
@@ -69,6 +72,27 @@ if TYPE_CHECKING:
 GESTE = "remplissage_geste_max"
 GESTE_PREHENSION = "prehension_geste_max"
 DOSAGE = "remplissage_dosage_max"
+# Une couche versée par la vraie griffe (plusieurs prises dans le fût).
+COUCHE_GRIFFE = "remplissage_couche_griffe_max"
+QUOI_FAIRE_GRIFFE = (
+    "La griffe verse la couche de substrat dans le seau : regarder son module (alarme, poste du "
+    "fût pas prêt ?) et la vidéo de la griffe. Corriger, puis acquitter et donner le Go."
+)
+
+
+class CouchesDeLaGriffe(Protocol):
+    """La vraie griffe vue du Remplissage (vidange.cycle.griffe_du_lot.GriffeDuSeau)."""
+
+    # La griffe ne gêne pas un trajet du pont de la préhension (même pont, même chariot Y).
+    garee: Condition
+
+    def attendre(self, seau: int, couche: int) -> None:
+        """Le seau `seau` (numéro dans le lot) attend sa couche `couche` au vidage."""
+        ...
+
+    def couche_versee(self) -> bool:
+        """La couche attendue est versée et tassée (ErreurEtape : elle ne viendra pas)."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -121,6 +145,7 @@ def module_remplissage(
     spray: "Spray | None" = None,
     griffe_partie: Callable[[], bool] = lambda: False,
     couvercle: "Couvercle | None" = None,
+    griffe: CouchesDeLaGriffe | None = None,
 ) -> Module:
     """`air` : condition d'entrée de la prise d'un seau par le venturi (sur la machine :
     `chef.condition_permission("air")`, l'attente de mise en pression du module Air, tâche 42).
@@ -133,7 +158,11 @@ def module_remplissage(
 
     `couvercle` (tâche 41 bis) : après la dernière couche, la préhension pose un couvercle sur le
     seau plein avant la fermeture ; la pose attend le bras de fermeture rangé et la griffe
-    partie."""
+    partie.
+
+    `griffe` (tâche 45 sexies) : la vraie griffe. L'étape « verser » ne fait plus tourner le seau
+    pendant `plan.versement_s` : elle dit à la griffe quelle couche le seau attend, puis attend
+    qu'elle l'ait versée et tassée. Chaque geste de la préhension attend la griffe garée."""
     chariot, tete = remplissage.chariot, prehension.tete
     magasin = plan.magasin
     # Règle 9 : la tête ne descend au-dessus du chariot que barres ouvertes, micropore rentré.
@@ -231,6 +260,9 @@ def module_remplissage(
             geste("fermer_le_seau", remplissage.geste_fermer, entree=(libre, manivelle_en_bas)),
         )
 
+    # Même pont que la griffe : la préhension ne part que griffe garée (tâche 45 sexies).
+    griffe_garee: tuple[Condition, ...] = () if griffe is None else (griffe.garee,)
+
     def geste_tete(nom: str, fabrique, ensuite=None, avec_air: bool = False, entree=()) -> Etape:
         venturi = (air,) if avec_air and air is not None else ()
         return Etape(
@@ -239,7 +271,7 @@ def module_remplissage(
             action=lambda: prehension.lancer(fabrique),
             fin=fin_tete,
             delai_max=GESTE_PREHENSION,
-            entree=(tete.pretes, chariot.pretes, *boucle, *venturi, *entree),
+            entree=(tete.pretes, chariot.pretes, *boucle, *venturi, *griffe_garee, *entree),
             ensuite=ensuite,
         )
 
@@ -320,6 +352,27 @@ def module_remplissage(
     def verser():
         plan.versement(plan.seau, plan.couche)
         return remplissage.geste_tourner(plan.versement_s)
+
+    if griffe is None:
+        etape_verser = geste("verser", verser, entree=(versement_permis,))
+    else:
+        vraie_griffe = griffe
+
+        def attendre_la_griffe() -> None:
+            plan.versement(plan.seau, plan.couche)
+            vraie_griffe.attendre(plan.numero, plan.couche)
+
+        etape_verser = Etape(
+            "verser",
+            QUOI_FAIRE_GRIFFE,
+            action=attendre_la_griffe,
+            fin=Condition(
+                "couche de substrat versée et tassée par la griffe (seau arrêté)",
+                lambda: vraie_griffe.couche_versee() and remplissage.libre(),
+            ),
+            delai_max=COUCHE_GRIFFE,
+            entree=(chariot.pretes, *boucle, *micropore, versement_permis),
+        )
 
     # Le dernier QR lu sur le flanc du seau en cours (le seau rangé n'est plus sur le plateau).
     dernier_lu = [""]
@@ -483,7 +536,7 @@ def module_remplissage(
             geste(
                 "ramener_au_vidage", remplissage.geste_ramener_au_vidage, entree=(manivelle_en_bas,)
             ),
-            geste("verser", verser, entree=(versement_permis,)),
+            etape_verser,
             Etape(
                 "doser",
                 "Le Mycélium dose la couche : regarder son module s'il est en alarme.",

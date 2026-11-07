@@ -733,7 +733,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   main ce que contient le stockage (bocaux de semence par variété et par place, capsules et couvercles percés dans les
   boîtes, piles de seaux vides par format, couvercles), avec le Go de Karulium avant d'écrire ; le lot (tâche 45
   quater, `refus_taille_lot`) lit ces nombres. Journal de chaque correction. Tests et procédure courte.
-- [ ] **45 sexies. Programme principal : construire la griffe et l'enchaîner (seaux et bocaux)** — Modèle : Opus,
+- [x] **45 sexies. Programme principal : construire la griffe et l'enchaîner (seaux et bocaux)** — Modèle : Opus,
   effort moyen. Le solveur (tâche 23) ne l'a pas fait : il ne fait que l'ordre de priorité. Aujourd'hui
   `Sources.griffe` et `Sources.versement_bocal` restent à None sur la vraie machine (`pi/vidange/cycle/machine.py`,
   textes `GRIFFE_DU_LOT` et `VERSEMENT_BOCAL`).

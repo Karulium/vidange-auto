@@ -31,15 +31,19 @@ def module_griffe(
     griffe: Griffe,
     seau_pret: Callable[[], bool] = lambda: True,
     pont_libre: Callable[[], bool] = lambda: True,
+    fut_permis: Callable[[], bool] = lambda: True,
 ) -> Module:
     """`seau_pret` : un seau est au poste de remplissage, et la couche de mycélium d'avant est
-    versée (Remplissage et Mycélium, pas encore écrits). `pont_libre` : la préhension n'a pas
-    besoin du pont (les deux mâts sont sur le même chariot)."""
+    versée. `pont_libre` : la préhension n'a pas besoin du pont (les deux mâts sont sur le même
+    chariot). `fut_permis` : la griffe peut descendre dans le fût (raclage, prise) ; dans le lot
+    de seaux (vidange.cycle.griffe_du_lot), seulement quand un seau l'attend au vidage : une fois
+    dans le fût, elle tient le pont jusqu'au versement."""
     poste = griffe.poste
     poste.griffe_hors_fut = griffe.hors_du_fut
     fin = Condition("geste de la griffe fini", griffe.geste_fini)
     pont = Condition("pont libre (la préhension n'en a pas besoin)", pont_libre)
     seau = Condition("seau prêt au poste de remplissage (mycélium versé)", seau_pret)
+    fut = Condition("un seau attend la griffe (elle peut descendre dans le fût)", fut_permis)
 
     def geste(nom: str, fabrique, ensuite, entree: tuple[Condition, ...] = ()) -> Etape:
         return Etape(
@@ -62,8 +66,8 @@ def module_griffe(
                 ensuite=griffe.nouveau_fut,
             ),
             geste("revenir_au_fut", griffe.geste_revenir, griffe.apres_retour, (pont,)),
-            geste("racler", griffe.geste_racler, griffe.apres_retour, (pont,)),
-            geste("prendre_une_dose", griffe.geste_prendre, griffe.apres_prise, (pont,)),
+            geste("racler", griffe.geste_racler, griffe.apres_retour, (pont, fut)),
+            geste("prendre_une_dose", griffe.geste_prendre, griffe.apres_prise, (pont, fut)),
             geste(
                 "porter_au_seau", griffe.geste_porter, lambda: "vider_dans_le_seau", (seau, pont)
             ),

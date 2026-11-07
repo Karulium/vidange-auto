@@ -18,6 +18,7 @@ from vidange.chef import Chef, ErreurChef
 from vidange.chef.chef import ATTENTE_GO, EtatChef, EtatModule
 from vidange.couvercle.couvercle import Couvercle
 from vidange.cycle import Lancement, ModeBocaux, ModeSeaux
+from vidange.cycle.griffe_du_lot import GriffeDuSeau
 from vidange.cycle.machine import (
     BOCAL_NEUF,
     BOCAUX_SALES,
@@ -40,6 +41,7 @@ from vidange.cycle.mode_seaux import Lot, refus_taille_lot
 from vidange.cycle.simulation import jouer_cycle
 from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.fermeture.fermeture import Fermeture
+from vidange.griffe.versement import Versement
 from vidange.lavage.bocaux import LavageBocaux
 from vidange.micropore.micropore import Micropore
 from vidange.mycelium.mycelium import Mycelium
@@ -69,7 +71,8 @@ def liste():
 
 
 class FausseGriffe:
-    """La griffe que la tâche 23 écrira : un versement dure tant, elle est vue partie."""
+    """Une griffe jouée en faux (à la place de la vraie) : un versement dure tant, elle est vue
+    partie."""
 
     versement_s = 1.0
 
@@ -226,13 +229,24 @@ def test_piece_manquante_le_lot_dit_pourquoi(liste):
         machine.fermer()
     machine = Machine(liste, sources=Sources(qr_du_bocal=lambda place: "SEM"))
     try:
-        # QR et codeur là : il manque encore la griffe (tâche 23), jamais inventée.
+        # QR et codeur là, pas de fausse griffe : c'est la vraie griffe des cartes (45 sexies).
         assert machine.pieces.manque("mycelium") is None
-        with pytest.raises(ErreurChef, match="griffe"):
-            machine.pieces.remplissage(lot_de(1), False, False, False, False)
-        assert GRIFFE_DU_LOT.startswith("enchaînement de la griffe")
+        lot = machine.pieces.remplissage(lot_de(1), False, False, False, False)
+        assert isinstance(lot.griffe, GriffeDuSeau)
+        assert lot.griffe.griffe.bras is machine.cartes.bras_griffe
+        assert lot.plan.versement_s == 0.0
         machine.pieces.sources.entonnoir = FauxPlafond()
-        with pytest.raises(ErreurChef, match="versement de la griffe"):
+        bocaux = machine.pieces.entonnoir(LotBocaux(("bocal_0_0",)))
+        assert isinstance(bocaux.versement, Versement)
+        assert bocaux.versement.griffe.bras is machine.cartes.bras_griffe
+        # Sans la griffe construite : la raison, jamais un lot.
+        machine.cartes.absentes["griffe"] = GRIFFE_DU_LOT
+        machine.cartes.bras_griffe = None
+        assert machine.pieces.manque("griffe") == GRIFFE_DU_LOT
+        assert machine.pieces.manque("versement") == GRIFFE_DU_LOT
+        with pytest.raises(ErreurChef, match="griffe pas construite"):
+            machine.pieces.remplissage(lot_de(1), False, False, False, False)
+        with pytest.raises(ErreurChef, match="griffe pas construite"):
             machine.pieces.entonnoir(LotBocaux(("bocal_0_0",)))
         assert VERSEMENT_BOCAL.startswith("versement de la griffe")
         machine.pieces.sources.qr_du_bocal = None
@@ -438,13 +452,20 @@ def test_boucles_de_fond_lancees_avec_le_lot_puis_arretees(machine):
     tete = machine.cartes.tete
     assert tete.vide.zero is None
     fond.demarrer(["remplissage", "mycelium"], suivi=False)
-    assert set(fond.actives) == {"chariot", "agitateur", "tete_micropore", "bras_fermeture", "tete"}
+    assert set(fond.actives) == {
+        "chariot",
+        "agitateur",
+        "griffe",
+        "tete_micropore",
+        "bras_fermeture",
+        "tete",
+    }
     # Au départ, le zéro du vide est recalé (vanne coupée).
     assert tete.vide.zero is not None
     zero = tete.vide.zero
     chef.modules = {"remplissage": ("en_cours", ""), "mycelium": ("en_cours", "")}
     fond.suivre()
-    assert len(fond.actives) == 5
+    assert len(fond.actives) == 6
     # Alarme : tout s'arrête, mais le lot reste suivi.
     chef.modules["remplissage"] = ("alarme", "")
     chef.modules["mycelium"] = ("alarme", "")
@@ -454,7 +475,14 @@ def test_boucles_de_fond_lancees_avec_le_lot_puis_arretees(machine):
     tete.vide.zero = zero + 0.5
     chef.modules["remplissage"] = ("en_cours", ATTENTE_GO)
     fond.suivre()
-    assert set(fond.actives) == {"chariot", "agitateur", "tete_micropore", "bras_fermeture", "tete"}
+    assert set(fond.actives) == {
+        "chariot",
+        "agitateur",
+        "griffe",
+        "tete_micropore",
+        "bras_fermeture",
+        "tete",
+    }
     assert tete.vide.zero == zero + 0.5
     # Lot fini : plus aucune boucle, plus de suivi.
     chef.modules = {"remplissage": ("fini", ""), "mycelium": ("fini", "")}
