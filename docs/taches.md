@@ -1427,7 +1427,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   - Les chiffres du § 3 de la source vont dans `machine.yaml → micropore`, avec la vérification au démarrage.
   Simulateur et tests : ToF qui ne voit pas l'escamotage, pas de contact, trou découvert puis nouvel essai, rangée
   trop haute (> 0,575), format inconnu, carte redémarrée.
-- [ ] **40 bis. Carte de pesée du plateau : I2C vers la PCA9685 et le VL6180X** — Modèle : Sonnet, effort moyen. À
+- [x] **40 bis. Carte de pesée du plateau : I2C vers la PCA9685 et le VL6180X** — Modèle : Sonnet, effort moyen. À
   faire avant la tâche 40.
   Vrai matériel : procédure d'essai, « testé sur le vrai matériel : non ».
   Dans `pesee/`, pour la carte du plateau du remplissage seulement (réglage par carte), ajouter un I2C (EXEMPLE I2C0

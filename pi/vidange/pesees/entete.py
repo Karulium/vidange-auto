@@ -71,19 +71,64 @@ def rediger_entete(reglages: ReglagesPesees, liste: EntreesSorties) -> str:
         "",
         *(f"#define REGLAGE_{nom} {valeur}" for nom, valeur in valeurs.items()),
         "",
+        *_lignes_i2c(reglages),
     ]
     return "\n".join(lignes)
+
+
+def _lignes_i2c(reglages: ReglagesPesees) -> list[str]:
+    """L'I2C de la seule carte qui en a (le programme des autres cartes ne s'en sert pas)."""
+    i2c = reglages.i2c
+    if i2c is None:
+        return []
+    pca = i2c.pca9685
+    tof = i2c.vl6180x
+    voies = ", \\\n".join(
+        f"    {{.canal = {v.canal}, .angle_min_dix = {v.angle_min_dix}, "
+        f".angle_max_dix = {v.angle_max_dix}, .impulsion_min_us = {v.impulsion_min_us}, "
+        f".impulsion_max_us = {v.impulsion_max_us}}}"
+        for v in pca.voies.values()
+    )
+    valeurs = {
+        "I2C_BROCHE_SDA": i2c.broches.sda,
+        "I2C_BROCHE_SCL": i2c.broches.scl,
+        "I2C_BLOC": i2c.broches.bloc_i2c,
+        "I2C_FREQUENCE_HZ": i2c.frequence_hz,
+        "I2C_DELAI_TRANSACTION_US": i2c.delai_transaction_us,
+    }
+    return [
+        "// L'I2C de la carte du plateau du remplissage (REGLAGE_AVEC_I2C = 1 pour elle seule).",
+        *(f"#define REGLAGE_{nom} {valeur}" for nom, valeur in valeurs.items()),
+        "#define REGLAGE_I2C_CONFIG { \\",
+        f"    .pca = {{.adresse = {pca.adresse}, .frequence_hz = {pca.frequence_pwm_hz}, "
+        f".horloge_hz = {pca.horloge_hz}}}, \\",
+        f"    .pca_reveil_us = {pca.reveil_us}, \\",
+        f"    .tof = {{.adresse = {tof.adresse}, .periode_ms = {tof.periode_ms}, "
+        f".sondage_ms = {tof.sondage_ms}, .delai_max_ms = {tof.delai_max_ms}, "
+        f".reessai_ms = {i2c.reessai_ms}}}, \\",
+        f"    .silence_pi_ms = {i2c.silence_pi_ms}, \\",
+        f"    .reessai_ms = {i2c.reessai_ms}, \\",
+        f"    .nb_voies = {len(pca.voies)}, \\",
+        "    .voies = { \\",
+        voies + " \\",
+        "    } \\",
+        "}",
+        "",
+    ]
 
 
 def rediger_cmake(reglages: ReglagesPesees, liste: EntreesSorties) -> str:
     """Le contenu de reglages_genere.cmake (lu avant le Pico SDK)."""
     cartes = ";".join(f"{nom};{adresse}" for nom, adresse in cartes_de_pesee(liste).items())
+    carte_i2c = "" if reglages.i2c is None else reglages.i2c.carte
     return (
         "# Écrit par vidange.pesees.entete depuis pi/reglages/pesees.yaml et\n"
         "# docs/entrees-sorties.yaml.\n"
         f'set(PICO_BOARD "{reglages.carte}")\n'
         "# Chaque carte de pesée et son adresse sur le bus (un programme par carte).\n"
         f'set(CARTES_PESEE "{cartes}")\n'
+        "# La seule carte qui a l'I2C (servos et capteur de distance) ; vide : aucune.\n"
+        f'set(CARTE_PESEE_I2C "{carte_i2c}")\n'
     )
 
 

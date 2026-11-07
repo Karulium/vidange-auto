@@ -322,12 +322,32 @@ class FausseCartePesee:
         self.trames_abimees = 0
         self.debranche = False
         self.questions = 0
+        # Le boîtier du chariot (I2C), seulement sur la carte du plateau du remplissage : voir
+        # brancher_boitier.
+        self.boitier: FauxBoitierChariot | None = None
+
+    def brancher_boitier(
+        self, plages_deg: list[tuple[float, float]] | None = None
+    ) -> "FauxBoitierChariot":
+        """Donne à cette carte l'I2C du plateau du remplissage : une voie de servo par plage
+        d'angle (min, max en degrés ; 3 voies de 0 à 270° par défaut). Rend le faux boîtier,
+        pour le régler (distance du ToF, pannes...)."""
+        self.boitier = FauxBoitierChariot(plages_deg or [(0, 270)] * 3)
+        return self.boitier
 
     def repondre(self, demande: bytes) -> bytes:
         adresse, fonction = demande[0], demande[1]
         premier = int.from_bytes(demande[2:4], "big")
         nombre = int.from_bytes(demande[4:6], "big")
         self.questions += 1
+        if fonction == 16:
+            if self.boitier is None:
+                reponse = bytes([adresse, fonction | 0x80, 1])
+                return reponse + crc_modbus(reponse)
+            valeurs = [int.from_bytes(demande[7 + 2 * i : 9 + 2 * i], "big") for i in range(nombre)]
+            code = self.boitier.ecrire(premier, valeurs)
+            reponse = demande[:6] if code == 0 else bytes([adresse, fonction | 0x80, code])
+            return reponse + crc_modbus(reponse)
         if self._mesure_nouvelle():
             self.numero = (self.numero + 1) & 0xFFFF
         return self._repondre(adresse, fonction, premier, nombre, self._registres())
@@ -336,7 +356,7 @@ class FausseCartePesee:
         return not self.figee and not self.hx711_muet
 
     def _registres(self) -> list[int]:
-        return carte_pesee.encoder(
+        registres = carte_pesee.encoder(
             carte_pesee.MesureCarte(
                 brut=self.brut,
                 numero=self.numero,
@@ -347,6 +367,9 @@ class FausseCartePesee:
                 trames_abimees=self.trames_abimees,
             )
         )
+        if self.boitier is not None:
+            registres += carte_pesee.encoder_boitier(self.boitier.etat())
+        return registres
 
     @staticmethod
     def _repondre(
@@ -360,6 +383,80 @@ class FausseCartePesee:
             donnees = b"".join(r.to_bytes(2, "big") for r in registres[premier : premier + nombre])
             reponse = bytes([adresse, fonction, len(donnees)]) + donnees
         return reponse + crc_modbus(reponse)
+
+
+class FauxBoitierChariot:
+    """L'I2C de la carte du plateau du remplissage : PCA9685 (angles des servos) et VL6180X (même
+    table que pesee/src/plateau.h, vidange.materiel.carte_pesee).
+
+    Les angles sont des dixièmes de degré, sortie coupée au départ. Comme la vraie carte, elle
+    refuse (exception 3) toute écriture dont un angle sort de la plage de sa voie, et ne change
+    rien dans ce cas. À régler dans un test : `distance_mm` (None : pas de bonne mesure),
+    `etat_tof`, `silence_pi_ms`, `pca9685_muette`, `tof_muet`; `redemarrer()` fait repartir la
+    carte (compteur de démarrages changé, servos sortie coupée)."""
+
+    def __init__(self, plages_deg: list[tuple[float, float]]) -> None:
+        self.plages_dix = [(round(a * 10), round(b * 10)) for a, b in plages_deg]
+        self.registres_angles = [carte_pesee.ANGLE_COUPE] * len(plages_deg)
+        self.distance_mm: int | None = 50
+        self.etat_tof = 0
+        self.age_tof_ms = 20
+        self.demarrages = 1
+        self.pca9685_muette = False
+        self.tof_muet = False
+        self.aucun_ordre = True
+        self.silence_pi_ms = 0
+        self.echecs_i2c = 0
+        self.ordres = 0
+        # Plus d'ordre depuis ce temps : la carte garde les angles et le dit.
+        self.silence_max_ms = 2000
+
+    def redemarrer(self) -> None:
+        """La carte repart (chien de garde, coupure) : compteur changé, servos sortie coupée."""
+        self.demarrages = (self.demarrages + 1) & 0xFFFF
+        self.registres_angles = [carte_pesee.ANGLE_COUPE] * len(self.registres_angles)
+        self.aucun_ordre = True
+        self.silence_pi_ms = 0
+
+    def ecrire(self, premier: int, valeurs: list[int]) -> int:
+        """Une écriture de registres : 0 si acceptée, sinon le code d'exception Modbus."""
+        fin = carte_pesee.REGISTRE_ANGLES + len(self.registres_angles)
+        if premier < carte_pesee.REGISTRE_ANGLES or premier + len(valeurs) > fin:
+            return 2
+        voie = premier - carte_pesee.REGISTRE_ANGLES
+        for decalage, valeur in enumerate(valeurs):
+            angle = carte_pesee.angle_du_registre(valeur)
+            if angle is None:
+                continue
+            mini, maxi = self.plages_dix[voie + decalage]
+            if not mini <= round(angle * 10) <= maxi:
+                return 3
+        for decalage, valeur in enumerate(valeurs):
+            self.registres_angles[voie + decalage] = valeur
+        self.aucun_ordre = False
+        self.silence_pi_ms = 0
+        self.ordres += 1
+        return 0
+
+    def etat(self) -> carte_pesee.BoitierChariot:
+        return carte_pesee.BoitierChariot(
+            distance_mm=None if self.tof_muet else self.distance_mm,
+            etat_tof=carte_pesee.TOF_ETAT_MUET if self.tof_muet else self.etat_tof,
+            age_tof_ms=self.age_tof_ms,
+            demarrages=self.demarrages,
+            pca9685_muette=self.pca9685_muette,
+            tof_muet=self.tof_muet,
+            aucun_ordre=self.aucun_ordre,
+            pi_silencieux=not self.aucun_ordre and self.silence_pi_ms > self.silence_max_ms,
+            pca9685_demarre_pas=False,
+            echecs_i2c=self.echecs_i2c,
+            silence_pi_ms=self.silence_pi_ms,
+            angles_deg=tuple(carte_pesee.angle_du_registre(v) for v in self.registres_angles),
+        )
+
+    @property
+    def angles_deg(self) -> tuple[float | None, ...]:
+        return self.etat().angles_deg
 
 
 class FausseBoitePosteFut(FausseCartePesee):

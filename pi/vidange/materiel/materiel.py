@@ -522,6 +522,45 @@ class Materiel:
         decoder = carte_pesee.decoder_boite if boite else carte_pesee.decoder
         return self._au_nom_de(nom, lambda: decoder(registres))
 
+    def lire_boitier_chariot(self, nom: str, nb_voies: int) -> carte_pesee.BoitierChariot:
+        """Ce que dit l'I2C de la carte du plateau du remplissage (tâche 40 bis) : distance du ToF,
+        compteur de démarrages, état de l'I2C et angles des `nb_voies` servos. Une question à
+        part de celle de la pesée (registres 8 et suivants).
+
+        Lève ErreurMateriel si elle ne répond pas, si ce n'est pas une carte à I2C, ou si son
+        nombre de voies n'est pas `nb_voies`."""
+        self._branchement(nom, "pesee")
+        signal = self.liste.signaux[nom]
+        assert signal.adresse is not None
+        client = self._clients[signal.carte]
+        adresse = signal.adresse
+        nombre = carte_pesee.NB_REGISTRES_ENTETE_PLATEAU - carte_pesee.REGISTRE_TOF_MM + nb_voies
+        registres = self._au_nom_de(
+            nom,
+            lambda: client.lire_registres(
+                adresse, carte_pesee.FONCTION, carte_pesee.REGISTRE_TOF_MM, nombre
+            ),
+        )
+        return self._au_nom_de(nom, lambda: carte_pesee.decoder_boitier(registres, nb_voies))
+
+    def ecrire_angles_chariot(
+        self, nom: str, angles_deg: list[float | None], premiere_voie: int = 0
+    ) -> None:
+        """Écrit les angles (degrés ; None = sortie coupée) des servos de la carte du plateau, à
+        partir de la voie `premiere_voie`, en une trame. Compte comme un ordre pour la carte
+        (voir carte_pesee.py : à renvoyer au moins toutes les secondes).
+
+        Lève ErreurMateriel si la carte refuse (angle hors de la plage de la voie) ou ne répond
+        pas."""
+        self._branchement(nom, "pesee")
+        signal = self.liste.signaux[nom]
+        assert signal.adresse is not None
+        client = self._clients[signal.carte]
+        adresse = signal.adresse
+        valeurs = [carte_pesee.registre_angle(angle) for angle in angles_deg]
+        registre = carte_pesee.REGISTRE_ANGLES + premiere_voie
+        self._au_nom_de(nom, lambda: client.ecrire_registres(adresse, registre, valeurs))
+
     def lire_spray(self, nom: str) -> EtatSpray:
         """Tout ce que dit la carte du spray (spray/README.md), en une question.
 

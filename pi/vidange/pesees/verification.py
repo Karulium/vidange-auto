@@ -39,6 +39,57 @@ def pesees_du_bus(liste: EntreesSorties) -> dict[str, int]:
     }
 
 
+def _verifier_i2c(
+    reglages: ReglagesPesees, liste: EntreesSorties, cartes: dict[str, int]
+) -> list[str]:
+    """L'I2C d'une carte (servos et capteur de distance) doit aller avec la liste des signaux."""
+    i2c = reglages.i2c
+    if i2c is None:
+        return []
+    erreurs = []
+    if i2c.carte not in cartes or liste.signaux[i2c.carte].appareil != CARTE_PESEE:
+        erreurs.append(
+            f"pesees.yaml : i2c → carte « {i2c.carte} » n'est pas une carte de pesée RP2040 de "
+            "entrees-sorties.yaml (« appareil: carte_pesee »)"
+        )
+    # Les servos et le capteur sont décrits dans la liste : même carte, un seul canal chacun.
+    cartes_i2c = set()
+    for nom, voie in i2c.pca9685.voies.items():
+        signal = liste.signaux.get(nom)
+        if signal is None:
+            erreurs.append(
+                f"pesees.yaml : i2c → voie « {nom} » n'est pas un signal de entrees-sorties.yaml"
+            )
+            continue
+        cartes_i2c.add(signal.carte)
+        if signal.type != "pwm":
+            erreurs.append(f"entrees-sorties.yaml : « {nom} » (servo) doit être de type pwm")
+        if tuple(b.upper() for b in signal.broche) != (f"CH{voie.canal}",):
+            erreurs.append(
+                f"entrees-sorties.yaml : « {nom} » doit avoir « broche: CH{voie.canal} » "
+                f"(canal {voie.canal} dans pesees.yaml)"
+            )
+    tof = liste.signaux.get(i2c.vl6180x.signal)
+    if tof is None:
+        erreurs.append(
+            f"pesees.yaml : i2c → vl6180x → signal « {i2c.vl6180x.signal} » n'est pas un signal "
+            "de entrees-sorties.yaml"
+        )
+    else:
+        cartes_i2c.add(tof.carte)
+        if tof.type != "mesure" or tof.unite != "mm":
+            erreurs.append(
+                f"entrees-sorties.yaml : « {i2c.vl6180x.signal} » (capteur de distance) doit être "
+                "de type mesure, en mm"
+            )
+    if len(cartes_i2c) > 1:
+        erreurs.append(
+            "entrees-sorties.yaml : les servos et le capteur de distance d'une même carte I2C "
+            f"doivent être sur la même carte de signaux (il y en a {', '.join(sorted(cartes_i2c))})"
+        )
+    return erreurs
+
+
 def verifier_avec_liste(reglages: ReglagesPesees, liste: EntreesSorties) -> list[str]:
     """Ce que pesees.yaml et entrees-sorties.yaml disent des cartes doit aller ensemble."""
     erreurs = []
@@ -76,6 +127,7 @@ def verifier_avec_liste(reglages: ReglagesPesees, liste: EntreesSorties) -> list
             "entrees-sorties.yaml : une seule boîte du poste du fût est prévue "
             f"(il y en a {len(boites)} : {', '.join(boites)})"
         )
+    erreurs.extend(_verifier_i2c(reglages, liste, cartes))
     bus = {liste.signaux[nom].carte for nom in cartes}
     if len(bus) > 1:
         erreurs.append(

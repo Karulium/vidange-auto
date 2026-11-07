@@ -5020,6 +5020,182 @@ class PosteFutRadio(Modele):
         return self
 
 
+class BrochesI2cPesee(Modele):
+    """Les deux fils de l'I2C de la carte du plateau du remplissage (numéros GPIO du RP2040)."""
+
+    sda: BrocheRp2040
+    scl: BrocheRp2040
+
+    @property
+    def bloc_i2c(self) -> int:
+        """Bloc I2C du RP2040 (0 ou 1) qui sort sur ces broches."""
+        return (self.sda // 2) % 2
+
+    @model_validator(mode="after")
+    def _verifier_broches(self) -> "BrochesI2cPesee":
+        erreurs = []
+        # Sur le RP2040, la broche n sort le bloc I2C (n // 2) % 2, en SDA si n est pair.
+        if self.sda % 2 != 0:
+            erreurs.append(f"sda ({self.sda}) doit être une broche paire")
+        if self.scl % 2 != 1:
+            erreurs.append(f"scl ({self.scl}) doit être une broche impaire")
+        if not erreurs and (self.sda // 2) % 2 != (self.scl // 2) % 2:
+            erreurs.append(
+                f"sda ({self.sda}) et scl ({self.scl}) ne sont pas du même bloc I2C "
+                "(I2C0 : SDA 0, 4, 8... SCL 1, 5, 9... ; I2C1 : SDA 2, 6, 10... SCL 3, 7, 11...)"
+            )
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class VoieServoPesee(Modele):
+    """Une voie de la PCA9685 : un servo, sa plage d'angle et les largeurs d'impulsion qui vont
+    avec (fiche du servo). Le Pi demande un angle, la carte en fait une impulsion."""
+
+    canal: int = Field(ge=0, le=15)
+    # Angle de l'axe du servo (°) à la plus petite et à la plus grande impulsion. Hors de cette
+    # plage, la carte refuse l'ordre.
+    angle_min_deg: float = Field(ge=-3000, le=3000)
+    angle_max_deg: float = Field(ge=-3000, le=3000)
+    impulsion_min_us: int = Field(gt=0)
+    impulsion_max_us: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "VoieServoPesee":
+        if self.angle_min_deg >= self.angle_max_deg:
+            raise ValueError(
+                f"angle_min_deg ({self.angle_min_deg:g}) doit être plus petit que "
+                f"angle_max_deg ({self.angle_max_deg:g})"
+            )
+        if self.impulsion_min_us >= self.impulsion_max_us:
+            raise ValueError(
+                f"impulsion_min_us ({self.impulsion_min_us}) doit être plus petite que "
+                f"impulsion_max_us ({self.impulsion_max_us})"
+            )
+        return self
+
+    @property
+    def angle_min_dix(self) -> int:
+        """En dixièmes de degré, comme dans les registres de la carte."""
+        return round(self.angle_min_deg * 10)
+
+    @property
+    def angle_max_dix(self) -> int:
+        return round(self.angle_max_deg * 10)
+
+
+class Pca9685Pesee(Modele):
+    """La PCA9685 (16 sorties PWM) du boîtier du chariot."""
+
+    adresse: int = Field(ge=0x40, le=0x6F)
+    # Fréquence des impulsions des servos (Hz) : 50 en général. La puce va de 24 à 1526 Hz.
+    frequence_pwm_hz: int = Field(ge=24, le=1526)
+    # Oscillateur interne de la puce (Hz) : 25 MHz à environ 10 % près.
+    horloge_hz: int = Field(ge=20_000_000, le=30_000_000)
+    # Attente après le réveil de la puce avant de lui parler (µs) : 500 au moins (fiche).
+    reveil_us: int = Field(ge=500, le=100_000)
+    # Une voie par servo, avec le nom de son signal dans entrees-sorties.yaml. L'ordre est celui
+    # des registres : la première voie est le registre 16, la suivante le 17...
+    voies: dict[Nom, VoieServoPesee] = Field(min_length=1, max_length=8)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Pca9685Pesee":
+        erreurs = []
+        # prescale = arrondi(horloge / (4096 × fréquence)) − 1, de 3 à 255 dans la puce.
+        prescale = round(self.horloge_hz / (4096 * self.frequence_pwm_hz)) - 1
+        if not 3 <= prescale <= 255:
+            erreurs.append(
+                f"frequence_pwm_hz ({self.frequence_pwm_hz}) avec horloge_hz ({self.horloge_hz}) "
+                f"demande un réglage de {prescale}, la puce accepte de 3 à 255"
+            )
+        periode_us = 1e6 / self.frequence_pwm_hz
+        canaux: dict[int, str] = {}
+        for nom, voie in self.voies.items():
+            if voie.impulsion_max_us >= periode_us:
+                erreurs.append(
+                    f"voies → {nom} : impulsion_max_us ({voie.impulsion_max_us}) ne tient pas "
+                    f"dans la période de {periode_us:.0f} µs ({self.frequence_pwm_hz} Hz)"
+                )
+            autre = canaux.setdefault(voie.canal, nom)
+            if autre != nom:
+                erreurs.append(
+                    f"voies : le canal {voie.canal} est pris deux fois ({autre} et {nom})"
+                )
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class Vl6180xPesee(Modele):
+    """Le capteur de distance VL6180X (temps de vol) du boîtier du chariot."""
+
+    # Le signal de entrees-sorties.yaml qui le décrit (type mesure, en mm).
+    signal: Nom
+    adresse: int = Field(ge=0x08, le=0x77)
+    # Entre deux mesures (ms).
+    periode_ms: int = Field(ge=10, le=10_000)
+    # Entre deux « la mesure est-elle prête ? » (ms).
+    sondage_ms: int = Field(ge=1, le=1000)
+    # Une mesure lancée qui n'est pas finie au bout de ce temps (ms) : capteur muet.
+    delai_max_ms: int = Field(ge=10, le=10_000)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Vl6180xPesee":
+        if self.sondage_ms >= self.periode_ms:
+            raise ValueError(
+                f"sondage_ms ({self.sondage_ms}) doit être plus petit que periode_ms "
+                f"({self.periode_ms})"
+            )
+        if self.delai_max_ms <= self.sondage_ms:
+            raise ValueError(
+                f"delai_max_ms ({self.delai_max_ms}) doit dépasser sondage_ms ({self.sondage_ms})"
+            )
+        return self
+
+
+# Silence de fin de trame du Modbus à 115 200 bauds (µs) : une transaction I2C plus longue
+# couperait en deux la trame d'une autre carte que la carte entend passer (pesee/src/modbus.h).
+SILENCE_MODBUS_US = 1750
+
+
+class I2cPesee(Modele):
+    """L'I2C d'UNE carte de pesée : celle du plateau du remplissage, avec la PCA9685 des servos
+    et le VL6180X. Les autres cartes n'ont pas d'I2C. Copié dans le programme de cette carte quand
+    on le fabrique ; les registres sont décrits dans pesee/README.md."""
+
+    # La carte (signal « carte_pesee » de entrees-sorties.yaml) qui porte cet I2C.
+    carte: Nom
+    broches: BrochesI2cPesee
+    frequence_hz: Literal[100_000, 400_000]
+    # Une transaction I2C qui n'a pas fini au bout de ce temps (µs) est abandonnée (bus bloqué).
+    delai_transaction_us: int = Field(ge=100)
+    # Après une panne d'une puce, nouvel essai toutes les ... (ms).
+    reessai_ms: int = Field(ge=50, le=60_000)
+    # Plus d'ordre du Pi depuis ce temps (ms) : la carte GARDE les angles (aucun mouvement) et le
+    # dit dans le registre 12.
+    silence_pi_ms: int = Field(ge=100, le=60_000)
+    pca9685: Pca9685Pesee
+    vl6180x: Vl6180xPesee
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "I2cPesee":
+        erreurs = []
+        if self.delai_transaction_us >= SILENCE_MODBUS_US:
+            erreurs.append(
+                f"delai_transaction_us ({self.delai_transaction_us}) doit rester sous "
+                f"{SILENCE_MODBUS_US} µs : une transaction I2C plus longue couperait en deux une "
+                "trame du bus des pesées"
+            )
+        if self.pca9685.adresse == self.vl6180x.adresse:
+            erreurs.append(
+                f"pca9685 et vl6180x ont la même adresse I2C (0x{self.vl6180x.adresse:02X})"
+            )
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class ReglagesPesees(Modele):
     """pesees.yaml : les pesées du bus RS485 des pesées (cartes RP2040 + HX711, et la boîte du
     poste du fût)."""
@@ -5047,10 +5223,28 @@ class ReglagesPesees(Modele):
     # 1 à 4 : brut_par_kg compte par kilogramme. Copié dans le programme de la carte quand on le
     # fabrique (tâche 39 bis) : c'est la carte qui pèse les doses.
     balances_spray: dict[Annotated[int, Field(ge=1, le=4)], EtalonnagePesee] | None = None
+    # L'I2C de la carte du plateau du remplissage (servos et capteur de distance). Les autres
+    # cartes de pesée n'en ont pas : un réglage par carte, pas pour toutes.
+    i2c: I2cPesee | None = None
 
     @model_validator(mode="after")
     def _verifier_cartes(self) -> "ReglagesPesees":
         erreurs = []
+        if self.i2c is not None:
+            if self.i2c.carte not in self.etalonnage:
+                erreurs.append(f"i2c → carte : « {self.i2c.carte} » n'est pas une carte de pesée")
+            prises = {
+                nom: broche
+                for nom, broche in self.broches.model_dump().items()
+                if broche is not None
+            }
+            for nom, broche in (("sda", self.i2c.broches.sda), ("scl", self.i2c.broches.scl)):
+                for autre, numero in prises.items():
+                    if numero == broche:
+                        erreurs.append(
+                            f"la broche {broche} est prise deux fois (i2c → broches → {nom} "
+                            f"et broches → {autre})"
+                        )
         for nom in dict.fromkeys(self.tour):
             if nom not in self.etalonnage:
                 erreurs.append(f"tour : « {nom} » n'a pas d'étalonnage (section etalonnage)")

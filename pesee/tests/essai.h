@@ -23,3 +23,7 @@ extern int essai_echecs;
 void essais_hx711(void);
 void essais_modbus(void);
 void essais_mesures(void);
+void essais_pca9685(void);
+void essais_vl6180x(void);
+void essais_plateau(void);
+void essais_rythme(void);

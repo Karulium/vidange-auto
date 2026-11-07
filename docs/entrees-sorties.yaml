@@ -227,6 +227,15 @@ cartes:
   # « liaison ») ; ses fins de course et alarmes de pilotes vont à FluidNC, qui les dit au Pi.
   # Entrées 24 V optocouplées (docs/decisions.md, PR n° 3). Repères : EXEMPLES, en attendant le
   # plan de câblage (les vrais numéros de broches vont dans fluidnc/mycelium_lavage.yaml).
+  # Boîtier du chariot (décisions du 06/11/2026, « Électronique du chariot et liaison du spray ») :
+  # la PCA9685 (servos) et le VL6180X (distance), sur l'I2C de la carte de pesée du plateau du
+  # remplissage. Le Pi ne les voit qu'à travers elle, par des registres Modbus du bus rs485_pesee
+  # (pesee/README.md) : pas de liaison ici. Voies et adresses : pi/reglages/pesees.yaml (« i2c »).
+  i2c_plateau_remplissage:
+    exemple: true
+    description: PCA9685 et VL6180X du boîtier du chariot, sur l'I2C de la carte du plateau
+    tension_max: 6
+    isolee: false
   fluidnc_mycelium_lavage:
     exemple: true
     description: Carte FluidNC n° 3 (mycélium et lavage), 6 axes, pilotes externes
@@ -363,6 +372,11 @@ cartes:
 #   pesee_griffe, pesee_prehension, pesee_plateau_remplissage : leur « adresse » est celle de la
 #   carte sur le bus ; elle est copiée dans le programme de chaque carte (pesee/README.md).
 #   Étalonnage et ordre de lecture : pi/reglages/pesees.yaml.
+# (tâche 40 bis, boîtier du chariot) :
+#   servo_escamotage_micropore, servo_lame_micropore, servo_fermeture_seaux (voies 0, 1 et 2 de la
+#   PCA9685) et tof_micropore (VL6180X) : sur l'I2C de la carte de pesée du plateau du remplissage
+#   (pesee_plateau_remplissage). Le Pi ne les voit qu'à travers elle, par des registres Modbus
+#   (pesee/README.md) ; leurs voies, adresses et largeurs d'impulsion : pi/reglages/pesees.yaml.
 # (tâche 39, spray) :
 #   carte_spray : la carte ESP32 n° 5, lue et commandée en Modbus (spray/README.md). Ses propres
 #     signaux ne passent pas par le Pi (il ne les voit qu'à travers elle) : pompe_spray_1 à _4,
@@ -1452,3 +1466,39 @@ signaux:
     module: armoire
     appareil: pcf8574
     fichier: /dev/i2c-1
+  # Servos du boîtier du chariot : seulement le SIGNAL (3,3 V de la PCA9685) ; le + vient du BEC
+  # 6 V 3 A de la PCA9685 (Micropore) ou de bec_servo (Fermeture). Broche = CH et le canal de la
+  # PCA9685 (le même que dans pesees.yaml, vérifié au démarrage). Angle demandé en degrés au Pi.
+  servo_escamotage_micropore:
+    exemple: true
+    description: Servo DS3225 d'escamotage de la tête du Micropore (voie de la PCA9685)
+    carte: i2c_plateau_remplissage
+    broche: CH0
+    type: pwm
+    tension: 3.3
+    module: micropore
+  servo_lame_micropore:
+    exemple: true
+    description: Servo MG90S de la lame du Micropore (voie de la PCA9685)
+    carte: i2c_plateau_remplissage
+    broche: CH1
+    type: pwm
+    tension: 3.3
+    module: micropore
+  servo_fermeture_seaux:
+    exemple: true
+    description: Signal du servo DS3225 de la Fermeture des seaux (voie de la PCA9685)
+    carte: i2c_plateau_remplissage
+    broche: CH2
+    type: pwm
+    tension: 3.3
+    module: fermeture_seaux
+  tof_micropore:
+    exemple: true
+    description: Capteur de distance VL6180X (escamotage de la tête du Micropore)
+    carte: i2c_plateau_remplissage
+    broche: VL6180X
+    type: mesure
+    tension: 3.3
+    unite: mm
+    module: micropore

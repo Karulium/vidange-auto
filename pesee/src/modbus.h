@@ -6,6 +6,8 @@
 // (2 octets), contrôle CRC-16 (2 octets, le faible d'abord). Les cartes de pesée ne font que ça.
 // L'écriture de registres (fonction 16), pour la carte du spray (spray/README.md) : adresse,
 // fonction, premier registre, nombre, nombre d'octets, les valeurs (2 octets chacune), contrôle.
+// L'écriture d'un seul registre (fonction 6) fait 8 octets, comme une lecture : adresse, fonction,
+// registre, valeur, contrôle. Elle est lue de la même façon que la fonction 16.
 // La carte qui écrit lit la question par modbus_lire_ecriture et répond par
 // modbus_repondre_ecriture ; modbus_repondre la refuse (exception 1).
 //
@@ -70,7 +72,7 @@ uint8_t modbus_fonction(const modbus_t *m);
 // Une exception (code MODBUS_...) en réponse à la dernière question. Rend sa taille (5).
 size_t modbus_exception(const modbus_t *m, uint8_t code, uint8_t *reponse);
 
-// La dernière question complète est une écriture (fonction 16) : son premier registre et ses
+// La dernière question complète est une écriture (fonction 6 ou 16) : son premier registre et ses
 // valeurs (au plus `max`). Rend le nombre de registres, 0 si la question est mal faite (nombre
 // nul, trop grand, ou qui ne va pas avec le nombre d'octets).
 size_t modbus_lire_ecriture(const modbus_t *m, uint16_t *premier, uint16_t *valeurs, size_t max);

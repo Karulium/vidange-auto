@@ -236,6 +236,32 @@ static void ignore_les_ecritures_aux_autres(void) {
     VERIFIER(carte1.trames_abimees == 0);
 }
 
+static void ecriture_d_un_registre(void) {
+    // Fonction 6 : une question de 8 octets comme une lecture, l'accusé répète la question.
+    modbus_t m;
+    modbus_init(&m, 3);
+    uint8_t q[8], r[MODBUS_REPONSE_MAX];
+    question(q, 3, 6, 17, 0xFF38);
+    VERIFIER(recevoir(&m, q, 7) == 0);
+    VERIFIER(recevoir(&m, q + 7, 1) == 1);
+    VERIFIER(modbus_fonction(&m) == 6);
+    uint16_t premier = 0, valeurs[2] = {0};
+    VERIFIER(modbus_lire_ecriture(&m, &premier, valeurs, 2) == 1);
+    VERIFIER(premier == 17 && valeurs[0] == 0xFF38);
+    VERIFIER(modbus_repondre_ecriture(&m, 0, r) == 8);
+    VERIFIER(r[0] == 3 && r[1] == 6 && r[3] == 17 && r[4] == 0xFF && r[5] == 0x38);
+    uint16_t crc = modbus_crc(r, 6);
+    VERIFIER(r[6] == (uint8_t)crc && r[7] == (uint8_t)(crc >> 8));
+    // La carte voisine entend la question et l'accusé sans les prendre pour elle.
+    modbus_t voisine;
+    modbus_init(&voisine, 1);
+    uint8_t lecture[8];
+    VERIFIER(recevoir(&voisine, q, 8) == 0);
+    VERIFIER(recevoir(&voisine, r, 8) == 0);
+    question(lecture, 1, 4, 0, 8);
+    VERIFIER(recevoir(&voisine, lecture, 8) == 1);
+}
+
 void essais_modbus(void) {
     printf("Modbus\n");
     LANCER(crc_connu);
@@ -246,6 +272,7 @@ void essais_modbus(void) {
     LANCER(message_a_tous);
     LANCER(trame_abimee_puis_silence);
     LANCER(ecriture_des_registres);
+    LANCER(ecriture_d_un_registre);
     LANCER(ecriture_abimee);
     LANCER(ignore_les_ecritures_aux_autres);
 }

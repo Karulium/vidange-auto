@@ -144,6 +144,12 @@ uint8_t modbus_fonction(const modbus_t *m) {
 
 size_t modbus_lire_ecriture(const modbus_t *m, uint16_t *premier, uint16_t *valeurs,
                             size_t max) {
+    if (m->trame[1] == 6 && m->longueur == MODBUS_QUESTION) {
+        // Un seul registre : adresse, 6, registre (2 octets), valeur (2 octets), contrôle.
+        *premier = (uint16_t)(m->trame[2] << 8 | m->trame[3]);
+        valeurs[0] = (uint16_t)(m->trame[4] << 8 | m->trame[5]);
+        return max >= 1 ? 1 : 0;
+    }
     if (m->trame[1] != 16 || m->longueur < 9) {
         return 0;
     }
