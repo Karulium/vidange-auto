@@ -1745,3 +1745,13 @@ la PR n° 99 », point 4). Code : `pi/vidange/griffe/` (règles, versement), `pi
 - **Choix de Claude pour le couvercle C (tâche 45 septies)** : la tête qui remonte **avec** le couvercle C (erreurs
   10a et 10b) refait le même chemin à l'envers (face 0,545, retour à y 0,498, puis en haut) : la remontée droite
   repasserait à 2,3 mm de la plaque du micropore (question à Karulium).
+- **Réponses à la PR n° 100** (tâche 45 septies, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Entonnoir sur `bocal_0_0`, `bocal_0_1`, `bocal_1_0`, `bocal_2_0` (griffe traînée au-dessus de l'agitateur) :
+     question posée à la Maquette ; d'ici sa réponse, Karulium y pose l'entonnoir à la main.
+  2. Tête à −180° au 4ᵉ bocal : corrigé par la tâche 45 octies (chaque prise du mode bocaux finit tête à 0°, dans le
+     fût) ; d'ici là, lots de 3 bocaux au plus.
+  3. Verrou de la zone du bras du spray pendant qu'il bouge (griffe et préhension n'y entrent pas) : fait dans la
+     tâche 45 octies, sans attendre la Maquette (seuls les chiffres de la zone sont EXEMPLE).
+  4. Remontée du couvercle C avec la tête : chemin décalé à l'envers (gardé) ; question posée au fil Préhension.
+  5. Décalage du mât de la griffe (dépôt −0,187, fiches de la Maquette et de la Préhension 0,175) : signalé à la
+     Maquette.
