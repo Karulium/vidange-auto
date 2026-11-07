@@ -9,8 +9,14 @@ le solveur (tâche 23). C'est le scénario « remplissage » du simulateur, et u
     prendre_le_seau        la préhension prend un seau vide au stockage
     poser_le_seau          plateau au contact (balance), centrage ; barrière coupée : prise double
     rendre_le_seau_du_dessus   après une prise double : le seau du dessus rendu au stockage
-    orienter_l_anse        QR du flanc lu, oreilles de l'anse à 45° des barres
+    orienter_l_anse        plateau à plateau_lecture_qr, QR du flanc lu pendant que le seau tourne
+                           (un tour au plus), oreilles de l'anse à 45° des barres
     centrer                barres en position au contact du corps, puis ouvertes
+    aller_au_poste         (mode seaux) le seau VIDE au poste (y 0,135), plateau à sa hauteur
+    spray_...              (avec le Spray) les étapes du module « spray » : une dose par seau,
+                           sur le seau vide, pendant le 1er aller-retour de la griffe
+    micropore_rangee_du_haut   (avec le Micropore, mode seaux) tour de repérage et rangées du
+                           haut, sur le seau vide, après le spray
     ramener_au_vidage      y 0,42, plateau à la hauteur du vidage (manivelle du mycélium en bas
                            si le chariot part de près du poste)
     verser                 versement de la griffe au vidage : le seau tourne (permission du chef :
@@ -41,6 +47,7 @@ fermée (elle est aussi surveillée pendant les gestes). Quatre étapes de plus 
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from vidange.chef import Condition, ErreurEtape, Etape, Module
 from vidange.mycelium.mycelium import Demande, Mycelium
@@ -49,6 +56,9 @@ from vidange.prehension.prehension import Prehension
 from vidange.reglages import PlaceSimulee
 from vidange.remplissage.remplissage import QUOI_FAIRE, Remplissage
 from vidange.stockage.stockage import BANDE, QUOI_FAIRE_BANDE, QUOI_FAIRE_TIROIR, Stockage
+
+if TYPE_CHECKING:
+    from vidange.spray.spray import Spray
 
 GESTE = "remplissage_geste_max"
 GESTE_PREHENSION = "prehension_geste_max"
@@ -99,9 +109,18 @@ def module_remplissage(
     mycelium: Mycelium,
     plan: Plan,
     air: Condition | None = None,
+    seau_vide_au_poste: bool = False,
+    spray: "Spray | None" = None,
+    griffe_partie: Callable[[], bool] = lambda: False,
 ) -> Module:
     """`air` : condition d'entrée de la prise d'un seau par le venturi (sur la machine :
-    `chef.condition_permission("air")`, l'attente de mise en pression du module Air, tâche 42)."""
+    `chef.condition_permission("air")`, l'attente de mise en pression du module Air, tâche 42).
+
+    `seau_vide_au_poste` (mode seaux, tâche 45, fils Spray et Micropore du 07/11/2026) : après le
+    centrage, le seau VIDE va au poste ; le `spray` (s'il est donné) y dose, une fois par seau,
+    pendant le 1er aller-retour de la griffe (`griffe_partie`), puis le micropore pose ses
+    rangées du haut ; ensuite seulement la 1re couche. La rangée du fond reste au vidage, quand
+    le seau pèse assez (micropore → fond_poids_min_kg)."""
     chariot, tete = remplissage.chariot, prehension.tete
     magasin = plan.magasin
     # Règle 9 : la tête ne descend au-dessus du chariot que barres ouvertes, micropore rentré.
@@ -335,6 +354,46 @@ def module_remplissage(
             Etape("verifier_place", QUOI_FAIRE_TIROIR, entree=boucle, ensuite=verifier_place),
         )
 
+    # Seau vide au poste (y 0,135) : spray, puis rangées du haut du micropore, avant la 1re couche.
+    au_poste: tuple[Etape, ...] = ()
+    if seau_vide_au_poste or spray is not None:
+        au_poste = (
+            geste(
+                "aller_au_poste",
+                remplissage.geste_aller_au_poste,
+                entree=(libre, manivelle_en_bas),
+            ),
+        )
+        if spray is not None:
+            from vidange.spray.module import etapes_du_spray
+
+            def seau_au_poste() -> tuple[str | None, str] | None:
+                seau = remplissage.seau
+                if seau is None or not remplissage.au_poste():
+                    return None
+                return seau.code, seau.format
+
+            au_poste += etapes_du_spray(
+                spray,
+                seau_au_poste,
+                griffe_partie,
+                lambda: remplissage.contexte().micropore_escamote,
+            )
+        if remplissage.micropore_branche:
+            au_poste += (
+                geste(
+                    "micropore_rangee_du_haut",
+                    remplissage.geste_micropore_au_poste,
+                    entree=(libre,),
+                ),
+            )
+
+    def arreter() -> None:
+        remplissage.arreter()
+        prehension.arreter()
+        if spray is not None:
+            spray.arreter()
+
     return Module(
         nom="remplissage",
         etapes=(
@@ -352,6 +411,7 @@ def module_remplissage(
             ),
             geste("orienter_l_anse", remplissage.geste_orienter_anse),
             geste("centrer", remplissage.geste_centrer),
+            *au_poste,
             geste(
                 "ramener_au_vidage", remplissage.geste_ramener_au_vidage, entree=(manivelle_en_bas,)
             ),
@@ -383,5 +443,5 @@ def module_remplissage(
         surveillances=(chariot.surveillance, tete.surveillance, *boucle),
         pauser=lambda: (remplissage.pauser(), prehension.pauser()),
         reprendre=lambda: (remplissage.reprendre(), prehension.reprendre()),
-        arreter=lambda: (remplissage.arreter(), prehension.arreter()),
+        arreter=arreter,
     )

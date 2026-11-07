@@ -677,6 +677,9 @@ def principal(
     poste: PosteFut | None = None
     if poste_reglages is not None and materiel is not None and erreur_materiel is None:
         poste = PosteFut(poste_reglages, materiel, registre, pesees=pesees)
+    spray = preparer_spray(
+        reglages, materiel if erreur_materiel is None else None, dossier_donnees, registre, chef
+    )
     # Le mode seaux : chaque poste du cycle d'un seau, prêt ou pourquoi pas (vrai matériel :
     # réglages d'EXEMPLE interdits).
     mode_seaux = ModeSeaux(
@@ -685,6 +688,7 @@ def principal(
             poste,
             materiel if erreur_materiel is None else None,
             vraie_machine=raccords.fabrique is None,
+            spray=spray,
         ),
         chef,
     )
@@ -760,9 +764,6 @@ def principal(
         registre,
         chef,
         mode,
-    )
-    spray = preparer_spray(
-        reglages, materiel if erreur_materiel is None else None, dossier_donnees, registre, chef
     )
     air = preparer_air(
         reglages, materiel if erreur_materiel is None else None, dossier_donnees, chef, nettoyage

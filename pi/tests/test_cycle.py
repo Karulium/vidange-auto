@@ -7,11 +7,19 @@ import pytest
 
 from vidange.chef import Carnet, Chef, ErreurChef
 from vidange.cycle import ORDRE_SEAU, ModeSeaux, verifier_ordre
-from vidange.cycle.machine import BOCAL_NEUF, QR_DU_FLANC, VISION_MICROPORE, PiecesMachine
-from vidange.cycle.simulation import PiecesSimulees, jouer_cycle, lot_du_simulateur
+from vidange.cycle.machine import (
+    BOCAL_NEUF,
+    CARTE_SPRAY,
+    CARTES_DU_CHARIOT,
+    QR_DU_FLANC,
+    VISION_MICROPORE,
+    PiecesMachine,
+)
+from vidange.cycle.simulation import JOUES_EN_FAUX, PiecesSimulees, jouer_cycle, lot_du_simulateur
 from vidange.demarrage import CODE_OK, principal
 from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.journal import NOM_FICHIER
+from vidange.materiel import carte_spray as table_spray
 from vidange.reglages import charger_reglages
 from vidange.simulateur import Simulateur
 from vidange.simulateur.outil import main as simulateur
@@ -50,7 +58,7 @@ class PiecesDeLaMachine:
     def manque(self, poste):
         return None
 
-    def remplissage(self, lot, avec_micropore, avec_fermeture):
+    def remplissage(self, lot, avec_micropore, avec_fermeture, avec_spray):
         raise AssertionError("pas de lot sur la vraie machine en EXEMPLE")
 
 
@@ -59,13 +67,17 @@ class PiecesDeLaMachine:
 
 def test_un_seul_endroit_dit_l_ordre_du_cycle_d_un_seau():
     noms = [poste.nom for poste in ORDRE_SEAU]
+    # Ordre corrigé du 07/11/2026 : QR du flanc avant le serrage des barres, spray puis
+    # rangées du haut du micropore sur le seau vide au poste, puis les couches.
     assert noms == [
         "fut",
         "seau_vide",
-        "griffe",
-        "mycelium",
+        "qr_du_flanc",
+        "au_poste",
         "spray",
         "micropore",
+        "griffe",
+        "mycelium",
         "couvercle",
         "fermeture",
         "stockage",
@@ -73,7 +85,11 @@ def test_un_seul_endroit_dit_l_ordre_du_cycle_d_un_seau():
     ]
     # Les gestes pas encore écrits restent des cases vides : jamais lancés.
     vides = {poste.nom for poste in ORDRE_SEAU if poste.case_vide}
-    assert vides == {"griffe", "spray", "couvercle", "lavage"}
+    assert vides == {"griffe", "couvercle", "lavage"}
+    # Sur la vraie machine, pas de lot sans spray ni micropore (question 3 de la PR n° 89 en
+    # attente), ni sans couvercle et fermeture.
+    obligatoires = {poste.nom for poste in ORDRE_SEAU if poste.obligatoire}
+    assert {"spray", "micropore", "couvercle", "fermeture"} <= obligatoires
     assert "41 bis" in next(p for p in ORDRE_SEAU if p.nom == "couvercle").case_vide
 
 
@@ -87,30 +103,65 @@ def test_les_etapes_d_ordre_seau_existent_dans_les_modules(reglages_depot, liste
             assert set(poste.etapes) <= etapes, poste.nom
 
 
+LANCES = ["seau_vide", "qr_du_flanc", "au_poste", "spray", "micropore", "griffe", "mycelium"]
+BON = [
+    "remplissage.prendre_le_seau",
+    "remplissage.poser_le_seau",
+    "remplissage.orienter_l_anse",
+    "remplissage.centrer",
+    "remplissage.aller_au_poste",
+    "remplissage.spray_pulveriser",
+    "remplissage.spray_ranger_le_bras",
+    "remplissage.micropore_rangee_du_haut",
+    "remplissage.ramener_au_vidage",
+    "remplissage.verser",
+    "mycelium.agiter",
+    "remplissage.verser",
+    "mycelium.agiter",
+]
+
+
+def deplacer(etapes, etape, avant):
+    """`etape` (sa 1re fois) déplacée juste avant la 1re fois de `avant`."""
+    etapes = list(etapes)
+    etapes.remove(etape)
+    etapes.insert(etapes.index(avant), etape)
+    return etapes
+
+
 def test_un_seau_qui_ne_suit_pas_l_ordre_est_vu():
-    lances = ["seau_vide", "mycelium", "stockage"]
-    bon = [
-        "remplissage.prendre_le_seau",
-        "remplissage.poser_le_seau",
-        "remplissage.centrer",
-        "remplissage.ramener_au_vidage",
-        "mycelium.agiter",
-        "remplissage.ranger",
+    assert verifier_ordre(BON * 2, LANCES) == []
+    # QR du flanc lu avant le serrage des barres (centrage).
+    probleme = verifier_ordre(
+        deplacer(BON, "remplissage.centrer", "remplissage.orienter_l_anse"), LANCES
+    )
+    assert len(probleme) == 1
+    assert "remplissage.centrer → remplissage.orienter_l_anse" in probleme[0]
+    # Spray avant la 1re couche.
+    probleme = verifier_ordre(
+        deplacer(BON, "remplissage.verser", "remplissage.spray_pulveriser"), LANCES
+    )
+    assert len(probleme) == 1 and probleme[0].startswith("seau n° 1 : ordre")
+    # Rangées du haut après le spray...
+    probleme = verifier_ordre(
+        deplacer(BON, "remplissage.micropore_rangee_du_haut", "remplissage.spray_pulveriser"),
+        LANCES,
+    )
+    assert len(probleme) == 1
+    assert "remplissage.micropore_rangee_du_haut → remplissage.spray_pulveriser" in probleme[0]
+    # ... et avant la 1re couche.
+    tard = [e for e in BON if e != "remplissage.micropore_rangee_du_haut"]
+    tard.insert(tard.index("mycelium.agiter"), "remplissage.micropore_rangee_du_haut")
+    probleme = verifier_ordre(tard, LANCES)
+    assert len(probleme) == 1
+    assert "remplissage.verser → remplissage.micropore_rangee_du_haut" in probleme[0]
+    # Un poste lancé dont l'étape manque.
+    sans_spray = [e for e in BON if not e.startswith("remplissage.spray_")]
+    assert verifier_ordre(sans_spray, LANCES) == [
+        "seau n° 1 : étape « remplissage.spray_pulveriser » pas faite",
+        "seau n° 1 : étape « remplissage.spray_ranger_le_bras » pas faite",
     ]
-    assert verifier_ordre(bon * 2, lances) == []
-    mauvais = [*bon[:4], "remplissage.ranger", "mycelium.agiter"]
-    problemes = verifier_ordre(mauvais, lances)
-    assert problemes == [
-        "seau n° 1 : ordre remplissage.prendre_le_seau → remplissage.poser_le_seau → "
-        "remplissage.centrer → remplissage.ramener_au_vidage → remplissage.ranger → "
-        "mycelium.agiter au lieu de remplissage.prendre_le_seau → remplissage.poser_le_seau → "
-        "remplissage.centrer → remplissage.ramener_au_vidage → mycelium.agiter → "
-        "remplissage.ranger"
-    ]
-    assert verifier_ordre(bon[:-1], lances) == [
-        "seau n° 1 : étape « remplissage.ranger » pas faite"
-    ]
-    assert verifier_ordre([], lances) == ["aucun seau commencé"]
+    assert verifier_ordre([], LANCES) == ["aucun seau commencé"]
 
 
 # ---------------------------------------------------------------- ce qui est prêt
@@ -119,7 +170,15 @@ def test_un_seau_qui_ne_suit_pas_l_ordre_est_vu():
 def test_avec_le_faux_materiel_les_modules_attendus_sont_prets(reglages_depot, liste):
     with Simulateur(reglages_depot, liste, "cycle") as simulateur:
         mode = ModeSeaux(reglages_depot, PiecesSimulees(simulateur), simulateur.chef)
-    assert mode.postes_lances == ["seau_vide", "mycelium", "micropore", "stockage"]
+    assert mode.postes_lances == [
+        "seau_vide",
+        "qr_du_flanc",
+        "au_poste",
+        "spray",
+        "micropore",
+        "mycelium",
+        "stockage",
+    ]
     assert mode.refus_lot() is None
     assert "tâche 23" in mode.etats["griffe"].raison
     assert mode.etats["fermeture"].en_texte() == "pas lancé : attend « couvercle » (pas prêt)"
@@ -133,7 +192,13 @@ def test_un_module_sans_reglage_n_est_pas_lance(reglages_depot, liste):
     assert mode.etats["micropore"].en_texte() == (
         "pas lancé : machine.yaml n'a pas de partie « micropore »"
     )
-    # Le micropore n'est pas du cœur : le lot peut partir sans lui.
+    # Le micropore n'est pas du cœur : dans le simulateur, le lot peut partir sans lui.
+    assert mode.refus_lot() is None
+
+    reglages = sans_partie(reglages_depot, "spray")
+    with Simulateur(reglages, liste, "cycle") as simulateur:
+        mode = ModeSeaux(reglages, PiecesSimulees(simulateur), simulateur.chef)
+    assert mode.etats["spray"].raison == "machine.yaml n'a pas de partie « spray »"
     assert mode.refus_lot() is None
 
     reglages = sans_partie(reglages_depot, "stockage")
@@ -156,7 +221,7 @@ def test_un_module_sans_reglage_n_est_pas_lance(reglages_depot, liste):
 def test_sur_la_vraie_machine_les_reglages_d_exemple_sont_interdits(reglages_depot):
     chef = Chef(reglages_depot.machine, reglages_depot.programme.chef)
     mode = ModeSeaux(reglages_depot, PiecesDeLaMachine(), chef)
-    for nom in ("fut", "seau_vide", "mycelium", "micropore", "stockage"):
+    for nom in ("fut", "seau_vide", "qr_du_flanc", "spray", "mycelium", "micropore", "stockage"):
         assert "valeurs d'EXEMPLE dans machine.yaml" in mode.etats[nom].raison, nom
         assert "interdit sur la vraie machine" in mode.etats[nom].raison
     assert "remplissage" in mode.etats["seau_vide"].raison
@@ -170,11 +235,14 @@ def test_les_pieces_de_la_machine_disent_ce_qui_manque(reglages_depot):
     chef = Chef(reglages.machine, reglages.programme.chef)
     # Faux matériel (essai) : les EXEMPLES des parties sont permis ; poste du fût pas ouvert.
     mode = ModeSeaux(reglages, PiecesMachine(None, None, vraie_machine=False), chef)
-    assert mode.etats["seau_vide"].raison == QR_DU_FLANC
+    assert mode.etats["seau_vide"].raison == CARTES_DU_CHARIOT
+    assert mode.etats["qr_du_flanc"].raison == QR_DU_FLANC
+    assert "40 ter" in QR_DU_FLANC
+    assert mode.etats["spray"].raison == CARTE_SPRAY
     assert mode.etats["mycelium"].raison == BOCAL_NEUF
     assert mode.etats["micropore"].raison == VISION_MICROPORE
     assert mode.etats["fut"].raison == "poste du fût pas suivi (entrées/sorties pas ouvertes)"
-    assert mode.refus_lot() == f"« seau_vide » pas lancé : {QR_DU_FLANC}"
+    assert mode.refus_lot() == f"« seau_vide » pas lancé : {CARTES_DU_CHARIOT}"
 
 
 def test_l_ecran_dit_quel_poste_manque_et_pourquoi(tmp_path, reglages_depot):
@@ -191,7 +259,7 @@ def test_l_ecran_dit_quel_poste_manque_et_pourquoi(tmp_path, reglages_depot):
         banc.tour()
         assert banc.texte("t_module") == "Aucun cycle en cours"
         assert banc.texte("t_attend") == "Lot de seaux : seau vide pas prêt"
-        assert banc.texte("t_info").startswith("lecture du QR du flanc du seau")
+        assert banc.texte("t_info").startswith("cartes du chariot et de la tête")
     finally:
         banc.registre.fermer()
 
@@ -211,7 +279,8 @@ def test_au_demarrage_la_check_list_dit_ce_qui_manque(reglages, entrees_sorties,
         fil.join(10)
     journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
     assert "Mode seaux, fut : prêt" in journal
-    assert f"Mode seaux, seau_vide : pas lancé : {QR_DU_FLANC}" in journal
+    assert f"Mode seaux, seau_vide : pas lancé : {CARTES_DU_CHARIOT}" in journal
+    assert f"Mode seaux, qr_du_flanc : pas lancé : {QR_DU_FLANC}" in journal
     assert f"[attention] mode seaux, micropore : pas lancé : {VISION_MICROPORE}" in journal
     assert "[attention] mode seaux, couvercle : pas lancé : geste pas encore écrit" in journal
     assert "[bloquant] mode seaux : aucun lot de seaux ne peut partir" in journal
@@ -234,6 +303,63 @@ def test_lot_complet_simule_sans_alarme(reglages_depot, liste):
     assert magasin.seaux_pleins() == 0
 
 
+def test_dans_le_lot_simule_spray_et_micropore_suivent_l_ordre_corrige(reglages_depot, liste):
+    """Fils Spray, Micropore et Guidage caméra (07/11/2026) : QR lu avant le serrage des barres,
+    spray sur le seau vide avant la 1re couche, rangées du haut après le spray et avant la 1re
+    couche, rangée du fond seulement quand le seau pèse assez."""
+    with Simulateur(reglages_depot, liste, "cycle") as simulateur:
+        pieces = PiecesSimulees(simulateur)
+        mode = ModeSeaux(reglages_depot, pieces, simulateur.chef)
+        modules = mode.modules_du_lot(lot_du_simulateur(simulateur))
+        scenario = pieces.scenario
+        micropore = scenario.micropore.micropore
+        poses = []
+        poser = micropore._poser_rangee
+
+        def espion(suivi, rang, rangee, au_poste):
+            contenu = scenario.chariot.contenu_kg
+            poses.append((suivi.seau.code, "fond" if rangee.fond else "haut", contenu))
+            yield from poser(suivi, rang, rangee, au_poste)
+
+        micropore._poser_rangee = espion
+        planning = simulateur.jouer(modules)
+        doses = [o for o in simulateur.carte_spray().ordres if o[0] == table_spray.ORDRE_SPRAY]
+    assert planning.probleme == ""
+    assert (
+        verifier_ordre(
+            [f"{ligne.module}.{ligne.etape}" for ligne in planning.lignes],
+            [*mode.postes_lances, *JOUES_EN_FAUX],
+        )
+        == []
+    )
+    etapes = [ligne.etape for ligne in planning.lignes if ligne.module == "remplissage"]
+    # Une dose de spray par seau, une seule fois.
+    assert etapes.count("spray_pulveriser") == 20
+    assert len(doses) == 20
+    # Le 1er seau : QR, centrage, poste, spray, rangées du haut, puis la 1re couche.
+    premier = etapes[: etapes.index("verser")]
+    suite = [
+        "orienter_l_anse",
+        "centrer",
+        "aller_au_poste",
+        "spray_pulveriser",
+        "spray_ranger_le_bras",
+        "micropore_rangee_du_haut",
+    ]
+    assert [e for e in premier if e in suite] == suite
+    seuil = reglages_depot.machine.micropore.fond_poids_min_kg
+    codes = {code for code, _, _ in poses}
+    assert len(codes) == 20
+    for code in codes:
+        du_seau = [(quoi, kg) for c, quoi, kg in poses if c == code]
+        hauts = [kg for quoi, kg in du_seau if quoi == "haut"]
+        fonds = [kg for quoi, kg in du_seau if quoi == "fond"]
+        # Rangées du haut sur le seau vide, rangée du fond après le poids mini.
+        assert hauts and all(kg == 0.0 for kg in hauts), code
+        assert fonds and all(kg >= seuil for kg in fonds), code
+        assert [quoi for quoi, _ in du_seau].index("fond") > 0
+
+
 def test_l_outil_joue_le_cycle(capsys):
     assert simulateur(["cycle", "--delai-go", "0"]) == 0
     sortie = capsys.readouterr().out
@@ -252,8 +378,8 @@ def test_cycle_se_joue_seul():
 
 def test_reprise_apres_une_coupure_au_milieu_d_un_seau(reglages_depot, liste, tmp_path):
     carnet = Carnet(tmp_path / "etat-cycle.json")
-    # Coupure de courant au bout de 1300 s simulées : 4e seau, dosage de sa 2e couche.
-    coupe = duree_max(reglages_depot, 1300)
+    # Coupure de courant au bout de 1600 s simulées : 4e seau, dosage de sa 3e couche.
+    coupe = duree_max(reglages_depot, 1600)
     with Simulateur(coupe, liste, "cycle", carnet=carnet) as simulateur:
         _, planning, _ = jouer_cycle(simulateur)
     assert planning.probleme.startswith("bloqué au bout de duree_max_s")
@@ -261,7 +387,7 @@ def test_reprise_apres_une_coupure_au_milieu_d_un_seau(reglages_depot, liste, tm
     note = next(n for n in etat["modules"] if n["module"] == "remplissage")
     memoire = note["memoire"]
     assert note["statut"] == "en_cours"
-    assert (note["etape"], memoire["numero"], memoire["couche"]) == ("doser", 3, 2)
+    assert (note["etape"], memoire["numero"], memoire["couche"]) == ("doser", 3, 3)
     assert memoire["seau_plateau"]["code"] == "S0304"
     assert memoire["lot"]["seaux"][0]["seau"] == "S0301"
 

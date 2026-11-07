@@ -8,10 +8,11 @@ Ce qu'il faut savoir avant : aujourd'hui, **aucun lot de seaux ne peut partir su
 C'est voulu. Le programme le dit, poste par poste, avec la raison :
 
 - réglages d'EXEMPLE (`exemple: true` dans `pi/reglages/machine.yaml`) : interdits sur la vraie machine ;
-- gestes pas encore écrits : griffe enchaînée avec la préhension (tâche 23), spray dans le cycle, pose du
-  couvercle (tâche 41 bis), lavage lancé après le lot ;
-- ce qui manque sur la machine : lecture du QR du flanc du seau, pose du bocal de semence neuf par la
-  préhension, vision du micropore (tâche 40 ter).
+- gestes pas encore écrits : griffe enchaînée avec la préhension (tâche 23), pose du couvercle (tâche 41 bis),
+  lavage lancé après le lot ;
+- ce qui manque sur la machine : cartes du chariot et de la tête pas encore branchées au mode seaux, lecture du
+  QR du flanc par la caméra du micropore et vision du micropore (tâche 40 ter), pose du bocal de semence neuf
+  par la préhension ; le spray, si sa carte n'est pas ouverte.
 
 La sécurité (arrêt d'urgence, portes, store) reste câblée, comme d'habitude.
 
@@ -24,7 +25,8 @@ La sécurité (arrêt d'urgence, portes, store) reste câblée, comme d'habitude
 ## Étape 2 : lire le journal
 
 1. `journalctl -u vidange -b | grep "Mode seaux"` : une ligne par poste du cycle d'un seau, dans
-   l'ordre (fut, seau_vide, griffe, mycelium, spray, micropore, couvercle, fermeture, stockage, lavage),
+   l'ordre (fut, seau_vide, qr_du_flanc, au_poste, spray, micropore, griffe, mycelium, couvercle, fermeture,
+   stockage, lavage),
    chacune « prêt » ou « pas lancé : ... » avec la raison.
 2. `journalctl -u vidange -b | grep "mode seaux"` : les lignes de la check-list. On doit voir
    « [bloquant] mode seaux : aucun lot de seaux ne peut partir : ... » et, pour chaque poste qui manque,

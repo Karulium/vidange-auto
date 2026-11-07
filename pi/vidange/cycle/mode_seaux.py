@@ -31,12 +31,12 @@ préhension dégagée et bras rangé (Fermeture, par le Remplissage). Rien de ce
 personne : la sécurité est câblée.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field, replace
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from vidange.chef import Chef, ErreurChef, Etape, Module
-from vidange.cycle.ordre import ORDRE_SEAU, Poste
+from vidange.cycle.ordre import ORDRE_SEAU, SUR_LE_CHARIOT, Poste
 from vidange.fiabilite.constats import Constat
 from vidange.journal import donner_journal
 from vidange.mycelium.module import module_mycelium
@@ -45,6 +45,9 @@ from vidange.prehension.prehension import Prehension
 from vidange.reglages import Reglages
 from vidange.remplissage.module import Plan, SeauAFaire, module_remplissage
 from vidange.remplissage.remplissage import Remplissage, SeauPlateau
+
+if TYPE_CHECKING:
+    from vidange.spray.spray import Spray
 
 journal = donner_journal("mode_seaux")
 
@@ -64,6 +67,10 @@ QUOI_FAIRE_EXEMPLE = (
 PARTIES: dict[str, tuple[str, ...]] = {
     "fut": ("poste_fut",),
     "seau_vide": ("remplissage", "prehension", "griffe"),
+    # Le QR du flanc est lu par la caméra du micropore (cam_inspection, fil Guidage caméra) : sa
+    # lecture manque sur la machine (tâche 40 ter) ; dans le simulateur, une fausse caméra.
+    "qr_du_flanc": ("remplissage",),
+    "au_poste": ("remplissage",),
     "griffe": ("griffe", "poste_fut"),
     "mycelium": ("mycelium", "porte_bocal"),
     "spray": ("spray",),
@@ -99,12 +106,15 @@ class Lot:
 @dataclass
 class PiecesRemplissage:
     """Ce que les pièces construisent pour un lot : le chariot, la tête, le mycélium et le plan
-    (avec le Stockage dans `plan.magasin`)."""
+    (avec le Stockage dans `plan.magasin`) ; le spray (None : pas de spray), branché au chariot,
+    et ce qui dit que la griffe est partie du poste chercher sa 1re prise."""
 
     remplissage: Remplissage
     prehension: Prehension
     mycelium: Mycelium
     plan: Plan
+    spray: "Spray | None" = None
+    griffe_partie: Callable[[], bool] = lambda: False
 
 
 class Pieces(Protocol):
@@ -118,7 +128,7 @@ class Pieces(Protocol):
         ...
 
     def remplissage(
-        self, lot: Lot, avec_micropore: bool, avec_fermeture: bool
+        self, lot: Lot, avec_micropore: bool, avec_fermeture: bool, avec_spray: bool
     ) -> PiecesRemplissage: ...
 
 
@@ -156,7 +166,7 @@ class ModeSeaux:
                 raison = f"attend « {absents[0]} » (pas prêt)"
                 self.etats[nom] = EtatPoste(self.etats[nom].poste, False, raison)
         # Un poste qui sert le seau du chariot n'a pas de sens sans le cœur.
-        for nom in ("micropore", "fermeture"):
+        for nom in SUR_LE_CHARIOT:
             if self.etats[nom].pret and absents:
                 self.etats[nom] = EtatPoste(self.etats[nom].poste, False, "pas de lot possible")
         self.en_cours: _LotEnCours | None = None
@@ -244,7 +254,7 @@ class ModeSeaux:
     def en_texte(self) -> str:
         lignes = ["Mode seaux (ordre du cycle d'un seau) :"]
         for etat in self.etats.values():
-            lignes.append(f"  {etat.poste.nom:<10} {etat.poste.texte} : {etat.en_texte()}")
+            lignes.append(f"  {etat.poste.nom:<11} {etat.poste.texte} : {etat.en_texte()}")
         refus = self.refus_lot()
         lignes.append("  lot : " + ("peut partir" if refus is None else f"impossible ({refus})"))
         return "\n".join(lignes)
@@ -257,7 +267,9 @@ class ModeSeaux:
         refus = self.refus_lot()
         if refus is not None:
             raise ErreurChef(f"lot de seaux impossible : {refus}")
-        pieces = self.pieces.remplissage(lot, self.pret("micropore"), self.pret("fermeture"))
+        pieces = self.pieces.remplissage(
+            lot, self.pret("micropore"), self.pret("fermeture"), self.pret("spray")
+        )
         plan = pieces.plan
         plan.fin_de_lot = lot.fin_de_lot
         if memoire is not None:
@@ -269,6 +281,11 @@ class ModeSeaux:
             plan,
             # Le venturi de la tête prend le seau : attente de la mise en pression (tâche 42).
             air=self.chef.condition_permission("air"),
+            # Ordre corrigé du 07/11/2026 : seau vide au poste, spray, rangées du haut du
+            # micropore, puis la 1re couche.
+            seau_vide_au_poste=True,
+            spray=pieces.spray,
+            griffe_partie=pieces.griffe_partie,
         )
         en_cours = _LotEnCours(lot, pieces)
         en_cours.modules = [

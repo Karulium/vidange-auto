@@ -4,24 +4,38 @@
         mode, planning, problemes = jouer_cycle(simulateur)
 
 Les pièces imaginaires (faux chariot, fausse tête, faux agitateur, fausse caméra du QR du flanc et
-du micropore, stockage imaginaire) sont celles des scénarios « remplissage » et « stockage » ; le
-reste (ce qui est prêt, les conditions, le lot, le carnet) est le code du programme principal
-(vidange.cycle.mode_seaux). Le lot est la partie « cycle » de simulateur.yaml.
+du micropore, stockage imaginaire, fausse carte n° 5 du spray) sont celles des scénarios
+« remplissage », « stockage » et du spray ; le reste (ce qui est prêt, les conditions, le lot, le
+carnet) est le code du programme principal (vidange.cycle.mode_seaux). Le lot est la partie
+« cycle » de simulateur.yaml.
 
 Ce qui n'est pas dans le lot simulé, et pourquoi, est dit par `mode.en_texte()` :
 - le fût est déjà au poste et prêt (l'échange se joue à part : `vidange-simulateur poste_fut`) ;
-- la griffe : chaque versement est une rotation du seau (étape « verser » du remplissage) ;
-- les cases vides d'ORDRE_SEAU (spray, couvercle, et donc la fermeture ; lavage).
+- la griffe : chaque versement est une rotation du seau (étape « verser » du remplissage), et
+  elle est vue « partie du poste » dès que le seau vide y arrive (le bras du spray peut sortir) ;
+- les cases vides d'ORDRE_SEAU (couvercle, et donc la fermeture ; lavage).
+La lecture du QR du flanc est une fausse caméra (la vraie est la tâche 40 ter).
 """
+
+from typing import TYPE_CHECKING
 
 from vidange.cycle.mode_seaux import Lot, ModeSeaux, PiecesRemplissage
 from vidange.cycle.ordre import verifier_ordre
 from vidange.reglages import CycleSimule, SeauRemplissageSimule
 from vidange.remplissage.module import SeauAFaire
+from vidange.remplissage.remplissage import Remplissage
 from vidange.simulateur.planning import Planning
 from vidange.simulateur.simulateur import ErreurSimulation, Simulateur
+from vidange.spray.spray import Spray
 from vidange.stockage.simulation import BOUCLE
 from vidange.stockage.stockage import Stockage
+
+if TYPE_CHECKING:
+    from vidange.remplissage.simulation import ScenarioRemplissage
+
+# Postes joués en faux par le simulateur, vérifiés dans le planning comme les postes lancés : la
+# griffe (chaque versement est une rotation du seau, étapes « ramener_au_vidage » et « verser »).
+JOUES_EN_FAUX = ("griffe",)
 
 
 class PiecesSimulees:
@@ -32,6 +46,9 @@ class PiecesSimulees:
 
     def __init__(self, simulateur: Simulateur) -> None:
         self.simulateur = simulateur
+        # Les dernières pièces construites (essais : regarder le micropore, le spray).
+        self.scenario: ScenarioRemplissage | None = None
+        self.spray: Spray | None = None
 
     def manque(self, poste: str) -> str | None:
         from vidange.fermeture.simulation import fermeture_possible
@@ -53,10 +70,15 @@ class PiecesSimulees:
             return "simulateur.yaml ou pesees.yaml (i2c) n'a pas de micropore"
         if poste == "fermeture" and not fermeture_possible(self.simulateur):
             return "simulateur.yaml ou pesees.yaml (i2c) n'a pas de fermeture"
+        spray = reglages.machine.spray
+        if poste == "spray" and (
+            spray is None or spray.signal not in self.simulateur.fabrique.branchements
+        ):
+            return "pas de carte du spray dans docs/entrees-sorties.yaml"
         return None
 
     def remplissage(
-        self, lot: Lot, avec_micropore: bool, avec_fermeture: bool
+        self, lot: Lot, avec_micropore: bool, avec_fermeture: bool, avec_spray: bool
     ) -> PiecesRemplissage:
         from vidange.remplissage.simulation import remplissage_du_simulateur
 
@@ -73,7 +95,11 @@ class PiecesSimulees:
             )
             for seau in lot.seaux
         ]
-        options = {} if avec_micropore else {"micropore_rentre": lambda: True}
+        options: dict[str, object] = {} if avec_micropore else {"micropore_rentre": lambda: True}
+        spray: Spray | None = None
+        if avec_spray:
+            # Règle 6 : le chariot reste immobile tant que le bras n'est pas vu rangé.
+            options["bras_spray_sorti"] = lambda: spray is not None and spray.bras_spray_sorti()
         scenario = remplissage_du_simulateur(
             simulateur, seaux_simules=seaux, avec_fermeture=avec_fermeture, **options
         )
@@ -86,9 +112,36 @@ class PiecesSimulees:
         for file, nombre in cycle.files_pleines.items():
             stockage.inventaire.changer_file(file, nombre)
         scenario.plan.magasin = stockage
+        if avec_spray:
+            spray = self._spray(scenario.remplissage)
+        self.scenario = scenario
         return PiecesRemplissage(
-            scenario.remplissage, scenario.prehension, scenario.mycelium, scenario.plan
+            scenario.remplissage,
+            scenario.prehension,
+            scenario.mycelium,
+            scenario.plan,
+            spray=spray,
+            # Pas de griffe sur la machine imaginaire : elle n'est jamais au poste.
+            griffe_partie=lambda: True,
         )
+
+    def _spray(self, remplissage: Remplissage) -> Spray:
+        """Le vrai Spray sur la fausse carte n° 5 du simulateur, branché au chariot (règle 6,
+        rotation du seau pendant la dose), lu en fond comme sur la machine."""
+        simulateur = self.simulateur
+        spray = Spray(
+            simulateur.reglages.machine,
+            simulateur.materiel,
+            horloge=lambda: simulateur.temps,
+            refus_chariot=remplissage.refus_bras_spray,
+            # Porte de la boîte du spray fermée (machine imaginaire).
+            porte_ouverte=lambda: False,
+            tourner_seau=remplissage.tourner_pour_spray,
+            permission=simulateur.chef.permission,
+        )
+        simulateur.ajouter_fond(spray.observer)
+        self.spray = spray
+        return spray
 
 
 def _cycle(simulateur: Simulateur) -> CycleSimule:
@@ -125,5 +178,6 @@ def jouer_cycle(simulateur: Simulateur) -> tuple[ModeSeaux, Planning, list[str]]
         raise ErreurSimulation(f"lot de seaux impossible : {refus}")
     planning = simulateur.jouer(mode.modules_du_lot(lot_du_simulateur(simulateur)))
     faites = [f"{ligne.module}.{ligne.etape}" for ligne in planning.lignes]
-    problemes = verifier_ordre(faites, mode.postes_lances) if planning.fini else []
+    verifies = [*mode.postes_lances, *JOUES_EN_FAUX]
+    problemes = verifier_ordre(faites, verifies) if planning.fini else []
     return mode, planning, problemes

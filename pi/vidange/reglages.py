@@ -1668,6 +1668,10 @@ class Remplissage(Modele):
     # direction, modulo 90°.
     barres_direction_deg: float
     anse_deg: float
+    # Hauteur du plateau (dessus) pendant la lecture du QR du flanc par la caméra du micropore,
+    # seau vide à la pose, avant le serrage des barres (fil Guidage caméra, 07/11/2026). None :
+    # le plateau reste où la pose l'a laissé (valeur à venir du fil Micropore).
+    plateau_lecture_qr: float | None = None
     # La face de la tête de préhension touche le fond intérieur du seau à tant au-dessus du
     # plateau (pose du seau vide).
     face_au_dessus_plateau_m: float = Field(ge=0)
@@ -3952,6 +3956,8 @@ class Machine(Modele):
         )
         dans("couvercles → plateau_z", "plateau_z", r.couvercles.plateau_z)
         dans("inspection → plateau_z", "plateau_z", r.inspection.plateau_z)
+        if r.plateau_lecture_qr is not None:
+            dans("plateau_lecture_qr", "plateau_z", r.plateau_lecture_qr)
         dans("pousseur_rentre_m", "pousseur", r.pousseur_rentre_m)
         dans("barres → ouvertes_m", "barres", r.barres.ouvertes_m)
         approche = r.pose_seau.barres_approche_hw_m

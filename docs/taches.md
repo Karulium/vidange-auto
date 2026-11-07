@@ -1497,7 +1497,9 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   - redémarrage dans le bon ordre.
 - [ ] **40 ter. Vision du micropore** — Modèle : Sonnet, effort moyen. La caméra de la tête du micropore (tâche 40) :
   lecture du QR du seau, position des trous, contrôle de chaque pièce posée, et l'angle caméra → rouleau (donné à la
-  main par `--camera-rouleau` pour l'instant). Règles de la fiche `micropore/logiciel/micropore-pour-logiciel.md`
+  main par `--camera-rouleau` pour l'instant).
+  Elle lit aussi le **QR du flanc** pour le Remplissage (`VisionSeau.lire_seau`, étape `orienter_l_anse`, plateau à
+  `plateau_lecture_qr`, pendant un tour avant le serrage des barres ; `docs/decisions.md`, réponses à la PR n° 89). Règles de la fiche `micropore/logiciel/micropore-pour-logiciel.md`
   (§ vision). Tests sur des images fabriquées (OpenCV, comme la tâche 22) ; ce qui demande des photos réelles reste
   un faux (tâche 22 ter).
 - [ ] **41 bis. Pose du couvercle sur le seau plein** — Modèle : Sonnet, effort moyen. À écrire d'abord : demander au

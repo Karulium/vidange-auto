@@ -1150,8 +1150,9 @@ caméra en chiffres de la fiche) et objet `entonnoir` dans `prehension → objet
 Code : `pi/vidange/cycle/` ; lot du simulateur : `pi/reglages/simulateur.yaml → cycle` (EXEMPLE) ; essai :
 `pi/systeme/essai-mode-seaux.md` (testé sur le vrai matériel : non).
 
-- **L'ordre du cycle d'un seau est écrit à un seul endroit** (`vidange/cycle/ordre.py`, `ORDRE_SEAU`) : fût, seau
-  vide posé, griffe, mycélium, spray, micropore, couvercle, fermeture, stockage, lavage des vides. Le démarrage le lit
+- **L'ordre du cycle d'un seau est écrit à un seul endroit** (`vidange/cycle/ordre.py`, `ORDRE_SEAU`). Ordre
+  corrigé le 07/11/2026 (section suivante) : fût, seau vide posé, QR du flanc, centrage et seau vide au poste, spray,
+  rangées du haut du micropore, griffe, mycélium, couvercle, fermeture, stockage, lavage des vides. Le démarrage le lit
   (quels postes sont prêts, check-list, écran) ; le simulateur le lit (`vidange-simulateur cycle` vérifie que chaque
   seau du lot passe par ces postes, dans cet ordre).
 - **Même code pour la machine et le simulateur** (`ModeSeaux`) ; seules les « pièces » (ce qui touche le matériel)
@@ -1162,7 +1163,8 @@ Code : `pi/vidange/cycle/` ; lot du simulateur : `pi/reglages/simulateur.yaml �
 - **Choix de la tâche 45 (tranchés par Claude, en attendant les réponses de Karulium, PR de la tâche 45)** :
   1. Cases vides d'`ORDRE_SEAU` : la griffe (son enchaînement avec la préhension sur le même pont et avec le seau du
      chariot est le travail du solveur, tâche 23 ; dans le simulateur, chaque versement reste une rotation du seau),
-     le spray (à quel passage au poste il dose n'est écrit nulle part), le couvercle (tâche 41 bis, donc pas de
+     le spray (à quel passage au poste il dose n'est écrit nulle part ; **réponse du 07/11 : section suivante**), le
+     couvercle (tâche 41 bis, donc pas de
      fermeture), le lavage des vides (travail à part, règle 7 du plafond).
   2. Sur la vraie machine, il manque aussi : la lecture du QR du flanc du seau par une caméra (le Remplissage refuse
      d'orienter l'anse sans elle), la pose du bocal de semence neuf par la préhension (case vide `nouveau_bocal` du
@@ -1179,3 +1181,55 @@ Code : `pi/vidange/cycle/` ; lot du simulateur : `pi/reglages/simulateur.yaml �
   6. Le Remplissage attend l'air comprimé (`chef.condition_permission("air")`) avant de prendre un seau par le
      venturi, comme la Préhension et le Lavage (PR n° 87).
 
+## Programme principal, réponses à la PR n° 89 (07/11/2026)
+
+Réponses des fils mécaniques (Spray, Micropore, Guidage caméra) et de Karulium, recopiées ici. Code :
+`pi/vidange/cycle/ordre.py` (l'ordre, un seul endroit), `pi/vidange/remplissage/module.py` (étapes
+`aller_au_poste`, `spray_*`, `micropore_rangee_du_haut`), `pi/vidange/cycle/simulation.py`.
+
+- **Spray** (fil Spray, `pulverisation/logiciel/spray-pour-logiciel.md` § 1 a), mise à jour du 07/11) : **une seule
+  fois par seau, sur le seau VIDE**, au poste (y 0,135), avant la 1re couche, pendant le 1er aller-retour de la griffe
+  (exigence de Karulium du 25/09 : « spray automatique dès le début »). Ordre :
+  1. seau vide au poste, QR lu et seau orienté ;
+  2. la griffe part chercher sa 1re prise ;
+  3. plateau ≤ min(0,50 ; 0,68 − h) et barres ouvertes à plus de 0,50 d'entraxe (règle 6) ;
+  4. le bras sort ;
+  5. spray, le seau tourne d'environ 200° ;
+  6. le bras se range (le Pi attend « bras rangé ») ;
+  7. pose de la rangée du HAUT du micropore, dans le même aller-retour.
+
+  Ensuite les couches de substrat et de mycélium, puis le couvercle et la fermeture. Le spray est branché dans le cycle
+  (simulateur et machine) avec la même règle que les autres postes : « pas lancé : raison » s'il manque quelque chose.
+- **Micropore** (fil Micropore) : c'est ce que fait déjà la tâche 40. Rangée du haut sur le seau vide au poste, après le
+  spray ; rangée du bas quand le seau a assez de poids. Ce poids reste un réglage, sous le nom qu'il a depuis la tâche
+  40 : `micropore → fond_poids_min_kg` (global, EXEMPLE 4 kg) et `micropore → formats → <format> → fond_poids_min_kg`
+  (1,5 kg pour seau_b) ; il peut passer à 0 après l'essai, sans changer le code. Plateau arrêté et tête escamotée à
+  chaque mouvement du plateau (tâche 40, inchangé).
+- **QR du flanc** (fil Guidage caméra) : lu par la caméra du micropore (`cam_inspection`, sur une équerre du chariot ;
+  pas de lecteur QR à part, le GM65 est retiré). Le QR est en bas du flanc.
+  - Moment : seau vide posé sur le plateau à y 0,50, plateau monté à `remplissage → plateau_lecture_qr` (EXEMPLE,
+    valeur à venir du fil Micropore), le plateau fait tourner le seau et la caméra lit pendant la rotation, AVANT le
+    serrage des barres.
+  - Puis le format du seau est chargé et le seau tourné pour mettre les oreilles de l'anse à 45° (modulo 90°) de l'axe
+    x des barres. L'angle est lu sur le QR, corrigé par l'écart attaches/QR enregistré pour ce seau, et gardé jusqu'à la
+    poussée ; le même QR sert de repère d'angle du micropore.
+  - Lecture ratée après un tour complet : seau mis de côté et alerte, comme un format inconnu.
+  - La lecture elle-même est dans la tâche 40 ter (vision du micropore). Ici l'étape existe dans l'ordre, avec une
+    fausse caméra dans le simulateur ; sur la machine, le poste « qr_du_flanc » n'est pas lancé tant que la 40 ter
+    manque.
+- **Ordre corrigé** dans `ORDRE_SEAU` et dans le simulateur. Le lot simulé de 20 seaux passe sans alarme ; le test
+  d'ordre vérifie : QR avant le serrage des barres, spray avant la 1re couche, rangée du haut après le spray et avant la
+  1re couche, rangée du bas après le poids mini.
+- **Question 1 de la PR (lancer un lot)** : acceptée au niveau 1 : bouton « Lot de seaux » sur la page web (format et
+  nombre de seaux), puis Go sur l'écran de l'armoire. Pas encore codé (reste à faire).
+- **Question 3 de la PR (lot sans micropore ou sans spray)** : posée à Karulium, **en attente**. D'ici là, sur la vraie
+  machine, le lot ne part pas sans eux (le plus prudent : spray et micropore sont « obligatoires » dans `ORDRE_SEAU`),
+  et il ne part **jamais** sans couvercle ni fermeture.
+- **Choix de Claude (tâche 45, correction)** :
+  1. « Mis de côté » après un QR pas lu : aucun geste ni place n'est écrit pour poser un seau de côté. Le Pi s'arrête
+     en alarme avec l'alerte (« QR du flanc du seau pas lu après un tour complet ») et l'écran dit de mettre ce seau de
+     côté à la main, comme pour un format inconnu. Le geste automatique sera écrit quand la place sera donnée.
+  2. La lecture « pendant la rotation » : le plateau lit d'abord le QR là où il est ; s'il n'est pas lu, il fait un
+     tour complet et relit (la caméra lit pendant ce tour ; la vraie lecture continue est la 40 ter).
+  3. La griffe « partie du poste » (condition de la sortie du bras) : dans le simulateur il n'y a pas de griffe au
+     poste, elle est vue partie ; sur la machine, la griffe reste une case vide (tâche 23), donc pas de lot.

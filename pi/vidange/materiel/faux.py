@@ -630,8 +630,14 @@ class FausseCarteSpray:
                 break
             self._t = min(self._t + self.PAS_S, maintenant)
             self._un_pas(self.PAS_S)
+            # Pas après pas : une longue lecture (simulateur) ne prend pas une sortie finie
+            # pour un bras poussé.
+            self._voir_capteur()
         if self.agitateurs_pct and maintenant >= self._fin_agitation:
             self.agitateurs_pct = 0
+        self._voir_capteur()
+
+    def _voir_capteur(self) -> None:
         vu = self._capteur()
         if self._capteur_vu and not vu and self._cible is None:
             self.erreurs |= carte_spray.ERREUR_BRAS_POUSSE
