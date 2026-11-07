@@ -605,3 +605,170 @@ def test_page_web_propose_le_lot_et_dit_le_refus(tmp_path):
         assert "Lancer un lot" in client.get("/").text
     finally:
         registre.fermer()
+
+
+# ------------------------------------------------------- corriger l'inventaire (45 quinquies)
+
+
+def une_correction(machine, delai_s=60.0, horloge=None):
+    from vidange.stockage.correction import Correction
+
+    return Correction(
+        machine.stockage, delai_s, lambda: None, *([] if horloge is None else [horloge])
+    )
+
+
+def test_correction_proposee_puis_confirmee_est_ecrite_et_journalisee(machine, caplog):
+    correction = une_correction(machine)
+    inventaire = machine.stockage.inventaire
+    caplog.set_level("INFO")
+    # Le Pi propose : rien n'est écrit.
+    proposition = correction.proposer(f"boite_{BOITES.capsules}", None, 5, "page web")
+    assert (proposition.avant, proposition.apres) == ("vide", "5")
+    assert inventaire.boites[BOITES.capsules] == 0
+    # Karulium confirme : c'est écrit, avec avant et après au journal.
+    correction.confirmer("page web")
+    assert inventaire.boites[BOITES.capsules] == 5
+    assert correction.proposition is None
+    assert f"boite_{BOITES.capsules}, vide → 5" in caplog.text
+    # Un bocal de semence : variété, puis place libre.
+    correction.proposer(SEMENCE[0], "shiitake", 0, "page web")
+    correction.confirmer("page web")
+    assert inventaire.bocaux[SEMENCE[0]] == "shiitake"
+    correction.proposer(SEMENCE[0], "", 0, "page web")
+    correction.confirmer("page web")
+    assert SEMENCE[0] not in inventaire.bocaux
+    assert f"{SEMENCE[0]}, shiitake → vide" in caplog.text
+    # Une pile de seaux vides, les couvercles.
+    pile = next(iter(inventaire.piles))
+    correction.proposer(pile, FORMAT, 3, "page web")
+    correction.confirmer("page web")
+    assert (inventaire.piles[pile].format, inventaire.piles[pile].nombre) == (FORMAT, 3)
+    correction.proposer("couvercles", None, 7, "page web")
+    correction.confirmer("page web")
+    assert inventaire.couvercles == 7
+    correction.proposer(pile, None, 0, "page web")
+    correction.confirmer("page web")
+    assert inventaire.piles[pile].nombre == 0 and inventaire.piles[pile].format is None
+
+
+def test_correction_sans_confirmation_ou_trop_vieille_n_ecrit_rien(machine):
+    temps = [0.0]
+    correction = une_correction(machine, delai_s=10.0, horloge=lambda: temps[0])
+    with pytest.raises(ErreurChef, match="aucune correction proposée"):
+        correction.confirmer("page web")
+    correction.proposer("couvercles", None, 7, "page web")
+    correction.annuler("page web")
+    with pytest.raises(ErreurChef, match="aucune correction proposée"):
+        correction.confirmer("page web")
+    correction.proposer("couvercles", None, 7, "page web")
+    temps[0] = 11.0
+    with pytest.raises(ErreurChef, match="aucune correction proposée"):
+        correction.confirmer("page web")
+    assert machine.stockage.inventaire.couvercles == 0
+
+
+def test_correction_refusee_pendant_un_lot(machine):
+    occupe = ["un lot tourne : un lot est déjà en route (remplissage)"]
+    from vidange.stockage.correction import Correction
+
+    correction = Correction(machine.stockage, 60.0, lambda: occupe[0])
+    with pytest.raises(ErreurChef, match="correction refusée : un lot tourne"):
+        correction.proposer("couvercles", None, 7, "page web")
+    # Proposée avant le lot, refusée à la confirmation si un lot est parti entre-temps.
+    occupe[0] = None
+    correction.proposer("couvercles", None, 7, "page web")
+    occupe[0] = "un lot tourne : un lot est déjà en route (remplissage)"
+    with pytest.raises(ErreurChef, match="un lot est déjà en route"):
+        correction.confirmer("page web")
+    assert machine.stockage.inventaire.couvercles == 0
+
+
+@pytest.mark.parametrize(
+    ("place", "contenu", "nombre", "raison"),
+    [
+        ("inconnue", None, 1, "place « inconnue » inconnue"),
+        ("semence_99_99", "shiitake", 0, "inconnue"),
+        ("boite_nulle_part", None, 1, "inconnue"),
+        (f"boite_{BOITES.capsules}", None, 19, "la boîte en tient 18 au plus"),
+        (f"boite_{BOITES.capsules}", None, -1, "nombre négatif"),
+        ("couvercles", None, -3, "nombre négatif"),
+        ("pile_1", FORMAT, 999, "une pile en tient"),
+        ("pile_1", "seau_z", 2, "format « seau_z » inconnu"),
+        ("pile_1", None, 2, "format « None » inconnu"),
+    ],
+)
+def test_correction_valeur_impossible_refusee(machine, place, contenu, nombre, raison):
+    correction = une_correction(machine)
+    avant = (machine.stockage.inventaire.couvercles, dict(machine.stockage.inventaire.boites))
+    with pytest.raises(ErreurChef, match=raison):
+        correction.proposer(place, contenu, nombre, "page web")
+    assert correction.proposition is None
+    assert (machine.stockage.inventaire.couvercles, machine.stockage.inventaire.boites) == avant
+
+
+def test_refus_taille_lot_suit_l_inventaire_corrige(machine):
+    correction = une_correction(machine)
+    stockage = machine.stockage
+    assert refus_taille_lot(MACHINE, stockage, lot_de(18)) is None
+    # Un bocal de semence retiré : 17 seulement.
+    correction.proposer(SEMENCE[0], "", 0, "page web")
+    correction.confirmer("page web")
+    assert "18 seaux « pleurote_grise » mais 17 bocaux" in refus_taille_lot(
+        MACHINE, stockage, lot_de(18)
+    )
+    assert refus_taille_lot(MACHINE, stockage, lot_de(17)) is None
+    # Les couvercles percés et les capsules.
+    correction.proposer(f"boite_{BOITES.couvercles_perces}", None, 4, "page web")
+    correction.confirmer("page web")
+    assert "seulement 4 couvercles percés" in refus_taille_lot(MACHINE, stockage, lot_de(17))
+    correction.proposer(f"boite_{BOITES.couvercles_perces}", None, 17, "page web")
+    correction.confirmer("page web")
+    correction.proposer(f"boite_{BOITES.capsules}", None, 10, "page web")
+    correction.confirmer("page web")
+    assert "seulement 8 places libres" in refus_taille_lot(MACHINE, stockage, lot_de(17))
+    # Une autre variété posée à la main : elle compte pour son lot.
+    correction.proposer(SEMENCE[0], "shiitake", 0, "page web")
+    correction.confirmer("page web")
+    assert refus_taille_lot(MACHINE, stockage, lot_de(1, "shiitake")) is None
+
+
+def test_page_web_corrige_l_inventaire_avec_la_cle_et_la_confirmation(tmp_path, machine):
+    from vidange.fiabilite import Bilans
+    from vidange.registre import Registre
+    from vidange.reglages import ReglagesBilan
+
+    from .test_chef import Horloge, nouveau_chef
+
+    chef = nouveau_chef(Horloge())
+    registre = Registre(tmp_path / "registre.sqlite", tmp_path / "photos")
+    try:
+        bilans = Bilans(tmp_path, ReglagesBilan(lignes_journal=0), registre, chef)
+        correction = une_correction(machine)
+        services = Services(chef, registre, bilans.acquitter, list, correction=correction)
+        app = creer_app(services, reglages_api(), CLE)
+        sans_cle = TestClient(app, client=LOCAL)
+        assert sans_cle.get("/api/stockage").status_code == 401
+        assert sans_cle.post("/api/stockage/confirmer").status_code == 401
+        client = TestClient(app, client=LOCAL, headers={"Authorization": f"Bearer {CLE}"})
+        inventaire = client.get("/api/stockage").json()
+        assert inventaire["boites"][BOITES.capsules] == {"nombre": 0, "capacite": 18}
+        assert inventaire["semence"][SEMENCE[0]] == VARIETE
+        place = f"boite_{BOITES.capsules}"
+        reponse = client.post("/api/stockage/correction", json={"place": place, "nombre": 99})
+        assert reponse.status_code == 409 and "18 au plus" in reponse.json()["detail"]
+        reponse = client.post("/api/stockage/correction", json={"place": place, "nombre": 6})
+        assert reponse.json()["proposition"] == {
+            "place": place,
+            "avant": "vide",
+            "apres": "6",
+            "qui": reponse.json()["proposition"]["qui"],
+        }
+        assert machine.stockage.inventaire.boites[BOITES.capsules] == 0
+        reponse = client.post("/api/stockage/confirmer")
+        assert reponse.status_code == 200 and reponse.json()["proposition"] is None
+        assert machine.stockage.inventaire.boites[BOITES.capsules] == 6
+        assert client.post("/api/stockage/confirmer").status_code == 409
+        assert "Inventaire du stockage" in client.get("/").text
+    finally:
+        registre.fermer()

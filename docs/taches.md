@@ -729,7 +729,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   la 19 quater. Écrire `PiecesMachine.remplissage`, `entonnoir` et `lavage_bocaux` (PR 93), lancer les boucles de
   fond des pièces (balance, vide, battement des servos) avec le lot, et le bouton « Lot de seaux » / « Lot de
   bocaux » sur la page web puis le Go à l'écran (`docs/decisions.md`, PR 89, question 1).
-- [ ] **45 quinquies. Inventaire du stockage depuis la page web** — Modèle : Sonnet, effort bas. Saisir et corriger à la
+- [x] **45 quinquies. Inventaire du stockage depuis la page web** — Modèle : Sonnet, effort bas. Saisir et corriger à la
   main ce que contient le stockage (bocaux de semence par variété et par place, capsules et couvercles percés dans les
   boîtes, piles de seaux vides par format, couvercles), avec le Go de Karulium avant d'écrire ; le lot (tâche 45
   quater, `refus_taille_lot`) lit ces nombres. Journal de chaque correction. Tests et procédure courte.

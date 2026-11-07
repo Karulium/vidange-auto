@@ -147,3 +147,19 @@ Testé sur le vrai matériel : non. À faire quand les 3 panneaux et le tiroir a
 4. Bocaux : 14 par rangée paire (x 1,2075 à 2,6375), 13 par rangée impaire : 122 places. Coin des suspects :
    [8,13] à x 2,6375 doit être à la portée de la griffe (x ≤ 2,738).
 5. Boîtes à capsules en (2,95 ; 0,53) et (2,95 ; 0,80), hublot en (2,93 ; 0,22).
+
+## Étape 8 : corriger l'inventaire depuis la page web (tâche 45 quinquies)
+
+Testé sur le vrai matériel : non. À faire une fois, machine à l'arrêt (aucun lot en route).
+
+1. Ouvrir la page web du Pi (avec la clé), onglet « État » : la partie « Inventaire du stockage » résume les
+   bocaux de semence par variété, les boîtes (nombre / capacité), les piles de seaux vides et les couvercles.
+2. Regarder dans le stockage ce qu'il y a vraiment (bocaux de semence posés, capsules et couvercles percés
+   dans les deux boîtes) et comparer avec le résumé.
+3. Pour une différence : choisir la place, écrire la variété ou le format et le nombre, toucher « Proposer la
+   correction ». La page montre « Avant : … Après : … » ; rien n'est encore écrit.
+4. Toucher « Confirmer (Go) » : le résumé change. « Annuler » laisse tout comme avant.
+5. Essayer une valeur impossible (plus que la capacité d'une boîte, nombre négatif) : la page la refuse.
+6. Proposer un lot de seaux plus grand que les bocaux ou les couvercles percés notés : le refus cite les
+   nombres corrigés. Pendant un lot en route, toute correction est refusée.
+7. Chaque correction écrite se retrouve dans le journal du Pi (« Inventaire du stockage corrigé ... avant → après »).

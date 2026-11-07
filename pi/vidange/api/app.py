@@ -51,6 +51,7 @@ from vidange.spray import Spray
 
 if TYPE_CHECKING:
     from vidange.cycle.lancement import Lancement
+    from vidange.stockage.correction import Correction
 
 journal = donner_journal("api")
 
@@ -83,6 +84,8 @@ class Services:
     air: Air | None = None
     # Lancer un lot : la page web propose, Go à l'écran (None : pas de lot possible).
     lancement: "Lancement | None" = None
+    # Corriger l'inventaire du stockage : la page propose, Karulium confirme (None : pas possible).
+    correction: "Correction | None" = None
 
 
 class Tenir(BaseModel):
@@ -112,6 +115,14 @@ class LotDeBocaux(BaseModel):
     """Le bouton « Lot de bocaux » : nombre de bocaux vides."""
 
     nombre: int
+
+
+class CorrectionStockage(BaseModel):
+    """Une correction de l'inventaire : la place, son contenu (variété ou format) et le nombre."""
+
+    place: str
+    contenu: str | None = None
+    nombre: int = 0
 
 
 class ChoixCopie(BaseModel):
@@ -294,6 +305,38 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         lancement = le_lancement()
         lancement.annuler(_qui(requete))
         return lancement.en_dict()
+
+    # ------------------------------------------------------- inventaire du stockage (45 quinquies)
+
+    def la_correction() -> "Correction":
+        if services.correction is None:
+            raise HTTPException(404, "pas de correction de l'inventaire (stockage pas prêt)")
+        return services.correction
+
+    @app.get("/api/stockage", dependencies=protege)
+    def stockage_inventaire() -> dict[str, Any]:
+        return la_correction().inventaire()
+
+    @app.post("/api/stockage/correction", dependencies=protege)
+    def stockage_proposer(choix: CorrectionStockage, requete: Request) -> dict[str, Any]:
+        """Propose la correction (rien n'est écrit) ; refus : 409 et la raison."""
+        correction = la_correction()
+        pas_pendant_la_mise_a_jour("Correction de l'inventaire")
+        correction.proposer(choix.place, choix.contenu, choix.nombre, _qui(requete))
+        return correction.inventaire()
+
+    @app.post("/api/stockage/confirmer", dependencies=protege)
+    def stockage_confirmer(requete: Request) -> dict[str, Any]:
+        """Le Go de Karulium : la correction proposée est écrite et notée au journal."""
+        correction = la_correction()
+        correction.confirmer(_qui(requete))
+        return correction.inventaire()
+
+    @app.post("/api/stockage/annuler", dependencies=protege)
+    def stockage_annuler(requete: Request) -> dict[str, Any]:
+        correction = la_correction()
+        correction.annuler(_qui(requete))
+        return correction.inventaire()
 
     # ------------------------------------------------------------ poste du fût
 

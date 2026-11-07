@@ -67,6 +67,7 @@ from vidange.cycle.machine import (
 )
 from vidange.cycle.mode_bocaux import ENTONNOIR
 from vidange.cycle.mode_seaux import MYCELIUM, REMPLISSAGE
+from vidange.cycle.postes import refus_lancement
 from vidange.distance import PiloteDistance
 from vidange.ecran import SIGNAL as SIGNAL_ECRAN
 from vidange.ecran import Ecran, LiaisonEcran, PortEcran, ouvrir_port_ecran
@@ -121,6 +122,7 @@ from vidange.reglages import ErreurReglages, Reglages, charger_reglages
 from vidange.spray.spray import PORTE as PORTE_SPRAY
 from vidange.spray.spray import Spray
 from vidange.spray.spray import verifier_avec_liste as verifier_spray
+from vidange.stockage.correction import Correction
 from vidange.vision.photo import Photographe
 
 # Codes de sortie. Le service systemd (pi/systeme/vidange.service) utilise CODE_REGLAGES_FAUX.
@@ -861,6 +863,17 @@ def principal(
     lancement = Lancement(
         reglages.programme.lot, reglages.machine, mode_seaux, mode_bocaux, stockage, fond
     )
+    # Corriger l'inventaire du stockage depuis la page web (tâche 45 quinquies) : refusé pendant
+    # un lot, confirmé par Karulium sur la page.
+    correction = (
+        None
+        if stockage is None
+        else Correction(
+            stockage,
+            reglages.programme.lot.proposition_max_s,
+            lambda: refus_lancement(chef, None, "", "un lot tourne"),
+        )
+    )
     liaison_ecran = preparer_ecran(reglages, entrees_sorties, raccords.ecran)
     # L'écran s'arrête en premier, comme l'API : plus d'ordre pendant l'arrêt.
     arret_ecran = threading.Event()
@@ -953,6 +966,7 @@ def principal(
                 spray=spray,
                 air=air,
                 lancement=lancement,
+                correction=correction,
             ),
         )
         if serveur is not None:

@@ -153,6 +153,22 @@
           <button id="bouton-lot-bocaux" class="petit vert">Proposer le lot de bocaux</button>
         </div>
       </div>
+      <!-- Inventaire du stockage (tâche 45 quinquies) : le Pi propose la correction, Karulium confirme ici. -->
+      <div id="stock" hidden>
+        <h2>Inventaire du stockage</h2>
+        <div id="stock-resume" class="doux"></div>
+        <div id="stock-proposition"></div>
+        <div class="carte">
+          <strong>Corriger une place</strong>
+          <div class="champs">
+            <label>Place<select id="stock-place"></select></label>
+            <label><span id="stock-contenu-nom">Variété</span><input id="stock-contenu" autocomplete="off"></label>
+            <label>Nombre<input id="stock-nombre" type="number" min="0" step="1" value="0"></label>
+          </div>
+          <div id="stock-aide" class="doux"></div>
+          <button id="bouton-stock" class="petit vert">Proposer la correction</button>
+        </div>
+      </div>
       <h2>Modules</h2>
       <div id="modules"></div>
       <button id="bouton-anciennes" class="petit">Voir les dernières alarmes (même acquittées)</button>
@@ -390,6 +406,7 @@ function afficherEtat(etat) {
   afficherPosteFut(etat.poste_fut);
   afficherNettoyage(etat.nettoyage);
   afficherLot(etat.lot);
+  chargerStock();
 
   remplir("modules", ...(etat.modules.length ? etat.modules.map((m) =>
     el("div", { classe: "carte " + (m.statut === "alarme" ? "alarme" : m.attend ? "attention" : "ok") },
@@ -552,6 +569,82 @@ $("bouton-lot-seaux").addEventListener("click", () => proposerLot("/api/lot/seau
 $("bouton-lot-bocaux").addEventListener("click", () => proposerLot("/api/lot/bocaux", {
   nombre: parseInt($("lot-bocaux").value, 10) || 0,
 }, "Lot de bocaux proposé : donner le Go sur l'écran de l'armoire."));
+
+// Inventaire du stockage (tâche 45 quinquies) : la page PROPOSE la correction (avant -> après),
+// rien n'est écrit tant que Karulium n'a pas touché « Confirmer ».
+let stock = null;
+async function chargerStock() {
+  try {
+    stock = await lire("/api/stockage");
+  } catch (erreur) {
+    stock = null;
+  }
+  afficherStock(stock);
+}
+
+function afficherStock(inv) {
+  $("stock").hidden = !inv;
+  if (!inv) return;
+  const semence = {};
+  let vides = 0;
+  for (const v of Object.values(inv.semence)) { if (v) semence[v] = (semence[v] || 0) + 1; else vides++; }
+  const piles = Object.entries(inv.piles).filter(([, p]) => p.nombre > 0)
+    .map(([n, p]) => n + " : " + p.nombre + " " + p.format);
+  remplir("stock-resume",
+    el("div", {}, "Bocaux de semence : " + (Object.keys(semence).length
+      ? Object.entries(semence).map(([v, n]) => v + " " + n).join(", ") : "aucun")
+      + " (" + vides + " places libres)."),
+    el("div", {}, "Boîtes : " + Object.entries(inv.boites).map(([n, b]) => n + " " + b.nombre + "/" + b.capacite).join(", ") + "."),
+    el("div", {}, "Piles de seaux vides : " + (piles.length ? piles.join(", ") : "aucune") + "."),
+    el("div", {}, "Couvercles : " + inv.couvercles + "."));
+  const p = inv.proposition;
+  remplir("stock-proposition",
+    inv.refus && el("div", { classe: "carte attention" }, "Correction impossible maintenant : " + inv.refus + "."),
+    p && el("div", { classe: "carte attention" },
+      el("strong", {}, "Correction proposée : " + p.place),
+      el("div", {}, "Avant : " + p.avant + ". Après : " + p.apres + "."),
+      el("button", { classe: "petit vert", surclick: () => ordreStock("/api/stockage/confirmer", null, "Inventaire corrigé.") }, "Confirmer (Go)"),
+      el("button", { classe: "petit", surclick: () => ordreStock("/api/stockage/annuler", null, "Correction annulée.") }, "Annuler")));
+  const choix = $("stock-place");
+  const noms = [...Object.keys(inv.semence), ...Object.keys(inv.boites).map((n) => "boite_" + n),
+    ...Object.keys(inv.piles), "couvercles"];
+  if (choix.dataset.noms !== noms.join("|")) {
+    choix.dataset.noms = noms.join("|");
+    choix.replaceChildren(...noms.map((n) => el("option", { value: n }, n)));
+    adapterStock();
+  }
+}
+
+function adapterStock() {
+  const place = $("stock-place").value;
+  const semence = place.startsWith("semence_"), pile = stock && place in stock.piles;
+  $("stock-contenu").disabled = !(semence || pile);
+  $("stock-contenu-nom").textContent = semence ? "Variété (vide : place libre)" : pile ? "Format du seau" : "Contenu";
+  $("stock-nombre").disabled = semence;
+  $("stock-aide").textContent = pile
+    ? "Seaux au plus dans une pile : " + Object.entries(stock.pile_max).map(([f, n]) => f + " " + n).join(", ") + "."
+    : place.startsWith("boite_") ? "Pièces au plus dans une boîte : " + Object.values(stock.boites)[0].capacite + "." : "";
+}
+
+async function ordreStock(chemin, corps, texteOk) {
+  try {
+    await api(chemin, {
+      method: "POST",
+      headers: corps ? { "Content-Type": "application/json" } : {},
+      body: corps ? JSON.stringify(corps) : undefined,
+    });
+    dire(texteOk, "vert");
+  } catch (erreur) {
+    if (!(erreur instanceof Refus)) dire("Refusé : " + erreur.message, "rouge");
+  }
+  rafraichir();
+}
+
+$("stock-place").addEventListener("change", adapterStock);
+$("bouton-stock").addEventListener("click", () => ordreStock("/api/stockage/correction", {
+  place: $("stock-place").value, contenu: $("stock-contenu").value.trim() || null,
+  nombre: parseInt($("stock-nombre").value, 10) || 0,
+}, "Correction proposée : touche « Confirmer (Go) » pour l'écrire."));
 
 async function rafraichir() {
   clearTimeout(minuterie);
