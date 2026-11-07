@@ -117,7 +117,7 @@ def main(arguments: list[str] | None = None) -> int:
     with ExitStack() as pile:
         try:
             fabrique = FausseFabrique(liste) if options.faux else None
-            seulement = {VIDE, PANNEAU, PLATEAU, *reglages.pesees.tour}
+            seulement = {VIDE, PANNEAU, PLATEAU, CHAUFFAGE, *reglages.pesees.tour}
             materiel = pile.enter_context(Materiel(liste, fabrique, seulement))
             if fabrique is not None:
                 fabrique.regler(VIDE, 0.0)
@@ -155,7 +155,7 @@ def main(arguments: list[str] | None = None) -> int:
             )
             eau = EauLavage(
                 machine.lavage,
-                signaux_lavage(liaisons, reglages.fluidnc),
+                signaux_lavage(liaisons, reglages.fluidnc, materiel),
                 fichier=donnees / NOM_EAU,
             )
             lavage = Lavage(
@@ -213,8 +213,9 @@ def _faire(options: argparse.Namespace, reglages: Reglages, lavage: Lavage) -> i
         return 0
     if options.commande == "sortie":
         nom, duree = valeurs[0], float(valeurs[1])
-        if nom not in SORTIES_LAVAGE:
-            print(f"Sortie inconnue « {nom} » ({', '.join(SORTIES_LAVAGE)})", file=sys.stderr)
+        if nom not in (*SORTIES_LAVAGE, CHAUFFAGE):
+            noms = ", ".join((*SORTIES_LAVAGE, CHAUFFAGE))
+            print(f"Sortie inconnue « {nom} » ({noms})", file=sys.stderr)
             return 2
         if nom == CHAUFFAGE and not (eau.flotteur() and eau.eau_dans_le_fut):
             print("Chauffage refusé : fût de lavage pas rempli (flotteur bas)", file=sys.stderr)

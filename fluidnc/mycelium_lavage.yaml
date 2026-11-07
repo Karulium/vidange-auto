@@ -23,13 +23,13 @@
 #       le Pi (« $HY », bocal debout), jamais par « $H » : à la mise sous tension, un bocal tête
 #       en bas tomberait. Serrage : palpage « G38.3 » ; la sortie DIAG (StallGuard) du TMC2209 est
 #       l'entrée « probe ». Le courant de serrage se règle ici (run_amps, hold_amps), à l'essai.
-#   Demi-tour du bocal : 3 sorties « user_outputs » (pont en H du JGY370 dans un sens, dans
-#       l'autre ; électroaimant du verrou), commandées par le Pi (M64 / M65). Contact « verrou
-#       engagé » et capteur d'inclinaison sur les broches macro0 et macro1 (lettres 0 et 1 de
-#       « Pn: »), sans macro. Numéros et lettres : pi/reglages/fluidnc.yaml.
-#   Eau du lavage (tâche 21) : 5 sorties « user_outputs » (digital3 à 7 : eau du réseau, vanne
-#       à bille de vidange, pompe, vanne 3 voies vers les rampes, rinçage), commandées par le Pi
-#       par des relais de l'armoire ; flotteur du fût de lavage sur macro2 (lettre 2 de « Pn: »).
+#   Sorties 24 V (fiche de l'Implantation sorties-carte-3.md, 07/11/2026), commandées par le Pi
+#       (M64 / M65), toutes sur le 24 V coupé : pont en H du demi-tour (P0 et P1, jamais
+#       ensemble), relais de la pompe de vidange, électrovanne d'eau, vanne à bille, jet d'air du
+#       col, et (EXEMPLES) électroaimant du verrou du plateau et vanne 3 voies. Contact « verrou
+#       engagé » et capteur d'inclinaison sur macro0 et macro1 (lettres 0 et 1 de « Pn: »), sans
+#       macro ; flotteur du fût de lavage sur macro2 (lettre 2), recopié par le 2e contact de
+#       relais_flotteur. Numéros et lettres : pi/reglages/fluidnc.yaml.
 #   À VÉRIFIER à l'essai de la carte (pi/systeme/essai-porte-bocal.md, étape 1 ;
 #   pi/systeme/essai-lavage.md) : « $HY » avec « cycle: 0 », les lettres de « Pn: », M64/M65.
 
@@ -144,10 +144,10 @@ probe:
 
 # Sorties du demi-tour du bocal et de l'eau du lavage (pi/reglages/fluidnc.yaml → sorties).
 # EXEMPLES de broches.
-#   digital0 : demi_tour_vers_tete_en_bas ; digital1 : demi_tour_vers_debout ;
-#   digital2 : electroaimant_verrou_plateau ; digital3 : eau_reseau_lavage ;
-#   digital4 : vanne_vidange_lavage ; digital5 : pompe_lavage ; digital6 : vanne_rampes_lavage ;
-#   digital7 : rincage_lavage.
+#   digital0 : demi_tour_vers_tete_en_bas ; digital1 : demi_tour_vers_debout (jamais les deux) ;
+#   digital2 : pompe_lavage ; digital3 : eau_reseau_lavage ; digital4 : vanne_vidange_lavage ;
+#   digital5 : air_col_lavage ; digital6 : electroaimant_verrou_plateau (EXEMPLE) ;
+#   digital7 : vanne_rampes_lavage (EXEMPLE).
 user_outputs:
   digital0_pin: gpio.2
   digital1_pin: gpio.5

@@ -33,9 +33,10 @@
 #       supprimé le 22/10), pas de prise d'origine : leur position ne compte pas. Ils ne
 #       tournent que dans un sens (« en avant »), sans fin : pas de limites logicielles.
 #       Jusqu'à 200 tr/min pour le noyau (fiche) = 72 000 °/min.
-#   Vanne du venturi et électroaimants des capsules : 2 sorties « user_outputs », commandées par
-#       le Pi (M64 / M65). Jet d'air du col et chauffage du lavage : 2 de plus (la carte n° 3 n'a
-#       plus de sortie libre). Numéros : pi/reglages/fluidnc.yaml.
+#   Les 2 vannes du venturi, les électroaimants des capsules (3 en parallèle) et (EXEMPLE) l'électrovanne
+#       de rinçage du lavage : « user_outputs » commandées par le Pi (M64 / M65). Le jet d'air du
+#       col est sur la carte n° 3 et le chauffage du lavage sur un relais du Pi (fiche du 07/11).
+#       Numéros : pi/reglages/fluidnc.yaml.
 #   À VÉRIFIER à l'essai de la carte (pi/systeme/essai-prehension.md, étape 1) : sens de A, la
 #   lettre P de « Pn: » au contact, M64/M65, « G38.3 » qui s'arrête au contact ; sens de B et C
 #   (pi/systeme/essai-lavage.md).
@@ -159,14 +160,12 @@ control:
 #   digital0 : vanne_vide (« aspirer », sortie auxiliaire 24 V n° 1) ;
 #   digital1 : vanne_souffler (« souffler », sortie auxiliaire 24 V n° 2) ;
 #   digital2 : frein_prehension_z (commandée = desserré ; sortie n° 3 ou module de sortie) ;
-#   digital3 : libre ; digital4 : electroaimants_capsule ; digital5 : air_col_lavage ;
-#   digital6 : chauffage_lavage.
+#   digital3 : rincage_lavage (EXEMPLE, libre dans la fiche) ; digital4 : electroaimants_capsule.
 # Les deux électrovannes sont sur le 24 V coupé : fermées à l'arrêt d'urgence. Diode de roue
 # libre sur chaque bobine si la sortie n'en a pas.
 user_outputs:
   digital0_pin: gpio.2
   digital1_pin: gpio.5
   digital2_pin: gpio.19
+  digital3_pin: gpio.18
   digital4_pin: gpio.17
-  digital5_pin: gpio.18
-  digital6_pin: gpio.23

@@ -53,7 +53,7 @@ from vidange.fiabilite.constats import lancer_boucle
 from vidange.fluidnc import Commande, Liaison
 from vidange.griffe.bras import MM_PAR_M, TOLERANCE_ARRIVEE, CapteurForce
 from vidange.journal import donner_journal
-from vidange.porte_bocal.signaux import Signaux, SignauxFluidnc
+from vidange.porte_bocal.signaux import DeuxSortiesExclusives, Signaux, SignauxFluidnc
 from vidange.prehension.regles import Pose
 from vidange.quoi_faire import pour_carte
 from vidange.reglages import CarteFluidnc, Machine, VidePrehension
@@ -103,32 +103,21 @@ class ErreurVide(Exception):
     """Capteur de vide muet ou déréglé."""
 
 
-class DeuxVannes:
-    """« aspirer » et « souffler » : jamais ouvertes en même temps.
+class DeuxVannes(DeuxSortiesExclusives):
+    """« aspirer » et « souffler » : jamais ouvertes en même temps (voir DeuxSortiesExclusives).
 
     `commander(nom, ouverte)` envoie l'ordre (sur la machine : M64/M65 de la carte). Une vanne
     est comptée ouverte dès qu'on demande de l'ouvrir, et jusqu'à ce que sa fermeture soit
     acceptée : si l'ordre de fermeture échoue, elle reste comptée ouverte (prudence)."""
 
     def __init__(self, commander: Callable[[str, bool], None]) -> None:
-        self._commander = commander
-        self.ouvertes: set[str] = set()
-
-    def commander(self, nom: str, ouverte: bool) -> None:
-        if not ouverte:
-            self._commander(nom, False)
-            self.ouvertes.discard(nom)
-            return
-        autre = SOUFFLER if nom == VANNE else VANNE
-        if autre in self.ouvertes:
-            journal.error("Préhension : « %s » pas ouverte, « %s » est ouverte", nom, autre)
-            raise ErreurEtape(
-                f"préhension : refus d'ouvrir « {nom} » : « {autre} » est encore ouverte "
-                "(jamais les deux vannes de la ventouse en même temps)",
-                QUOI_FAIRE_VANNES,
-            )
-        self.ouvertes.add(nom)
-        self._commander(nom, True)
+        super().__init__(
+            commander,
+            (VANNE, SOUFFLER),
+            "préhension : refus d'ouvrir « {nom} » : « {autre} » est encore ouverte "
+            "(jamais les deux vannes de la ventouse en même temps)",
+            QUOI_FAIRE_VANNES,
+        )
 
 
 @dataclass(frozen=True)

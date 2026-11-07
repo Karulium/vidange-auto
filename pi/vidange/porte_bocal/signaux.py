@@ -10,12 +10,15 @@ Le nom de chaque signal (docs/entrees-sorties.yaml) donne sa lettre ou son numé
 fluidnc.yaml ; le code ne connaît que les noms.
 """
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Protocol
 
 from vidange.chef import ErreurEtape
 from vidange.fluidnc import Liaison
+from vidange.journal import donner_journal
 from vidange.reglages import CarteFluidnc
+
+journal = donner_journal("porte_bocal.signaux")
 
 
 class Signaux(Protocol):
@@ -56,3 +59,39 @@ class SignauxFluidnc:
             raise ErreurEtape(
                 f"sortie « {nom} » de la carte « {self.liaison.nom} » : {commande.erreur}"
             )
+
+
+class DeuxSortiesExclusives:
+    """Deux sorties qui ne sont jamais actives ensemble (les deux vannes de la ventouse, les deux
+    sens du pont en H du demi-tour).
+
+    `commander(nom, actif)` envoie l'ordre. Une sortie est comptée active dès qu'on demande de
+    l'allumer, et jusqu'à ce que son extinction soit acceptée : si l'ordre d'extinction échoue,
+    elle reste comptée active (prudence) et l'autre est refusée. Le refus (ErreurEtape, avec un
+    « quoi faire ») protège la machine, jamais les personnes : la sécurité est câblée."""
+
+    def __init__(
+        self,
+        commander: Callable[[str, bool], None],
+        noms: tuple[str, str],
+        refus: str,
+        quoi_faire: str,
+    ) -> None:
+        """`refus` : phrase avec {nom} et {autre} ; `quoi_faire` : ce que Karulium doit faire."""
+        self._commander = commander
+        self._noms = noms
+        self._refus = refus
+        self._quoi_faire = quoi_faire
+        self.ouvertes: set[str] = set()
+
+    def commander(self, nom: str, actif: bool) -> None:
+        if not actif:
+            self._commander(nom, False)
+            self.ouvertes.discard(nom)
+            return
+        autre = self._noms[1] if nom == self._noms[0] else self._noms[0]
+        if autre in self.ouvertes:
+            journal.error("« %s » pas allumée, « %s » est allumée", nom, autre)
+            raise ErreurEtape(self._refus.format(nom=nom, autre=autre), self._quoi_faire)
+        self.ouvertes.add(nom)
+        self._commander(nom, True)

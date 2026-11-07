@@ -130,6 +130,7 @@ from vidange.prehension.tete import (
 )
 from vidange.reglages import (
     ENTREES_LAVAGE,
+    RELAIS_CHAUFFAGE_LAVAGE,
     SORTIES_LAVAGE,
     Fluidnc,
     Machine,
@@ -536,7 +537,7 @@ def construire_cartes(
         if machine.lavage is None:
             raise Absente("machine.yaml n'a pas de partie « lavage »")
         assert poste is not None and cartes.prehension is not None
-        faire.signaux(*ENTREES_LAVAGE, *SORTIES_LAVAGE)
+        faire.signaux(*ENTREES_LAVAGE, *SORTIES_LAVAGE, RELAIS_CHAUFFAGE_LAVAGE)
         noms = {
             carte
             for nom in (*ENTREES_LAVAGE, *SORTIES_LAVAGE)
@@ -547,7 +548,7 @@ def construire_cartes(
             faire.carte_fluidnc(nom)
         eau = EauLavage(
             machine.lavage,
-            signaux_lavage(liaisons, reglages.fluidnc),
+            signaux_lavage(liaisons, reglages.fluidnc, materiel),
             fichier=None if donnees is None else donnees / NOM_EAU,
         )
         cartes.lavage = Lavage(

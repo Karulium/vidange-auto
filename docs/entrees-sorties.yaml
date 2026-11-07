@@ -725,6 +725,8 @@ signaux:
     module: porte_bocal
   demi_tour_vers_tete_en_bas:
     exemple: true
+    # Sorties de la carte n° 3, P0 et P1 (Implantation, sorties-carte-3.md, 07/11/2026) : JAMAIS
+    # ENSEMBLE (le Pi refuse d'allumer l'une tant que l'autre est allumée).
     description: Pont en H du motoréducteur JGY370 24 V du demi-tour, sens « vers tête en bas »
     carte: fluidnc_mycelium_lavage
     broche: S7
@@ -743,7 +745,7 @@ signaux:
     exemple: true
     description: Électroaimant 24 V du verrou du plateau (commandé = doigt retiré), par l'armoire
     carte: fluidnc_mycelium_lavage
-    broche: S9
+    broche: S13
     type: logique
     tension: 5
     module: porte_bocal
@@ -1254,25 +1256,37 @@ signaux:
     module: lavage
   air_col_lavage:
     exemple: true
-    description: Électrovanne d'air du jet du col (commandée = air), par un relais de l'armoire
-    carte: fluidnc_prehension
-    broche: S11
-    type: logique
-    tension: 5
-    module: lavage
-  chauffage_lavage:
-    exemple: true
-    description: >-
-      Relais statique (SSR) de la prise du thermoplongeur 2 kW (commandé = prise alimentée ; le
-      thermostat de l'appareil, réglé à 50 °C, règle la température)
-    carte: fluidnc_prehension
+    description: Électrovanne d'air du jet du col (commandée = air), 24 V coupé, diode de roue libre
+    carte: fluidnc_mycelium_lavage
     broche: S12
     type: logique
     tension: 5
     module: lavage
+  # Chauffage du lavage : PAS sur une carte FluidNC mais sur un RELAIS DU PI (Implantation,
+  # sorties-carte-4.md, 07/11/2026). Ce relais alimente l'entrée de commande du SSR du
+  # thermoplongeur 2 kW. LA SÉCURITÉ EST CÂBLÉE : le flotteur du fût de lavage alimente le relais
+  # relais_flotteur (armoire), dont un contact est en série avec la commande du SSR (flotteur bas,
+  # fil coupé ou flotteur débranché : plus de commande, quoi que fasse le Pi) ; son 2e contact
+  # recopie le flotteur sur flotteur_lavage (entrée de la carte n° 3). Une 2e barrière (thermostat
+  # de sécurité à réarmement manuel) est demandée au Lavage. Le Pi n'allume le relais que
+  # « flotteur haut » et « pompe arrêtée », sinon il attend et informe : jamais une sécurité.
+  # Voie du relais en EXEMPLE (fiche future implantation/logiciel/relais-du-pi.md).
+  relais_chauffage_lavage:
+    exemple: true
+    description: >-
+      Relais du Pi qui alimente la commande du SSR du thermoplongeur 2 kW (commandé = chauffage
+      demandé ; le flotteur câblé et le thermostat de l'appareil gardent la main)
+    carte: relais_2
+    broche: K8
+    type: relais
+    tension: 24
+    repos: ouvert
+    module: lavage
   flotteur_lavage:
     exemple: true
-    description: Flotteur du fût de lavage (contact sec ; actionné = flotteur haut, fût plein)
+    description: >-
+      Flotteur du fût de lavage, recopié par le 2e contact de relais_flotteur (contact sec ;
+      actionné = flotteur haut, fût plein). Le Pi le lit pour attendre et informer.
     carte: fluidnc_mycelium_lavage
     broche: E9
     type: contact
@@ -1281,7 +1295,7 @@ signaux:
     module: lavage
   eau_reseau_lavage:
     exemple: true
-    description: Électrovanne d'eau du réseau (remplir le fût de lavage), par un relais de l'armoire
+    description: Électrovanne d'eau du réseau (remplir le fût de lavage), 24 V coupé
     carte: fluidnc_mycelium_lavage
     broche: S10
     type: logique
@@ -1297,9 +1311,9 @@ signaux:
     module: lavage
   pompe_lavage:
     exemple: true
-    description: Pompe à membrane du lavage (commandée = en marche), par un relais de l'armoire
+    description: Pompe à membrane du lavage (commandée = en marche), par relais_pompe (fusible 8 A)
     carte: fluidnc_mycelium_lavage
-    broche: S12
+    broche: S9
     type: logique
     tension: 5
     module: lavage
@@ -1309,15 +1323,16 @@ signaux:
       Vanne 3 voies motorisée après la pompe (commandée = voie des rampes, arrosage ; au repos =
       voie de la bonde, vidange)
     carte: fluidnc_mycelium_lavage
-    broche: S13
+    broche: S14
     type: logique
     tension: 5
     module: lavage
   rincage_lavage:
     exemple: true
-    description: Électrovanne de rinçage (eau du réseau dans les rampes), par un relais de l'armoire
-    carte: fluidnc_mycelium_lavage
-    broche: S14
+    # Sur la carte n° 4 (sortie P3, libre dans la fiche) faute de place sur la n° 3 (EXEMPLE).
+    description: Électrovanne de rinçage (eau du réseau dans les rampes), 24 V coupé
+    carte: fluidnc_prehension
+    broche: S11
     type: logique
     tension: 5
     module: lavage

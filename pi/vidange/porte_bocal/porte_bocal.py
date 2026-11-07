@@ -45,7 +45,7 @@ from vidange.chef import ErreurEtape
 from vidange.fluidnc import Commande, Liaison
 from vidange.griffe.bras import MM_PAR_M
 from vidange.journal import donner_journal
-from vidange.porte_bocal.signaux import Signaux, SignauxFluidnc
+from vidange.porte_bocal.signaux import DeuxSortiesExclusives, Signaux, SignauxFluidnc
 from vidange.reglages import CarteFluidnc, Machine
 
 journal = donner_journal("porte_bocal")
@@ -60,6 +60,11 @@ MOTEUR = {"tete_en_bas": "demi_tour_vers_tete_en_bas", "debout": "demi_tour_vers
 ENTREES = (VERROU, INCLINAISON)
 SORTIES = (AIMANT, *MOTEUR.values())
 
+QUOI_FAIRE_PONT = (
+    "Le Pi a refusé d'allumer un sens du pont en H du demi-tour pendant que l'autre était allumé "
+    "(jamais les deux ensemble). Regarder la carte n° 3 (câble USB, alarme) et le journal, puis "
+    "acquitter et donner le Go : le demi-tour est refait."
+)
 QUOI_FAIRE_MORS = (
     "Regarder la vidéo du porte-bocal : les mors sont-ils bloqués ? Vérifier la carte n° 3 et "
     "le fin de course « mors ouverts », puis acquitter et donner le Go : le geste est refait."
@@ -112,6 +117,15 @@ class PorteBocalFluidnc:
         self.reglages = machine.porte_bocal
         self.liaison = liaison
         self.signaux = signaux
+        # Pont en H du JGY370 : jamais les deux sens ensemble (refus clair, comme les deux vannes
+        # de la ventouse). Ce refus protège le pont, jamais les personnes.
+        self.pont = DeuxSortiesExclusives(
+            signaux.sortie,
+            (MOTEUR["tete_en_bas"], MOTEUR["debout"]),
+            "porte-bocal : refus d'allumer « {nom} » : « {autre} » est encore allumée "
+            "(jamais les deux sorties du pont en H du demi-tour en même temps)",
+            QUOI_FAIRE_PONT,
+        )
         self.verrou = verrou
         self._horloge = horloge
         self._photo = photo
@@ -283,16 +297,19 @@ class PorteBocalFluidnc:
             )
         journal.info("Porte-bocal : demi-tour, bocal %s", _dire(sens == "tete_en_bas"))
         autre: Sens = "debout" if sens == "tete_en_bas" else "tete_en_bas"
-        self.signaux.sortie(MOTEUR[autre], False)
+        self.pont.commander(MOTEUR[autre], False)
         self.signaux.sortie(AIMANT, True)
-        self.signaux.sortie(MOTEUR[sens], True)
+        self.pont.commander(MOTEUR[sens], True)
         self._depart, self._aimant, self._degage, self._arret = self._horloge(), True, False, None
 
     def _couper(self) -> None:
         """Moteur et électroaimant coupés (même si la carte refuse une des lignes)."""
         for nom in (*MOTEUR.values(), AIMANT):
             try:
-                self.signaux.sortie(nom, False)
+                if nom == AIMANT:
+                    self.signaux.sortie(nom, False)
+                else:
+                    self.pont.commander(nom, False)
             except ErreurEtape as erreur:
                 journal.error("Porte-bocal : %s", erreur)
         self._aimant = False
