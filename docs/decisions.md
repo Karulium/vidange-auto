@@ -1008,8 +1008,10 @@ non (procédure `spray/essai-materiel.md`, puis `pi/systeme/essai-spray.md`).
   5. « Pas de contact » si le ToF baisse de plus de 3 mm entre l'approche et l'appui : gardé (EXEMPLE), revu à l'essai.
   6. Durée simulée ≈ 37 s au poste et ≈ 30 s pour la rangée du bas (15 s estimées par la mécanique) : accepté, mesuré
      à l'essai ; la cadence sera recalculée avec la vraie mesure.
-  7. Le 6 V des servos suit l'arrêt d'urgence (câblé, demandé à l'Implantation) ; le logiciel ne suppose rien : il
-     relit le ToF avant tout mouvement du plateau.
+  7. Le 6 V des servos suit l'arrêt d'urgence (Implantation, 07/11) : le BEC 6 V (borne V+ de la PCA9685) est sur le
+     24 V coupé par K1/K2 ; la logique (RP2040, VCC de la PCA9685, ToF) reste sur le 24 V de commande. Le câble du
+     chariot porte donc les 2 alimentations. Le logiciel ne suppose rien : il relit le ToF avant tout mouvement du
+     plateau.
   8. Contact appris une fois par format (pas par rangée) : gardé, vérifié à l'essai.
   À faire plus tard : vision de la caméra du micropore (QR, trous, contrôle de chaque pièce), branchement dans le
   programme principal, bouton « rouleau » à l'écran et dans l'API.
