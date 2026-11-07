@@ -1386,7 +1386,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   - amorce ;
   - compteur des nettoyages.
   `vidange --verifier` passe.
-- [ ] **39 bis. Programme de la carte ESP32 n° 5 du spray** — Modèle : Opus, effort moyen. À faire après la tâche 39.
+- [x] **39 bis. Programme de la carte ESP32 n° 5 du spray** — Modèle : Opus, effort moyen. À faire après la tâche 39.
   Vrai matériel : procédure d'essai pas à pas, « testé sur le vrai matériel : non ».
   Dossier `spray/`, sur le modèle de `poste_fut_radio/` (ESP-IDF, code commun en C testé sur PC, CI qui fabrique le
   programme, réglages copiés depuis les réglages du Pi à la fabrication). Le Modbus vient de `pesee/src/modbus.c`

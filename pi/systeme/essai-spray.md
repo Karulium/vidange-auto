@@ -1,7 +1,8 @@
 # Essai du spray sur le vrai matériel (carte ESP32 n° 5)
 
 **Testé sur le vrai matériel : non.** Les tests automatiques n'utilisent qu'une fausse carte. Cet essai se
-fait **après la tâche 39 bis** (programme de la carte n° 5 chargé dedans). Durée : environ 2 h.
+fait **après la tâche 39 bis** : la carte n° 5 câblée et son programme chargé, essayés d'abord seuls
+(`spray/essai-materiel.md`). Durée : environ 2 h.
 
 Le spray ne protège personne. Pendant tout l'essai, l'arrêt d'urgence et le store restent câblés comme
 d'habitude. L'outil `vidange-spray` **ne vérifie pas la règle 6** (plateau assez bas, barres ouvertes) :
@@ -80,20 +81,21 @@ Pour chaque emplacement N (1 à 4) :
 1. Remplir le flacon 1 d'eau (environ 300 g), le remettre, clipser le tube de pompe.
 2. Peser le seau A vide sur la balance de cuisine, le poser sur le plateau (plateau en bas, barres
    ouvertes : vérifier).
-3. Lancer `sortir 64.3 --etabli`, puis `dose 1 10 --etabli`.
+3. Lancer `dose 1 10 --angle 64.3 --etabli` (le bras sort d'abord, dans la même commande : entre deux
+   commandes, l'outil ne bat plus et la carte range le bras au bout de 2 s).
 4. Attendu : air de la buse (bruit), pompe, puis chasse de 4 à 5 s, air coupé 1 s après. La dernière ligne
    dit « atteinte (emplacement 1, ≈ 10,0 g perdus sur 10 g, … s) ».
-5. Lancer `ranger`. Repeser le seau : il doit avoir pris environ 10 g (un peu moins : brouillard perdu).
+5. Le bras se range seul 2 s après la fin (l'outil ne bat plus). Repeser le seau : il doit avoir pris environ 10 g (un peu moins : brouillard perdu).
    Noter : le poids perdu, le poids pris par le seau, la durée de pompage (le débit de la pompe).
 6. Avec ce débit, régler `spray → dose → temps_max_pompage_s` (au moins 2 fois la durée d'une dose).
-7. **Tube pincé** : pincer le tube de la pompe à la main, refaire les points 3 et 4. Attendu : au bout du
+7. **Tube pincé** : pincer le tube de la pompe à la main, refaire le point 3. Attendu : au bout du
    temps maximum, « TEMPS MAX », la chasse se fait quand même, puis le bras se range tout seul.
 
 ## Étape 8 : nettoyage des tubes et agitateurs
 
 1. Mettre de l'eau dans le flacon d'alcool (pas d'alcool pour l'essai). Seau vide sur le plateau.
-2. Lancer `sortir 64.3 --etabli`, puis `nettoyer --etabli`. Attendu : petite pompe ≈ 5 s, chasse de séchage
-   ≈ 15 s. Lancer `ranger`. Peser l'eau tombée dans le seau : environ 10 ml attendus. Sinon, régler
+2. Lancer `nettoyer --angle 64.3 --etabli`. Attendu : le bras sort, petite pompe ≈ 5 s, chasse de séchage
+   ≈ 15 s, puis le bras se range seul 2 s après. Peser l'eau tombée dans le seau : environ 10 ml attendus. Sinon, régler
    `spray → nettoyage → pompe_s`.
 3. Lancer `agiter 60 30` : les 4 barreaux aimantés tournent pendant 30 s, sans sauter. S'ils sautent,
    baisser `spray → agitateurs → vitesse_pct`.

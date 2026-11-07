@@ -93,6 +93,12 @@ def main(arguments: list[str] | None = None, fabrique=None) -> int:
     dose.add_argument("--etabli", action="store_true", help="règle 6 vérifiée à la main")
     nettoyer = commandes.add_parser("nettoyer", help="nettoyage des tubes")
     nettoyer.add_argument("--etabli", action="store_true", help="règle 6 vérifiée à la main")
+    # Sortir le bras d'abord, dans la même commande : entre deux commandes, l'outil ne bat plus
+    # et la carte range le bras au bout de silence_max_s.
+    for sous_commande in (dose, nettoyer):
+        sous_commande.add_argument(
+            "--angle", type=float, help="sortir d'abord le bras à cet angle (°)"
+        )
     agiter = commandes.add_parser("agiter", help="agitateurs : vitesse (%%), durée (s)")
     agiter.add_argument("pourcent", type=int)
     agiter.add_argument("secondes", type=int)
@@ -184,6 +190,11 @@ class _Outil:
             code = (table.ORDRE_AGITER, options.pourcent, options.secondes)
         else:
             code = ordres[commande]
+        angle = getattr(options, "angle", None)
+        if angle is not None:
+            resultat = self.ordre(table.ORDRE_SORTIR, round(angle * 10), 0, options.attente)
+            if resultat:
+                return resultat
         return self.ordre(*code, attente_s=options.attente)
 
     def suivre_etat(self, secondes: int | None) -> int:

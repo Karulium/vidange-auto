@@ -950,3 +950,40 @@ code : `pi/vidange/spray/` ; table des registres (langue commune avec la tâche 
   3. Bouton « Cartouche N confirmée » en attendant le lien QR du logiciel de culture : suffisant.
   4. Doses ≈ 1 g par litre de seau (A 11, B 5, C 10, D 10 g ; Karulium 25/09 : ≈ 10 ml pour 10 L) : EXEMPLES, réglés
      aux essais.
+
+## Carte ESP32 n° 5 du spray, programme (tâche 39 bis, 06/11/2026)
+
+Code : `spray/` (ESP-IDF, comme `poste_fut_radio/`) ; chiffres : `machine.yaml → spray → carte` (tous
+EXEMPLES) ; table des registres inchangée (version 1, `spray/README.md`). Testé sur le vrai matériel :
+non (procédure `spray/essai-materiel.md`, puis `pi/systeme/essai-spray.md`).
+
+- **Points tranchés par Claude (niveau 1), en attendant les réponses de Karulium (PR de la tâche 39 bis)** :
+  1. **ESP32-S3** (exemple : ESP32-S3-DevKitC-1, module N8) : il faut 25 broches, un ESP32 n'en a
+     pas assez de libres. Broches : EXEMPLES jusqu'à l'Implantation.
+  2. Une SCK par HX711 ; sens des 4 pompes câblé en dur (`pompes_sens: null`) ; un seul EN pour les
+     5 pilotes TMC2209 (10 kΩ vers le 3,3 V), 10 kΩ vers le 0 V sur chaque grille de MOSFET.
+  3. Bras : 200 pas × 16 micro-pas, bras sur l'axe du moteur (`rapport: 1`), 180 °/s² ; « ranger »
+     cherche le capteur jusqu'à −10° ; l'origine au plus 120° depuis là où il est (et 3 s).
+  4. Bras bloqué : tous les pas faits mais capteur qui voit encore le bras ⇒ erreur 512.
+  5. Pilote du bras muet puis revenu, ou redémarré (24 V coupé) ⇒ réglé de nouveau, origine à refaire.
+  6. Balance muette pendant une dose ⇒ pompe arrêtée, comme le temps maximum (résultat 3, chasse,
+     bras rangé). Poids perdu relu après la chasse.
+  7. Le Pi a `silence_max_s` après le démarrage de la carte pour parler ; sinon, bras pas rangé ⇒ la
+     carte le range seule.
+  8. Modbus : `pesee/src/modbus.c` sait aussi la fonction 16 (écriture) ; les cartes de pesée la
+     refusent (exception 1) comme avant.
+  9. Outil `vidange-spray` : `dose` et `nettoyer` prennent `--angle` (le bras sort dans la même
+     commande ; entre deux commandes, la carte range le bras au bout de 2 s).
+- **Carte du spray, réponses à la PR n° 83** (tâche 39 bis, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Carte **ESP32-S3-DevKitC-1 N8** (environ 25 broches nécessaires) au lieu d'un ESP32 simple ; signalé au fil Spray
+     (fiche et achats).
+  2. Bras directement sur l'axe du moteur (`rapport: 1`, EXEMPLE) ; question posée au fil Spray.
+  3. Sens des pompes câblé en dur, courant réglé par la vis du pilote (`pompes_sens: null`).
+  4. Au démarrage, Pi muet 2 s et bras pas rangé : la carte le range seule, lentement (le bras ne doit pas rester
+     au-dessus du seau ; le chariot ne bouge pas tant que le Pi n'a pas lu « bras rangé »).
+  5. Balance muette pendant une dose : pompe arrêtée (on ne pompe jamais à l'aveugle).
+  6. Balances : 80 mesures/s, moyenne de 8, « instable » au-delà de 3 g (EXEMPLES, étape 8 de la procédure).
+  7. Agitateurs : PWM à 1000 Hz (jusqu'à 40 kHz si le moteur siffle).
+  8. Le 24 V de la boîte du spray suit l'arrêt d'urgence (à confirmer par l'Implantation) : la carte voit le pilote
+     redémarré et demande une nouvelle prise d'origine.
+  9. Un seul fil EN pour les 5 pilotes, 10 kΩ vers le 3,3 V (moteurs coupés pendant le démarrage de la carte).

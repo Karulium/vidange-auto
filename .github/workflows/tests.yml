@@ -154,3 +154,60 @@ jobs:
         with:
           name: poste_fut_radio
           path: poste_fut_radio/build/*-complet.bin
+
+  # Programme de la carte ESP32 n° 5 du spray (ESP32-S3) : essais sur PC (faux moteurs, faux bras
+  # et capteur, faux HX711, Modbus), puis fabrication avec ESP-IDF dans l'image Docker officielle
+  # d'Espressif. Pour économiser les minutes, seulement si le spray peut avoir changé : spray/, le
+  # code commun pesee/src/ et le faux HX711, les réglages copiés dans le programme (machine.yaml,
+  # pesees.yaml, entrees-sorties.yaml), leur copie (entete_spray.py) ou ce fichier. Sinon les
+  # étapes sont sautées et la ligne reste verte.
+  spray:
+    runs-on: ubuntu-24.04
+    env:
+      IDF_VERSION: "v5.5.4"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Le spray a-t-il changé ?
+        id: chemins
+        env:
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+          AVANT: ${{ github.event.before }}
+        run: |
+          base="${BASE_PR:-$AVANT}"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "Pas de point de comparaison : tout est refait."
+            echo "change=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$base" HEAD | grep -qE '^(spray/|pesee/src/|poste_fut_radio/tests/faux_hx711\.|pi/reglages/(machine|pesees)\.yaml$|docs/entrees-sorties\.yaml$|pi/vidange/entete_spray\.py$|\.github/workflows/tests\.yml$)'; then
+            echo "change=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Rien du spray n'a changé : essais et fabrication sautés."
+            echo "change=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Essais sur PC
+        if: steps.chemins.outputs.change == 'true'
+        run: |
+          cmake -S spray/tests -B spray/build-essais
+          cmake --build spray/build-essais
+          ctest --test-dir spray/build-essais --output-on-failure
+      - name: Fabrication du programme (ESP-IDF, ESP32-S3)
+        if: steps.chemins.outputs.change == 'true'
+        run: |
+          docker run --rm -v "$PWD":/projet -w /projet "espressif/idf:$IDF_VERSION" bash -c '
+            set -e
+            git config --global --add safe.directory "*"
+            # Lecture et vérification des réglages du Pi (par le code du Pi).
+            pip install -q "pydantic>=2.5,<3" "PyYAML>=6.0,<7"
+            idf.py -C spray/carte build
+            # Un seul fichier, à charger à 0x0 (essai-materiel.md, étape 1).
+            mkdir -p spray/build
+            (cd spray/carte/build &&
+              python -m esptool --chip esp32s3 merge_bin -o ../../build/carte_spray-complet.bin @flash_args)
+          '
+      - name: Programme à télécharger (carte_spray-complet.bin)
+        if: steps.chemins.outputs.change == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: spray
+          path: spray/build/carte_spray-complet.bin

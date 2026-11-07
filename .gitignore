@@ -24,3 +24,10 @@ poste_fut_radio/*/build*/
 poste_fut_radio/*/sdkconfig
 poste_fut_radio/*/sdkconfig.old
 poste_fut_radio/*/dependencies.lock
+
+# Programme de la carte du spray fabriqué (spray/README.md)
+spray/build*/
+spray/*/build*/
+spray/*/sdkconfig
+spray/*/sdkconfig.old
+spray/*/dependencies.lock

@@ -116,7 +116,10 @@ redémarrage. Le Pi prend comme numéro celui du registre 6, plus 1.
   puis chasse (`ev_chasse_spray`) pendant `chasse_s` (4,5 s) ; air de la buse fermé `air_apres_s` (1 s)
   après la fin de la chasse. Résultat et numéro de dose (registres 22 à 27) à la fin.
 - **Dose pas atteinte** au temps maximum : pompe arrêtée, chasse quand même, résultat 3, puis la carte
-  **range le bras elle-même**.
+  **range le bras elle-même**. Pareil si la balance du flacon devient muette pendant la dose (on ne
+  sait plus ce qui part) : le bit de la balance muette (registre 4) dit pourquoi.
+- **Poids perdu** (registre 24) : relu à la fin du geste, après la chasse, quand le flacon ne bouge
+  plus (la pompe, elle, s'arrête dès que la balance a vu la dose).
 - **Nettoyage** (ordre 5) : air de la buse ouvert, `pompe_nettoyage_spray` pendant `nettoyage → pompe_s`
   (5 s), chasse de séchage `sechage_s` (15 s), air fermé 1 s après.
 - **Bras** : NEMA 17 sur TMC2209 en UART (1,2 A), lent (`bras → vitesse_deg_s`), butée logicielle 0 à
@@ -133,6 +136,97 @@ redémarrage. Le Pi prend comme numéro celui du registre 6, plus 1.
 Les réglages de la carte (durées, vitesse et temps maximum du bras, silence du Pi, étalonnage des
 balances) viennent de `pi/reglages/machine.yaml` (partie `spray`) et de `pesees.yaml` : la tâche 39 bis
 les copie dans le programme quand on le fabrique, comme pour les cartes de pesée.
+
+## Le programme de la carte (tâche 39 bis)
+
+La carte est un **ESP32-S3** (exemple des réglages : « ESP32-S3-DevKitC-1 », module N8), avec un
+MAX3485 pour le bus, 5 pilotes TMC2209 (le bras en UART, les 4 pompes en pas/direction), 4 HX711,
+un PC817 pour le capteur et 4 sorties MOSFET. Programme : **ESP-IDF**, comme `poste_fut_radio/`.
+
+- **Générateur de pas** : une minuterie toutes les `carte → periode_pas_us` (50 µs), seule sur le
+  2ᵉ cœur, avance les 5 moteurs (rampe d'accélération, arrêt juste sur la cible, au plus un pas
+  tous les 2 tours). Pour l'origine et « ranger », le bras s'arrête net au tour où le capteur le
+  voit, et cet endroit devient 0°. « Ranger » cherche le capteur jusqu'à
+  `moteur_bras → depassement_max_deg` sous 0° (10°), pas plus loin ; l'origine (position pas
+  encore connue) au plus toute la course et ce dépassement (120°) depuis là où il est. Et jamais
+  plus que `bras → temps_max_s`.
+- **Bras bloqué** : le moteur n'a pas de codeur. Si tous les pas de « sortir » sont faits mais que
+  le capteur voit encore le bras, c'est l'erreur 512 (bras pas arrivé).
+- **Pilote du bras** : réglé par son UART au démarrage (courant `bras → courant_a`, micro-pas,
+  courant à l'arrêt), relu toutes les `lecture_pilote_ms`. Pas de réponse : erreur 2048 (« sortir »
+  refusé ; « ranger » et l'origine restent permis). Pilote redémarré (son 24 V coupé) : il est
+  réglé de nouveau et la prise d'origine est à refaire (bit « origine faite » éteint).
+- **Capteur** : filtré `filtre_capteur_ms` (20 ms) pour « bras poussé » ; fil coupé = broche tirée
+  à 1 = « pas rangé » (le Pi attend : c'est le côté sûr).
+- **Balances** : HX711 à 80 mesures par seconde (broche RATE au 3,3 V), poids = moyenne des
+  `moyenne_de` (8) dernières ; instable si elles s'écartent de plus de `instable_g` (3 g).
+- **Au démarrage** : tout éteint, compteur de démarrages +1 (mémoire flash), pilotes alimentés
+  après le réglage du bras. Le Pi a `silence_max_s` pour parler : sinon, si le bras n'est pas
+  rangé, la carte le range seule (sans origine, elle cherche le capteur, au plus le temps maximum).
+- **Fenêtre USB** (essais) : une ligne d'état par seconde (bras, capteur, pilote, 4 balances,
+  dernier ordre, dernière dose, silence du Pi).
+
+### Les chiffres
+
+Tous dans [`pi/reglages/machine.yaml`](../pi/reglages/machine.yaml), partie `spray` (bras, dose,
+nettoyage, liaison → silence_max_s, et `spray → carte` : broches, moteur du bras, pompes,
+balances, PWM des agitateurs), plus l'étalonnage des balances (`pesees.yaml → balances_spray`) et
+l'adresse et la vitesse du bus (`docs/entrees-sorties.yaml` : `carte_spray`, `rs485_spray`). Ils
+sont **vérifiés** au démarrage du Pi et quand on fabrique le programme (broche prise deux fois,
+broche réservée de l'ESP32-S3, micro-pas impossibles, courant que le pilote ne peut pas donner,
+vitesse plus grande que le générateur de pas, bras qui n'a pas le temps de faire sa course...), puis
+copiés dans le programme (`reglages_spray.h`). Les changer = refabriquer et recharger la carte.
+
+### Les fichiers
+
+| Fichier | Rôle |
+|---|---|
+| `commun/spray.c` | La carte sans le matériel : ordres, refus, gestes, bras, silence du Pi, registres (essayé sur PC) |
+| `commun/moteur.c` | Le générateur de pas d'un moteur : rampe, cible, arrêt sur le capteur (essayé sur PC) |
+| `commun/balance.c` | Une balance : moyenne, poids, muette, instable (essayé sur PC) |
+| `commun/tmc2209.c` | Les trames du pilote TMC2209 du bras (essayé sur PC) |
+| `carte/main/main.c` | L'ESP32-S3 : broches, minuterie des pas, HX711, UART du bus et du pilote, PWM, fenêtre USB |
+| `tests/` | Les essais sur PC : faux moteurs et faux bras, faux capteur, faux HX711, questions Modbus |
+| `reglages.cmake` | Copie les réglages du Pi dans le programme (`vidange.entete_spray`) |
+| `essai-materiel.md` | **Procédure d'essai sur le vrai matériel**, pas à pas |
+
+Le HX711 et le Modbus viennent de `pesee/src/` (`hx711.c`, `modbus.c`, qui sait maintenant aussi
+l'écriture de registres, fonction 16) ; le faux HX711 de `poste_fut_radio/tests/`.
+
+### Fabriquer le programme
+
+GitHub Actions le fabrique quand le spray change (ligne `spray` des Tests) :
+`carte_spray-complet.bin`, à charger à l'adresse 0x0 (`essai-materiel.md`, étape 1).
+
+Pour le fabriquer soi-même (Linux, avec Docker) :
+
+```bash
+docker run --rm -v "$PWD":/projet -w /projet espressif/idf:v5.5.4 bash -c 'pip install -q "pydantic>=2.5,<3" "PyYAML>=6.0,<7" && idf.py -C spray/carte build'
+```
+
+Essais sur PC (sans la carte) :
+
+```bash
+cmake -S spray/tests -B spray/build-essais && cmake --build spray/build-essais
+```
+
+```bash
+ctest --test-dir spray/build-essais --output-on-failure
+```
+
+### Choix faits
+
+- **ESP32-S3** plutôt que l'ESP32 des cartes FluidNC : il faut 25 broches (5 moteurs, 4 HX711 avec
+  chacun sa SCK, bus, UART du pilote, capteur, 4 sorties) ; l'ESP32 n'en a pas assez de libres.
+  L'ESP32-S3 a aussi un USB à lui (mises à jour par le Pi, numéro de série).
+- **Une SCK par HX711** : 4 HX711 sur une seule SCK seraient lus en même temps, mais ils ne sont
+  jamais prêts au même instant.
+- **Sens des pompes câblé en dur** (`pompes_sens: null`) : une pompe péristaltique ne tourne que
+  dans un sens ; une broche gagnée. Une broche peut être donnée si le câblage le demande.
+- **Un seul EN pour les 5 pilotes** : ils sont alimentés dès le démarrage (le bras tient sa place,
+  courant réduit à l'arrêt).
+- **Générateur de pas maison** plutôt qu'une bibliothèque : une centaine de lignes en nombres
+  entiers, essayées sur PC, les mêmes pour le bras et les pompes.
 
 ## Ce que fait le Pi (`pi/vidange/spray/`)
 

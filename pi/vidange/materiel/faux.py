@@ -597,7 +597,10 @@ class FausseCarteSpray:
             n = self.dose.emplacement - 1
             self.grammes[n] -= self.debit_g_s * dt
             perdu = self._dose_depart_g - self.grammes[n]
-            if perdu >= self.dose.demandee_g:
+            if self.balance_muette[n]:
+                # Balance perdue pendant la dose : la carte arrête la pompe (comme le temps max).
+                self._resultat_pompe(carte_spray.DOSE_TEMPS_MAX)
+            elif perdu >= self.dose.demandee_g:
                 self._resultat_pompe(carte_spray.DOSE_ATTEINTE)
             elif t - self._debut_pompe >= self.temps_max_pompage_s:
                 self._resultat_pompe(carte_spray.DOSE_TEMPS_MAX)

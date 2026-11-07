@@ -2370,6 +2370,189 @@ class LiaisonSpray(Modele):
         return self
 
 
+# Broches de l'ESP32-S3 de la carte n° 5 du spray (exemple : ESP32-S3-DevKitC-1, module N8) : 0 à
+# 48, sans celles qui n'existent pas (22 à 25) ni celles qui servent déjà à la carte.
+BROCHES_INTERDITES_ESP32S3 = {
+    0: "démarrage (bouton BOOT)",
+    3: "démarrage (JTAG)",
+    19: "USB",
+    20: "USB",
+    **{broche: "n'existe pas sur l'ESP32-S3" for broche in range(22, 26)},
+    **{broche: "mémoire flash" for broche in range(26, 33)},
+    **{
+        broche: "mémoire PSRAM de certaines cartes, ou absente du module"
+        for broche in range(33, 38)
+    },
+    43: "fenêtre texte (UART0)",
+    44: "fenêtre texte (UART0)",
+    45: "démarrage (tension de la flash)",
+    46: "démarrage (messages au démarrage)",
+}
+BrocheEsp32s3 = Annotated[int, Field(ge=0, le=48)]
+# Micro-pas que le pilote TMC2209 du bras sait faire (réglés par son UART).
+MICRO_PAS_TMC2209 = (1, 2, 4, 8, 16, 32, 64, 128, 256)
+
+
+class BrochesCarteSpray(Modele):
+    """Broches de l'ESP32-S3 de la carte n° 5 (numéros GPIO). EXEMPLES jusqu'à l'Implantation."""
+
+    # L'émetteur-récepteur RS485 3,3 V (MAX3485) : DI, RO, et DE et /RE reliées (1 = parler).
+    rs485_tx: BrocheEsp32s3
+    rs485_rx: BrocheEsp32s3
+    rs485_sens: BrocheEsp32s3
+    # UART du pilote TMC2209 du bras (fil PDN_UART : RX direct, TX par une résistance de 1 kΩ).
+    pilote_bras_tx: BrocheEsp32s3
+    pilote_bras_rx: BrocheEsp32s3
+    # Pas et sens du moteur du bras.
+    bras_pas: BrocheEsp32s3
+    bras_sens: BrocheEsp32s3
+    # EN des 5 pilotes TMC2209 (bras et 4 pompes), reliés ensemble : 0 = moteurs alimentés.
+    activer_moteurs: BrocheEsp32s3
+    # Pas des 4 pompes (emplacements 1 à 4), pilotes TMC2209 en pas/direction.
+    pompes_pas: tuple[BrocheEsp32s3, BrocheEsp32s3, BrocheEsp32s3, BrocheEsp32s3]
+    # Sens des 4 pompes, une broche pour les 4. null : sens câblé en dur sur les pilotes (une pompe
+    # péristaltique ne tourne que dans un sens).
+    pompes_sens: BrocheEsp32s3 | None = None
+    # Les 4 HX711 des balances (emplacements 1 à 4) : DT et SCK de chacun.
+    hx711_dt: tuple[BrocheEsp32s3, BrocheEsp32s3, BrocheEsp32s3, BrocheEsp32s3]
+    hx711_sck: tuple[BrocheEsp32s3, BrocheEsp32s3, BrocheEsp32s3, BrocheEsp32s3]
+    # Capteur du bras rangé, par l'optocoupleur PC817 : bras rangé = broche à 0 (logique inversée).
+    bras_spray_range: BrocheEsp32s3
+    # Sorties MOSFET 24 V (1 = allumée), chacune avec 10 kΩ vers le 0 V (éteinte au démarrage).
+    ev_buse_spray: BrocheEsp32s3
+    ev_chasse_spray: BrocheEsp32s3
+    agitateurs_spray: BrocheEsp32s3  # en PWM, une seule sortie pour les 4
+    pompe_nettoyage_spray: BrocheEsp32s3
+    # Petit voyant de la carte. null : pas de voyant.
+    voyant: BrocheEsp32s3 | None = None
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "BrochesCarteSpray":
+        erreurs = []
+        deja_vues: dict[int, str] = {}
+        for nom, valeur in self.model_dump().items():
+            liste = valeur if isinstance(valeur, list | tuple) else [valeur]
+            for numero, broche in enumerate(liste, start=1):
+                if broche is None:
+                    continue
+                quoi = f"{nom} n° {numero}" if isinstance(valeur, list | tuple) else nom
+                if broche in BROCHES_INTERDITES_ESP32S3:
+                    erreurs.append(
+                        f"{quoi} ({broche}) : broche de l'ESP32-S3 réservée "
+                        f"({BROCHES_INTERDITES_ESP32S3[broche]})"
+                    )
+                autre = deja_vues.setdefault(broche, quoi)
+                if autre != quoi:
+                    erreurs.append(f"la broche {broche} est prise deux fois ({autre} et {quoi})")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class MoteurBrasCarteSpray(Modele):
+    """Le moteur du bras (NEMA 17 sur TMC2209 en UART) vu par la carte."""
+
+    # Pas entiers par tour du moteur (200 pour un 17HS4401, 1,8° par pas).
+    pas_par_tour: int = Field(gt=0, le=1000)
+    micro_pas: int
+    # Tours du moteur pour un tour du bras (1 : bras sur l'axe du moteur). EXEMPLE.
+    rapport: float = Field(gt=0, le=100)
+    acceleration_deg_s2: float = Field(gt=0)
+    # Pour « ranger », la carte va au plus jusqu'à ... (°) au-delà de 0 pour trouver le capteur.
+    depassement_max_deg: float = Field(gt=0, le=30)
+    # Le sens de rotation du moteur est inversé (broche « bras_sens » à 1 pour sortir).
+    sens_inverse: bool = False
+    # Capteur vu ou perdu pendant ce temps (ms) avant d'y croire (« bras poussé »).
+    filtre_capteur_ms: int = Field(ge=0, le=500)
+    # Résistance de mesure du courant sur la carte du pilote (Ω ; 0,11 sur la plupart).
+    resistance_mesure_ohm: float = Field(gt=0, le=1)
+    # Courant à l'arrêt, en % du courant de marche (bras.courant_a).
+    maintien_pct: int = Field(ge=0, le=100)
+    # Adresse du pilote sur son UART (broches MS1 et MS2 du pilote : 0 à 3) et vitesse.
+    adresse_uart: int = Field(ge=0, le=3)
+    vitesse_uart_bauds: int = Field(ge=9600, le=500000)
+    # Le pilote est relu tous les ... (ms) : pas de réponse = erreur « pilote du bras ».
+    lecture_pilote_ms: int = Field(ge=100, le=60000)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "MoteurBrasCarteSpray":
+        if self.micro_pas not in MICRO_PAS_TMC2209:
+            raise ValueError(
+                f"micro_pas ({self.micro_pas}) : le TMC2209 ne sait faire que "
+                + ", ".join(str(n) for n in MICRO_PAS_TMC2209)
+            )
+        pas = self.pas_par_tour * self.micro_pas * self.rapport
+        if abs(pas - round(pas)) > 1e-6:
+            raise ValueError(
+                f"pas_par_tour × micro_pas × rapport ({pas:g}) doit faire un nombre entier de "
+                "pas par tour du bras"
+            )
+        return self
+
+    @property
+    def pas_par_tour_bras(self) -> int:
+        return round(self.pas_par_tour * self.micro_pas * self.rapport)
+
+
+class PompesCarteSpray(Modele):
+    """Les 4 pompes péristaltiques (NEMA 17 sur TMC2209 en pas/direction ; micro-pas et courant
+    réglés sur chaque pilote : broches MS1/MS2 et potentiomètre)."""
+
+    vitesse_pas_s: int = Field(gt=0)
+    acceleration_pas_s2: int = Field(gt=0)
+    # Niveau de la broche pompes_sens pour pomper (si elle existe).
+    sens_inverse: bool = False
+
+
+class BalancesCarteSpray(Modele):
+    """Les 4 HX711 des balances des flacons (étalonnage : pesees.yaml → balances_spray)."""
+
+    # Cadence du HX711, choisie sur sa carte par la broche RATE (au 3,3 V : 80). Sert à vérifier
+    # les autres chiffres.
+    mesures_par_seconde: Literal[10, 80]
+    # Le poids est la moyenne des ... dernières mesures.
+    moyenne_de: int = Field(ge=1, le=16)
+    # Plus de mesure depuis ce temps (ms) : balance muette.
+    sans_mesure_ms: int = Field(ge=20, le=10000)
+    # Entre la plus petite et la plus grande des dernières mesures, plus que ça (g) : instable.
+    instable_g: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "BalancesCarteSpray":
+        periode_ms = 1000 / self.mesures_par_seconde
+        if self.sans_mesure_ms < 3 * periode_ms:
+            raise ValueError(
+                f"sans_mesure_ms ({self.sans_mesure_ms}) doit valoir au moins 3 fois le temps "
+                f"entre deux mesures du HX711 ({periode_ms:g} ms)"
+            )
+        return self
+
+
+class CarteSpray(Modele):
+    """Programme de la carte ESP32 n° 5 (tâche 39 bis, dossier spray/). Copié dans le programme
+    quand on le fabrique, avec le reste de « spray » et pesees.yaml → balances_spray."""
+
+    broches: BrochesCarteSpray
+    voyant_actif_bas: bool = False
+    moteur_bras: MoteurBrasCarteSpray
+    pompes: PompesCarteSpray
+    balances: BalancesCarteSpray
+    # Fréquence du PWM des agitateurs (Hz).
+    agitateurs_pwm_hz: int = Field(ge=100, le=40000)
+    # Le générateur de pas tourne toutes les ... (µs) : au plus un pas tous les 2 tours.
+    periode_pas_us: int = Field(ge=20, le=1000)
+    # Attente avant de répondre (µs), le temps que l'adaptateur du Pi repasse en écoute.
+    delai_avant_reponse_us: int = Field(ge=0, le=1000)
+    # Programme figé plus longtemps que ça (ms) : la carte redémarre.
+    chien_de_garde_ms: int = Field(ge=100, le=60000)
+    # Fenêtre texte sur le câble USB (essais) : une ligne d'état tous les ... (ms).
+    periode_affichage_ms: int = Field(ge=100, le=600000)
+
+    @property
+    def pas_max_par_s(self) -> float:
+        return 1_000_000 / (2 * self.periode_pas_us)
+
+
 class Spray(Modele):
     """Spray (fiche v5.8 du 01/11/2026, module gelé) : carte ESP32 n° 5, 4 flacons pesés, bras
     pivotant. Le spray ne protège personne : la règle du bras (règle 6) protège la machine."""
@@ -2382,6 +2565,8 @@ class Spray(Modele):
     agitateurs: AgitateursSpray
     nettoyage: NettoyageSpray
     liaison: LiaisonSpray
+    # Programme de la carte n° 5 (None : pas de programme à fabriquer, pour des réglages d'essai).
+    carte: CarteSpray | None = None
 
     @model_validator(mode="after")
     def _verifier(self) -> "Spray":
@@ -2400,9 +2585,78 @@ class Spray(Modele):
         for nom, dose in self.dose.par_format_g.items():
             if dose + self.dose.amorce_g >= self.flacons.contenu_max_g - self.flacons.reserve_g:
                 erreurs.append(f"dose → par_format_g → {nom} : plus grande qu'un flacon plein")
+        if self.carte is not None:
+            erreurs += self._verifier_carte(self.carte)
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self
+
+    def _verifier_carte(self, carte: CarteSpray) -> list[str]:
+        """Les chiffres de la carte n° 5 vont avec ceux du bras et des gestes."""
+        erreurs = []
+        debut, fin = self.bras.course_deg
+        if debut != 0:
+            erreurs.append("bras → course_deg : la carte compte depuis 0° (bras rangé, capteur)")
+        # Toute la course, avec la montée et la descente en vitesse.
+        vitesse, acceleration = self.bras.vitesse_deg_s, carte.moteur_bras.acceleration_deg_s2
+        course = fin - debut
+        if course >= vitesse**2 / acceleration:
+            duree = course / vitesse + vitesse / acceleration
+        else:
+            duree = 2 * math.sqrt(course / acceleration)
+        if duree >= self.bras.temps_max_s:
+            erreurs.append(
+                f"bras → temps_max_s ({self.bras.temps_max_s:g} s) : le bras n'a pas le temps de "
+                f"faire toute sa course ({course:g}° en {duree:.2f} s à {vitesse:g} °/s)"
+            )
+        pas_deg = carte.moteur_bras.pas_par_tour_bras / 360
+        vitesse_bras = self.bras.vitesse_deg_s * pas_deg
+        for quoi, vitesse in (
+            ("bras → vitesse_deg_s", vitesse_bras),
+            ("carte → pompes → vitesse_pas_s", carte.pompes.vitesse_pas_s),
+        ):
+            if vitesse > carte.pas_max_par_s:
+                erreurs.append(
+                    f"{quoi} : {vitesse:g} pas/s, plus que ce que fait le générateur de pas "
+                    f"({carte.pas_max_par_s:g} pas/s avec periode_pas_us "
+                    f"{carte.periode_pas_us})"
+                )
+        if self.bras.tolerance_deg * pas_deg < 1:
+            erreurs.append(
+                "bras → tolerance_deg : plus petite qu'un pas du moteur du bras (augmenter les "
+                "micro-pas ou la tolérance)"
+            )
+        if self.liaison.silence_max_s * 1000 <= carte.chien_de_garde_ms:
+            erreurs.append(
+                "carte → chien_de_garde_ms doit être plus court que liaison → silence_max_s"
+            )
+        try:
+            courants_tmc2209(self.bras.courant_a, carte.moteur_bras)
+        except ValueError as erreur:
+            erreurs.append(str(erreur))
+        return erreurs
+
+
+# Pleine échelle du courant du TMC2209 (V aux bornes de la résistance de mesure), selon VSENSE.
+TENSION_PLEINE_ECHELLE_TMC2209 = {0: 0.325, 1: 0.180}
+
+
+def courants_tmc2209(courant_a: float, moteur: MoteurBrasCarteSpray) -> tuple[int, int, int]:
+    """(VSENSE, IRUN, IHOLD) du pilote TMC2209 pour ce courant (A efficaces), d'après sa notice :
+    I = (CS + 1) / 32 × V / (R + 0,02 Ω) / √2. Le courant obtenu ne dépasse jamais celui demandé.
+    ValueError si le pilote ne peut pas le donner avec cette résistance de mesure."""
+    resistance = moteur.resistance_mesure_ohm + 0.02
+    # D'abord la petite échelle (VSENSE 1), plus fine, si elle suffit.
+    for vsense in (1, 0):
+        tension = TENSION_PLEINE_ECHELLE_TMC2209[vsense]
+        cs = math.floor(32 * math.sqrt(2) * courant_a * resistance / tension + 1e-9) - 1
+        if 0 <= cs <= 31:
+            ihold = math.floor((cs + 1) * moteur.maintien_pct / 100 + 1e-9) - 1
+            return vsense, cs, max(ihold, 0)
+    raise ValueError(
+        f"bras → courant_a ({courant_a:g} A) : le pilote TMC2209 ne peut pas le donner avec une "
+        f"résistance de mesure de {moteur.resistance_mesure_ohm:g} Ω"
+    )
 
 
 class Machine(Modele):
