@@ -184,6 +184,7 @@ ORDRE_BOCAUX: tuple[Poste, ...] = (
         "versement",
         "Versement de la griffe dans le bocal où est l'entonnoir (étape « verser » de l'entonnoir)",
         case_vide=(
+            "geste écrit (vidange.griffe.versement, tâche 43 bis) mais pas branché : "
             "enchaînement de la griffe avec la préhension (même pont) pas écrit (solveur, tâche "
             "23) ; dans le simulateur, chaque versement dure le temps réglé (simulateur.yaml, "
             "entonnoir → verse_s)"

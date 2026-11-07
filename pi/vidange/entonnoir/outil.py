@@ -6,6 +6,8 @@
   vidange-entonnoir etat                   où le Pi croit que l'entonnoir est (fichier de donnees/)
   vidange-entonnoir noter hors_machine     change cet état (programme principal ARRÊTÉ) :
   vidange-entonnoir noter inconnu          « hors_machine », « inconnu » ou un nom de bocal
+  vidange-entonnoir versement              hauteurs et ouvertures du versement de la griffe, et
+                                           les bocaux où ses règles l'interdisent
 
 Sert à l'essai sur le vrai matériel (pi/systeme/essai-entonnoir.md) : mesurer au mètre les cotes
 annoncées. Tout vient de pi/reglages/machine.yaml (partie « entonnoir »).
@@ -69,9 +71,48 @@ def _hauteurs(machine: Machine) -> list[str]:
     ]
 
 
+def _versement(machine: Machine) -> list[str]:
+    """Le versement de la griffe (griffe → versement_bocal) : ses chiffres, et les bocaux où les
+    règles de la griffe refusent de verser (tête de préhension comptée en haut)."""
+    from vidange.griffe.regles import Contexte, ReglesGriffe
+    from vidange.griffe.versement import poses_du_bocal
+
+    griffe = machine.griffe
+    reg = None if griffe is None else griffe.versement_bocal
+    if griffe is None or reg is None:
+        return ["machine.yaml n'a pas de partie « griffe → versement_bocal »"]
+    godet, secousses = reg.godet, reg.secousses
+    angles = (reg.ouverture_deg, *secousses.angles_deg, secousses.grand_ouvert_deg)
+    lignes = [
+        f"Dose {_m(reg.dose_kg * 1000)} g (acceptée de {_m(reg.dose.plage_kg[0] * 1000)} à "
+        f"{_m(reg.dose.plage_kg[1] * 1000)} g), mât au plus à {_m(reg.centrage_max_m)} m du col",
+        f"Axes des coquilles à {_m(reg.axes_z)} m (permis {_m(reg.axes_z_permis[0])} à "
+        f"{_m(reg.axes_z_permis[1])}) : bas des dents à "
+        f"{_m(reg.axes_z - griffe.bas_godet_sous_axes)} m",
+        "Ouvertures du godet (0 fermé, 1 grand ouvert) : "
+        + ", ".join(f"{_m(a)}° → {_m(godet.b_pour(a))}" for a in angles),
+        f"Garde du boîtier de la caméra du bocal : mât à y {_m(reg.garde_camera_bocal.mat_y[0])}"
+        f"-{_m(reg.garde_camera_bocal.mat_y[1])} → x ≥ {_m(reg.garde_camera_bocal.mat_x_min)}",
+    ]
+    if reg.exemples():
+        lignes.append("EXEMPLE (à régler à l'essai) : " + ", ".join(reg.exemples()))
+    regles, contexte = ReglesGriffe(machine), Contexte()
+    refus = []
+    for nom, (x, y) in places.places_bocaux(machine).items():
+        poses = poses_du_bocal(reg, x, y)
+        haut = poses[0].avec(z=griffe.trajet.z)
+        for depart, arrivee in ((haut, poses[0]), *((poses[0], pose) for pose in poses[1:])):
+            raison = regles.refus_mouvement(depart, arrivee, contexte)
+            if raison is not None:
+                refus.append(f"  {nom:10} ({_m(x)} ; {_m(y)}) : {raison}")
+                break
+    lignes.append(f"Bocaux où la griffe ne peut pas verser : {len(refus)}")
+    return lignes + refus
+
+
 def main(arguments: list[str] | None = None) -> int:
     lecteur = argparse.ArgumentParser(prog="vidange-entonnoir", description=__doc__.split("\n")[0])
-    lecteur.add_argument("commande", choices=["places", "hauteurs", "etat", "noter"])
+    lecteur.add_argument("commande", choices=["places", "hauteurs", "etat", "noter", "versement"])
     lecteur.add_argument("valeur", nargs="?", help="un bocal (places) ou le nouvel état (noter)")
     lecteur.add_argument("--reglages", help="dossier des réglages (défaut : pi/reglages)")
     lecteur.add_argument("--donnees", help="dossier des données (défaut : pi/donnees)")
@@ -94,6 +135,8 @@ def main(arguments: list[str] | None = None) -> int:
         print("\n".join(_places(machine, options.valeur)))
     elif options.commande == "hauteurs":
         print("\n".join(_hauteurs(machine)))
+    elif options.commande == "versement":
+        print("\n".join(_versement(machine)))
     elif options.commande == "etat":
         etat, existe = garde.lire(fichier)
         print(f"Fichier : {fichier} ({'trouvé' if existe else 'absent : hors machine'})")

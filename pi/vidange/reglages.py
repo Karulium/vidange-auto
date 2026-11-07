@@ -547,6 +547,186 @@ class DosesGriffe(Modele):
     prises_avant_correction: int = Field(ge=1)
 
 
+class GardeCameraBocal(Modele):
+    """Garde au boîtier de la caméra du bocal pendant un versement (fiche versement-bocal.md) :
+    mât en y dans `mat_y` (rangée j = 2 des bocaux) → mât à x ≥ `mat_x_min` (la raclette est à
+    mât − raclette_decalage_m du boîtier)."""
+
+    mat_y: Intervalle
+    mat_x_min: float
+
+
+class PeseeVersement(Modele):
+    """Pesée de la griffe pendant un versement : seulement à l'arrêt, après `attente_s`, moyenne
+    sur `moyenne_s` (fiche, figé)."""
+
+    attente_s: float = Field(ge=0)
+    moyenne_s: float = Field(gt=0)
+
+
+class DoseVersement(Modele):
+    """Proposé (EXEMPLE) : la dose acceptée, et combien de prises avant l'alerte."""
+
+    exemple: bool = False
+    # Hors de cette plage (kg) : la prise est rendue au fût et refaite.
+    plage_kg: Intervalle
+    # Au plus tant de prises pour un bocal, puis alerte (la griffe reste au-dessus du fût).
+    prises_max: int = Field(ge=1)
+
+
+class OuvertureVersement(Modele):
+    """Proposé (EXEMPLE) : l'ouverture du godet au-dessus de l'entonnoir."""
+
+    exemple: bool = False
+    # Vitesse de la vis à billes du godet (m/s) pendant l'ouverture et la fermeture.
+    vitesse_m_s: float = Field(gt=0)
+    # Attente, tête immobile, avant la pesée (s).
+    attente_s: float = Field(ge=0)
+    # Le godet ne se referme qu'après être remonté de tant (m) : pas de dent dans le cône.
+    remontee_avant_fermer_m: float = Field(gt=0)
+
+
+class SecoussesVersement(Modele):
+    """Proposé (EXEMPLE) : grains restés dans le godet (fiche, § 3)."""
+
+    exemple: bool = False
+    # Aller-retour de l'ouverture entre deux angles (°), à cette vitesse de la vis (m/s).
+    fois: int = Field(ge=1)
+    angles_deg: Intervalle
+    vitesse_m_s: float = Field(gt=0)
+    # Attente après les secousses, puis après le grand ouvert, avant de peser (s).
+    attente_s: float = Field(ge=0)
+    # Ensuite : grand ouvert (°), toujours dans la bouche de l'entonnoir.
+    grand_ouvert_deg: float = Field(gt=0)
+
+
+class FinVersement(Modele):
+    """Proposé (EXEMPLE) : fini quand le poids est revenu à la tare « godet vide » à
+    `ecart_tare_kg` près, stable `stable_s` ; deux lectures qui s'écartent de plus de
+    `ecart_kg` à `entre_s` d'écart : pesée instable (attendre `attente_en_plus_s`, relire ;
+    après `essais` essais, alerte)."""
+
+    exemple: bool = False
+    ecart_tare_kg: float = Field(gt=0)
+    stable_s: float = Field(gt=0)
+    ecart_kg: float = Field(gt=0)
+    entre_s: float = Field(gt=0)
+    attente_en_plus_s: float = Field(ge=0)
+    essais: int = Field(ge=1)
+
+
+class GodetVersement(Modele):
+    """Vide (EXEMPLE, à mesurer) : l'ouverture du godet (0 fermé, 1 grand ouvert : position de la
+    vis à billes) pour chaque angle des coquilles (°)."""
+
+    exemple: bool = False
+    angles_deg: list[float] = Field(min_length=2)
+    b: list[Annotated[float, Field(ge=0, le=1)]] = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "GodetVersement":
+        erreurs = []
+        if len(self.angles_deg) != len(self.b):
+            erreurs.append("angles_deg et b : autant de valeurs de chaque côté")
+        for nom, valeurs in (("angles_deg", self.angles_deg), ("b", self.b)):
+            if any(a >= c for a, c in zip(valeurs, valeurs[1:], strict=False)):
+                erreurs.append(f"{nom} : du plus petit au plus grand, sans doublon")
+        if self.angles_deg[0] != 0 or self.b[0] != 0:
+            erreurs.append("le premier angle (0°) est le godet fermé (b = 0)")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+    def b_pour(self, angle_deg: float) -> float:
+        """L'ouverture pour un angle, entre deux angles de la table (en ligne droite)."""
+        angles, valeurs = self.angles_deg, self.b
+        if not angles[0] <= angle_deg <= angles[-1]:
+            raise ValueError(f"angle {angle_deg:g}° hors de la table du godet")
+        for (a0, b0), (a1, b1) in zip(
+            zip(angles, valeurs, strict=True),
+            zip(angles[1:], valeurs[1:], strict=True),
+            strict=True,
+        ):
+            if a0 <= angle_deg <= a1:
+                return b0 + (b1 - b0) * (angle_deg - a0) / (a1 - a0)
+        return valeurs[-1]
+
+
+class BouchageVersement(Modele):
+    """Vide (EXEMPLE, à mesurer sur l'entonnoir acheté) : le capteur de distance de la tête voit
+    à travers le godet ouvert ; plus près que `distance_vide_m − marge_m` : entonnoir bouché."""
+
+    exemple: bool = False
+    distance_vide_m: float = Field(gt=0)
+    marge_m: float = Field(gt=0)
+
+
+class VersementBocal(Modele):
+    """Versement de la griffe dans un bocal de semence, mode bocaux (fiche
+    griffe/logiciel/versement-bocal.md du 07/11/2026). Les chiffres de cette partie sont FIGÉS ;
+    ses sous-parties marquées « exemple » sont proposées ou à mesurer. La tare « godet vide »
+    n'est pas un réglage : elle est pesée à chaque prise (godet ouvert, vide, à l'arrêt)."""
+
+    # Dose par bocal (kg de maïs cuit), le mât au plus à `centrage_max_m` du centre du col (caméra).
+    dose_kg: float = Field(gt=0)
+    centrage_max_m: float = Field(gt=0)
+    # Tête à a_deg, aucune rotation pendant le versement ; axes des coquilles à axes_z (plage
+    # permise axes_z_permis) ; ouverture de « fermé » à ouverture_deg.
+    a_deg: float
+    axes_z: float
+    axes_z_permis: Intervalle
+    ouverture_deg: float = Field(gt=0)
+    garde_camera_bocal: GardeCameraBocal
+    pesee: PeseeVersement
+    dose: DoseVersement
+    ouverture: OuvertureVersement
+    secousses: SecoussesVersement
+    fin: FinVersement
+    godet: GodetVersement
+    bouchage: BouchageVersement
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "VersementBocal":
+        erreurs = []
+        bas, haut = self.dose.plage_kg
+        if not bas < self.dose_kg < haut:
+            erreurs.append(
+                f"dose → plage_kg ({bas:g} à {haut:g}) doit entourer dose_kg ({self.dose_kg:g})"
+            )
+        debut, fin = self.axes_z_permis
+        if not debut <= self.axes_z <= fin:
+            erreurs.append(f"axes_z ({self.axes_z:g}) hors de axes_z_permis ({debut:g} à {fin:g})")
+        if self.axes_z + self.ouverture.remontee_avant_fermer_m > fin + 1e-9:
+            erreurs.append(
+                "axes_z + ouverture → remontee_avant_fermer_m sort de axes_z_permis : le godet "
+                "se fermerait trop haut"
+            )
+        petit, grand = self.secousses.angles_deg
+        if petit >= grand:
+            erreurs.append("secousses → angles_deg : du plus petit au plus grand")
+        dernier = self.godet.angles_deg[-1]
+        for nom, angle in (
+            ("ouverture_deg", self.ouverture_deg),
+            ("secousses → angles_deg", grand),
+            ("secousses → grand_ouvert_deg", self.secousses.grand_ouvert_deg),
+        ):
+            if angle > dernier:
+                erreurs.append(f"{nom} ({angle:g}°) au-delà de la table godet → angles_deg")
+        if self.fin.ecart_tare_kg >= bas:
+            erreurs.append("fin → ecart_tare_kg doit être bien plus petit que la dose")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+    def exemples(self) -> list[str]:
+        """Les sous-parties encore en EXEMPLE (proposées ou à mesurer)."""
+        return [
+            nom
+            for nom in ("dose", "ouverture", "secousses", "fin", "godet", "bouchage")
+            if getattr(self, nom).exemple
+        ]
+
+
 class FormatSeau(Modele):
     """Un format de seau, posé au poste de remplissage (table des formats)."""
 
@@ -639,10 +819,35 @@ class Griffe(Modele):
     seau_remplissage: tuple[float, float]
     # Où le mât attend, hors de la zone du plateau du fût, quand le fût est vide.
     attente: tuple[float, float]
+    # Versement dans un bocal de semence, mode bocaux (None : pas de versement).
+    versement_bocal: VersementBocal | None = None
 
     @model_validator(mode="after")
     def _verifier(self) -> "Griffe":
         erreurs = []
+        versement = self.versement_bocal
+        if versement is not None:
+            garde, camera = versement.garde_camera_bocal, self.camera_bocal
+            if not (garde.mat_y[0] <= camera.y[0] and camera.y[1] <= garde.mat_y[1]):
+                erreurs.append(
+                    "versement_bocal → garde_camera_bocal → mat_y doit couvrir le boîtier de la "
+                    f"caméra du bocal (camera_bocal → y {camera.y[0]:g} à {camera.y[1]:g})"
+                )
+            if garde.mat_x_min - self.raclette_decalage_m <= camera.x[1]:
+                erreurs.append(
+                    f"versement_bocal → garde_camera_bocal → mat_x_min ({garde.mat_x_min:g}) : "
+                    f"la raclette (mât − {self.raclette_decalage_m:g}) toucherait le boîtier de "
+                    f"la caméra du bocal (x jusqu'à {camera.x[1]:g})"
+                )
+            for nom, vitesse in (
+                ("ouverture", versement.ouverture.vitesse_m_s),
+                ("secousses", versement.secousses.vitesse_m_s),
+            ):
+                if vitesse > self.vitesses.griffe_b:
+                    erreurs.append(
+                        f"versement_bocal → {nom} → vitesse_m_s ({vitesse:g}) au-dessus de "
+                        f"vitesses → griffe_b ({self.vitesses.griffe_b:g})"
+                    )
         if self.format_par_defaut not in self.formats:
             erreurs.append(f"format_par_defaut : « {self.format_par_defaut} » absent de formats")
         if self.trajet.z <= self.rotation.bloquee_z_min:
@@ -3754,6 +3959,51 @@ class Machine(Modele):
                 erreurs.append(
                     f"griffe → point_demi_tour : y {point.y:g} au-delà de chaine_prehension → "
                     f"mat_y_max ({chaine.mat_y_max:g}) : la préhension y est en haut"
+                )
+        erreurs += self._verifier_versement_bocal()
+        return erreurs
+
+    def _verifier_versement_bocal(self) -> list[str]:
+        """Versement dans un bocal : hauteurs dans la course de griffe_z, dents au-dessus du cône
+        de l'entonnoir, chaque bocal à portée du mât, et la garde du boîtier de la caméra du
+        bocal tenue par chaque bocal de la bande (mât au-dessus du col)."""
+        from vidange.stockage import places
+
+        griffe = self.griffe
+        assert griffe is not None
+        versement = griffe.versement_bocal
+        if versement is None:
+            return []
+        erreurs = []
+        bas, haut = self.axes["griffe_z"].course
+        debut, fin = versement.axes_z_permis
+        if debut < bas or fin > haut:
+            erreurs.append(
+                f"griffe → versement_bocal → axes_z_permis ({debut:g} à {fin:g}) hors de la "
+                f"course de griffe_z ({bas:g} à {haut:g} m)"
+            )
+        if self.entonnoir is not None:
+            dents = debut - griffe.bas_godet_sous_axes
+            if dents <= self.entonnoir.cone_haut_z:
+                erreurs.append(
+                    f"griffe → versement_bocal → axes_z_permis : bas des dents à {dents:g} m, "
+                    f"pas au-dessus du haut du cône de l'entonnoir ({self.entonnoir.cone_haut_z:g})"
+                )
+        if self.stockage is None:
+            return erreurs
+        garde = versement.garde_camera_bocal
+        pont, chariot = self.axes["pont_x"].course, self.axes["chariot_y"].course
+        for nom, (x, y) in places.places_bocaux(self).items():
+            if garde.mat_y[0] <= y <= garde.mat_y[1] and x < garde.mat_x_min - 1e-9:
+                erreurs.append(
+                    f"griffe → versement_bocal → garde_camera_bocal : le bocal « {nom} » (x "
+                    f"{x:g}, y {y:g}) demande le mât à x ≥ {garde.mat_x_min:g}"
+                )
+            if not pont[0] <= x - griffe.decalage_mat_x <= pont[1] or not (
+                chariot[0] <= y <= chariot[1]
+            ):
+                erreurs.append(
+                    f"griffe → versement_bocal : le mât n'atteint pas le bocal « {nom} »"
                 )
         return erreurs
 

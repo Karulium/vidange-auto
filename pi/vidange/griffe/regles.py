@@ -237,6 +237,9 @@ class ReglesGriffe:
                 f"{_m(camera.x[1])}, y {_m(camera.y[0])} à {_m(camera.y[1])} m) : bas de la "
                 f"tête à {_m(bas)} m, sous {_m(camera.bas_z_max)} m"
             )
+        refus = self._refus_garde_camera(pose, bas)
+        if refus is not None:
+            return refus
         if contexte.porte_spray_ouverte and self._touche(
             pose, (-_LOIN, g.porte_spray.x_max), (-_LOIN, g.porte_spray.y_max)
         ):
@@ -258,6 +261,27 @@ class ReglesGriffe:
         if refus is not None:
             return refus
         return self._refus_fut(pose, bas)
+
+    def _refus_garde_camera(self, pose: Pose, bas: float) -> str | None:
+        """Garde au boîtier de la caméra du bocal (fiche du versement dans un bocal) : la tête
+        assez basse pour le toucher, le mât de x camera_bocal → x début jusqu'à mat_x_min, en y
+        dans mat_y : refusé (la raclette, à mât − 0,111, toucherait le boîtier). Ailleurs, seul
+        le boîtier lui-même compte (règle d'au-dessus)."""
+        g = self.griffe
+        versement = g.versement_bocal
+        if versement is None or bas >= g.camera_bocal.bas_z_max - _EGAL:
+            return None
+        garde = versement.garde_camera_bocal
+        if (
+            garde.mat_y[0] - _EGAL <= pose.y <= garde.mat_y[1] + _EGAL
+            and g.camera_bocal.x[0] <= pose.x < garde.mat_x_min - _EGAL
+        ):
+            return (
+                f"garde du boîtier de la caméra du bocal : mât à y {_m(pose.y)} m (de "
+                f"{_m(garde.mat_y[0])} à {_m(garde.mat_y[1])}), il faut x ≥ "
+                f"{_m(garde.mat_x_min)} m (mât à x {_m(pose.x)})"
+            )
+        return None
 
     def refus_bout_bloque(self, pont: float, z: float, a: float) -> str | None:
         """Bandes du pont (portique → bouts_bloques_griffe) : pont dans la bande (bornes

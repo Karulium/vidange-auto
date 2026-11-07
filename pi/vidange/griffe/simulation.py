@@ -8,6 +8,10 @@ son poids, qu'il écrit sur la fausse pesée du plateau du fût. Le godet prend 
 volume de la table » quand il se ferme dans le substrat (moins près de la paroi et au fond), le
 rend au fût s'il s'ouvre dedans, le verse dans le seau ailleurs. Une descente au contact s'arrête
 sur le substrat ; une poussée s'arrête sur le fond.
+
+Versement dans un bocal (vidange.griffe.versement) : hors du fût, le godet verse dès qu'il
+s'ouvre, sauf `colle_kg` (grains collés) qui reste tant que l'ouverture n'atteint pas `decolle_b`.
+`bruit_n` : ce qu'ajoute la pesée lue (pesée instable).
 """
 
 import math
@@ -95,6 +99,10 @@ class BrasSimule:
         self._resultat: Resultat | None = None
         self._pas: Pas | None = None
         self._ouverture_prise = 1.0
+        # Versement dans un bocal : grains collés, ouverture qui les décolle, bruit de la pesée.
+        self.colle_kg = 0.0
+        self.decolle_b = 1.0
+        self.bruit_n: Callable[[], float] = lambda: 0.0
         self.pretes = Condition("cartes simulées prêtes", lambda: True)
         self.surveillance = Condition("cartes simulées sans alarme", lambda: True)
 
@@ -105,6 +113,9 @@ class BrasSimule:
 
     def _charge(self) -> float:
         return self.reglages.charge_vide_n + self.godet_kg * G
+
+    def moyenne_n(self, duree_s: float) -> float:
+        return self._charge() + self.bruit_n()
 
     def executer(self, pas: Pas, cible: Pose) -> None:
         depart = self.position()
@@ -124,7 +135,9 @@ class BrasSimule:
         elif cible.b > depart.b:
             self._ouvrir(cible)
         self._arrivees = self._etat.aller_vers(
-            pas.texte, self.conversion.vers_axes(cible), self.conversion.vitesses(pas.vitesse)
+            pas.texte,
+            self.conversion.vers_axes(cible),
+            self.conversion.vitesses(pas.vitesse, pas.vitesse_b),
         )
         if pas.attente_s:
             self._arrivees = self._etat.attendre(CARTE, pas.attente_s)
@@ -165,13 +178,20 @@ class BrasSimule:
         if self.godet_kg == 0:
             self._ouverture_prise = cible.b
             return
-        if cible.b < 0.5:
+        dans_le_fut = self.regles.au_dessus_du_fut(cible.x, cible.y)
+        if cible.b < 0.5 and dans_le_fut:
             return  # entrouvert : le reste est compté à la fermeture
-        if self.regles.au_dessus_du_fut(cible.x, cible.y):
+        if dans_le_fut:
             self.fut.changer(self.godet_kg)
+            self.godet_kg = 0.0
         else:
-            self.fut.verse_kg += self.godet_kg
-        self.godet_kg = 0.0
+            # Hors du fût (seau, bocal) : tout tombe, sauf les grains collés.
+            reste = self.colle_kg if cible.b < self.decolle_b - 1e-9 else 0.0
+            reste = min(reste, self.godet_kg)
+            self.fut.verse_kg += self.godet_kg - reste
+            self.godet_kg = reste
+            if reste == 0:
+                self.colle_kg = 0.0
         self._ouverture_prise = cible.b
 
     def enchainer(self, poses: list[Pose], vitesse: str | None) -> None:

@@ -203,8 +203,9 @@ class Entonnoir:
     def versement_possible(self) -> bool:
         return self.connue() and not self.tenu
 
-    def refus_versement(self, bocal: str) -> str | None:
-        """La griffe ne verse QUE dans le bocal noté `entonnoir_place` (et une fois)."""
+    def refus_versement(self, bocal: str, reprise: bool = False) -> str | None:
+        """La griffe ne verse QUE dans le bocal noté `entonnoir_place` (et une fois). `reprise` :
+        le versement de ce bocal a déjà commencé, il continue (jamais une 2e dose)."""
         if self.tenu:
             return "la griffe ne verse pas : la tête de préhension tient l'entonnoir"
         if not self.connue():
@@ -217,9 +218,16 @@ class Entonnoir:
                 f"la griffe ne verse pas dans le bocal {lisible(bocal)} : l'entonnoir est sur le "
                 f"bocal {lisible(self.place)}"
             )
-        if bocal in self.verses:
+        if bocal in self.verses and not reprise:
             return f"le bocal {lisible(bocal)} a déjà reçu sa dose"
         return None
+
+    def axe_pose(self, bocal: str) -> tuple[float, float]:
+        """L'axe de l'entonnoir posé sur ce bocal (x ; y) : le centre du col donné par la caméra
+        pour sa pose, sinon la place attendue (premier bocal, posé à la main)."""
+        if bocal == self.prochain and self.centre is not None:
+            return self.centre
+        return self.places[bocal]
 
     def declarer_inconnu(self, raison: str) -> None:
         journal.warning("Entonnoir : place inconnue (%s)", raison)
@@ -293,6 +301,11 @@ class Entonnoir:
 
     def noter_verse(self, bocal: str) -> None:
         self.verses.add(bocal)
+
+    def noter_suspect(self, bocal: str, raison: str) -> None:
+        """Le bocal est « suspect » (entonnoir bouché au versement...) : Karulium le vérifie."""
+        journal.warning("Entonnoir : %s", raison)
+        self._suspect(bocal)
 
     def _suspect(self, bocal: str) -> None:
         journal.warning("Entonnoir : bocal %s marqué suspect", lisible(bocal))

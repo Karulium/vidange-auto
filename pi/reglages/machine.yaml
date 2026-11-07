@@ -54,6 +54,10 @@
 #   - nettoyage : durées positives, t_generation_s < t_contact_s < t_max_retour_s, niveaux du
 #     ventilateur entre 0 et 10 V et croissants (arrêt < normal < plein), course du store égale au
 #     trajet de sa barre basse, purge minimale plus courte que son alerte ;
+#   - griffe → versement_bocal : dose dans sa plage, hauteurs dans la course de griffe_z, dents
+#     au-dessus du cône de l'entonnoir, table du godet rangée, vitesses du godet au plus celle de
+#     griffe_b, garde du boîtier de la caméra du bocal (bande qui le couvre, raclette hors de lui,
+#     chaque bocal de la bande à x ≥ mat_x_min) ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit sont refusés.
 
 exemple: true
@@ -708,6 +712,78 @@ griffe:
   #   Avant tout : la dernière position connue de A (fichier des angles gardés) doit être 0° ou
   #   180° à tolerance_deg près (rotation → tolerance_deg) ; sinon pas de montée de Z, alarme.
   origine_rotation: {recherche_deg: 190, vitesse_deg_s: 20}
+  # Versement dans un bocal de semence, mode bocaux (tâche 43 bis ; fiche du fil Griffe
+  # griffe/logiciel/versement-bocal.md du 07/11/2026). Le geste n'a JAMAIS été essayé avec du vrai
+  # maïs. Cette partie : chiffres FIGÉS de la fiche. Ses sous-parties « exemple: true » sont
+  # proposées par la fiche (à confirmer au 1er essai avec du maïs chaud) ou à mesurer.
+  # La tare « godet vide » n'est pas un chiffre : elle est pesée à chaque prise (godet ouvert,
+  # vide, à l'arrêt, juste avant d'entrer dans le maïs), donc refaite aussi après un lavage.
+  versement_bocal:
+    # ≈ 300 g de grains de maïs cuits, chauds, hydratés par bocal (Karulium 24/09, « grosso
+    # modo »). Mât au-dessus du centre du col donné par la caméra (axe de l'entonnoir posé), à
+    # 0,05 au plus (14/10 : 7 cm au plus, 5 avec marge).
+    dose_kg: 0.300
+    centrage_max_m: 0.05
+    # Tête à A = 0 (bras le long du pont, raclette vers −x), aucune rotation pendant le versement.
+    a_deg: 0
+    # Axes des coquilles à 1,025 (plage 1,02 à 1,07, 12/10) : bas des dents à 20° à 0,812, 2,7 cm
+    # au-dessus du haut du cône. Ouverture de « fermé » à 20° par coquille (fente ±0,041 le long
+    # du pont × ±0,052 en x).
+    axes_z: 1.025
+    axes_z_permis: [1.02, 1.07]
+    ouverture_deg: 20
+    # Garde au boîtier de la caméra du bocal (x 0,997-1,091, y 0,22-0,28) : mât à y 0,21-0,29
+    # (rangée j = 2, y 0,2506) → mât à x ≥ 1,207 (raclette à mât − 0,111 ; 5 mm de marge).
+    # Vérifiée à chaque pose de la griffe (règles), et au démarrage pour chaque bocal.
+    garde_camera_bocal: {mat_y: [0.21, 0.29], mat_x_min: 1.207}
+    # Pesée de la griffe : seulement à l'arrêt, après 0,3 s, moyenne sur 0,5 s (bruit ≈ ±3 g).
+    pesee: {attente_s: 0.3, moyenne_s: 0.5}
+    # PROPOSÉ : 290 à 310 g (Karulium n'a pas donné de chiffre) ; hors plage, la prise est
+    # rendue au fût et refaite. Au plus 6 prises par bocal, puis alerte (choix du logiciel).
+    dose:
+      exemple: true
+      plage_kg: [0.290, 0.310]
+      prises_max: 6
+    # PROPOSÉ : vis à billes à ≈ 10 mm/s (≈ 1 s de fermé à 20°), attente 1,5 s tête immobile ;
+    # le godet ne se ferme qu'après une remontée de 2 cm (pas de dent qui frotte dans le cône).
+    ouverture:
+      exemple: true
+      vitesse_m_s: 0.010
+      attente_s: 1.5
+      remontee_avant_fermer_m: 0.02
+    # PROPOSÉ : grains restés dans le godet : 3 aller-retour 15° ↔ 25° à 30 mm/s, attente 1 s,
+    # pesée ; puis grand ouvert (35°), attente 1 s, pesée ; puis alerte, griffe immobile.
+    secousses:
+      exemple: true
+      fois: 3
+      angles_deg: [15, 25]
+      vitesse_m_s: 0.030
+      attente_s: 1
+      grand_ouvert_deg: 35
+    # PROPOSÉ : fini quand le poids est revenu à la tare ± 10 g, stable 0,5 s. Pesée instable :
+    # plus de 10 g entre 2 lectures à 0,3 s ; attendre 0,5 s de plus, relire ; 3 essais, alerte.
+    fin:
+      exemple: true
+      ecart_tare_kg: 0.010
+      stable_s: 0.5
+      ecart_kg: 0.010
+      entre_s: 0.3
+      attente_en_plus_s: 0.5
+      essais: 3
+    # VIDE, À MESURER : position de la vis (0 fermé, 1 grand ouvert) pour chaque angle des
+    # coquilles. Seul « 20° ≈ 1 s à 10 mm/s » vient de la fiche (≈ 10 mm sur 36) ; 35° = grand
+    # ouvert. Le reste : EXEMPLE.
+    godet:
+      exemple: true
+      angles_deg: [0, 15, 20, 25, 35]
+      b: [0.0, 0.21, 0.28, 0.36, 1.0]
+    # VIDE, À MESURER sur l'entonnoir acheté : distance lue par le capteur de distance de la tête
+    # (VL53L1X, à travers le godet ouvert) au cône vide, axes à 1,025. Plus près que cette
+    # distance moins 2 cm (fiche) : « entonnoir bouché », bocal suspect, alerte.
+    bouchage:
+      exemple: true
+      distance_vide_m: 0.40
+      marge_m: 0.02
 
 # Mycélium (dosage), module validé le 24/10/2026 (option B : tout le module relevé de 12 mm),
 # agitateur FIXE depuis le 01/11/2026 (fiche Mycélium v10, docs/decisions.md « Agitateur du
