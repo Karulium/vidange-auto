@@ -1588,4 +1588,23 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
     Préhension (tâche 36 bis).
   - Les hauteurs « exemple » se mesurent sur l'entonnoir reçu.
   - Tests : les cas du § 5 de la source.
+- [ ] **43 bis. Versement de la griffe dans un bocal de semence (mode bocaux)** — Modèle : Opus, effort moyen.
+  Source : `/mnt/project-files/griffe/logiciel/versement-bocal.md` (fil Griffe, 07/11/2026 ; lire ce seul fichier, et
+  le résumer dans la PR). Remplit la case vide `verser(bocal)` de l'Entonnoir (`pi/vidange/entonnoir/module.py`)
+  avec un geste de la griffe (`pi/vidange/griffe/`).
+  - Figé (réglages sans `exemple`) : dose ≈ 300 g ; mât au-dessus du centre du col (caméra) à ≤ 0,05 ; tête à
+    A = 0, aucune rotation pendant le versement ; axes des coquilles à 1,025 (plage 1,02-1,07) ; ouverture de fermé
+    à 20° ; garde du boîtier de la caméra du bocal : mât à y 0,21-0,29 → mât à x ≥ 1,207 (règle vérifiée, pas un
+    simple réglage) ; pesée à l'arrêt seulement (après 0,3 s, moyenne sur 0,5 s).
+  - Proposé (réglages `exemple: true`) : tolérance 290-310 g (hors plage : retour au fût, revider ou 2e prise) ;
+    vitesse d'ouverture, attente 1,5 s ; fin = poids revenu à la tare « godet vide » ± 10 g, stable 0,5 s ; dose
+    versée enregistrée pour le bocal ; fermeture du godet seulement après une remontée de 2 cm.
+  - Ce qui peut mal tourner (fiche § 3) : grains collés (secousses 15°↔25°, puis 35°, puis alerte, griffe immobile,
+    jamais refermer au-dessus du bocal) ; entonnoir bouché (capteur de distance de la tête : surface plus haute
+    que l'entonnoir vide moins un seuil → bocal « suspect », alerte, rien d'automatique) ; godet vide → nouvelle
+    prise ; pesée instable (3 essais puis alerte).
+  - Jamais de versement si `entonnoir_place` n'est pas ce bocal (`Entonnoir.refus_versement` existe déjà).
+  - Vide (cases gardées réglables, EXEMPLE) : seuil du capteur de distance, tare « godet vide » (à mesurer à la mise
+    en service et après chaque lavage : prévoir une étape de tare, pas un chiffre figé).
+  Procédure d'essai sur le vrai matériel avec du maïs chaud ; « testé sur le vrai matériel : non ».
 - [ ] 44. App « machine » dans le logiciel de culture (avec l'accord de Karulium)
