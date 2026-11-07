@@ -1446,3 +1446,9 @@ Aucun chiffre nouveau : tout vient de `docs/entrees-sorties.yaml`, `fluidnc.yaml
      appelés tant que le mycélium (bocal neuf), la griffe et la photo du plafond manquent. Avec les cartes
      là, il restera à y assembler le Mycélium (agitateur, porte-bocal), le Stockage, le Micropore, la
      Fermeture, le Couvercle et le Spray, comme dans `vidange.cycle.simulation`.
+- **Cartes du chariot et de la tête, réponses à la PR n° 93** (tâche 45 ter, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Le lot complet sur les vraies cartes (`PiecesMachine.remplissage`, `entonnoir`, `lavage_bocaux`) : tâche 45 quater,
+     juste après le geste du bocal neuf de semence (tâche 19 quater), avant la tâche 23.
+  2. Une carte branchée après le démarrage ne compte qu'après une relance du programme : gardé ; un bouton
+     « relire les cartes » sur la page web viendra peut-être plus tard.
+  3. Une carte du spray programmée avec des réglages d'EXEMPLE bloque le poste spray sur la vraie machine : gardé.
