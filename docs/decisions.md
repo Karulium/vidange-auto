@@ -1268,3 +1268,16 @@ Réponses des fils mécaniques (Spray, Micropore, Guidage caméra) et de Karuliu
      tour complet et relit (la caméra lit pendant ce tour ; la vraie lecture continue est la 40 ter).
   3. La griffe « partie du poste » (condition de la sortie du bras) : dans le simulateur il n'y a pas de griffe au
      poste, elle est vue partie ; sur la machine, la griffe reste une case vide (tâche 23), donc pas de lot.
+- **Pose du couvercle, réponses à la PR n° 90** (tâche 41 bis, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Couvercle C à 2,3 mm de la tête du micropore escamotée : la Préhension a demandé au Micropore de reculer de 1 cm
+     (07/11). En attendant, descente lente du C de la face 0,67 à 0,57 (fiche) ; à corriger dans les réglages à la
+     réponse.
+  2. Une seule vanne de vide : vanne ouverte pendant le trajet, arrêt sur place si le vide remonte au-dessus de
+     −40 kPa. La relance à −50 kPa ne sera ajoutée que si le vide baisse à l'essai.
+  3. Masses des couvercles (A 0,13, B 0,10, C 0,16, D 0,13 kg) et diamètre du B : EXEMPLES, à peser et mesurer par
+     Karulium (avec le diamètre du couvercle A demandé par le Stockage le 07/11). Si le palier pesé ne voit pas un
+     couvercle de plus, le contrôle passera à la caméra du plafond.
+  4. Sens du couvercle : on suppose qu'il n'en a pas ; à vérifier à l'essai. S'il en a un, petite tâche à part
+     pour l'angle de pose.
+  5. Contact à 8-15 mm sous Z_pose (cas absent de la fiche) : accepté et noté au journal ; Hc revu à l'essai.
+  6. Jamais de couvercle sans fermeture, ni de fermeture sans couvercle : oui.
