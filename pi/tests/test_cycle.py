@@ -9,10 +9,13 @@ from vidange.chef import Carnet, Chef, ErreurChef
 from vidange.cycle import ORDRE_SEAU, ModeSeaux, verifier_ordre
 from vidange.cycle.machine import (
     BOCAL_NEUF,
+    CAMERA_ABSENTE,
+    CARTE_DE_LA_TETE,
     CARTE_SPRAY,
     CARTES_DU_CHARIOT,
-    QR_DU_FLANC,
-    VISION_MICROPORE,
+    INSPECTION_ABSENTE,
+    INSPECTION_EXEMPLE,
+    VISION_ABSENTE,
     PiecesMachine,
 )
 from vidange.cycle.simulation import JOUES_EN_FAUX, PiecesSimulees, jouer_cycle, lot_du_simulateur
@@ -242,13 +245,45 @@ def test_les_pieces_de_la_machine_disent_ce_qui_manque(reglages_depot):
     # Faux matériel (essai) : les EXEMPLES des parties sont permis ; poste du fût pas ouvert.
     mode = ModeSeaux(reglages, PiecesMachine(None, None, vraie_machine=False), chef)
     assert mode.etats["seau_vide"].raison == CARTES_DU_CHARIOT
-    assert mode.etats["qr_du_flanc"].raison == QR_DU_FLANC
-    assert "40 ter" in QR_DU_FLANC
+    # Sans la vision donnée aux pièces, la raison est dite (jamais « tâche 40 ter manquante »).
+    assert mode.etats["qr_du_flanc"].raison == VISION_ABSENTE
     assert mode.etats["spray"].raison == CARTE_SPRAY
     assert mode.etats["mycelium"].raison == BOCAL_NEUF
-    assert mode.etats["micropore"].raison == VISION_MICROPORE
+    assert mode.etats["micropore"].raison == VISION_ABSENTE
     assert mode.etats["fut"].raison == "poste du fût pas suivi (entrées/sorties pas ouvertes)"
     assert mode.refus_lot() == f"« seau_vide » pas lancé : {CARTES_DU_CHARIOT}"
+
+
+def test_la_vision_du_micropore_ne_manque_que_pour_ses_reglages_ou_sa_camera(reglages_depot):
+    """Tâche 40 ter : le QR du flanc et le micropore ne sont plus « pas écrits ». Sur la vraie
+    machine, ils attendent les valeurs vraies de vision.yaml (inspection) ; ailleurs, la caméra."""
+    vision = reglages_depot.vision
+    inspection = vision.inspection
+    regard = object()  # le poste ne demande que sa présence
+
+    def pieces(vraie, vision_donnee=vision, regard_donne=regard):
+        return PiecesMachine(
+            None, None, vraie_machine=vraie, vision=vision_donnee, regard=regard_donne
+        )
+
+    # Vraie machine : EXEMPLE interdit.
+    assert pieces(True).manque("qr_du_flanc") == INSPECTION_EXEMPLE
+    assert pieces(True).manque("micropore") == INSPECTION_EXEMPLE
+    # Seule la partie « inspection » compte (le haut de vision.yaml est celui des autres caméras).
+    sans_exemple = inspection.model_copy(update={"exemple": False})
+    vrai = vision.model_copy(update={"inspection": sans_exemple})
+    assert vrai.exemple
+    assert pieces(True, vrai).manque("qr_du_flanc") is None
+    assert pieces(True, vrai).manque("micropore") == CARTE_DE_LA_TETE
+    sans_partie = vrai.model_copy(update={"inspection": None})
+    assert pieces(True, sans_partie).manque("qr_du_flanc") == INSPECTION_ABSENTE
+    # Sans caméra ouverte.
+    assert pieces(True, vrai, None).manque("qr_du_flanc") == CAMERA_ABSENTE
+    # Faux matériel : les EXEMPLES sont permis.
+    assert pieces(False).manque("qr_du_flanc") is None
+    assert "40 ter" not in " ".join(
+        str(pieces(False).manque(poste)) for poste in ("qr_du_flanc", "micropore")
+    )
 
 
 def test_l_ecran_dit_quel_poste_manque_et_pourquoi(tmp_path, reglages_depot):
@@ -286,8 +321,9 @@ def test_au_demarrage_la_check_list_dit_ce_qui_manque(reglages, entrees_sorties,
     journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
     assert "Mode seaux, fut : prêt" in journal
     assert f"Mode seaux, seau_vide : pas lancé : {CARTES_DU_CHARIOT}" in journal
-    assert f"Mode seaux, qr_du_flanc : pas lancé : {QR_DU_FLANC}" in journal
-    assert f"[attention] mode seaux, micropore : pas lancé : {VISION_MICROPORE}" in journal
+    # La vision du micropore est écrite : le QR du flanc attend seulement le chariot (cœur).
+    assert "Mode seaux, qr_du_flanc : pas lancé : attend « seau_vide » (pas prêt)" in journal
+    assert f"[attention] mode seaux, micropore : pas lancé : {CARTE_DE_LA_TETE}" in journal
     assert f"[attention] mode seaux, couvercle : pas lancé : {CARTES_DU_CHARIOT}" in journal
     assert "[bloquant] mode seaux : aucun lot de seaux ne peut partir" in journal
 

@@ -7,14 +7,16 @@ chaque trou du seau, posé comme par une étiqueteuse.
 La tête est sur le chariot de remplissage ; c'est le plateau du chariot qui monte et tourne le
 seau. Les gestes du micropore sont donc des pas du Remplissage (`brancher`) :
 - au poste (y 0,135, après le spray, avant le dosage du mycélium), au premier passage du seau :
-  0) tour de repérage devant la caméra (QR, trous et leur angle sur le plateau, attaches de
-  l'anse), puis les rangées qui ne sont pas « du fond » ;
+  les rangées qui ne sont pas « du fond » ;
 - au vidage (y 0,42), quand la balance voit assez de substrat dans le seau (≈ 4 kg, pour que le
   seau ne glisse pas sous l'appui) : la rangée du fond. Elle ne peut pas se poser au poste : son
   plateau mettrait le bord du seau au-dessus de 0,68 (règle C2).
-Pour chaque rangée : 1) tête escamotée, VUE au ToF (sinon le plateau ne bouge pas : règle du
-Remplissage) ; 2) plateau à ruban_z − hauteur de la rangée (jamais au-dessus de 0,575 ; au poste,
-bord ≤ 0,68 : sinon la rangée n'est pas posée, alerte) ; 3) approche. Pour chaque trou :
+Pour chaque rangée : 0) tour de repérage devant la caméra, plateau à « z de l'objectif − hauteur de
+la rangée » (la caméra est fixe et ne voit qu'une rangée à la fois : les trous de cette rangée et
+leur angle sur le plateau, attaches de l'anse) ; 1) tête escamotée, VUE au ToF (sinon le plateau
+ne bouge pas : règle du Remplissage) ; 2) plateau à ruban_z − hauteur de la rangée (jamais
+au-dessus de 0,575 ; au poste, bord ≤ 0,68 : sinon la rangée n'est pas posée, alerte) ;
+3) approche. Pour chaque trou :
 4) le trou amené 15 mm avant le rouleau (angle du trou vu par la caméra + angle caméra → rouleau
 appris) ; 5) avance de 13 mm ; 6) appui, contact vu au ToF (sinon : la tête recule, plus de pose
 sur ce seau, alerte) ; 7) pose de 17 mm, le ruban suit la paroi ; 8) tension ; 9) coupe ;
@@ -94,14 +96,19 @@ class Reperage:
 
 
 class VisionMicropore(Protocol):
-    """Ce que le micropore demande à sa caméra (vision : case vide, tâche 22 ter)."""
+    """Ce que le micropore demande à sa caméra (vidange.vision.inspection, tâche 40 ter)."""
 
-    def commencer_tour(self) -> None:
-        """Le plateau va faire un tour : regarder (QR, trous, attaches) pendant le tour."""
+    def plateau_z_repere(self, hauteur_rangee_m: float) -> float:
+        """Hauteur du plateau pour que la caméra (fixe) voie la rangée de trous à cette hauteur
+        sur le seau."""
         ...
 
-    def finir_tour(self) -> Reperage | None:
-        """Le tour est fini : ce qui a été vu (None : rien de lisible)."""
+    def commencer_tour(self) -> None:
+        """Le plateau va faire un tour devant une rangée : regarder pendant le tour."""
+        ...
+
+    def finir_tour(self, rangee: int) -> Reperage | None:
+        """Le tour est fini : ce qui a été vu de la rangée n° `rangee` (None : rien de lisible)."""
         ...
 
     def controler_morceau(self, rangee: int, angle_deg: float) -> bool | None:
@@ -197,8 +204,6 @@ class Micropore:
             return
         yield from self._escamoter()
         if not suivi.abandon and self._pret(suivi):
-            if suivi.reperage is None:
-                yield from self._tour(suivi)
             for rang, rangee in enumerate(self._rangees(suivi)):
                 if suivi.abandon:
                     break
@@ -492,15 +497,37 @@ class Micropore:
         servos = self.reglages.servos
         return appris.contact_deg - servos.sens_avance * mm / servos.mm_par_degre
 
-    def _tour(self, suivi: SuiviSeau) -> Geste:
-        """0) Tour de repérage devant la caméra : QR, trous, attaches de l'anse."""
+    def _refus_hauteur(self, z: float, hauteur_seau: float, au_poste: bool) -> str | None:
+        """Pourquoi le plateau ne peut pas être à cette hauteur (règle 9 ; règle C2 au poste)."""
+        bas, plafond = self.course_z
+        if z > plafond + _EGAL:
+            return f"plateau à {z:.3f} m, au plus {plafond:g} (règle 9)"
+        if z < bas - _EGAL:
+            return f"plateau à {z:.3f} m, sous sa course"
+        if au_poste and z + hauteur_seau > self.poste_bord_max_z + _EGAL:
+            return (
+                f"au poste, le bord du seau serait à {z + hauteur_seau:.3f} m (au plus "
+                f"{self.poste_bord_max_z:g}, règle C2)"
+            )
+        return None
+
+    def _tour(self, suivi: SuiviSeau, rang: int, rangee: RangeeMicropore) -> Geste:
+        """0) Tour de repérage devant la caméra, plateau à la hauteur de cette rangée : ses trous
+        et leur angle, les attaches de l'anse. Trou introuvable : la rangée n'est pas posée."""
         sens = self.reglages.pose.sens_rotation
         self.vision.commencer_tour()
-        yield self._tourner(self._pose().a + sens * 360, "micropore 0) : tour de repérage")
-        reperage = self.vision.finir_tour()
+        try:
+            yield self._tourner(
+                self._pose().a + sens * 360, f"micropore 0) : tour de repérage, rangée {rang + 1}"
+            )
+        finally:
+            reperage = self.vision.finir_tour(rang)
         seau = suivi.seau
         if reperage is None:
-            self._abandonner(suivi, "rien lu au tour de repérage (QR, trous) : pas de pose")
+            suivi.rangees_finies.add(rang)
+            self._probleme(
+                suivi, f"rangée {rang + 1} : rien lu au tour de repérage (trous) : pas posée"
+            )
             return
         if seau.code is not None and reperage.code is not None and reperage.code != seau.code:
             self._abandonner(
@@ -511,45 +538,50 @@ class Micropore:
         if bord is not None and bord > self.reglages.bord_diametre_max_m + _EGAL:
             self._abandonner(suivi, f"bord du seau vu à Ø {bord * 100:.1f} cm : pas de pose")
             return
-        suivi.reperage = reperage
-        for rang, rangee in enumerate(self._rangees(suivi)):
-            vus = len(reperage.trous.get(rang, []))
-            if vus < rangee.trous:
-                self._probleme(
-                    suivi,
-                    f"rangée {rang + 1} : {vus} trou(s) vu(s) sur {rangee.trous} : pose seulement "
-                    "sur les trous vus",
-                )
+        if suivi.reperage is None:
+            suivi.reperage = reperage
+        else:
+            suivi.reperage.trous.update(reperage.trous)
+            suivi.reperage.attaches_deg.extend(reperage.attaches_deg)
+        vus = len(reperage.trous.get(rang, []))
+        if vus < rangee.trous:
+            self._probleme(
+                suivi,
+                f"rangée {rang + 1} : {vus} trou(s) vu(s) sur {rangee.trous} : pose seulement "
+                "sur les trous vus",
+            )
 
     def _poser_rangee(
         self, suivi: SuiviSeau, rang: int, rangee: RangeeMicropore, au_poste: bool
     ) -> Geste:
-        assert suivi.reperage is not None
         hauteur_seau = self.formats_seaux[suivi.seau.format].hauteur
         assert hauteur_seau is not None
         z = self.reglages.ruban_z - rangee.hauteur_m
-        bas, plafond = self.course_z
-        refus = None
-        if z > plafond + _EGAL:
-            refus = (
-                f"rangée {rang + 1} trop haute : plateau à {z:.3f} m pour la poser, au plus "
-                f"{plafond:g} (règle 9) : pas posée"
-            )
-        elif z < bas - _EGAL:
-            refus = f"rangée {rang + 1} : plateau à {z:.3f} m, sous sa course : pas posée"
-        elif au_poste and z + hauteur_seau > self.poste_bord_max_z + _EGAL:
-            refus = (
-                f"rangée {rang + 1} : au poste, le bord du seau serait à {z + hauteur_seau:.3f} m "
-                f"(au plus {self.poste_bord_max_z:g}, règle C2) : pas posée"
-            )
+        refus = self._refus_hauteur(z, hauteur_seau, au_poste)
+        if refus is not None:
+            refus = f"rangée {rang + 1} : {refus} : pas posée"
         if refus is not None:
             suivi.rangees_finies.add(rang)
             self._probleme(suivi, refus)
             return
         appris = self._appris(suivi)
         yield from self._escamoter()
+        # 0) Tour de repérage de CETTE rangée, juste avant sa pose, à la même station.
+        z_tour = self.vision.plateau_z_repere(rangee.hauteur_m)
+        refus = self._refus_hauteur(z_tour, hauteur_seau, au_poste)
+        if refus is not None:
+            suivi.rangees_finies.add(rang)
+            self._probleme(suivi, f"rangée {rang + 1}, tour de repérage : {refus} : pas posée")
+            return
+        if abs(self._pose().z - z_tour) > _EGAL:
+            yield Pas(f"micropore 0) : plateau au repérage de la rangée {rang + 1}", {"z": z_tour})
+        yield from self._tour(suivi, rang, rangee)
+        if suivi.abandon or rang in suivi.rangees_finies:
+            yield from self._escamoter()
+            return
         if abs(self._pose().z - z) > _EGAL:
             yield Pas(f"micropore 2) : plateau à la rangée {rang + 1}", {"z": z})
+        assert suivi.reperage is not None
         trous = list(enumerate(suivi.reperage.trous.get(rang, [])))
         nouveaux_essais = self.reglages.pose.nouveaux_essais
         for numero, angle in trous:

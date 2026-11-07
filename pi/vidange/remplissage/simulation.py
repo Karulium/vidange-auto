@@ -219,6 +219,12 @@ class FausseVisionSeau:
         self.code, self.anse_deg = code, anse_deg
         self._a_la_pose = self.chariot.position().a
 
+    def commencer_lecture(self) -> None:
+        pass
+
+    def finir_lecture(self) -> None:
+        pass
+
     def lire_seau(self) -> tuple[str, float] | None:
         if self.illisible or self.code is None:
             return None

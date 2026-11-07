@@ -1676,6 +1676,12 @@ class Remplissage(Modele):
     # seau vide à la pose, avant le serrage des barres (fil Guidage caméra, 07/11/2026). None :
     # le plateau reste où la pose l'a laissé (valeur à venir du fil Micropore).
     plateau_lecture_qr: float | None = None
+    # Où se fait la lecture (m, y du chariot) ; None : à la pose (pose_y). Jamais au poste (règle
+    # C2 : 3 formats sur 4 y toucheraient le bord limite) : là où rien n'est au-dessus du seau.
+    # `lecture_qr_bord_max_z` : limite du bord du seau à cette position (obligatoire avec
+    # plateau_lecture_qr) ; vérifié au démarrage : plateau_lecture_qr + hauteur du seau.
+    lecture_qr_y: float | None = None
+    lecture_qr_bord_max_z: float | None = None
     # La face de la tête de préhension touche le fond intérieur du seau à tant au-dessus du
     # plateau (pose du seau vide).
     face_au_dessus_plateau_m: float = Field(ge=0)
@@ -4045,6 +4051,29 @@ class Machine(Modele):
         dans("inspection → plateau_z", "plateau_z", r.inspection.plateau_z)
         if r.plateau_lecture_qr is not None:
             dans("plateau_lecture_qr", "plateau_z", r.plateau_lecture_qr)
+            lecture_y = r.pose_y if r.lecture_qr_y is None else r.lecture_qr_y
+            dans("lecture_qr_y", "remplissage_y", lecture_y)
+            limite = r.lecture_qr_bord_max_z
+            if limite is None:
+                erreurs.append(
+                    "remplissage → lecture_qr_bord_max_z : il manque (limite du bord du seau à "
+                    "la position de lecture du QR, avec plateau_lecture_qr)"
+                )
+            else:
+                if lecture_y < r.dosage_y:
+                    # Au poste (règle C2), le bord du seau reste ≤ poste_bord_max_z toujours.
+                    limite = min(limite, r.verrous.poste_bord_max_z)
+                for nom, seau in self.griffe.formats.items():
+                    if seau.hauteur is None:
+                        continue
+                    bord = r.plateau_lecture_qr + seau.hauteur
+                    if bord > limite + 1e-9:
+                        erreurs.append(
+                            f"remplissage → plateau_lecture_qr : {r.plateau_lecture_qr:g} + "
+                            f"hauteur du seau {nom} ({seau.hauteur:g}) = {bord:.4f} dépasse la "
+                            f"limite de hauteur du bord ({limite:g}) à la position de lecture "
+                            f"y {lecture_y:g}"
+                        )
         dans("pousseur_rentre_m", "pousseur", r.pousseur_rentre_m)
         dans("barres → ouvertes_m", "barres", r.barres.ouvertes_m)
         approche = r.pose_seau.barres_approche_hw_m
@@ -6379,8 +6408,127 @@ class PlafondVision(Modele):
         return self
 
 
+class GeometrieInspection(Modele):
+    """Où est la caméra de la tête du micropore (`cam_inspection` du projet mécanique) par rapport
+    à l'axe du plateau, et où est le rouleau. Azimuts : ° depuis +x, vus de dessus (sens inverse
+    des aiguilles d'une montre), dans le repère du portique."""
+
+    # Objectif par rapport à l'axe du plateau (ΔX, ΔY en m) : fiche du micropore, figé
+    # (azimut −122°).
+    decalage_m: tuple[float, float]
+    # Azimut visé par l'axe optique de la caméra ; None : elle vise l'axe du plateau.
+    cap_deg: float | None = Field(default=None, ge=-180, le=180)
+    # Azimut du rouleau vu de l'axe du plateau : la tête vient du mur (y petit), donc côté −y
+    # (direction d'escamotage de la fiche) : EXEMPLE tant que la tête n'est pas montée.
+    rouleau_azimut_deg: float = Field(ge=-180, le=180)
+    # Rayon du flanc à la hauteur du QR (m) : sert seulement si la caméra ne vise pas l'axe.
+    rayon_qr_m: float = Field(gt=0)
+    # La caméra est fixe sur la plaque (elle ne recule pas avec l'escamotage) : centre de son
+    # objectif à cette hauteur (m, fil Micropore du 07/11/2026). Elle ne voit qu'UNE rangée de
+    # trous par image (rangées écartées de 10 à 17 cm) : ±3,5 cm en hauteur, dont `vue_utile_m`
+    # (±2,5 cm) utiles. Le plateau se met à « objectif_z_m − hauteur de la rangée » (tour de
+    # repérage de la rangée) ; la pose se fait à « ruban_z − hauteur » (9 mm plus bas).
+    objectif_z_m: float = Field(gt=0)
+    vue_utile_m: float = Field(gt=0)
+    # Hauteur du centre de l'étiquette QR au-dessus du fond du seau (m), la même sur tous les
+    # formats (consigne : 14 cm, entre deux trous) : plateau_lecture_qr = objectif − cette hauteur.
+    etiquette_hauteur_m: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "GeometrieInspection":
+        if self.decalage_m == (0, 0):
+            raise ValueError("decalage_m : la caméra n'est pas sur l'axe du plateau")
+        return self
+
+
+class LectureFlancInspection(Modele):
+    """Le QR du flanc lu pendant que le plateau tourne le seau (Remplissage, étape
+    `orienter_l_anse`) et le tour de repérage du micropore (QR, trous)."""
+
+    # Attente (s) entre deux regards sur la vidéo quand il n'y a pas d'image nouvelle.
+    pause_s: float = Field(gt=0, le=1)
+    # Lectures du QR à des angles différents pour trouver l'angle où il passe au centre de
+    # l'image. Une seule lecture ne compte que si le QR est à moins de `centre_tolerance_px`
+    # du centre.
+    lectures_min: int = Field(ge=1)
+    centre_tolerance_px: float = Field(gt=0)
+    # Le centre trouvé ne peut être qu'à cette distance (°) des angles où le QR a été lu.
+    marge_deg: float = Field(ge=0)
+    # Le QR repasse devant la caméra à chaque tour : deux lectures séparées de plus que ça (°)
+    # sont de deux passages.
+    ecart_passage_deg: float = Field(gt=0)
+    # Écart attaches de l'anse / QR (°) d'un seau dont l'écart n'est pas enregistré : EXEMPLE.
+    ecart_attaches_defaut_deg: float = Field(ge=-90, lt=90)
+
+
+class TrousInspection(Modele):
+    """Les trous du seau (Ø ≈ 1 cm) vus pendant le tour de repérage : taches rondes qui
+    tranchent sur la paroi."""
+
+    diametre_mm: float = Field(gt=0)
+    # Un trou a un diamètre dans diametre ± cette part.
+    tolerance_diametre: float = Field(gt=0, lt=1)
+    circularite_min: float = Field(gt=0, le=1)
+    # Écart de gris (0 à 255) avec la paroi pour qu'une tache compte.
+    contraste_min: float = Field(gt=0, le=255)
+    # Un trou suivi d'une image à l'autre ne change pas de hauteur de plus (points).
+    suivi_max_y_px: float = Field(gt=0)
+    # Un trou suivi d'une image à l'autre ne bouge pas de plus (points).
+    suivi_max_px: float = Field(gt=0)
+    # Deux trous vus à moins de tant de degrés sont le même (début et fin du tour).
+    fusion_deg: float = Field(gt=0)
+
+
+class PieceInspection(Modele):
+    """Le contrôle du morceau de micropore posé (geste 11 de la fiche)."""
+
+    longueur_mm: float = Field(gt=0)
+    largeur_mm: float = Field(gt=0)
+    # Un morceau mal coupé : longueur ou largeur hors de la cote ± cette part.
+    tolerance_taille: float = Field(gt=0, lt=1)
+    # Un morceau de travers : son grand côté s'écarte de l'horizontale de plus que ça (°).
+    inclinaison_max_deg: float = Field(gt=0, lt=90)
+    contraste_min: float = Field(gt=0, le=255)
+    # Le trou doit rester sous le morceau avec cette marge (mm) de chaque côté.
+    marge_mm: float = Field(ge=0)
+
+
+class InspectionVision(Modele):
+    """La caméra de la tête du micropore (tâche 40 ter) : QR du flanc, trous, morceaux posés.
+    Ce qui demande des photos réelles (attaches de l'anse, morceau bien collé) reste un faux."""
+
+    exemple: bool = False
+    # Nom de la caméra dans `cameras` (même que machine.yaml → micropore → camera).
+    camera: Nom
+    geometrie: GeometrieInspection
+    # Taille d'un point de l'image sur la paroi (mm), à mesurer avec un objet connu : EXEMPLE.
+    echelle_mm_par_point: float = Field(gt=0)
+    flanc: LectureFlancInspection
+    trous: TrousInspection
+    piece: PieceInspection
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "InspectionVision":
+        erreurs = []
+        petit = self.trous.diametre_mm
+        if self.piece.longueur_mm < petit + 2 * self.piece.marge_mm:
+            erreurs.append(
+                f"piece → longueur_mm ({self.piece.longueur_mm:g}) trop courte pour couvrir un "
+                f"trou de Ø {petit:g} mm avec sa marge"
+            )
+        if self.piece.largeur_mm < petit + 2 * self.piece.marge_mm:
+            erreurs.append(
+                f"piece → largeur_mm ({self.piece.largeur_mm:g}) trop étroite pour couvrir un "
+                f"trou de Ø {petit:g} mm avec sa marge"
+            )
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class ReglagesVision(Modele):
-    """vision.yaml : caméras, QR, repères ArUco, caméra du plafond (tâche 22)."""
+    """vision.yaml : caméras, QR, repères ArUco, caméra du plafond (tâche 22), caméra du
+    micropore (tâche 40 ter)."""
 
     exemple: bool = False
     # Photos de mesure : à l'arrêt, après ce temps (s).
@@ -6392,6 +6540,7 @@ class ReglagesVision(Modele):
     qr: QrVision
     aruco: ArucoVision
     plafond: PlafondVision
+    inspection: InspectionVision | None = None
 
     @model_validator(mode="after")
     def _verifier(self) -> "ReglagesVision":
@@ -6407,6 +6556,17 @@ class ReglagesVision(Modele):
             camera = self.cameras.get(nom)
             if camera is not None and camera.video is None:
                 erreurs.append(f"cameras → {nom} : il faut sa vidéo (video)")
+        if self.inspection is not None:
+            camera = self.cameras.get(self.inspection.camera)
+            if camera is None:
+                erreurs.append(
+                    f"inspection → camera : « {self.inspection.camera} » absente de cameras"
+                )
+            elif camera.video is None:
+                erreurs.append(
+                    f"cameras → {self.inspection.camera} : il faut sa vidéo (video), la caméra "
+                    "d'inspection du micropore en a besoin"
+                )
         if "plafond" in self.cameras and self.cameras["plafond"].position is None:
             erreurs.append("cameras → plafond : il faut sa position")
         if "tete_griffe" in self.cameras and self.cameras["tete_griffe"].tete is None:
@@ -6657,6 +6817,29 @@ def _verifier_micropore_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
         erreurs.append(
             f"machine.yaml, micropore → camera : « {micropore.camera} » absente de vision.yaml "
             "(cameras)"
+        )
+    if vision.inspection is not None:
+        geometrie = vision.inspection.geometrie
+        ecart = geometrie.objectif_z_m - micropore.ruban_z
+        if abs(ecart) > geometrie.vue_utile_m + 1e-9:
+            erreurs.append(
+                f"vision.yaml, inspection → geometrie → objectif_z_m ({geometrie.objectif_z_m:g}) "
+                f"est à {abs(ecart) * 100:.1f} cm de micropore → ruban_z ({micropore.ruban_z:g}) : "
+                f"la rangée sort de la zone utile de la caméra ({geometrie.vue_utile_m * 100:g} cm)"
+            )
+        remplissage = machine.remplissage
+        if remplissage is not None and remplissage.plateau_lecture_qr is not None:
+            voulu = geometrie.objectif_z_m - geometrie.etiquette_hauteur_m
+            if abs(remplissage.plateau_lecture_qr - voulu) > 1e-6:
+                erreurs.append(
+                    "machine.yaml, remplissage → plateau_lecture_qr "
+                    f"({remplissage.plateau_lecture_qr:g})"
+                    f" doit valoir objectif_z_m − etiquette_hauteur_m de vision.yaml ({voulu:g})"
+                )
+    if vision.inspection is not None and vision.inspection.camera != micropore.camera:
+        erreurs.append(
+            f"vision.yaml, inspection → camera : « {vision.inspection.camera} », machine.yaml dit "
+            f"« {micropore.camera} » (micropore → camera)"
         )
     i2c = pesees.i2c
     if i2c is None:

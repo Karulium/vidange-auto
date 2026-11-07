@@ -10,9 +10,10 @@ C'est voulu. Le programme le dit, poste par poste, avec la raison :
 - réglages d'EXEMPLE (`exemple: true` dans `pi/reglages/machine.yaml`) : interdits sur la vraie machine ;
 - gestes pas encore écrits : griffe enchaînée avec la préhension (tâche 23), pose du couvercle (tâche 41 bis),
   lavage lancé après le lot ;
-- ce qui manque sur la machine : cartes du chariot et de la tête pas encore branchées au mode seaux, lecture du
-  QR du flanc par la caméra du micropore et vision du micropore (tâche 40 ter), pose du bocal de semence neuf
-  par la préhension ; le spray, si sa carte n'est pas ouverte.
+- ce qui manque sur la machine : cartes du chariot et de la tête pas encore branchées au mode seaux (la vision de la
+  caméra du micropore, elle, est écrite : tâche 40 ter, `pi/systeme/essai-inspection.md` ; elle attend
+  `vision.yaml → inspection → exemple: false`), pose du bocal de semence neuf par la préhension ; le spray, si sa
+  carte n'est pas ouverte.
 
 La sécurité (arrêt d'urgence, portes, store) reste câblée, comme d'habitude.
 

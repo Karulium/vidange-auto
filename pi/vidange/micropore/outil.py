@@ -3,10 +3,13 @@
   vidange-micropore etat                       distance du ToF, angles, gestes appris
   vidange-micropore escamote 40                servo d'escamotage à 40° : si le ToF voit la tête
                                                escamotée, cet angle est appris (« escamoté »)
-  vidange-micropore apprendre seau_a --camera-rouleau 32
-                                               un seau A devant la tête (procédure) : le servo
+  vidange-micropore apprendre seau_a           un seau A devant la tête (procédure) : le servo
                                                avance doucement jusqu'au contact vu au ToF ; le
-                                               Pi apprend approche, contact et appui
+                                               Pi apprend approche, contact et appui, et l'angle
+                                               caméra → rouleau que donne la vision
+                                               (vision.yaml → inspection)
+  vidange-micropore apprendre seau_a --camera-rouleau 32
+                                               pareil, mais l'angle caméra → rouleau est FORCÉ
   vidange-micropore servo 55                   servo d'escamotage à 55° (SANS seau devant : la
                                                tête avance librement), distance du ToF lue
   vidange-micropore lame                       une coupe (lame en bas, puis au repos)
@@ -42,6 +45,7 @@ from vidange.reglages import (
     charger_reglages,
     verifier_appris,
 )
+from vidange.vision.inspection import angle_camera_rouleau
 
 NOM_APPRIS = "micropore-appris.yaml"
 NOM_ETAT = "micropore.json"
@@ -70,8 +74,9 @@ def main(
     apprendre.add_argument(
         "--camera-rouleau",
         type=float,
-        required=True,
-        help="rotation du plateau (°) d'un trou vu au centre de la caméra jusqu'au rouleau",
+        default=None,
+        help="force l'angle caméra → rouleau : rotation du plateau (°) d'un trou vu au centre de "
+        "la caméra jusqu'au rouleau (sans cette option, c'est la vision qui le donne)",
     )
     servo = commandes.add_parser("servo", help="servo d'escamotage à cet angle, ToF lu")
     servo.add_argument("angle", type=float, help="angle du servo d'escamotage (°)")
@@ -277,7 +282,7 @@ def _apprendre(
     reglages: Reglages,
     appris: FichierAppris,
     format: str,
-    camera_rouleau: float,
+    camera_rouleau: float | None,
     qui: str,
     attendre: Callable[[float], None],
 ) -> int:
@@ -288,6 +293,18 @@ def _apprendre(
             file=sys.stderr,
         )
         return 2
+    if camera_rouleau is None:
+        inspection = reglages.vision.inspection
+        if inspection is None:
+            print(
+                "Pas de partie « inspection » dans vision.yaml : donner l'angle caméra → rouleau "
+                "avec --camera-rouleau.",
+                file=sys.stderr,
+            )
+            return 2
+        rangees = micropore.formats[format].rangees
+        camera_rouleau = round(angle_camera_rouleau(inspection, rangees[0].rayon_paroi_m), 2)
+        print(f"Angle caméra → rouleau donné par la vision : {camera_rouleau:g}°.")
     escamote = appris.escamote_deg
     if escamote is None:
         print("Apprendre d'abord l'angle escamoté (vidange-micropore escamote).", file=sys.stderr)

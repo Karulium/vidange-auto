@@ -134,6 +134,27 @@ def test_la_hauteur_de_lecture_du_qr_hors_de_la_course_est_refusee(reglages):
     assert "remplissage → plateau_lecture_qr : 0.9 hors de la course" in erreur_de(reglages)
 
 
+def test_la_lecture_du_qr_plus_la_hauteur_du_seau_depasse_la_limite_est_refusee(reglages):
+    # Plateau à 0,46 : le seau le plus haut (0,265) a son bord à 0,725 ; limite baissée à 0,70.
+    remplacer(
+        reglages / "machine.yaml", "lecture_qr_bord_max_z: 0.75", "lecture_qr_bord_max_z: 0.7"
+    )
+    message = erreur_de(reglages)
+    assert "remplissage → plateau_lecture_qr : 0.46 + hauteur du seau" in message
+    assert "dépasse la limite de hauteur du bord (0.7)" in message
+
+
+def test_la_lecture_du_qr_au_poste_est_limitee_par_la_regle_c2(reglages):
+    # Lue au poste (y < dosage_y), la limite du bord est celle du poste (0,68), pas 0,75.
+    remplacer(reglages / "machine.yaml", "lecture_qr_y: 0.50", "lecture_qr_y: 0.15")
+    assert "dépasse la limite de hauteur du bord (0.68)" in erreur_de(reglages)
+
+
+def test_la_lecture_du_qr_sans_limite_de_hauteur_est_refusee(reglages):
+    remplacer(reglages / "machine.yaml", "  lecture_qr_bord_max_z: 0.75\n", "")
+    assert "remplissage → lecture_qr_bord_max_z : il manque" in erreur_de(reglages)
+
+
 def test_les_barres_restent_sous_les_joues_pendant_la_pose(reglages):
     remplacer(
         reglages / "machine.yaml", "barres_approche_hw_m: 0.225", "barres_approche_hw_m: 0.24"

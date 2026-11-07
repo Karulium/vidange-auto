@@ -101,7 +101,10 @@ de chaque format (A, B, C, D), un réglet, un feutre, un rapporteur (ou une marq
    centre** de l'image de la caméra du micropore (`vidange-vision photo micropore /tmp/m.jpg`, regarder la
    photo). Additionner les degrés tournés : c'est l'angle caméra → rouleau (≈ 32° d'exemple). Retourner la
    marque devant le rouleau (même nombre de degrés, dans l'autre sens).
-5. Lancer `apprendre seau_a --camera-rouleau 32` (avec le format et l'angle trouvé). La tête avance d'un
+5. Lancer `apprendre seau_a --camera-rouleau 32` (avec le format et l'angle trouvé). **Depuis la tâche 40 ter**,
+   l'option n'est plus obligatoire : sans elle, la vision donne l'angle (géométrie de `vision.yaml → inspection`,
+   voir `vidange-vision rouleau seau_a`). Comparer avec l'angle mesuré aux points 3 et 4 : si l'écart dépasse 2°,
+   garder l'option pour forcer la valeur mesurée, et le dire dans la PR (`essai-inspection.md`, étape 6). La tête avance d'un
    demi-degré à la fois (≈ 30 s), s'arrête quand le capteur ne voit plus la distance baisser, puis recule.
    Attendu : « seau_a appris (changement n° …) : contact à …° (ToF … mm), approche …°, appui …° ».
 6. Si « butée sans toucher de paroi » : le seau n'est pas devant la tête (plateau trop bas ou trop haut, seau
@@ -132,8 +135,9 @@ de chaque format (A, B, C, D), un réglet, un feutre, un rapporteur (ou une marq
 - **La pose dans un vrai cycle** : le programme principal ne branche pas encore le Remplissage ni le
   micropore (comme pour les tâches 34 et 39). Quand ce sera fait, essayer d'abord un seau A vide en mode
   pas à pas : tour de repérage, puis pour chaque trou approche, avance, appui, pose, coupe, contrôle.
-- **La caméra** : le repérage des trous et le contrôle des morceaux par l'image sont à écrire (le programme
-  sait déjà quoi en faire). En attendant, rien ne se pose sur le vrai matériel.
+- **La caméra** : le repérage des trous et le contrôle des morceaux par l'image sont écrits (tâche 40 ter) ; ils
+  s'essaient avec `essai-inspection.md`. Dans un vrai cycle, ils attendent les cartes du chariot et de la tête
+  branchées au programme principal.
 - **Le bouton « rouleau » à l'écran** (plateau en bas, barres serrées, tête escamotée) : à venir avec
   l'écran ; `charger` remet le compteur à neuf.
 

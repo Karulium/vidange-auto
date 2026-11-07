@@ -91,9 +91,9 @@ class TeteSimulee:
 
 
 class FausseVisionMicropore:
-    """La caméra imaginaire : au tour de repérage, le QR du seau et ses trous (le premier à
-    premier_trou_deg du départ, les autres répartis sur le tour) ; chaque morceau est vu couvert,
-    sauf les `rates` suivants."""
+    """La caméra imaginaire : à chaque tour de repérage (un par rangée), le QR du seau et les
+    trous de la rangée (le premier à premier_trou_deg du départ, les autres répartis sur le tour) ;
+    chaque morceau est vu couvert, sauf les `rates` suivants."""
 
     def __init__(
         self,
@@ -101,8 +101,10 @@ class FausseVisionMicropore:
         simule: MicroporeSimule,
         remplissage: "Remplissage",
         chariot: ChariotVu,
+        objectif_z_m: float,
     ) -> None:
         self.reglages = reglages
+        self.objectif_z_m = objectif_z_m
         self.simule = simule
         self.remplissage = remplissage
         self.chariot = chariot
@@ -114,21 +116,24 @@ class FausseVisionMicropore:
         self.tours = 0
         self.controles: list[tuple[int, float, bool]] = []
 
+    def plateau_z_repere(self, hauteur_rangee_m: float) -> float:
+        return self.objectif_z_m - hauteur_rangee_m
+
     def commencer_tour(self) -> None:
         self._depart = self.chariot.position().a
 
-    def finir_tour(self) -> Reperage | None:
+    def finir_tour(self, rangee: int) -> Reperage | None:
         self.tours += 1
         seau = self.remplissage.seau
         if self.illisible or seau is None:
             return None
         format = self.reglages.formats.get(seau.format)
         trous: dict[int, list[float]] = {}
-        for rang, rangee in enumerate([] if format is None else format.rangees):
-            vus = max(0, rangee.trous - self.manquants.get(rang, 0))
-            trous[rang] = [
-                self._depart + self.simule.premier_trou_deg + k * 360 / rangee.trous
-                for k in range(vus)
+        if format is not None and rangee < len(format.rangees):
+            nombre = format.rangees[rangee].trous
+            vus = max(0, nombre - self.manquants.get(rangee, 0))
+            trous[rangee] = [
+                self._depart + self.simule.premier_trou_deg + k * 360 / nombre for k in range(vus)
             ]
         return Reperage(seau.code, None, trous)
 
@@ -181,7 +186,11 @@ def micropore_du_simulateur(
     tete = TeteMicropore(machine.micropore, i2c, simulateur.materiel, appris, horloge)
     physique = TeteSimulee(machine.micropore, appris, remplissage, chariot, tete.voie_escamotage)
     boitier.tof_selon_angles = physique.tof
-    vision = FausseVisionMicropore(machine.micropore, simule, remplissage, chariot)
+    inspection = reglages.vision.inspection
+    assert inspection is not None, "vision.yaml : pas d'inspection (réglages vérifiés au départ)"
+    vision = FausseVisionMicropore(
+        machine.micropore, simule, remplissage, chariot, inspection.geometrie.objectif_z_m
+    )
     avance = AvanceSimulee(horloge)
     micropore = Micropore(machine, tete, avance, vision, appris, registre=registre, horloge=horloge)
     micropore.brancher(remplissage)

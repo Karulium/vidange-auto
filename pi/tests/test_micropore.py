@@ -326,8 +326,9 @@ def test_scenario_micropore_sur_les_2_seaux(tmp_path):
     planning, scenario, textes = jouer(registre=registre)
     assert planning.fini, planning.probleme
     simule = scenario.micropore
-    # 2 seaux × 2 rangées × 4 trous, tous vus couverts du premier coup.
-    assert morceaux_poses(textes) == 16 and simule.vision.tours == 2
+    # 2 seaux × 2 rangées × 4 trous, tous vus couverts du premier coup ; un tour de repérage
+    # par rangée (2 seaux × 2 rangées).
+    assert morceaux_poses(textes) == 16 and simule.vision.tours == 4
     assert [couvert for _, _, couvert in simule.vision.controles] == [True] * 16
     assert simule.micropore.morceaux_restants == MICROPORE.rouleau.morceaux - 16
     pose = MICROPORE.pose
@@ -346,12 +347,33 @@ def test_scenario_micropore_sur_les_2_seaux(tmp_path):
     assert [v for paire in rangees for v in paire] == pytest.approx(
         [v for paire in attendu for v in paire]
     )
+    # Un tour de repérage par rangée, plateau à (z de l'objectif − hauteur de la rangée).
+    reperages = [z for texte, _, z in textes if texte.startswith("micropore 0) : tour de repérage")]
+    objectif = REGLAGES.vision.inspection.geometrie.objectif_z_m
+    assert reperages == pytest.approx(
+        [objectif - rangee.hauteur_m for format in (a, b) for rangee in format]
+    )
     # Rien à vérifier, une mesure par seau au registre.
     assert registre.trouver("seau", "S0101")["a_verifier"] is None
     mesures = registre.lire("SELECT valeur FROM mesures WHERE nom = 'micropore_morceaux'")
     assert [m["valeur"] for m in mesures] == [8, 8]
     assert registre.alarmes_ouvertes() == []
     registre.fermer()
+
+
+@pytest.mark.parametrize("nom", sorted(MICROPORE.formats))
+def test_le_plateau_du_reperage_de_chaque_rangee_de_chaque_format_est_permis(nom):
+    # Plateau à (objectif − hauteur de la rangée) : dans la course, sous 0,575 (règle 9), et pour
+    # les rangées posées au poste le bord du seau reste sous la limite C2.
+    objectif = REGLAGES.vision.inspection.geometrie.objectif_z_m
+    bas, plafond = MACHINE.axes["plateau_z"].course
+    limite = MACHINE.remplissage.verrous.poste_bord_max_z
+    hauteur_seau = MACHINE.griffe.formats[nom].hauteur
+    for rangee in MICROPORE.formats[nom].rangees:
+        z = objectif - rangee.hauteur_m
+        assert bas <= z <= plafond
+        if not rangee.fond:
+            assert z + hauteur_seau <= limite
 
 
 def test_le_plateau_ne_bouge_en_hauteur_que_tete_vue_escamotee():
@@ -462,7 +484,7 @@ def test_rangee_trop_haute_pas_posee(reglages):
     planning, scenario, textes = jouer(reglages=charger_reglages(reglages))
     assert planning.fini, planning.probleme
     assert max(z for _, _, z in textes) <= MACHINE.axes["plateau_z"].course[1] + 1e-9
-    assert any("rangée 1 trop haute" in m for m in scenario.micropore.micropore.messages)
+    assert any("rangée 1" in m and "règle 9" in m for m in scenario.micropore.micropore.messages)
     # Les 3 autres rangées sont posées.
     assert morceaux_poses(textes) == 12
 
@@ -634,3 +656,19 @@ def test_outil_charger_remet_le_compteur(tmp_path):
     assert lancer_outil(donnees, "charger") == 0
     etat = json.loads((donnees / "micropore.json").read_text(encoding="utf-8"))
     assert etat == {"morceaux_restants": MICROPORE.rouleau.morceaux, "alerte_rouleau_faite": False}
+
+
+def test_outil_apprend_l_angle_camera_rouleau_donne_par_la_vision(tmp_path, capsys):
+    """Tâche 40 ter : sans --camera-rouleau, c'est la vision qui donne l'angle (géométrie de
+    vision.yaml → inspection) ; l'option le force."""
+    donnees = tmp_path / "donnees"
+    assert lancer_outil(donnees, "escamote", "40") == 0
+    capsys.readouterr()
+    assert lancer_outil(donnees, "apprendre", "seau_a") == 0
+    assert "donné par la vision : 31.84°" in capsys.readouterr().out
+    appris = FichierAppris(donnees / "micropore-appris.yaml")
+    assert appris.format("seau_a").camera_rouleau_deg == pytest.approx(31.84, abs=0.01)
+    assert lancer_outil(donnees, "apprendre", "seau_b", "--camera-rouleau", "40") == 0
+    assert (
+        FichierAppris(donnees / "micropore-appris.yaml").format("seau_b").camera_rouleau_deg == 40
+    )

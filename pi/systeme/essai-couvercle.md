@@ -106,7 +106,7 @@ Le chariot de remplissage n'a pas besoin d'être préparé pour cette étape : l
 ## Ce qui ne peut pas encore s'essayer
 
 - **Le cycle complet** : il manque encore la griffe (tâche 23), les cartes du chariot et de la tête branchées au
-  programme principal, la lecture du QR du flanc (tâche 40 ter). Ici, le chariot et la tête se commandent avec
+  programme principal (la lecture du QR du flanc est écrite : tâche 40 ter). Ici, le chariot et la tête se commandent avec
   leurs outils.
 - **Les impulsions du venturi pendant le trajet** (fiche, étape 7 : « nouvelle impulsion si le vide passe
   au-dessus de −50 kPa ») : le Pi garde la vanne de vide ouverte pendant tout le trajet (question 2 de la PR).

@@ -1174,11 +1174,18 @@ remplissage:
   # barres vue de dessus (° depuis +x) : EXEMPLE.
   barres_direction_deg: 0
   anse_deg: 45
-  # Lecture du QR du flanc (en bas du flanc) par la caméra du micropore, seau vide posé à y 0,50 :
-  # plateau monté à cette hauteur, le plateau fait tourner le seau, puis l'anse est orientée,
-  # avant le serrage des barres (fil Guidage caméra, 07/11/2026). EXEMPLE : valeur à venir du fil
-  # Micropore.
+  # Lecture du QR du flanc par la caméra du micropore, seau vide posé : plateau monté à cette
+  # hauteur, le plateau fait tourner le seau, puis l'anse est orientée, avant le serrage des barres
+  # (fil Guidage caméra, 07/11/2026). Fil Micropore (07/11) : plateau_lecture_qr = 0,600 (centre de
+  # l'objectif) − hauteur du centre de l'étiquette (14 cm du fond sur tous les formats) = 0,46
+  # (vérifié contre vision.yaml → inspection). EXEMPLE tant que l'étiquette n'est pas collée.
   plateau_lecture_qr: 0.46
+  # Où : à la pose (y 0,50, rien au-dessus du seau), PAS au poste (règle C2 : bord ≤ 0,68, trois
+  # formats sur quatre y touchent). Limite du bord du seau à cette position : 0,75 (limite donnée
+  # par le fil Micropore pour la position de vidage ; aucune règle de positions plus stricte à
+  # y 0,50 : EXEMPLE). Vérifié au démarrage : plateau_lecture_qr + hauteur de chaque format.
+  lecture_qr_y: 0.50
+  lecture_qr_bord_max_z: 0.75
   # Face de la ventouse de la préhension au contact du fond intérieur d'un seau posé (au-dessus
   # du dessus du plateau) : H + 0,003 (fil Remplissage avec la Préhension, PR n° 56, point 2).
   face_au_dessus_plateau_m: 0.003

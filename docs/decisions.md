@@ -1329,3 +1329,82 @@ code lit est déjà dans `machine.yaml` (`entonnoir`, `lavage → lave_bocal`, `
      l'essai du Nettoyage (générateur à blanc), puis on enlève `exemple: true`.
   3. Pas de lot de bocaux sans le versement de la griffe : on attend son geste. À écrire avec la tâche 23 (ou une
      petite tâche avant elle si la griffe a déjà une fiche pour ce versement).
+
+## Vision du micropore (tâche 40 ter, 07/11/2026)
+
+Code : `pi/vidange/vision/inspection.py` ; réglages : `pi/reglages/vision.yaml → inspection` (EXEMPLES,
+`exemple: true`) ; vidéo : `programme.yaml → cameras → liste → micropore` (commande d'EXEMPLE) ; outils :
+`vidange-vision flanc|piece|rouleau|ecart` ; essai : `pi/systeme/essai-inspection.md` (testé sur le vrai matériel :
+non). Source : `micropore/logiciel/micropore-pour-logiciel.md` (§ 1 a, gestes 0 et 11) et le fil Guidage caméra
+(PR n° 89, section « Programme principal, réponses à la PR n° 89 »).
+
+- **Une seule vision pour deux modules.** La caméra `cam_inspection` du projet mécanique garde son nom `micropore`
+  dans le code (`vision.yaml → cameras → micropore`, `machine.yaml → micropore → camera`) : la renommer aurait
+  touché trois fichiers pour rien.
+  - Le Remplissage (`VisionSeau`) lit le QR du flanc **pendant que le plateau tourne le seau** : il appelle
+    `commencer_lecture`, lit à l'arrêt (`lire_seau`), fait faire un tour complet s'il n'a rien lu, relit, puis
+    `finir_lecture` (même quand le geste est arrêté par une alarme). Pas lu après un tour complet : alerte, comme
+    un format inconnu (inchangé).
+  - Le Micropore (`VisionMicropore`) : tour de repérage (QR, trous), puis contrôle de chaque morceau.
+- **Comment l'angle est trouvé.** Un fil regarde la vidéo pendant la rotation et note, pour chaque image, l'angle du
+  plateau et où est le QR (ou un trou) dans l'image. Le QR passe au centre de l'image à l'angle `a_c` du plateau
+  (droite « position dans l'image en fonction de l'angle », donc aucune échelle à connaître). Au centre de l'image,
+  le QR est à l'azimut de la caméra vu de l'axe du plateau (−122°, fiche, figé). Oreilles de l'anse = azimut de la
+  caméra + (angle du plateau maintenant − `a_c`) + écart attaches/QR du seau. Les passages successifs du même QR
+  (début et fin du tour) sont séparés (`ecart_passage_deg`).
+- **Une lecture seule ne compte que si le QR est au centre** (`centre_tolerance_px`) : sinon on a besoin d'au moins
+  deux lectures à des angles différents.
+- **Angle caméra → rouleau** = azimut du rouleau (−90°, côté −y de l'axe : la tête vient du mur, EXEMPLE) moins
+  azimut de la caméra, soit ≈ 31,8° (le simulateur en avait déjà mis 32). Si la caméra ne vise pas l'axe du plateau
+  (`cap_deg`), il dépend du rayon de la paroi, donc du format. `vidange-micropore apprendre` l'utilise quand
+  `--camera-rouleau` n'est pas donné ; l'option force toujours.
+- **Les trous** : taches rondes de la taille d'un trou (Ø ≈ 1 cm, `echelle_mm_par_point`) suivies d'une image à
+  l'autre ; l'angle du plateau où chacune passe au centre. Les rangées sont reconnues à la hauteur des trous dans
+  l'image (la rangée la plus haute du seau est la plus haute de l'image, `haut_en_haut`).
+- **Le morceau posé** (geste 11) : « couvert » veut dire un morceau de la bonne taille (30 × 25 mm ± 25 %), droit
+  (au plus 10° de l'horizontale), qui recouvre le trou avec 2 mm de marge. Découvert, de travers, mal coupé ou
+  décalé : pas couvert (un nouvel essai, puis alerte, comme la fiche).
+- **Écart attaches/QR d'un seau** : fichier `donnees/ecarts-attaches.json` (`vidange-vision ecart CODE DEGRES`), sinon
+  `flanc → ecart_attaches_defaut_deg` (EXEMPLE 0). Le journal dit quand le réglage sert.
+- **Reste un faux avec son interface (comme la tâche 22 ter)** : la reconnaissance des **attaches de l'anse**
+  (`ReconnaissanceAttaches`, faux `FausseReconnaissanceAttaches` : elle ne trouve rien), qui donnerait l'écart au
+  premier passage ; le **diamètre du bord du seau** (`Reperage.diametre_bord_m` reste vide : le Micropore refuse déjà
+  un format dont le bord dépasse 29,5 cm d'après `machine.yaml`) ; le jugement « bien collé » (pas dans la fiche).
+- **Sur la vraie machine** : « qr_du_flanc » et « micropore » ne sont plus « pas écrits ». Ils attendent
+  `inspection → exemple: false` (seule cette partie compte : le haut de `vision.yaml` est celui des autres caméras),
+  la caméra ouverte, puis le reste : cartes du chariot (angle du plateau : le QR du flanc attend « seau_vide ») et de
+  la tête (le micropore). Le journal et l'écran le disent.
+- **Choix de Claude (tâche 40 ter, en attendant les réponses de Karulium)** :
+  1. Un trou vu sur une seule image n'est pas compté (on ne peut pas dire où il est au centre) ; un trou coupé par le
+     bord de l'image non plus.
+  2. Les lumières de la caméra (carte du fil Guidage caméra, éteintes après 2 s sans ordre) ne sont pas commandées ici.
+  3. L'angle du plateau est celui que lit la carte du chariot au moment où l'image est regardée ; le retard de
+     l'image n'est pas corrigé (à mesurer à l'essai).
+- **Vision du micropore, réponses à la PR n° 92** (tâche 40 ter, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Écart attaches de l'anse / QR : une seule valeur dans les réglages (`ecart_attaches_defaut_deg`) tant que les
+     QR sont collés de la même façon sur tous les seaux ; sinon `vidange-vision ecart` seau par seau. La
+     reconnaissance des attaches par la caméra viendra avec les photos réelles (tâche 22 ter).
+  2. Visée de la caméra (axe du plateau) et rouleau à −90° : supposés ; mesurés à la main une fois par format à
+     l'essai (essai-micropore.md, étape 7), forcés avec `--camera-rouleau` si l'écart dépasse 2°.
+  3. La caméra voit-elle les deux rangées de trous à la hauteur du poste ? Non : réponse du fil Micropore (07/11),
+     une seule rangée par image (voir le point 7).
+  4. Lumières de la caméra : petite tâche à part quand les ordres de la carte de lumières seront écrits (Guidage
+     caméra).
+  5. Pas de jugement « bien collé » (plis, bulles) pour l'instant ; à revoir après les premières photos réelles.
+  6. Pas de mesure du diamètre du bord à la caméra : le format vient de `machine.yaml`.
+  7. Réponses du fil Micropore (07/11), appliquées sur la même branche :
+     - **Une seule rangée de trous par image.** Caméra fixe sur le plateau, objectif à z 0,600, à environ 5 cm de
+       la paroi, voit ±3,5 cm (±2,5 cm utiles), rangées à 10–17 cm l'une de l'autre. Donc **un tour de repérage
+       par rangée**, plateau à « 0,600 − hauteur de la rangée », juste avant de poser cette rangée à la même
+       station (rangée du haut : au poste, seau vide ; rangée du fond : une fois le poids minimum atteint). Le
+       z de l'objectif et les autres chiffres sont dans `vision.yaml → inspection → geometrie` (EXEMPLE). La
+       reconnaissance de « deux rangées dans une image » est supprimée.
+     - **QR du flanc** : `plateau_lecture_qr` = 0,600 − hauteur du centre de l'étiquette (14 cm du fond pour
+       tous les formats) = 0,46 (EXEMPLE). **Pas lu au poste** (règle C2 : bord ≤ 0,68 ; trois formats sur
+       quatre la touchent). Lu avant le poste, là où rien n'est au-dessus du seau : le cycle le lisait déjà à
+       y 0,50 (pose du seau) ; aucune règle de positions n'y limite la hauteur, la limite du fil Micropore
+       (0,75 − hauteur) est dans `lecture_qr_bord_max_z` (le bord le plus haut : 0,46 + 0,265 = 0,725). Gardé :
+       `lecture_qr_y: 0.50` (réglage ; peut être mis à la position de vidage).
+     - **Contrôle au démarrage** : `plateau_lecture_qr` + hauteur du seau (chaque format) ≤ limite de hauteur
+       de la position de lecture (0,68 si c'est le poste, sinon `lecture_qr_bord_max_z`) ; erreur claire sinon.
+       Aussi : `plateau_lecture_qr` = `objectif_z_m` − `etiquette_hauteur_m`.

@@ -107,6 +107,7 @@ from vidange.reglages import ErreurReglages, Reglages, charger_reglages
 from vidange.spray.spray import PORTE as PORTE_SPRAY
 from vidange.spray.spray import Spray
 from vidange.spray.spray import verifier_avec_liste as verifier_spray
+from vidange.vision.photo import Photographe
 
 # Codes de sortie. Le service systemd (pi/systeme/vidange.service) utilise CODE_REGLAGES_FAUX.
 CODE_OK = 0
@@ -620,6 +621,12 @@ def principal(
             "mire, repères ; les régler aux essais (pi/systeme/essai-vision.md), puis passer "
             "« exemple » à false."
         )
+    if reglages.vision.inspection is not None and reglages.vision.inspection.exemple:
+        journal.warning(
+            "vision.yaml, inspection : caméra du micropore (QR du flanc, trous, morceaux) en "
+            "valeurs d'EXEMPLE ; les régler aux essais (pi/systeme/essai-inspection.md), puis "
+            "passer « inspection → exemple » à false."
+        )
     if reglages.air.exemple:
         journal.warning(
             "air.yaml contient des valeurs d'EXEMPLE (exemple: true) : attente de mise en "
@@ -694,6 +701,7 @@ def principal(
         reglages, materiel if erreur_materiel is None else None, dossier_donnees, registre, chef
     )
     mode = ModeMachine(dossier_donnees / NOM_MODE, chef, registre)
+    cameras = Cameras(reglages.programme.cameras, dossier_donnees, raccords.cameras)
     # Le mode seaux : chaque poste du cycle d'un seau, prêt ou pourquoi pas (vrai matériel :
     # réglages d'EXEMPLE interdits). Un lot de seaux ne part qu'en mode « production ».
     mode_seaux = ModeSeaux(
@@ -703,6 +711,9 @@ def principal(
             materiel if erreur_materiel is None else None,
             vraie_machine=raccords.fabrique is None,
             spray=spray,
+            vision=reglages.vision,
+            regard=Photographe(cameras, reglages.vision, registre),
+            donnees=dossier_donnees,
         ),
         chef,
         mode_actuel=lambda: mode.actuel,
@@ -719,7 +730,6 @@ def principal(
         dossier_donnees / "journal" / NOM_FICHIER,
     )
     chef.sur_alarme.append(bilans.recevoir)
-    cameras = Cameras(reglages.programme.cameras, dossier_donnees, raccords.cameras)
     # Le clip des dernières secondes de chaque caméra, dans le bilan de chaque alarme.
     bilans.collecteurs["clip_video"] = lambda: cameras.garder_clip("alarme")
     pilote = PiloteDistance(
@@ -790,6 +800,7 @@ def principal(
         vraie_machine=raccords.fabrique is None,
         spray=spray,
         nettoyage=nettoyage,
+        vision=reglages.vision,
     )
     mode_bocaux = ModeBocaux(reglages, pieces_bocaux, chef, mode_actuel=lambda: mode.actuel)
     mode_nuit = ModeNuit(reglages, pieces_bocaux, nettoyage)
