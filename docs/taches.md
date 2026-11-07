@@ -859,6 +859,20 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      attend et informe (jamais une protection logicielle présentée comme une sécurité).
   Vérifié au démarrage (sorties en double, sortie absente) ; procédure d'essai sur le vrai matériel ; « testé sur le
   vrai matériel : non ».
+- [ ] **45 tredecies. Relais du Pi et voyant-buzzer sur son propre relais** — Modèle : Sonnet, effort bas. Fiches de
+  l'Implantation du 07/11/2026 (`/mnt/project-files/implantation/logiciel/relais-du-pi.md`, `sorties-carte-3.md`,
+  `sorties-carte-4.md` ; lire ces seuls fichiers) ; à recopier dans `docs/decisions.md` :
+  1. **Validé par l'Implantation** : carte n° 3 P6 verrou du plateau, P7 vanne 3 voies des rampes (carte n° 3 pleine,
+     8/8) ; carte n° 4 P3 rinçage du lavage (P5 à P7 libres, P2 frein) ; modules de sorties 24 V à 4 voies dans les
+     emplacements d'axe libres, rien à acheter ; chauffage `relais_2` K8 (24 V → K8 → contact de `relais_flotteur` →
+     entrée du SSR). Les cartes à 8 relais sont en I2C PCF8574 aux adresses 0x20 et 0x21. Les numéros de GPIO des
+     cartes FluidNC restent EXEMPLE jusqu'à la réception des cartes.
+  2. **`voyant_buzzer` n'est pas sur `relais_1` K1** : il a son propre module relais à 1 voie (`relais_buzzer`), sur un
+     GPIO direct du Pi, en 24 V **non coupé** (l'alarme sonne même si l'I2C ou une carte à relais tombe en panne ;
+     choix du 26/10). Choisir le GPIO parmi les broches libres du dépôt, jamais 2, 3, 8, 9, 14, 15, 18, 19 ; il reste
+     EXEMPLE tant que l'Implantation ne l'a pas écrit dans sa fiche. `relais_1` K1 redevient libre.
+  3. Vérifier au démarrage qu'aucune voie de relais ni aucun GPIO n'est pris deux fois (existe peut-être déjà).
+  Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
 - [x] **23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi** — Modèle : Opus, effort
   moyen. Base : `pi/vidange/simulateur/solveur.py` (place prête), `simulateur/planning.py`, `chef/zones.py`,
   decisions « La fiabilité d'abord ». Bibliothèque : `ortools` (CP-SAT, gratuite, roues pour le Pi 5 en
