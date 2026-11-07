@@ -57,6 +57,8 @@ if TYPE_CHECKING:
 journal = donner_journal("micropore")
 
 MODULE = "micropore"
+# Le compteur du rouleau (morceaux restants), dans le dossier des données.
+NOM_ETAT = "micropore.json"
 Geste = Generator[Pas, Resultat, None]
 Issue = Literal["couvert", "decouvert", "sans_contact", "redemarrage"]
 

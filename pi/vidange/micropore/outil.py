@@ -36,6 +36,7 @@ from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.journal import configurer_journal
 from vidange.materiel import ErreurMateriel, FausseFabrique, Materiel
 from vidange.micropore.appris import NOM_APPRIS, FichierAppris
+from vidange.micropore.micropore import NOM_ETAT
 from vidange.micropore.simulation import distance_imaginaire
 from vidange.micropore.tete import TeteMicropore
 from vidange.reglages import (
@@ -46,8 +47,6 @@ from vidange.reglages import (
     verifier_appris,
 )
 from vidange.vision.inspection import angle_camera_rouleau
-
-NOM_ETAT = "micropore.json"
 
 
 def main(

@@ -22,6 +22,10 @@ seule (depuis la page d'état) : poids (ou « pesée absente »), accu et radio 
 faire à la main, ce qui manque, bouton PRÊT. Elle repart seule quand le poste est prêt ou que le
 plateau s'en va.
 
+Lot (tâche 45 quater) : un lot proposé par la page web (« Lot de seaux », « Lot de bocaux ») est
+montré sur la page d'état (« ATTEND LE GO ») ; le bouton GO, puis « Oui », le lance. Le Pi propose,
+Karulium dit Go devant la machine. S'il ne peut pas partir, l'écran dit pourquoi.
+
 Nettoyage (tâche 38) : page « nettoyage », depuis la page du mode (ENCEINTE) : état du store et de
 ses verrous, purge, nuit UV-ozone, ozone dedans et dehors ; OUVRIR (libère les verrous) ou FERMER,
 LUMIÈRE, NUIT (à l'heure réglée, puis MAINTENANT), PASSER OUTRE (la purge). Le Pi ne commande pas
@@ -59,7 +63,7 @@ from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import FondTexte, ReglagesEcran
 
 if TYPE_CHECKING:
-    from vidange.cycle import ModeBocaux, ModeNuit, ModeSeaux
+    from vidange.cycle import Lancement, ModeBocaux, ModeNuit, ModeSeaux
 
 journal = donner_journal("ecran")
 
@@ -201,11 +205,13 @@ class Ecran:
         mode_seaux: "ModeSeaux | None" = None,
         mode_bocaux: "ModeBocaux | None" = None,
         mode_nuit: "ModeNuit | None" = None,
+        lancement: "Lancement | None" = None,
     ) -> None:
         """`mode_seaux` : quand aucun cycle ne tourne, la page d'état dit si un lot de seaux peut
         partir, ou ce qui manque (tâche 45). `mode_bocaux` : de même pour un lot de bocaux (mode
         « production », si les seaux sont prêts) et pour laver les bocaux (mode « lavage »).
-        `mode_nuit` : en mode « UV-ozone », la nuit peut partir ou ce qui manque (tâche 45 bis)."""
+        `mode_nuit` : en mode « UV-ozone », la nuit peut partir ou ce qui manque (tâche 45 bis).
+        `lancement` : le lot proposé par la page web, lancé par GO (tâche 45 quater)."""
         self.reglages = reglages
         self.liaison = liaison
         self.chef = chef
@@ -218,6 +224,7 @@ class Ecran:
         self.mode_seaux = mode_seaux
         self.mode_bocaux = mode_bocaux
         self.mode_nuit = mode_nuit
+        self.lancement = lancement
         self._etat_poste: EtatPoste | None = None
         self._horloge = horloge
         self._aujourdhui = aujourdhui
@@ -369,7 +376,7 @@ class Ecran:
         elif bouton == "b_go":
             etat = self.chef.etat()
             if not etat.attendent_go:
-                self._dire("Aucun Go attendu.")
+                self._go_du_lot()
                 return
             module = self._module(etat, etat.attendent_go[0])
             self._demander(
@@ -382,6 +389,23 @@ class Ecran:
             self._aller(COMPTEURS)
         elif bouton == "b_mode":
             self._aller(MODE)
+
+    def _go_du_lot(self) -> None:
+        """GO sans module qui l'attend : le lot proposé par la page web, s'il y en a un."""
+        proposition = None if self.lancement is None else self.lancement.proposition
+        if proposition is None:
+            self._dire("Aucun Go attendu.")
+            return
+        assert self.lancement is not None
+        refus = self.lancement.refus_go()
+        if refus is not None:
+            self._dire(f"Lot impossible : {refus}.")
+            return
+        self._demander(
+            f"Lancer le lot de {proposition.texte} ? La machine va bouger.",
+            "lot",
+            proposition.texte,
+        )
 
     def _appui_alarme(self, bouton: str) -> None:
         alarmes = self.registre.alarmes_ouvertes()
@@ -451,6 +475,10 @@ class Ecran:
         if ordre == "go":
             journal.info("Go pour « %s » donné à l'écran de l'armoire", argument)
             self.chef.donner_go(argument)
+        elif ordre == "lot" and self.lancement is not None:
+            journal.info("Go pour le lot de %s donné à l'écran de l'armoire", argument)
+            self.lancement.go(QUI)
+            self._dire(f"Lot de {argument} lancé.")
         elif ordre == "reprendre":
             journal.info("Reprise demandée à l'écran de l'armoire")
             self.chef.reprendre()
@@ -490,13 +518,15 @@ class Ecran:
         etat = self.chef.etat()
         en_cours = [m for m in etat.modules if m.statut == "en_cours"]
         nombre_alarmes = len(alarmes) or len(etat.alarmes)
+        # Un lot proposé par la page web, qui attend le GO de l'écran (tâche 45 quater).
+        lot = None if self.lancement is None else self.lancement.texte_ecran()
         if self.pilote is not None and self.pilote.actif:
             page.mettre("b_bandeau", "À DISTANCE : TOUCHER = STOP", "distance")
         elif nombre_alarmes:
             page.mettre("b_bandeau", f"ALARME ({nombre_alarmes}) : TOUCHER ICI", "alarme")
         elif etat.en_pause:
             page.mettre("b_bandeau", "EN PAUSE", "pause")
-        elif etat.attendent_go:
+        elif etat.attendent_go or lot is not None:
             page.mettre("b_bandeau", "ATTEND LE GO", "go")
         elif en_cours:
             page.mettre("b_bandeau", "EN MARCHE", "marche")
@@ -521,6 +551,10 @@ class Ecran:
                 f"{lisible(module.etape)}",
             )
             page.mettre("t_attend", f"Attend : {module.attend}" if module.attend else "")
+        elif lot is not None:
+            page.mettre("t_module", lot[0])
+            page.mettre("t_attend", "Proposé depuis la page web")
+            pourquoi = lot[1]
         else:
             page.mettre("t_module", "Aucun cycle en cours")
             page.mettre("t_attend", seaux)
@@ -539,7 +573,7 @@ class Ecran:
             page.mettre("b_pause", "REPRENDRE", "marche")
         else:
             page.mettre("b_pause", "PAUSE", "pause")
-        page.mettre("b_go", "GO", "go" if etat.attendent_go else "inactif")
+        page.mettre("b_go", "GO", "go" if etat.attendent_go or lot is not None else "inactif")
         page.mettre("b_compteurs", "COMPTEURS", "bouton")
         page.mettre("b_mode", "MODE", "bouton")
 

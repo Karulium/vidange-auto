@@ -26,49 +26,66 @@ machine, numéro de série introuvable, carte qui ne répond pas) n'arrête jama
 n'est pas construite, et les postes qui en ont besoin sont « pas lancés : raison » (check-list,
 écran, journal). La présence est regardée une fois, au démarrage : une carte branchée après
 demande de relancer le programme. Rien n'est commandé au démarrage (aucun ordre aux servos ni aux
-sorties) : les boucles en fond de ces pièces partiront avec le lot.
+sorties) : les boucles en fond de ces pièces partent avec le lot (FondDuLot).
 
-Ce qui manque encore pour qu'un lot parte sur la machine, sans rien inventer :
-- griffe (case vide d'ORDRE_SEAU) : son enchaînement avec la préhension (solveur, tâche 23) ;
+Les lots (tâche 45 quater) : `remplissage`, `entonnoir` et `lavage_bocaux` assemblent les modules
+sur ces cartes, comme vidange.cycle.simulation le fait sur les pièces imaginaires (Remplissage,
+Mycélium et son bocal neuf, Micropore, Fermeture, Couvercle, Spray, Stockage ; Entonnoir ; lave-
+bocal). `FondDuLot` lance leurs boucles en fond avec le lot et les arrête à sa fin ou sur alarme.
+
+Ce qui manque encore pour qu'un lot parte sur la machine, sans rien inventer (`Sources` : None sur
+la machine, un faux dans les essais ; le poste dit « pas lancé : raison ») :
+- griffe : son enchaînement avec la préhension et le seau du chariot (solveur, tâche 23) ;
 - mycélium : le geste du bocal neuf de semence est écrit (vidange.bocal_neuf, tâche 19 quater),
   mais il lui manque deux sources que la machine n'a pas encore : la lecture du QR du bocal par la
   caméra de la tête de la griffe, et l'erreur du codeur de la rotation de la tête (calage du
   moteur) ;
 - QR du flanc et micropore : la vision (vidange.vision.inspection, tâche 40 ter) attend ses
   réglages vrais (vision.yaml → inspection) et la caméra ;
-- stockage : il faut le signal de la boucle du tiroir et des panneaux ;
+- stockage : il faut le signal de la boucle du tiroir et des panneaux, et (vraie machine) la
+  lecture de la photo du plafond de la bande du haut ;
 - entonnoir : la lecture de la photo du plafond (l'entonnoir est-il sur le bocal ? où est le
-  centre du col ?) n'est pas écrite ;
+  centre du col ?) et le versement de la griffe dans le bocal ne sont pas écrits ;
 - lavage des bocaux : la liste des bocaux sales vient de la caméra du plafond (règle 7), pas
   écrite ;
 - nuit UV-ozone : tout est là (le Nettoyage tourne déjà) ; elle ne manque que si le Nettoyage n'est
   pas construit ou si un signal de la nuit manque dans la liste des entrées/sorties.
-Tant que ces cases vides restent, `remplissage`, `entonnoir` et `lavage_bocaux` ne sont jamais
-appelés sur la machine (le poste « mycelium », cœur du lot, dit lequel manque).
 """
 
-from collections.abc import Callable, Iterable, Mapping
+import threading
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from vidange.angles_gardes import AnglesGardes
+from vidange.bocal_neuf.bocal_neuf import BocalNeuf
+from vidange.chef import Chef, ErreurChef, ErreurEtape
+from vidange.chef.chef import ATTENTE_GO
+from vidange.couvercle.couvercle import Couvercle
 from vidange.cycle.mode_bocaux import LotBocaux, PiecesEntonnoir, PiecesLavageBocaux
 from vidange.cycle.mode_seaux import Lot, PiecesRemplissage
+from vidange.entonnoir.entonnoir import Entonnoir, VisionEntonnoir
+from vidange.entonnoir.etat import NOM_FICHIER as NOM_ENTONNOIR
 from vidange.entrees_sorties import EntreesSorties
 from vidange.fermeture.bras import BrasFermeture
-from vidange.fiabilite.constats import Constat
+from vidange.fermeture.fermeture import Fermeture
+from vidange.fiabilite.constats import Constat, lancer_boucle
 from vidange.fluidnc import Liaison
 from vidange.fluidnc.ports import CarteIntrouvable, lister_ports_usb, trouver_port
 from vidange.journal import donner_journal
+from vidange.lavage.bocaux import LavageBocaux
 from vidange.lavage.eau import NOM_EAU, EauLavage
 from vidange.lavage.lavage import Lavage
 from vidange.lavage.signaux import signaux_lavage
 from vidange.materiel import Materiel
 from vidange.micropore.appris import NOM_APPRIS, FichierAppris
 from vidange.micropore.avance import AvanceFluidnc
+from vidange.micropore.micropore import NOM_ETAT as NOM_ETAT_MICROPORE
+from vidange.micropore.micropore import Micropore
 from vidange.micropore.tete import TeteMicropore
 from vidange.mycelium.agitateur import AgitateurFluidnc
+from vidange.mycelium.mycelium import Mycelium
 from vidange.mycelium.regles import ReglesMycelium
 from vidange.nettoyage.nettoyage import (
     GENERATEUR,
@@ -95,10 +112,22 @@ from vidange.prehension.tete import (
     TeteFluidnc,
     signaux_prehension,
 )
-from vidange.reglages import ENTREES_LAVAGE, SORTIES_LAVAGE, Fluidnc, Reglages, ReglagesVision
+from vidange.reglages import (
+    ENTREES_LAVAGE,
+    SORTIES_LAVAGE,
+    Fluidnc,
+    Machine,
+    ObjetLaveBocalSimule,
+    Reglages,
+    ReglagesLot,
+    ReglagesVision,
+)
 from vidange.remplissage.chariot import ALARMES_BARRES, BARRIERE, ChariotFluidnc, signaux_chariot
+from vidange.remplissage.module import Plan
+from vidange.remplissage.remplissage import Remplissage
 from vidange.spray.spray import Spray
 from vidange.stockage.simulation import BOUCLE
+from vidange.stockage.stockage import Stockage, VisionBande
 from vidange.vision.inspection import NOM_ECARTS, EcartsAttaches, Regard, VisionInspection
 
 journal = donner_journal("cycle.machine")
@@ -118,8 +147,25 @@ BOCAL_NEUF = (
     "caméra de la tête de la griffe et l'erreur du codeur de la rotation de la tête (calage du "
     "moteur), pas encore branchées"
 )
+QR_DU_BOCAL = (
+    "bocal de semence neuf (vidange.bocal_neuf) : lecture du QR du bocal par la caméra de la tête "
+    "de la griffe pas encore branchée"
+)
+CODEUR = (
+    "bocal de semence neuf (vidange.bocal_neuf) : erreur du codeur de la rotation de la tête "
+    "(calage du moteur) pas encore lue"
+)
+GRIFFE_DU_LOT = (
+    "enchaînement de la griffe avec la préhension et le seau du chariot pas écrit (solveur, tâche "
+    "23)"
+)
+VERSEMENT_BOCAL = "versement de la griffe dans le bocal pas écrit (solveur, tâche 23)"
 PHOTO_DU_PLAFOND = (
     "lecture de la photo du plafond (entonnoir sur le bocal, centre du col) pas écrite"
+)
+PHOTO_DE_LA_BANDE = (
+    "lecture de la photo du plafond (seaux pleins de la bande du haut) pas écrite : le Stockage "
+    "ne vérifierait pas la bande"
 )
 BOCAUX_SALES = "liste des bocaux sales (caméra du plafond, règle 7) pas écrite"
 NETTOYAGE_ABSENT = "Nettoyage pas lancé (partie « nettoyage » de machine.yaml ou entrées/sorties)"
@@ -314,10 +360,13 @@ def construire_cartes(
     mode: Callable[[], str],
     donnees: Path | None = None,
     garde: AnglesGardes | None = None,
+    erreur_codeur: Callable[[], float | None] | None = None,
 ) -> CartesMachine:
     """Construit les pièces du chariot et de la tête qui sont là ; jamais d'exception (une pièce
     absente est notée avec sa raison, dans le journal aussi). `presence` : presence_fluidnc ;
-    `mode` : ModeMachine.actuel (Lavage) ; `garde` : les angles gardés (rotation de la tête)."""
+    `mode` : ModeMachine.actuel (Lavage) ; `garde` : les angles gardés (rotation de la tête) ;
+    `erreur_codeur` : l'erreur du codeur de la rotation de la tête (°), pour le calage du moteur
+    (None : pas encore lue sur la machine ; un faux dans les essais)."""
     cartes = CartesMachine()
     if materiel is None:
         for piece in NOMS_DES_PIECES:
@@ -436,7 +485,9 @@ def construire_cartes(
             raise Absente(f"capteur de vide « {VIDE} » : {erreur}") from None
         vide = CapteurVide(machine.prehension.vide, lambda: materiel.mesurer(VIDE))
         signaux = signaux_prehension(liaison, reglages.fluidnc.cartes[CARTE_TETE])
-        cartes.tete = TeteFluidnc(machine, pont, liaison, signaux, force, vide)
+        cartes.tete = TeteFluidnc(
+            machine, pont, liaison, signaux, force, vide, erreur_codeur=erreur_codeur
+        )
         # Sans l'agitateur ni le porte-bocal (pièces absentes), la manivelle est inconnue : la
         # tête ne va jamais dans la zone du porte-bocal (vidange.prehension).
         cartes.prehension = Prehension(
@@ -507,10 +558,78 @@ def construire_cartes(
     return cartes
 
 
+class GriffeDuLot(Protocol):
+    """Ce que le lot de seaux demande à la griffe (case vide d'ORDRE_SEAU : son enchaînement avec
+    la préhension et le seau du chariot, solveur, tâche 23). Les essais donnent un faux."""
+
+    # Le seau tourne tant de secondes pendant chaque versement (étape « verser »).
+    versement_s: float
+
+    def partie(self) -> bool:
+        """La griffe est partie du poste chercher sa 1re prise (le bras du spray peut sortir)."""
+        ...
+
+
+class VersementBocal(Protocol):
+    """Le versement de la griffe dans le bocal où est l'entonnoir (case vide, tâche 23)."""
+
+    def verser(self, bocal: str) -> object: ...
+
+    def fini(self) -> bool: ...
+
+
+@dataclass
+class Sources:
+    """Ce que la machine n'a pas encore (cases vides, sans rien inventer) : None tant que ce n'est
+    pas écrit, et le poste qui en a besoin dit « pas lancé : raison ». Sur la vraie machine,
+    vidange.demarrage les laisse toutes à None ; les essais donnent des faux."""
+
+    # Enchaînement de la griffe avec le seau du chariot (tâche 23).
+    griffe: GriffeDuLot | None = None
+    # QR d'un bocal de semence lu par la caméra de la tête de la griffe (place → QR, ou None).
+    qr_du_bocal: Callable[[str], str | None] | None = None
+    # Photo du plafond : seaux pleins de la bande du haut (Stockage) ; entonnoir et col (bocaux).
+    bande: VisionBande | None = None
+    entonnoir: VisionEntonnoir | None = None
+    # Versement de la griffe dans un bocal (tâche 23).
+    versement_bocal: VersementBocal | None = None
+    # Bocaux sales et capsules à laver, vus par la caméra du plafond (règle 7).
+    bocaux_sales: Callable[[], Sequence[ObjetLaveBocalSimule]] | None = None
+
+
+def stockage_de_la_machine(
+    machine: Machine,
+    materiel: Materiel | None,
+    registre: Any = None,
+    vision: VisionBande | None = None,
+) -> Stockage | None:
+    """Le Stockage de la machine, un seul pour tout le programme : son inventaire (piles, bocaux
+    de semence, boîtes à capsules) est repris du registre. None : machine.yaml sans stockage ou
+    sans griffe, ou entrées/sorties pas ouvertes."""
+    if machine.stockage is None or machine.griffe is None or materiel is None:
+        return None
+    lire = materiel.lire
+
+    def boucle() -> bool | None:
+        if BOUCLE not in materiel.branchements:
+            return None
+        return bool(lire(BOUCLE))
+
+    return Stockage(machine, boucle_fermee=boucle, registre=registre, vision=vision)
+
+
+def sans_bocal_neuf(variete: str) -> Any:
+    """Le Mycélium sans le geste du bocal neuf : jamais sur la machine (il est branché)."""
+    raise ErreurEtape(f"bocal neuf « {variete} » : le geste de la Préhension n'est pas branché")
+
+
 class PiecesMachine:
     """`vraie_machine` : vrai matériel (le programme tourne sur le Pi) ; faux pour les essais avec
     un faux matériel (des réglages d'EXEMPLE y sont permis). `cartes` : celles de
-    construire_cartes (None : pas construites)."""
+    construire_cartes (None : pas construites). `machine` : machine.yaml (pour assembler les
+    lots). `permission` : Chef.permission. `stockage` : stockage_de_la_machine (le même pour les
+    seaux et les bocaux). `sources` : ce qui n'est pas encore écrit (None partout sur la
+    machine)."""
 
     def __init__(
         self,
@@ -523,6 +642,11 @@ class PiecesMachine:
         regard: Regard | None = None,
         donnees: Path | None = None,
         cartes: CartesMachine | None = None,
+        machine: Machine | None = None,
+        registre: Any = None,
+        permission: Callable[[str], str | None] = lambda geste: None,
+        stockage: Stockage | None = None,
+        sources: Sources | None = None,
     ) -> None:
         self.poste = poste
         self.materiel = materiel
@@ -533,6 +657,11 @@ class PiecesMachine:
         self.regard = regard
         self.donnees = donnees
         self.cartes = cartes
+        self.machine = machine
+        self.registre = registre
+        self.permission = permission
+        self.stockage = stockage
+        self.sources = sources or Sources()
 
     def manque_inspection(self) -> str | None:
         """Ce qui empêche la caméra du micropore de servir (QR du flanc, trous, morceaux)."""
@@ -557,6 +686,17 @@ class PiecesMachine:
             return CARTES_PAS_CONSTRUITES
         return self.cartes.manque(*pieces)
 
+    def manque_bocal_neuf(self) -> str | None:
+        """Les deux sources du geste du bocal neuf que la machine n'a pas encore."""
+        qr = self.sources.qr_du_bocal is None
+        tete = None if self.cartes is None else self.cartes.tete
+        codeur = tete is None or not tete.peut_detecter_le_calage()
+        if qr and codeur:
+            return BOCAL_NEUF
+        if qr:
+            return QR_DU_BOCAL
+        return CODEUR if codeur else None
+
     def vision_inspection(
         self,
         angle_plateau: Callable[[], float | None],
@@ -574,15 +714,21 @@ class PiecesMachine:
         if poste == "spray":
             return CARTE_SPRAY if self.spray is None else self.manque_cartes(poste)
         if poste == "mycelium":
-            return self.manque_cartes(poste) or BOCAL_NEUF
-        if poste == "stockage" and (
-            self.materiel is None or BOUCLE not in self.materiel.branchements
-        ):
-            return f"pas de signal « {BOUCLE} » ouvert (entrées/sorties)"
+            return self.manque_cartes(poste) or self.manque_bocal_neuf()
+        if poste == "stockage":
+            if self.materiel is None or BOUCLE not in self.materiel.branchements:
+                return f"pas de signal « {BOUCLE} » ouvert (entrées/sorties)"
+            if self.vraie_machine and self.sources.bande is None:
+                return PHOTO_DE_LA_BANDE
+            return None
         if poste == "entonnoir":
-            return self.manque_cartes(poste) or PHOTO_DU_PLAFOND
+            if self.sources.entonnoir is None:
+                return self.manque_cartes(poste) or PHOTO_DU_PLAFOND
+            return self.manque_cartes(poste)
         if poste == "lavage_bocaux":
-            return self.manque_cartes(poste) or BOCAUX_SALES
+            if self.sources.bocaux_sales is None:
+                return self.manque_cartes(poste) or BOCAUX_SALES
+            return self.manque_cartes(poste)
         if poste in ("enceinte", "ozone", "purge"):
             return self._manque_nuit(poste)
         return self.manque_cartes(poste)
@@ -609,6 +755,19 @@ class PiecesMachine:
                 return f"capteurs de la purge absents ({', '.join(absents)})"
         return None
 
+    # ------------------------------------------------------------ les lots (tâche 45 quater)
+
+    def _pieces_du_lot(self, *pieces: str) -> CartesMachine:
+        """Les cartes, avec ces pièces construites (ErreurChef sinon : jamais de geste inventé)."""
+        if self.machine is None:
+            raise ErreurChef("pièces de la machine sans machine.yaml : lot impossible")
+        if self.cartes is None:
+            raise ErreurChef(CARTES_PAS_CONSTRUITES)
+        raison = self.cartes.manque(*pieces)
+        if raison is not None:
+            raise ErreurChef(raison)
+        return self.cartes
+
     def remplissage(
         self,
         lot: Lot,
@@ -617,17 +776,305 @@ class PiecesMachine:
         avec_spray: bool,
         avec_couvercle: bool,
     ) -> PiecesRemplissage:
-        # Jamais appelé : le poste « mycelium » (cœur) manque toujours (BOCAL_NEUF : QR du bocal,
-        # codeur de la rotation), et la griffe est une case vide. Les cartes sont là
-        # (self.cartes, dont l'agitateur et le porte-bocal) ; le Mycélium, le Stockage, le
-        # BocalNeuf, le Micropore, la Fermeture, le Couvercle et le Spray seront assemblés dessus
-        # comme dans vidange.cycle.simulation.
-        raise NotImplementedError(BOCAL_NEUF)
+        """Le lot de seaux sur les vraies cartes, assemblé comme vidange.cycle.simulation sur les
+        pièces imaginaires : Remplissage (chariot, caméra du micropore), Mycélium (agitateur,
+        porte-bocal) et son bocal neuf de semence (Préhension, Stockage), Micropore, Fermeture,
+        Couvercle, Spray. Ce qui manque (griffe, QR du bocal, codeur de la rotation, photo du
+        plafond...) : ErreurChef, avec la raison."""
+        cartes = self._pieces_du_lot("chariot", "tete", "agitateur", "porte_bocal")
+        machine = self.machine
+        assert machine is not None
+        griffe = self.sources.griffe
+        for raison in (
+            self.manque_bocal_neuf(),
+            None if griffe is not None else GRIFFE_DU_LOT,
+            self.manque("stockage"),
+            self.manque_inspection(),
+            None if self.poste is not None else "poste du fût pas suivi",
+        ):
+            if raison is not None:
+                raise ErreurChef(f"lot de seaux impossible : {raison}")
+        assert griffe is not None and self.stockage is not None and self.poste is not None
+        chariot, prehension = cartes.chariot, cartes.prehension
+        assert chariot is not None and prehension is not None
+        poste = self.poste
+
+        def angle_plateau() -> float | None:
+            try:
+                return chariot.position().a
+            except Exception:
+                return None
+
+        vision = self.vision_inspection(angle_plateau)
+        mycelium: Mycelium | None = None
+
+        def refus_mycelium() -> str | None:
+            return "Mycélium pas encore prêt" if mycelium is None else mycelium.refus_chariot()
+
+        spray = self.spray if avec_spray else None
+        remplissage = Remplissage(
+            machine,
+            chariot,
+            registre=self.registre,
+            plateau_fut_en_place=lambda: not poste.echange_en_cours,
+            refus_mycelium=refus_mycelium,
+            bras_spray_sorti=(lambda: False) if spray is None else spray.bras_spray_sorti,
+            vision=vision,
+            permission=self.permission,
+        )
+        if spray is not None:
+            # Règle 6 : le bras ne sort que plateau assez bas et barres ouvertes ; le seau tourne
+            # pendant la dose.
+            spray.brancher_chariot(remplissage.refus_bras_spray, remplissage.tourner_pour_spray)
+        if avec_micropore:
+            assert cartes.tete_micropore is not None and cartes.avance_micropore is not None
+            micropore = Micropore(
+                machine,
+                cartes.tete_micropore,
+                cartes.avance_micropore,
+                vision,
+                cartes.tete_micropore.appris,
+                registre=self.registre,
+                fichier_etat=None if self.donnees is None else self.donnees / NOM_ETAT_MICROPORE,
+            )
+            micropore.brancher(remplissage)
+        if avec_fermeture:
+            assert cartes.bras_fermeture is not None
+            Fermeture(machine, cartes.bras_fermeture, registre=self.registre).brancher(remplissage)
+        assert cartes.agitateur is not None and cartes.porte_bocal is not None
+        mycelium = Mycelium(
+            machine,
+            cartes.agitateur,
+            cartes.porte_bocal,
+            remplissage,
+            sans_bocal_neuf,
+            registre=self.registre,
+            prehension_hors_zone=prehension.hors_zone_porte_bocal,
+            permission=self.permission,
+        )
+        mycelium.brancher_bocal_neuf(
+            BocalNeuf(
+                machine,
+                prehension,
+                self.stockage,
+                registre=self.registre,
+                lire_qr=self.sources.qr_du_bocal,
+            )
+        )
+        couvercle = Couvercle(machine, stockage=self.stockage) if avec_couvercle else None
+        plan = Plan(seaux=list(lot.seaux), versement_s=griffe.versement_s, magasin=self.stockage)
+        return PiecesRemplissage(
+            remplissage,
+            prehension,
+            mycelium,
+            plan,
+            spray=spray,
+            griffe_partie=griffe.partie,
+            couvercle=couvercle,
+        )
 
     def entonnoir(self, lot: LotBocaux) -> PiecesEntonnoir:
-        # Jamais appelé : le poste « entonnoir » manque toujours (photo du plafond).
-        raise NotImplementedError(PHOTO_DU_PLAFOND)
+        """Le lot de bocaux sur la tête de la Préhension : l'entonnoir (son état dans
+        donnees/entonnoir.json), la photo du plafond et le versement de la griffe (cases vides :
+        ErreurChef avec la raison tant qu'ils manquent)."""
+        cartes = self._pieces_du_lot("tete")
+        machine = self.machine
+        assert machine is not None and cartes.prehension is not None
+        vision, versement = self.sources.entonnoir, self.sources.versement_bocal
+        if vision is None:
+            raise ErreurChef(f"lot de bocaux impossible : {PHOTO_DU_PLAFOND}")
+        if versement is None:
+            raise ErreurChef(f"lot de bocaux impossible : {VERSEMENT_BOCAL}")
+        stockage = self.stockage
+
+        def marquer_suspect(bocal: str) -> None:
+            if stockage is not None:
+                stockage.inventaire.changer_bocal(bocal, "suspect")
+
+        entonnoir = Entonnoir(
+            machine,
+            None if self.donnees is None else self.donnees / NOM_ENTONNOIR,
+            vision=vision,
+            marquer_suspect=marquer_suspect,
+        )
+        return PiecesEntonnoir(
+            entonnoir, cartes.prehension, verser=versement.verser, versement_fini=versement.fini
+        )
 
     def lavage_bocaux(self) -> PiecesLavageBocaux:
-        # Jamais appelé : le poste « lavage_bocaux » manque toujours (bocaux sales).
-        raise NotImplementedError(BOCAUX_SALES)
+        """Le lave-bocal sur le Lavage de la tête, avec les bocaux sales vus par la caméra du
+        plafond (case vide : ErreurChef avec la raison tant qu'elle manque)."""
+        cartes = self._pieces_du_lot("tete", "lavage")
+        assert cartes.lavage is not None
+        if self.sources.bocaux_sales is None:
+            raise ErreurChef(f"lavage des bocaux impossible : {BOCAUX_SALES}")
+        return PiecesLavageBocaux(LavageBocaux(cartes.lavage), self.sources.bocaux_sales())
+
+
+class FondDuLot:
+    """Les boucles en fond des pièces, pendant un lot seulement (rien au démarrage : tâche 45 ter,
+    choix 2) : balance du chariot, balance de l'agitateur, lecture et battement du boîtier du
+    chariot (tête du micropore, bras de la fermeture), vide et force de la tête.
+
+        fond = FondDuLot(cartes, reglages.programme.lot, chef)
+        fond.demarrer(["remplissage", "mycelium"])   # au Go, juste avant le lot ; ErreurChef sinon
+        fond.reprendre(["remplissage", "mycelium"])  # lot repris du carnet : le suivi seulement
+        fond.suivre()                                # tous les suivi_periode_s (son propre fil)
+        fond.arreter()
+
+    Le suivi arrête les boucles quand plus aucun module du lot n'est « en cours » (alarme : elles
+    repartent quand le lot repart ; lot fini ou abandonné : tout s'arrête, le suivi aussi). La
+    tête : au premier départ, vanne et aimants coupés et zéro du vide recalé (TeteFluidnc.
+    demarrer) ; ensuite (après une alarme) la surveillance seule, sans toucher la vanne (elle tient
+    peut-être un seau). Lot repris du carnet : la tête attend le Go de Karulium avant de couper sa
+    vanne (rien n'est commandé au démarrage du programme)."""
+
+    def __init__(self, cartes: CartesMachine, reglages: ReglagesLot, chef: Chef) -> None:
+        self.cartes = cartes
+        self.reglages = reglages
+        self.chef = chef
+        self.modules: tuple[str, ...] = ()
+        self._verrou = threading.Lock()
+        self._arret: threading.Event | None = None
+        self._fils: list[threading.Thread] = []
+        self._actives: list[str] = []
+        self._arret_suivi: threading.Event | None = None
+        self._fil_suivi: threading.Thread | None = None
+        # Un seul regard à la fois (le fil du suivi, ou un essai qui appelle suivre()).
+        self._verrou_suivi = threading.Lock()
+
+    @property
+    def actives(self) -> list[str]:
+        """Les boucles en route (noms), pour la page web et les essais."""
+        with self._verrou:
+            return list(self._actives)
+
+    @property
+    def en_route(self) -> bool:
+        """Un lot est suivi (boucles en route, ou arrêtées sur alarme)."""
+        return self._fil_suivi is not None
+
+    def demarrer(self, modules: Sequence[str], suivi: bool = True) -> None:
+        """Au Go : lance les boucles des pièces construites, la tête comprise, et leur suivi
+        (`suivi` faux : `suivre()` à la main, pour les essais). ErreurChef si une boucle ne peut
+        pas partir (zéro du vide faux...) : le lot ne doit alors pas être lancé."""
+        self.arreter()
+        self.modules = tuple(modules)
+        self._lancer_boucles()
+        try:
+            self._lancer_tete()
+        except ErreurChef:
+            self._arreter_boucles()
+            raise
+        if suivi:
+            self._lancer_suivi()
+
+    def reprendre(self, modules: Sequence[str], suivi: bool = True) -> None:
+        """Lot repris du carnet après une coupure : le suivi seulement ; les boucles partent quand
+        le lot est en cours (la tête, après le Go)."""
+        self.arreter()
+        self.modules = tuple(modules)
+        if suivi:
+            self._lancer_suivi()
+
+    def _lancer_suivi(self) -> None:
+        self._arret_suivi = threading.Event()
+        self._fil_suivi = lancer_boucle(
+            "suivi_du_lot", self.reglages.suivi_periode_s, self.suivre, self._arret_suivi
+        )
+
+    def _demarrer(self, nom: str, lancer: Callable[[threading.Event], threading.Thread]) -> None:
+        with self._verrou:
+            if self._arret is None:
+                self._arret = threading.Event()
+            arret = self._arret
+        try:
+            fil = lancer(arret)
+        except Exception as erreur:
+            raise ErreurChef(f"boucle de fond « {nom} » du lot pas lancée : {erreur}") from None
+        with self._verrou:
+            self._fils.append(fil)
+            self._actives.append(nom)
+        journal.info("Lot : boucle de fond « %s » lancée", nom)
+
+    def _lancer_boucles(self) -> None:
+        """Les boucles qui ne commandent rien : balances, boîtier du chariot (son battement ne
+        renvoie que les angles déjà ordonnés)."""
+        cartes = self.cartes
+        periode = self.reglages.fond_periode_s
+        if cartes.chariot is not None:
+            self._demarrer("chariot", cartes.chariot.demarrer)
+        if cartes.agitateur is not None:
+            self._demarrer("agitateur", cartes.agitateur.demarrer)
+        for nom, piece in (
+            ("tete_micropore", cartes.tete_micropore),
+            ("bras_fermeture", cartes.bras_fermeture),
+        ):
+            if piece is not None:
+                observer = piece.observer
+                self._demarrer(
+                    nom, lambda arret, n=nom, o=observer: lancer_boucle(n, periode, o, arret)
+                )
+
+    def _lancer_tete(self) -> None:
+        tete = self.cartes.tete
+        if tete is None or "tete" in self.actives:
+            return
+        if tete.vide.zero is None:
+            # Premier départ : vanne et aimants coupés, zéro du vide recalé.
+            self._demarrer("tete", tete.demarrer)
+        else:
+            self._demarrer("tete", tete.surveiller_en_fond)
+
+    def _arreter_boucles(self) -> None:
+        with self._verrou:
+            arret, fils, self._arret, self._fils = self._arret, self._fils, None, []
+            actives, self._actives = self._actives, []
+        if arret is None:
+            return
+        arret.set()
+        for fil in fils:
+            fil.join()
+        journal.info("Lot : boucles de fond arrêtées (%s)", ", ".join(actives) or "aucune")
+
+    def suivre(self) -> None:
+        """Un regard sur le lot : boucles arrêtées sur alarme, relancées quand il repart, tout
+        arrêté quand il est fini ou abandonné."""
+        with self._verrou_suivi:
+            self._suivre()
+
+    def _suivre(self) -> None:
+        etats = [m for m in self.chef.etat().modules if m.module in self.modules]
+        if not etats:
+            # Le lot n'est pas encore donné au chef (les boucles partent juste avant lui).
+            return
+        en_cours = [m for m in etats if m.statut == "en_cours"]
+        if en_cours:
+            try:
+                if not self.actives:
+                    self._lancer_boucles()
+                tete = self.cartes.tete
+                go_donne = any(m.attend != ATTENTE_GO for m in en_cours)
+                if tete is not None and (tete.vide.zero is not None or go_donne):
+                    self._lancer_tete()
+            except ErreurChef as erreur:
+                journal.error("Lot : %s", erreur)
+            return
+        self._arreter_boucles()
+        if not any(m.statut == "alarme" for m in etats):
+            journal.info("Lot fini : plus de boucle de fond")
+            self._arreter_suivi()
+
+    def _arreter_suivi(self) -> None:
+        arret, fil = self._arret_suivi, self._fil_suivi
+        self._arret_suivi = self._fil_suivi = None
+        self.modules = ()
+        if arret is not None:
+            arret.set()
+        if fil is not None and fil is not threading.current_thread():
+            fil.join()
+
+    def arreter(self) -> None:
+        """Arrêt de tout (fin du programme, ou nouveau lot)."""
+        self._arreter_suivi()
+        self._arreter_boucles()

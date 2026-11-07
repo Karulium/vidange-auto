@@ -1,11 +1,14 @@
-"""Le programme principal (tâches 45 et 45 bis) : ce qui est prêt (ou pourquoi pas), les lots donnés
-au chef, la reprise après une coupure.
+"""Le programme principal (tâches 45 à 45 quater) : ce qui est prêt (ou pourquoi pas), les lots
+donnés au chef, la reprise après une coupure, le lancement d'un lot (page web, puis Go à
+l'écran).
 
 - mode seaux (`ModeSeaux`) : l'ordre du cycle d'un seau ;
 - mode bocaux (`ModeBocaux`) : lot de bocaux avec l'entonnoir, lavage des bocaux ;
-- nuit UV-ozone (`ModeNuit`) : la nuit du Nettoyage peut-elle partir.
+- nuit UV-ozone (`ModeNuit`) : la nuit du Nettoyage peut-elle partir ;
+- lancement (`Lancement`) : le lot proposé par la page web, lancé au Go de l'écran.
 """
 
+from vidange.cycle.lancement import Lancement, LotPropose
 from vidange.cycle.mode_bocaux import LotBocaux, ModeBocaux
 from vidange.cycle.mode_nuit import ModeNuit
 from vidange.cycle.mode_seaux import Lot, ModeSeaux, Pieces, PiecesRemplissage
@@ -17,8 +20,10 @@ __all__ = [
     "ORDRE_NUIT",
     "ORDRE_SEAU",
     "EtatPoste",
+    "Lancement",
     "Lot",
     "LotBocaux",
+    "LotPropose",
     "ModeBocaux",
     "ModeNuit",
     "ModeSeaux",

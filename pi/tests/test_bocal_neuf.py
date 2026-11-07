@@ -42,17 +42,18 @@ assert NEUF is not None
 VARIETE = REGLAGES.simulateur.cycle.variete
 PLACES = list(places.places_semence(MACHINE))
 PREMIERE = PLACES[0]
+# Les bocaux de semence posés au départ (simulateur.yaml, cycle → bocal_neuf).
+BOCAUX_POSES = REGLAGES.simulateur.cycle.bocal_neuf.bocaux
 CAPSULES = NEUF.boites.capsules
 COUVERCLES = NEUF.boites.couvercles_perces
 QUOI_FAIRE = "regarder, corriger, acquitter"
 
 
 def sans_recharge(**changements):
-    """Les réglages du simulateur où Karulium ne recharge pas le stockage entre deux bocaux (le lot
-    du cycle, lui, en a besoin : 20 seaux, 18 places de semence)."""
+    """Les réglages du simulateur, avec ces changements du lot du cycle (Karulium ne recharge
+    jamais le stockage en milieu de lot : tâche 45 quater)."""
     cycle = REGLAGES.simulateur.cycle
-    neuf = cycle.bocal_neuf.model_copy(update={"reapprovisionne": False})
-    cycle = cycle.model_copy(update={"bocal_neuf": neuf, **changements})
+    cycle = cycle.model_copy(update=changements)
     simule = REGLAGES.simulateur.model_copy(update={"cycle": cycle})
     return REGLAGES.model_copy(update={"simulateur": simule})
 
@@ -200,7 +201,7 @@ def test_les_20_etapes_de_la_fiche_au_simulateur(registre):
     bocal = neuf.bocal()
     assert (bocal.code, bocal.variete) == (f"{PREFIXE_QR}{PREMIERE}", VARIETE)
     # Le bocal a quitté sa place, la capsule est dans sa boîte, un couvercle percé en moins.
-    assert PREMIERE not in inventaire.bocaux and len(inventaire.bocaux) == 5
+    assert PREMIERE not in inventaire.bocaux and len(inventaire.bocaux) == BOCAUX_POSES - 1
     assert inventaire.boites[CAPSULES] == 1 and inventaire.boites[COUVERCLES] == 17
     prehension = essai.scenario.prehension
     assert prehension.objet is None and neuf.phase == RIEN
@@ -361,7 +362,8 @@ def test_7_la_capsule_ne_touche_pas_la_boite_et_le_geste_reprend_apres_le_go():
     assert len(essai.erreurs) == 1 and "boîte des capsules" in essai.erreurs[0]
     # Le dévissage n'a pas été refait : un seul bocal pris.
     assert essai.textes.count("dévissage de la capsule") == 3
-    assert PREMIERE not in essai.inventaire.bocaux and len(essai.inventaire.bocaux) == 5
+    assert PREMIERE not in essai.inventaire.bocaux
+    assert len(essai.inventaire.bocaux) == BOCAUX_POSES - 1
     assert essai.inventaire.boites[CAPSULES] == 1
 
 

@@ -73,6 +73,8 @@ DOSAGE = "remplissage_dosage_max"
 
 @dataclass(frozen=True)
 class SeauAFaire:
+    # Le QR du seau ; "" : pas connu d'avance (lot lancé depuis la page web, tâche 45 quater), le
+    # code est celui que lit la caméra du micropore sur le flanc.
     seau: str
     format: str
     variete: str
@@ -297,7 +299,7 @@ def module_remplissage(
 
     def poser():
         seau = plan.seau
-        return remplissage.geste_poser_seau(prehension, seau.format, seau.seau, seau.cycle)
+        return remplissage.geste_poser_seau(prehension, seau.format, seau.seau or None, seau.cycle)
 
     def apres_pose() -> str:
         if not remplissage.seau_du_dessus:
@@ -319,9 +321,21 @@ def module_remplissage(
         plan.versement(plan.seau, plan.couche)
         return remplissage.geste_tourner(plan.versement_s)
 
+    # Le dernier QR lu sur le flanc du seau en cours (le seau rangé n'est plus sur le plateau).
+    dernier_lu = [""]
+
+    def code_du_seau() -> str:
+        """Le QR du seau en cours : celui du plan, ou celui lu sur son flanc."""
+        sur_le_plateau = remplissage.seau
+        if sur_le_plateau is not None and sur_le_plateau.code:
+            dernier_lu[0] = sur_le_plateau.code
+        return plan.seau.seau or dernier_lu[0]
+
     def doser() -> None:
         seau = plan.seau
-        mycelium.demander(Demande(seau.seau, seau.format, plan.couche, seau.variete, seau.cycle))
+        mycelium.demander(
+            Demande(code_du_seau(), seau.format, plan.couche, seau.variete, seau.cycle)
+        )
 
     def apres_dose() -> str:
         if plan.couche < remplissage.format(plan.seau.format).couches:
@@ -351,7 +365,7 @@ def module_remplissage(
         return suite()
 
     def suite() -> str:
-        plan.faits.append(plan.seau.seau)
+        plan.faits.append(code_du_seau())
         plan.numero += 1
         plan.couche = 1
         if plan.numero < len(plan.seaux):

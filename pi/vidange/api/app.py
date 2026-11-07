@@ -18,6 +18,9 @@ refusés. Les mises à jour (tâche 13) passent par MisesAJour (vidange/mises_a_
 machine à l'arrêt ; pendant une mise à jour, Go, Reprise et pilotage à distance sont refusés.
 Le Nettoyage (tâche 38) : état de l'enceinte, « ouvrir le store » (verrous seulement, jamais son
 moteur), fermeture, éclairage, passer outre la purge, nuit UV-ozone.
+Les lots (tâche 45 quater) : « Lot de seaux » (format, nombre, variété) et « Lot de bocaux »
+(nombre) ne font que PROPOSER le lot (vidange.cycle.lancement) ; il part au Go donné sur l'écran
+de l'armoire, devant la machine. L'API n'a pas de Go pour un lot.
 """
 
 import hmac
@@ -26,7 +29,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
@@ -45,6 +48,9 @@ from vidange.poste_fut import ErreurPoste, PosteFut
 from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import ReglagesApi
 from vidange.spray import Spray
+
+if TYPE_CHECKING:
+    from vidange.cycle.lancement import Lancement
 
 journal = donner_journal("api")
 
@@ -75,6 +81,8 @@ class Services:
     spray: Spray | None = None
     # Air comprimé : compresseur, mise en pression, bidon de purge (None : pas d'air).
     air: Air | None = None
+    # Lancer un lot : la page web propose, Go à l'écran (None : pas de lot possible).
+    lancement: "Lancement | None" = None
 
 
 class Tenir(BaseModel):
@@ -90,6 +98,20 @@ class ChoixProgramme(BaseModel):
     """Le fichier de programme (déjà envoyé au Pi) à écrire dans une carte."""
 
     fichier: str
+
+
+class LotDeSeaux(BaseModel):
+    """Le bouton « Lot de seaux » : format, nombre de seaux, variété de la semence."""
+
+    format: str
+    nombre: int
+    variete: str
+
+
+class LotDeBocaux(BaseModel):
+    """Le bouton « Lot de bocaux » : nombre de bocaux vides."""
+
+    nombre: int
 
 
 class ChoixCopie(BaseModel):
@@ -188,6 +210,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             if services.nettoyage is None
             else services.nettoyage.etat().en_dict(),
             "air": None if services.air is None else services.air.etat().en_dict(),
+            "lot": None if services.lancement is None else services.lancement.en_dict(),
         }
 
     @app.get("/api/checklist", dependencies=protege)
@@ -229,6 +252,48 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         pas_pendant_le_pilotage("Go")
         chef.donner_go(module)
         return {"go": module}
+
+    # ------------------------------------------------------------ lots (tâche 45 quater)
+
+    def le_lancement() -> "Lancement":
+        if services.lancement is None:
+            raise HTTPException(404, "pas de lancement de lot (programme principal pas prêt)")
+        return services.lancement
+
+    @app.get("/api/lot", dependencies=protege)
+    def lot() -> dict[str, Any]:
+        return le_lancement().en_dict()
+
+    @app.post("/api/lot/seaux", dependencies=protege)
+    def lot_de_seaux(choix: LotDeSeaux, requete: Request) -> dict[str, Any]:
+        """Propose le lot ; il part au Go de l'écran de l'armoire (refus : 409 et la raison)."""
+        lancement = le_lancement()
+        qui = _qui(requete)
+        journal.info(
+            "Lot de %d seaux %s (%s) demandé par la %s",
+            choix.nombre,
+            choix.format,
+            choix.variete,
+            qui,
+        )
+        pas_pendant_la_mise_a_jour("Lot de seaux")
+        lancement.proposer_seaux(choix.format, choix.nombre, choix.variete, qui)
+        return lancement.en_dict()
+
+    @app.post("/api/lot/bocaux", dependencies=protege)
+    def lot_de_bocaux(choix: LotDeBocaux, requete: Request) -> dict[str, Any]:
+        lancement = le_lancement()
+        qui = _qui(requete)
+        journal.info("Lot de %d bocaux demandé par la %s", choix.nombre, qui)
+        pas_pendant_la_mise_a_jour("Lot de bocaux")
+        lancement.proposer_bocaux(choix.nombre, qui)
+        return lancement.en_dict()
+
+    @app.post("/api/lot/annuler", dependencies=protege)
+    def lot_annuler(requete: Request) -> dict[str, Any]:
+        lancement = le_lancement()
+        lancement.annuler(_qui(requete))
+        return lancement.en_dict()
 
     # ------------------------------------------------------------ poste du fût
 

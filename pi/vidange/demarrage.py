@@ -16,7 +16,9 @@
    (vidange.cycle : chaque poste est prêt, ou la check-list et l'écran disent pourquoi pas),
    reprend le cycle noté dans le carnet (après une coupure, le lot de seaux ou de bocaux en cours
    compris ; une nuit UV-ozone reprend générateur coupé, jamais relancé seul), et propose le
-   retour en lieu sûr (il attend le Go de Karulium).
+   retour en lieu sûr (il attend le Go de Karulium). Un lot se lance depuis la page web (le Pi
+   propose) puis Go à l'écran de l'armoire (vidange.cycle.lancement) ; les boucles de fond de ses
+   pièces partent avec lui.
 7. Lance la surveillance : santé du Pi, onduleur, chien de garde (et dit à systemd « prêt »),
    bilan de chaque alarme. Écrit la check-list de démarrage au journal.
    Lance l'API et la page web, si le fichier de secrets donne une clé (sinon la machine
@@ -54,8 +56,17 @@ from vidange.angles_gardes import AnglesGardes
 from vidange.api import ServeurApi, Services, constats_api, creer_app
 from vidange.cameras import Cameras, Flux
 from vidange.chef import Carnet, Chef, ErreurChef, Module
-from vidange.cycle import ModeBocaux, ModeNuit, ModeSeaux
-from vidange.cycle.machine import PiecesMachine, construire_cartes, presence_fluidnc
+from vidange.cycle import Lancement, ModeBocaux, ModeNuit, ModeSeaux
+from vidange.cycle.machine import (
+    FondDuLot,
+    PiecesMachine,
+    Sources,
+    construire_cartes,
+    presence_fluidnc,
+    stockage_de_la_machine,
+)
+from vidange.cycle.mode_bocaux import ENTONNOIR
+from vidange.cycle.mode_seaux import MYCELIUM, REMPLISSAGE
 from vidange.distance import PiloteDistance
 from vidange.ecran import SIGNAL as SIGNAL_ECRAN
 from vidange.ecran import Ecran, LiaisonEcran, PortEcran, ouvrir_port_ecran
@@ -722,6 +733,13 @@ def principal(
         donnees=dossier_donnees,
         garde=angles,
     )
+    # Un seul Stockage pour tout le programme (inventaire repris du registre : piles, bocaux de
+    # semence, boîtes à capsules), et ce qui n'est pas encore écrit (Sources : rien sur la
+    # machine ; chaque poste qui en a besoin dit pourquoi il n'est pas lancé).
+    stockage = stockage_de_la_machine(
+        reglages.machine, materiel if erreur_materiel is None else None, registre
+    )
+    sources = Sources()
     # Le mode seaux : chaque poste du cycle d'un seau, prêt ou pourquoi pas (vrai matériel :
     # réglages d'EXEMPLE interdits). Un lot de seaux ne part qu'en mode « production ».
     mode_seaux = ModeSeaux(
@@ -735,6 +753,11 @@ def principal(
             regard=Photographe(cameras, reglages.vision, registre),
             donnees=dossier_donnees,
             cartes=cartes,
+            machine=reglages.machine,
+            registre=registre,
+            permission=chef.permission,
+            stockage=stockage,
+            sources=sources,
         ),
         chef,
         mode_actuel=lambda: mode.actuel,
@@ -822,10 +845,22 @@ def principal(
         spray=spray,
         nettoyage=nettoyage,
         vision=reglages.vision,
+        donnees=dossier_donnees,
         cartes=cartes,
+        machine=reglages.machine,
+        registre=registre,
+        permission=chef.permission,
+        stockage=stockage,
+        sources=sources,
     )
     mode_bocaux = ModeBocaux(reglages, pieces_bocaux, chef, mode_actuel=lambda: mode.actuel)
     mode_nuit = ModeNuit(reglages, pieces_bocaux, nettoyage)
+    # Lancer un lot (tâche 45 quater) : la page web propose, Go à l'écran de l'armoire. Les
+    # boucles de fond des pièces partent avec le lot et s'arrêtent à sa fin ou sur alarme.
+    fond = FondDuLot(cartes, reglages.programme.lot, chef)
+    lancement = Lancement(
+        reglages.programme.lot, reglages.machine, mode_seaux, mode_bocaux, stockage, fond
+    )
     liaison_ecran = preparer_ecran(reglages, entrees_sorties, raccords.ecran)
     # L'écran s'arrête en premier, comme l'API : plus d'ordre pendant l'arrêt.
     arret_ecran = threading.Event()
@@ -837,7 +872,7 @@ def principal(
         if materiel is not None and SIGNAL_COMPTE_TOURS in entrees_sorties.signaux:
             # Une erreur de lecture est vue par le portique : il demande alors une confirmation.
             compte_tours = lambda: materiel.mesurer(SIGNAL_COMPTE_TOURS)  # noqa: E731
-        _, erreur_reprise = preparer_chef(
+        repris, erreur_reprise = preparer_chef(
             chef,
             module_lieu_sur(
                 reglages.machine,
@@ -850,6 +885,10 @@ def principal(
             carnet,
             mode_bocaux,
         )
+        du_lot = [nom for nom in repris if nom in (REMPLISSAGE, MYCELIUM, ENTONNOIR)]
+        if du_lot:
+            # Lot repris du carnet : ses boucles de fond partiront quand il repartira (Go).
+            fond.reprendre(du_lot)
         chef.demarrer()
         cameras.demarrer()
         fils += [
@@ -913,6 +952,7 @@ def principal(
                 nettoyage=nettoyage,
                 spray=spray,
                 air=air,
+                lancement=lancement,
             ),
         )
         if serveur is not None:
@@ -931,6 +971,7 @@ def principal(
                 mode_seaux=mode_seaux,
                 mode_bocaux=mode_bocaux,
                 mode_nuit=mode_nuit,
+                lancement=lancement,
             )
             fil_ecran = ecran.demarrer(arret_ecran)
         gardien.pret()
@@ -960,6 +1001,8 @@ def principal(
         if any(m.statut == "en_cours" and m.phase != "go" for m in chef.etat().modules):
             chef.pause()
         chef.arreter()
+        # Les boucles de fond du lot (balances, vide, battement des servos).
+        fond.arreter()
         arret.set()
         arret_bilans.set()
         for fil in [*fils, fil_bilans]:

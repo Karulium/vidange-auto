@@ -294,6 +294,11 @@ class TeteFluidnc:
             except ErreurEtape as erreur:
                 journal.warning("Préhension : %s", erreur)
         self.vide.recaler_zero()
+        return self.surveiller_en_fond(arret)
+
+    def surveiller_en_fond(self, arret: threading.Event) -> threading.Thread:
+        """La surveillance seule, sans toucher la vanne ni le zéro du vide : reprise d'un lot
+        après une alarme (la tête tient peut-être un seau ; tâche 45 quater)."""
         return lancer_boucle(
             "prehension", 1 / self.reglages.vide.frequence_hz, self.surveiller, arret
         )

@@ -1485,6 +1485,8 @@ exemples (hauteur du bocal, angles, 360° au plus, essai à 120° puis tous les 
   2. Un lot de 20 seaux demande 20 bocaux (un bocal par seau A) : plus que les 18 places de semence et que les 18
      capsules de la boîte. Au simulateur, Karulium « recharge » entre deux bocaux (`cycle → bocal_neuf →
      reapprovisionne`). Sur la machine, il faudra une pause de rechargement en milieu de lot.
+     *Remplacé par la tâche 45 quater* : plus de rechargement ; un lot a au plus autant de seaux que de bocaux de
+     semence posés de sa variété, de places libres dans la boîte des capsules et de couvercles percés (18).
   3. Le lot simulé complet dure maintenant ≈ 3 h 50 (≈ 2 min 45 de plus par seau) : `duree_max_s` du simulateur est
      passé de 14400 à 21600 s.
   4. Le Pi ne commande jamais le couple de serrage C_vis (≈ 1,5 N·m) : il se règle sur le pilote, à la main.
@@ -1505,3 +1507,34 @@ exemples (hauteur du bocal, angles, 360° au plus, essai à 120° puis tous les 
   5. Lot de 20 seaux pour 18 bocaux de semence et 18 capsules : question de capacité posée à Karulium (07/11) ;
      recommandation : 18 seaux au plus par lot, sans pause.
   6. Tenue d'un bocal plein par les 3 électroaimants au choc du transport : à voir au premier essai.
+
+## Programme principal, le lot sur les vraies cartes (tâche 45 quater, 07/11/2026)
+
+- **Le lot se lance en deux temps (règle 6)** : la page web (onglet « État », carte « Lancer un lot ») PROPOSE un
+  « Lot de seaux » (format, nombre, variété de la semence) ou un « Lot de bocaux » (nombre) ; rien ne bouge. Le lot
+  part au Go de Karulium sur l'écran de l'armoire (page d'état « ATTEND LE GO », bouton GO puis « Oui »). Pas de Go
+  de lot par l'API. Une seule proposition à la fois, oubliée après `programme.yaml → lot → proposition_max_s`.
+- **Refus avec la raison**, au bouton et de nouveau au Go : mode autre que « production », un lot (ou le retour en
+  lieu sûr) déjà en route, un poste « pas lancé : raison », format inconnu, et la taille du lot.
+- **Taille du lot, un seul endroit** (`refus_taille_lot`, `vidange/cycle/mode_seaux.py`) : au plus autant de seaux
+  que de bocaux de semence posés de leur variété, de places libres dans la boîte des capsules et de couvercles
+  percés (18 aujourd'hui). Pas de pause de rechargement : si on la veut un jour, c'est là qu'elle s'ajoute (une
+  pause avec Go). Le simulateur suit la même règle (lot de 18, plus de « rechargement par Karulium »).
+- **Seaux sans nom d'avance** : les seaux d'un lot lancé depuis la page web prennent le QR lu sur leur flanc.
+- **`PiecesMachine.remplissage`** assemble le Remplissage, le spray, le Micropore, la Fermeture, le Mycélium, le
+  bocal neuf, le couvercle et le plan à partir des vraies cartes. Il reste « pas lancé : raison » tant que manquent
+  l'enchaînement de la griffe (tâche 23), le QR du bocal par la caméra de la tête de la griffe, l'erreur du codeur
+  de la rotation de la tête (carte n° 4) ou une carte en EXEMPLE. **`entonnoir`** et **`lavage_bocaux`** attendent la
+  photo du plafond (bande du haut, entonnoir, bocaux sales) et le versement de la griffe. Le stockage aussi : sur la
+  vraie machine, pas de lot sans la photo de la bande.
+- **Boucles de fond du lot** (`FondDuLot`, `vidange/cycle/machine.py`) : au Go, la balance du chariot, la balance de
+  l'agitateur, le boîtier du chariot (battement des servos), le bras de fermeture et la tête (vide) partent juste
+  avant le lot ; si elles ne partent pas, le lot n'est pas lancé. Elles s'arrêtent sur alarme et à la fin du lot, et
+  repartent après « RÉPARÉ » et le Go. La tête coupe vanne et aimants et recale le zéro du vide seulement au premier
+  départ ; ensuite elle ne relance que sa surveillance (un objet tenu n'est pas lâché). Après une reprise du carnet,
+  rien n'est commandé avant le Go. Périodes dans `programme.yaml → lot` (vérifiées : plus courtes que le battement
+  des servos).
+- **Questions posées à Karulium (PR de la tâche 45 quater)**, avec la recommandation de Claude appliquée en
+  attendant : 18 seaux au plus par lot, sans pause ; saisie de l'inventaire du stockage (bocaux de semence, boîtes)
+  depuis la page web dans une tâche à part ; variété demandée dans le formulaire ; stockage bloqué sans photo de la
+  bande ; vanne coupée au premier départ du lot.

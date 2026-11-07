@@ -56,6 +56,12 @@
     font-size: 22px; font-weight: 800; color: #fff; cursor: pointer;
   }
   .gros:disabled { opacity: .45; }
+  .champs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+  .champs label { display: flex; flex-direction: column; font-size: 15px; flex: 1 1 140px; min-width: 0; }
+  .champs input, .champs select {
+    padding: 8px; font-size: 16px; border-radius: 8px; border: 1px solid var(--bord);
+    background: var(--fond); color: var(--texte); width: 100%;
+  }
   .petit {
     padding: 8px 14px; border-radius: 8px; border: 1px solid var(--bord); background: var(--fond);
     color: var(--texte); font-size: 16px; margin-top: 8px; cursor: pointer;
@@ -123,6 +129,30 @@
       <div id="alarmes"></div>
       <div id="poste-fut"></div>
       <div id="nettoyage"></div>
+      <!-- Lancer un lot (tâche 45 quater) : le Pi propose ; le Go se donne à l'écran de l'armoire. -->
+      <div id="lot" hidden>
+        <h2>Lancer un lot</h2>
+        <div id="lot-etat"></div>
+        <div class="carte">
+          <strong>Lot de seaux</strong>
+          <div class="champs">
+            <label>Format<select id="lot-format"></select></label>
+            <label>Nombre de seaux<input id="lot-nombre" type="number" min="1" step="1" value="1"></label>
+            <label>Variété de la semence<input id="lot-variete" list="lot-varietes" autocomplete="off"></label>
+          </div>
+          <datalist id="lot-varietes"></datalist>
+          <div id="lot-semence" class="doux"></div>
+          <button id="bouton-lot-seaux" class="petit vert">Proposer le lot de seaux</button>
+        </div>
+        <div class="carte">
+          <strong>Lot de bocaux</strong>
+          <div class="champs">
+            <label>Nombre de bocaux<input id="lot-bocaux" type="number" min="1" step="1" value="1"></label>
+          </div>
+          <div id="lot-bocaux-vides" class="doux"></div>
+          <button id="bouton-lot-bocaux" class="petit vert">Proposer le lot de bocaux</button>
+        </div>
+      </div>
       <h2>Modules</h2>
       <div id="modules"></div>
       <button id="bouton-anciennes" class="petit">Voir les dernières alarmes (même acquittées)</button>
@@ -359,6 +389,7 @@ function afficherEtat(etat) {
 
   afficherPosteFut(etat.poste_fut);
   afficherNettoyage(etat.nettoyage);
+  afficherLot(etat.lot);
 
   remplir("modules", ...(etat.modules.length ? etat.modules.map((m) =>
     el("div", { classe: "carte " + (m.statut === "alarme" ? "alarme" : m.attend ? "attention" : "ok") },
@@ -463,6 +494,64 @@ function afficherNettoyage(n) {
             "Lancer la nuit UV-ozone TOUT DE SUITE ? Personne dans l'enceinte, store fermé.", "orange")
           : null)));
 }
+
+// Lancer un lot (tâche 45 quater) : la page PROPOSE, le Go se donne à l'écran de l'armoire.
+function afficherLot(lot) {
+  $("lot").hidden = !lot;
+  if (!lot) return;
+  const p = lot.proposition;
+  remplir("lot-etat",
+    p && el("div", { classe: "carte " + (lot.refus_go ? "alarme" : "attention") },
+      el("strong", {}, "Lot de " + p.texte + " proposé"),
+      el("div", {}, lot.refus_go
+        ? "Il ne peut pas partir : " + lot.refus_go + "."
+        : "Donner le Go sur l'écran de l'armoire (bouton GO, puis Oui), devant la machine."),
+      el("button", { classe: "petit", surclick: () => ordre("/api/lot/annuler", "Lot proposé annulé.") },
+        "Annuler")),
+    lot.dernier && el("div", { classe: "doux" }, "Dernier lot lancé : " + lot.dernier + "."),
+    lot.fond.length ? el("div", { classe: "doux" }, "Boucles de fond du lot : " + lot.fond.join(", ") + ".") : null,
+    lot.refus_seaux && el("div", { classe: "doux" }, "Lot de seaux : " + lot.refus_seaux + "."),
+    lot.refus_bocaux && el("div", { classe: "doux" }, "Lot de bocaux : " + lot.refus_bocaux + "."));
+  // Les listes ne changent que si leur contenu change (ne pas gêner la saisie).
+  const formats = lot.formats.join("|");
+  const choix = $("lot-format");
+  if (choix.dataset.formats !== formats) {
+    choix.dataset.formats = formats;
+    choix.replaceChildren(...lot.formats.map((f) => el("option", { value: f }, f)));
+  }
+  const varietes = Object.keys(lot.varietes);
+  const liste = $("lot-varietes");
+  if (liste.dataset.varietes !== varietes.join("|")) {
+    liste.dataset.varietes = varietes.join("|");
+    liste.replaceChildren(...varietes.map((v) => el("option", { value: v })));
+    if (!$("lot-variete").value && varietes.length === 1) $("lot-variete").value = varietes[0];
+  }
+  $("lot-semence").textContent = varietes.length
+    ? "Bocaux de semence posés : " + varietes.map((v) => v + " " + lot.varietes[v]).join(", ")
+      + " (un bocal par seau, pas de rechargement en milieu de lot)."
+    : "Aucun bocal de semence noté au stockage.";
+  $("lot-bocaux-vides").textContent = "Bocaux vides notés au stockage : " + lot.bocaux_vides + ".";
+}
+
+async function proposerLot(chemin, corps, texteOk) {
+  try {
+    await api(chemin, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps),
+    });
+    dire(texteOk, "vert");
+  } catch (erreur) {
+    if (!(erreur instanceof Refus)) dire("Refusé : " + erreur.message, "rouge");
+  }
+  rafraichir();
+}
+
+$("bouton-lot-seaux").addEventListener("click", () => proposerLot("/api/lot/seaux", {
+  format: $("lot-format").value, nombre: parseInt($("lot-nombre").value, 10) || 0,
+  variete: $("lot-variete").value.trim(),
+}, "Lot de seaux proposé : donner le Go sur l'écran de l'armoire."));
+$("bouton-lot-bocaux").addEventListener("click", () => proposerLot("/api/lot/bocaux", {
+  nombre: parseInt($("lot-bocaux").value, 10) || 0,
+}, "Lot de bocaux proposé : donner le Go sur l'écran de l'armoire."));
 
 async function rafraichir() {
   clearTimeout(minuterie);
