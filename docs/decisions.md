@@ -974,3 +974,16 @@ non (procédure `spray/essai-materiel.md`, puis `pi/systeme/essai-spray.md`).
      refusent (exception 1) comme avant.
   9. Outil `vidange-spray` : `dose` et `nettoyer` prennent `--angle` (le bras sort dans la même
      commande ; entre deux commandes, la carte range le bras au bout de 2 s).
+- **Carte du spray, réponses à la PR n° 83** (tâche 39 bis, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Carte **ESP32-S3-DevKitC-1 N8** (environ 25 broches nécessaires) au lieu d'un ESP32 simple ; signalé au fil Spray
+     (fiche et achats).
+  2. Bras directement sur l'axe du moteur (`rapport: 1`, EXEMPLE) ; question posée au fil Spray.
+  3. Sens des pompes câblé en dur, courant réglé par la vis du pilote (`pompes_sens: null`).
+  4. Au démarrage, Pi muet 2 s et bras pas rangé : la carte le range seule, lentement (le bras ne doit pas rester
+     au-dessus du seau ; le chariot ne bouge pas tant que le Pi n'a pas lu « bras rangé »).
+  5. Balance muette pendant une dose : pompe arrêtée (on ne pompe jamais à l'aveugle).
+  6. Balances : 80 mesures/s, moyenne de 8, « instable » au-delà de 3 g (EXEMPLES, étape 8 de la procédure).
+  7. Agitateurs : PWM à 1000 Hz (jusqu'à 40 kHz si le moteur siffle).
+  8. Le 24 V de la boîte du spray suit l'arrêt d'urgence (à confirmer par l'Implantation) : la carte voit le pilote
+     redémarré et demande une nouvelle prise d'origine.
+  9. Un seul fil EN pour les 5 pilotes, 10 kΩ vers le 3,3 V (moteurs coupés pendant le démarrage de la carte).
