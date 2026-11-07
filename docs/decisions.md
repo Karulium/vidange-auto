@@ -1033,3 +1033,13 @@ non (procédure `spray/essai-materiel.md`, puis `pi/systeme/essai-spray.md`).
   6. Une erreur de fermeture (pas de contact, contact trop tôt, couvercle bloqué, carte redémarrée) n'arrête pas le
      cycle : retour à l'approche, bras rangé, alerte et seau « fermeture à vérifier ». Seul « le couvercle reste
      contre le rouleau » met le module en alarme (le bras ne bouge pas).
+- **Fermeture des seaux, réponses à la PR n° 86** (tâche 41, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Chariot en y 0,50 pendant la fermeture (EXEMPLE, comme la pose du couvercle) : gardé ; demandé au fil
+     Remplissage (07/11) si la place est bonne et si le bras ne gêne rien.
+  2. Fermeture ratée : le cycle continue, seau marqué « fermeture à vérifier » (pour ne pas bloquer la machine la
+     nuit) : gardé.
+  3. Pose du couvercle sur le seau plein par la préhension : ce geste n'existe pas encore dans le code. Il devient la
+     tâche 41 bis (à écrire depuis la fiche du module qui le fait, avant le premier cycle complet).
+  4. Bande du haut et tiroir : pas des places A 0,272 (couvercle 0,28) et C 0,30 (couvercle 0,315), soit 8 et 15 mm
+     de recouvrement vus de dessus. Question posée au fil Stockage (07/11) ; rien n'est changé en attendant, les
+     places restent dans les réglages.
