@@ -1492,3 +1492,16 @@ exemples (hauteur du bocal, angles, 360° au plus, essai à 120° puis tous les 
   `mycelium_lavage`, balance du plateau) et « porte_bocal » (`PorteBocalFluidnc`), construits comme les autres
   pièces ; la Préhension voit le porte-bocal et la manivelle (zone du porte-bocal). Absents ou en EXEMPLE sur la
   vraie machine : le poste « mycelium » dit pourquoi.
+- **Bocal neuf, réponses à la PR n° 94** (tâche 19 quater, 07/11/2026, niveau 1, tranché par Claude sauf le point 5) :
+  1. « Le moteur cale » : lire l'erreur de suivi du pilote en boucle fermée de la rotation (carte n° 4), avec la
+     tâche 24 (dérive de position) ou la 45 quater si elle arrive avant. D'ici là, le geste refuse de partir sur la
+     vraie machine.
+  2. Bocal qui tourne sur la tôle pendant le dévissage : tapis silicone de 1 mm sous les 18 places (la Préhension le
+     fait ajouter, 07/11) ; couple d'ouverture d'un vrai bocal stérilisé à mesurer par Karulium.
+  3. Masses (capsule, couvercle percé, bocal plein) et résolution du palier pesé : à peser par Karulium ; si une
+     capsule est trop légère pour le palier, l'étape 5 passera au couple.
+  4. Reprise du bocal vide : tâche à part ; d'ici là, les mors s'ouvrent et la machine demande de l'enlever à la
+     main.
+  5. Lot de 20 seaux pour 18 bocaux de semence et 18 capsules : question de capacité posée à Karulium (07/11) ;
+     recommandation : 18 seaux au plus par lot, sans pause.
+  6. Tenue d'un bocal plein par les 3 électroaimants au choc du transport : à voir au premier essai.
