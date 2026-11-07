@@ -39,9 +39,10 @@ def test_au_depart_rien_n_est_actionne_et_tout_est_au_repos(faux_et_materiel):
     }
     assert materiel.lire("voyant_buzzer") is False
     assert faux.commande("voyant_buzzer") is False
-    # La carte relais est « à l'envers » (niveau_actif: bas) : au repos, la broche est haute.
+    # La carte relais I2C est « à l'envers » (niveau_actif: bas) : au repos, la broche est haute.
     assert faux.bus["/dev/i2c-1"].appareils[0x20].niveau("P1") is True
-    assert faux.gpios["/dev/gpiochip0"].niveau("GPIO23") is True
+    # Le relais du voyant-buzzer est en actif haut : au repos, la broche est basse.
+    assert faux.gpios["/dev/gpiochip0"].niveau("GPIO23") is False
 
 
 def test_entrees_actionnees(faux_et_materiel):
@@ -91,8 +92,8 @@ def test_le_voyant_buzzer_est_sur_un_gpio_direct_sans_i2c(faux_et_materiel):
     faux, materiel = faux_et_materiel
     materiel.ecrire("voyant_buzzer", True)
     assert faux.commande("voyant_buzzer") is True
-    # Niveau actif bas : relais commandé = broche basse ; la carte à relais I2C n'est pas touchée.
-    assert faux.gpios["/dev/gpiochip0"].niveau("GPIO23") is False
+    # Niveau actif haut : relais commandé = broche haute ; la carte à relais I2C n'est pas touchée.
+    assert faux.gpios["/dev/gpiochip0"].niveau("GPIO23") is True
     assert faux.bus["/dev/i2c-1"].appareils[0x20].niveau("P0") is True
     assert faux.bus["/dev/i2c-1"].appareils[0x20].niveau("P1") is True
     materiel.mettre_au_repos()
@@ -126,8 +127,8 @@ def test_carte_relais_en_gpio_direct(entrees_sorties):
     faux, materiel = ouvrir(entrees_sorties)
     gpio = faux.gpios["/dev/gpiochip0"]
     # GPIO12 : le battement du Pi, sur la carte « pi » elle-même.
-    # GPIO23 : le module relais du voyant-buzzer (niveau actif bas : haut au repos).
-    assert gpio.sorties == {"GPIO12": False, "GPIO21": False, "GPIO23": True}
+    # GPIO23 : le module relais du voyant-buzzer (niveau actif haut : bas au repos).
+    assert gpio.sorties == {"GPIO12": False, "GPIO21": False, "GPIO23": False}
     materiel.ecrire("voyant_pret_fut", True)
     assert gpio.niveau("GPIO21") is True
     assert faux.commande("voyant_pret_fut") is True

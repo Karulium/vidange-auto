@@ -2150,7 +2150,7 @@ Fiches de l'Implantation du 07/11/2026 (`implantation/logiciel/relais-du-pi.md`,
   2. Le module `relais_buzzer` est alimenté en 24 V non coupé ; son GPIO du Pi est en 3,3 V. Recommandation : un module
      à optocoupleur (isolation du Pi), sinon un transistor ; à préciser sur la fiche.
 - **Réponses à la PR n° 106** (tâche 45 tredecies, 07/11/2026, niveau 1, tranché par Claude) :
-  1. `relais_buzzer` sur GPIO23, niveau actif bas (EXEMPLE) : gardé ; question posée à l'Implantation (à écrire dans
-     `implantation/logiciel/relais-du-pi.md`).
-  2. Commande d'un module relais en 24 V depuis un GPIO à 3,3 V : module à optocoupleur (sinon un transistor) ;
-     question posée à l'Implantation.
+  1. `relais_buzzer` sur GPIO23, en **actif haut** (réponse de l'Implantation du 07/11, écrite dans
+     `implantation/logiciel/relais-du-pi.md`) : au démarrage, GPIO23 est une entrée tirée vers le bas ; un module
+     actif bas ferait sonner l'alarme à chaque démarrage du Pi. Corrigé dans `docs/entrees-sorties.yaml`.
+  2. Module du voyant-buzzer : relais 1 voie à **optocoupleur**, entrée 3,3 V, cavalier H/L sur H (Implantation).

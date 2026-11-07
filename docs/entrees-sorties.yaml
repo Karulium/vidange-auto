@@ -197,7 +197,9 @@ cartes:
         K8: P7
       niveau_actif: bas
   # Module relais 1 voie du voyant-buzzer, sur un GPIO direct du Pi (pas sur l'I2C), alimenté en
-  # 24 V non coupé. GPIO23 et niveau_actif : EXEMPLES, à confirmer par l'Implantation. Le GPIO
+  # 24 V non coupé. GPIO23 en actif HAUT, validé par l'Implantation (07/11, relais-du-pi.md) :
+  # module à optocoupleur, entrée 3,3 V, cavalier H/L sur H. Au démarrage, GPIO23 est une entrée
+  # tirée vers le bas : en actif haut, l'alarme ne sonne pas à chaque démarrage du Pi. Le GPIO
   # est pris parmi les broches libres : ni « gpio_reserves » (bus et ports série du Pi), ni celles
   # des autres cartes (vérifié au démarrage).
   relais_buzzer:
@@ -212,7 +214,7 @@ cartes:
       fichier: /dev/gpiochip0
       broches:
         K1: GPIO23
-      niveau_actif: bas
+      niveau_actif: haut
   # 2ᵉ adaptateur USB-RS485, réservé aux 3 cartes de pesée embarquées (RP2040 + HX711 : griffe,
   # préhension, plateau du remplissage) et à la boîte du poste du fût (pesée du plateau du fût,
   # tâche 17 bis), séparé des liaisons série des capteurs d'ozone (docs/decisions.md, 28/10).
