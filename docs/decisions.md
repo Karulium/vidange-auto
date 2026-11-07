@@ -1408,3 +1408,47 @@ non). Source : `micropore/logiciel/micropore-pour-logiciel.md` (§ 1 a, gestes 0
      - **Contrôle au démarrage** : `plateau_lecture_qr` + hauteur du seau (chaque format) ≤ limite de hauteur
        de la position de lecture (0,68 si c'est le poste, sinon `lecture_qr_bord_max_z`) ; erreur claire sinon.
        Aussi : `plateau_lecture_qr` = `objectif_z_m` − `etiquette_hauteur_m`.
+
+## Programme principal, cartes du chariot et de la tête (tâche 45 ter, 07/11/2026)
+
+Code : `pi/vidange/cycle/machine.py` (`construire_cartes`, `CartesMachine`, `PiecesMachine`), branché dans
+`pi/vidange/demarrage.py` ; essai : `pi/systeme/essai-cartes-chariot-tete.md` (testé sur le vrai matériel : non).
+Aucun chiffre nouveau : tout vient de `docs/entrees-sorties.yaml`, `fluidnc.yaml`, `pesees.yaml` et `machine.yaml`.
+
+- **Construites une fois, au démarrage**, comme le font les outils d'essai (`vidange-remplissage`,
+  `vidange-prehension`, `vidange-micropore`, `vidange-lavage`), sur les liaisons et le bus des pesées du
+  programme (une seule liaison par carte) : chariot (`ChariotFluidnc` et la balance de la carte du plateau),
+  boîtier du chariot (PCA9685 et ToF lus par la carte du plateau), tête du micropore (`TeteMicropore`), bras de la
+  fermeture (`BrasFermeture`), moteur d'avance du ruban (`AvanceFluidnc`), tête de la Préhension
+  (`TeteFluidnc` et `Prehension`), Lavage (`Lavage` et `EauLavage`) ; la carte du spray est seulement regardée
+  (le Spray est déjà construit par le démarrage).
+- **Une pièce absente n'arrête jamais le démarrage** : elle n'est pas construite et les postes qui en ont besoin
+  disent « pas lancé : raison » (journal, check-list « cartes du chariot et de la tête », écran). Absente veut
+  dire : signal absent de la liste ; sur la vraie machine, ligne `exemple: true` (le signal ou sa carte),
+  `fluidnc.yaml` ou `pesees.yaml` en EXEMPLE, programme d'une carte de pesée ou du spray fait avec des réglages
+  d'EXEMPLE ; carte FluidNC dont le numéro de série USB n'est sur aucun port ; carte du bus qui ne répond pas
+  (adaptateur débranché, carte muette, HX711 muet, PCA9685 ou ToF muet) ; réglage qui ne va pas (signal
+  absent de `fluidnc.yaml`...).
+- **Postes et pièces** : seau_vide et couvercle → chariot, tête ; qr_du_flanc → (vision) chariot ; micropore →
+  (vision) chariot, tête du micropore, moteur d'avance ; fermeture → chariot, bras ; spray → carte du spray ;
+  entonnoir → tête ; lavage_bocaux → tête, Lavage.
+- **Choix de Claude (tâche 45 ter, en attendant les réponses de Karulium)** :
+  1. La présence est regardée **une seule fois, au démarrage** (les états des postes sont calculés à ce
+     moment-là, comme avant) : une carte branchée après demande de relancer le programme. Une carte qui tombe
+     pendant un lot est vue par les conditions du chef (« carte connectée et sans alarme »), comme avant.
+  2. **Rien n'est commandé au démarrage** : aucun ordre aux servos, aucune sortie FluidNC, pas de recalage du
+     zéro du vide. Les boucles en fond de ces pièces (balance, vide, battement des servos) partiront avec le
+     lot, quand `PiecesMachine.remplissage` sera écrit.
+  3. Sans le Mycélium (pas construit ici), la manivelle est inconnue pour la Préhension : la tête ne va jamais
+     dans la zone du porte-bocal. Les angles gardés de la tête sont le même fichier (et le même objet) que
+     ceux du retour en lieu sûr.
+  4. `PiecesMachine.remplissage`, `entonnoir` et `lavage_bocaux` restent non écrits : ils ne sont jamais
+     appelés tant que le mycélium (bocal neuf), la griffe et la photo du plafond manquent. Avec les cartes
+     là, il restera à y assembler le Mycélium (agitateur, porte-bocal), le Stockage, le Micropore, la
+     Fermeture, le Couvercle et le Spray, comme dans `vidange.cycle.simulation`.
+- **Cartes du chariot et de la tête, réponses à la PR n° 93** (tâche 45 ter, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Le lot complet sur les vraies cartes (`PiecesMachine.remplissage`, `entonnoir`, `lavage_bocaux`) : tâche 45 quater,
+     juste après le geste du bocal neuf de semence (tâche 19 quater), avant la tâche 23.
+  2. Une carte branchée après le démarrage ne compte qu'après une relance du programme : gardé ; un bouton
+     « relire les cartes » sur la page web viendra peut-être plus tard.
+  3. Une carte du spray programmée avec des réglages d'EXEMPLE bloque le poste spray sur la vraie machine : gardé.

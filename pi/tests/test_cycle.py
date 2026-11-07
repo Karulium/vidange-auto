@@ -10,9 +10,8 @@ from vidange.cycle import ORDRE_SEAU, ModeSeaux, verifier_ordre
 from vidange.cycle.machine import (
     BOCAL_NEUF,
     CAMERA_ABSENTE,
-    CARTE_DE_LA_TETE,
     CARTE_SPRAY,
-    CARTES_DU_CHARIOT,
+    CARTES_PAS_CONSTRUITES,
     INSPECTION_ABSENTE,
     INSPECTION_EXEMPLE,
     VISION_ABSENTE,
@@ -244,14 +243,14 @@ def test_les_pieces_de_la_machine_disent_ce_qui_manque(reglages_depot):
     chef = Chef(reglages.machine, reglages.programme.chef)
     # Faux matériel (essai) : les EXEMPLES des parties sont permis ; poste du fût pas ouvert.
     mode = ModeSeaux(reglages, PiecesMachine(None, None, vraie_machine=False), chef)
-    assert mode.etats["seau_vide"].raison == CARTES_DU_CHARIOT
+    assert mode.etats["seau_vide"].raison == CARTES_PAS_CONSTRUITES
     # Sans la vision donnée aux pièces, la raison est dite (jamais « tâche 40 ter manquante »).
     assert mode.etats["qr_du_flanc"].raison == VISION_ABSENTE
     assert mode.etats["spray"].raison == CARTE_SPRAY
     assert mode.etats["mycelium"].raison == BOCAL_NEUF
     assert mode.etats["micropore"].raison == VISION_ABSENTE
     assert mode.etats["fut"].raison == "poste du fût pas suivi (entrées/sorties pas ouvertes)"
-    assert mode.refus_lot() == f"« seau_vide » pas lancé : {CARTES_DU_CHARIOT}"
+    assert mode.refus_lot() == f"« seau_vide » pas lancé : {CARTES_PAS_CONSTRUITES}"
 
 
 def test_la_vision_du_micropore_ne_manque_que_pour_ses_reglages_ou_sa_camera(reglages_depot):
@@ -273,14 +272,15 @@ def test_la_vision_du_micropore_ne_manque_que_pour_ses_reglages_ou_sa_camera(reg
     sans_exemple = inspection.model_copy(update={"exemple": False})
     vrai = vision.model_copy(update={"inspection": sans_exemple})
     assert vrai.exemple
-    assert pieces(True, vrai).manque("qr_du_flanc") is None
-    assert pieces(True, vrai).manque("micropore") == CARTE_DE_LA_TETE
+    # Puis les cartes du chariot et de la tête (tâche 45 ter : tests/test_cycle_cartes.py).
+    assert pieces(True, vrai).manque("qr_du_flanc") == CARTES_PAS_CONSTRUITES
+    assert pieces(True, vrai).manque("micropore") == CARTES_PAS_CONSTRUITES
     sans_partie = vrai.model_copy(update={"inspection": None})
     assert pieces(True, sans_partie).manque("qr_du_flanc") == INSPECTION_ABSENTE
     # Sans caméra ouverte.
     assert pieces(True, vrai, None).manque("qr_du_flanc") == CAMERA_ABSENTE
     # Faux matériel : les EXEMPLES sont permis.
-    assert pieces(False).manque("qr_du_flanc") is None
+    assert pieces(False).manque("qr_du_flanc") == CARTES_PAS_CONSTRUITES
     assert "40 ter" not in " ".join(
         str(pieces(False).manque(poste)) for poste in ("qr_du_flanc", "micropore")
     )
@@ -320,11 +320,12 @@ def test_au_demarrage_la_check_list_dit_ce_qui_manque(reglages, entrees_sorties,
         fil.join(10)
     journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
     assert "Mode seaux, fut : prêt" in journal
-    assert f"Mode seaux, seau_vide : pas lancé : {CARTES_DU_CHARIOT}" in journal
-    # La vision du micropore est écrite : le QR du flanc attend seulement le chariot (cœur).
-    assert "Mode seaux, qr_du_flanc : pas lancé : attend « seau_vide » (pas prêt)" in journal
-    assert f"[attention] mode seaux, micropore : pas lancé : {CARTE_DE_LA_TETE}" in journal
-    assert f"[attention] mode seaux, couvercle : pas lancé : {CARTES_DU_CHARIOT}" in journal
+    # Les cartes du chariot et de la tête sont construites sur le faux matériel (tâche 45 ter) ;
+    # le boîtier du chariot n'y est pas branché (pas de PCA9685 ni de ToF).
+    assert "Mode seaux, seau_vide : pas lancé : attend « mycelium » (pas prêt)" in journal
+    assert "Mode seaux, qr_du_flanc : pas lancé : attend « mycelium » (pas prêt)" in journal
+    assert "[attention] mode seaux, micropore : pas lancé : boîtier du chariot" in journal
+    assert "[attention] mode seaux, couvercle : pas lancé : attend « fermeture »" in journal
     assert "[bloquant] mode seaux : aucun lot de seaux ne peut partir" in journal
 
 

@@ -14,9 +14,10 @@ from vidange.cycle import (
     verifier_ordre,
 )
 from vidange.cycle.machine import (
-    ENTONNOIR,
-    LAVAGE_DES_BOCAUX,
+    BOCAUX_SALES,
+    CARTES_PAS_CONSTRUITES,
     NETTOYAGE_ABSENT,
+    PHOTO_DU_PLAFOND,
     PiecesMachine,
 )
 from vidange.cycle.mode_bocaux import LotBocaux
@@ -211,8 +212,8 @@ def test_les_pieces_de_la_machine_disent_ce_qui_manque(reglages_depot):
     )
     chef = Chef(reglages.machine, reglages.programme.chef)
     mode = ModeBocaux(reglages, PiecesMachine(None, None, vraie_machine=False), chef)
-    assert mode.etats["entonnoir"].raison == ENTONNOIR
-    assert mode.etats["lavage_bocaux"].raison == LAVAGE_DES_BOCAUX
+    assert mode.etats["entonnoir"].raison == CARTES_PAS_CONSTRUITES
+    assert mode.etats["lavage_bocaux"].raison == CARTES_PAS_CONSTRUITES
     assert mode.refus_lot() is not None and mode.refus_lavage() is not None
     nuit = ModeNuit(reglages, PiecesMachine(None, None, vraie_machine=False), None)
     assert nuit.etats["enceinte"].raison == NETTOYAGE_ABSENT
@@ -465,7 +466,7 @@ def test_l_ecran_dit_ce_qui_manque_selon_le_mode(tmp_path, reglages_depot):
         banc.mode.changer("lavage", "essai")
         banc.tour()
         assert banc.texte("t_attend") == "Lavage des bocaux : pas prêt"
-        assert ENTONNOIR not in banc.texte("t_info")
+        assert PHOTO_DU_PLAFOND not in banc.texte("t_info")
         assert banc.texte("t_info").startswith("« lavage_bocaux » pas lancé")
         banc.mode.changer("uv_ozone", "essai")
         banc.tour()
@@ -487,11 +488,12 @@ def test_au_demarrage_la_check_list_dit_ce_qui_manque(reglages, entrees_sorties,
         arret.set()
         fil.join(10)
     journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
-    # Faux matériel : la nuit UV-ozone est prête, les bocaux ne le sont pas (pas de Préhension).
+    # Faux matériel : la nuit UV-ozone est prête, les bocaux ne le sont pas (la Préhension est
+    # construite, la photo du plafond n'est pas lue).
     assert "Nuit UV-ozone, enceinte : prêt" in journal
     assert "Nuit UV-ozone, ozone : prêt" in journal
     assert "nuit UV-ozone, enceinte" not in journal  # prête : rien à signaler
-    assert f"Mode bocaux, entonnoir : pas lancé : {ENTONNOIR}" in journal
+    assert f"Mode bocaux, entonnoir : pas lancé : {PHOTO_DU_PLAFOND}" in journal
     assert "Mode bocaux, versement : pas lancé : geste pas encore écrit" in journal
-    assert f"[attention] mode bocaux, lavage_bocaux : pas lancé : {LAVAGE_DES_BOCAUX}" in journal
+    assert f"[attention] mode bocaux, lavage_bocaux : pas lancé : {BOCAUX_SALES}" in journal
     assert "[attention] mode bocaux : aucun lot de bocaux ne peut partir" in journal

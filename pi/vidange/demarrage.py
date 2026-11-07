@@ -9,7 +9,10 @@
    tout (code de sortie 3). Lance la copie de secours quotidienne.
 5. Ouvre les entrées/sorties et les liaisons avec les cartes FluidNC. Du matériel qui manque
    n'arrête pas le programme : la check-list le signale et refuse la production.
-6. Met en route le chef d'orchestre : prépare le mode seaux, le mode bocaux et la nuit UV-ozone
+6. Construit les cartes du chariot et de la tête qui sont là (vidange.cycle.machine : chariot,
+   boîtier du chariot, tête du micropore, bras de la fermeture, tête de la Préhension, Lavage,
+   carte du spray ; présence regardée une fois, rien n'est commandé), puis met en route le chef
+   d'orchestre : prépare le mode seaux, le mode bocaux et la nuit UV-ozone
    (vidange.cycle : chaque poste est prêt, ou la check-list et l'écran disent pourquoi pas),
    reprend le cycle noté dans le carnet (après une coupure, le lot de seaux ou de bocaux en cours
    compris ; une nuit UV-ozone reprend générateur coupé, jamais relancé seul), et propose le
@@ -52,7 +55,7 @@ from vidange.api import ServeurApi, Services, constats_api, creer_app
 from vidange.cameras import Cameras, Flux
 from vidange.chef import Carnet, Chef, ErreurChef, Module
 from vidange.cycle import ModeBocaux, ModeNuit, ModeSeaux
-from vidange.cycle.machine import PiecesMachine
+from vidange.cycle.machine import PiecesMachine, construire_cartes, presence_fluidnc
 from vidange.distance import PiloteDistance
 from vidange.ecran import SIGNAL as SIGNAL_ECRAN
 from vidange.ecran import Ecran, LiaisonEcran, PortEcran, ouvrir_port_ecran
@@ -702,6 +705,23 @@ def principal(
     )
     mode = ModeMachine(dossier_donnees / NOM_MODE, chef, registre)
     cameras = Cameras(reglages.programme.cameras, dossier_donnees, raccords.cameras)
+    # Les angles gardés (rotations de la griffe et de la tête) : un seul fichier, un seul gardien.
+    angles = AnglesGardes(dossier_donnees / NOM_ANGLES)
+    vraie_machine = raccords.fabrique is None
+    # Les cartes du chariot et de la tête (tâche 45 ter) : construites si elles sont là (présence
+    # regardée maintenant, une fois), sinon chaque poste qui en a besoin dit pourquoi.
+    cartes = construire_cartes(
+        reglages,
+        materiel if erreur_materiel is None else None,
+        liaisons,
+        pesees,
+        poste,
+        vraie_machine,
+        presence_fluidnc(reglages.fluidnc, raccords.ports),
+        mode=lambda: mode.actuel,
+        donnees=dossier_donnees,
+        garde=angles,
+    )
     # Le mode seaux : chaque poste du cycle d'un seau, prêt ou pourquoi pas (vrai matériel :
     # réglages d'EXEMPLE interdits). Un lot de seaux ne part qu'en mode « production ».
     mode_seaux = ModeSeaux(
@@ -709,11 +729,12 @@ def principal(
         PiecesMachine(
             poste,
             materiel if erreur_materiel is None else None,
-            vraie_machine=raccords.fabrique is None,
+            vraie_machine=vraie_machine,
             spray=spray,
             vision=reglages.vision,
             regard=Photographe(cameras, reglages.vision, registre),
             donnees=dossier_donnees,
+            cartes=cartes,
         ),
         chef,
         mode_actuel=lambda: mode.actuel,
@@ -797,10 +818,11 @@ def principal(
     pieces_bocaux = PiecesMachine(
         poste,
         materiel if erreur_materiel is None else None,
-        vraie_machine=raccords.fabrique is None,
+        vraie_machine=vraie_machine,
         spray=spray,
         nettoyage=nettoyage,
         vision=reglages.vision,
+        cartes=cartes,
     )
     mode_bocaux = ModeBocaux(reglages, pieces_bocaux, chef, mode_actuel=lambda: mode.actuel)
     mode_nuit = ModeNuit(reglages, pieces_bocaux, nettoyage)
@@ -821,7 +843,7 @@ def principal(
                 reglages.machine,
                 liaisons,
                 reglages.fluidnc.cartes,
-                garde=AnglesGardes(dossier_donnees / NOM_ANGLES),
+                garde=angles,
                 compte_tours=compte_tours,
             ),
             mode_seaux,
@@ -870,6 +892,7 @@ def principal(
                 "enceinte": lambda: constats_nettoyage(nettoyage),
                 "spray": lambda: constats_spray(spray),
                 "air": lambda: constats_air(air),
+                "cartes du chariot et de la tête": cartes.constats,
                 "mode seaux": mode_seaux.constats,
                 "mode bocaux": mode_bocaux.constats,
                 "nuit UV-ozone": mode_nuit.constats,

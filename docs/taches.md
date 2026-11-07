@@ -707,13 +707,23 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   la raison ; reprise après coupure au milieu d'un seau (carnet) ; lot complet simulé sans alarme.
 - [x] **45 bis. Programme principal : mode bocaux et nuit UV-ozone** — Modèle : Sonnet. À faire après la 45 :
   même branchement pour `module_entonnoir`, `module_lavage_bocaux` et la nuit UV-ozone.
-- [ ] **45 ter. Programme principal : construire les vraies cartes du chariot et de la tête** — Modèle : Opus,
+- [x] **45 ter. Programme principal : construire les vraies cartes du chariot et de la tête** — Modèle : Opus,
   effort moyen. Dans `pi/vidange/cycle/machine.py` (`PiecesMachine`), construire depuis `docs/entrees-sorties.yaml`
   et les réglages : carte du plateau du chariot (RP2040-Zero, pesée, PCA9685, ToF), tête de la Préhension, Lavage,
   cartes FluidNC, spray ; c'est ce qui bloque encore les postes « qr_du_flanc », « micropore », « couvercle »,
   « fermeture », « entonnoir » et « lavage » sur la vraie machine (PR 89 à 92). Chaque pièce absente ou en EXEMPLE ⇒
   poste « pas lancé : raison ». Pas de geste nouveau. Tests avec le faux matériel branché par le même chemin que le
   vrai ; procédure d'essai « démarrer la vraie machine et lire la check-list ».
+- [ ] **19 quater. Bocal neuf de semence pour le Mycélium** — Modèle : Sonnet, effort moyen. Le geste
+  `nouveau_bocal` (prise d'un bocal de semence au stockage, ouverture de la capsule, pose sur le porte-bocal /
+  l'agitateur) n'existe que dans le simulateur ; c'est lui qui bloque le cœur d'un lot sur la vraie machine (PR 93).
+  À écrire d'abord : demander au fil qui porte ce geste (Mycélium ou Préhension) un fichier
+  `<module>/logiciel/bocal-neuf-pour-logiciel.md`. Ne pas inventer le geste. Construire aussi le Mycélium
+  (agitateur, porte-bocal) dans `cycle/machine.py`.
+- [ ] **45 quater. Programme principal : le lot complet sur les vraies cartes** — Modèle : Opus, effort moyen. Après
+  la 19 quater. Écrire `PiecesMachine.remplissage`, `entonnoir` et `lavage_bocaux` (PR 93), lancer les boucles de
+  fond des pièces (balance, vide, battement des servos) avec le lot, et le bouton « Lot de seaux » / « Lot de
+  bocaux » sur la page web puis le Go à l'écran (`docs/decisions.md`, PR 89, question 1).
 - [ ] 23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi
 
 ## Partie 3 : fonctions en plus, voir `docs/fonctionnalites.md`

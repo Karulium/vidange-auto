@@ -34,7 +34,7 @@ from vidange.fluidnc.ports import ErreurFluidnc
 from vidange.griffe.simulation import FausseForce
 from vidange.journal import configurer_journal
 from vidange.lavage.bocaux import LavageBocaux
-from vidange.lavage.eau import CHAUFFAGE, EauLavage
+from vidange.lavage.eau import CHAUFFAGE, NOM_EAU, EauLavage
 from vidange.lavage.lavage import Lavage
 from vidange.lavage.signaux import signaux_lavage
 from vidange.materiel import ErreurMateriel, FausseFabrique, Materiel
@@ -156,7 +156,7 @@ def main(arguments: list[str] | None = None) -> int:
             eau = EauLavage(
                 machine.lavage,
                 signaux_lavage(liaisons, reglages.fluidnc),
-                fichier=donnees / "lavage.json",
+                fichier=donnees / NOM_EAU,
             )
             lavage = Lavage(
                 machine,

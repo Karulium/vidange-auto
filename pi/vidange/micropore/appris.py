@@ -35,6 +35,9 @@ from vidange.reglages import (
 
 journal = donner_journal("micropore.appris")
 
+# Les gestes appris, dans le dossier des données (vidange-micropore, programme principal).
+NOM_APPRIS = "micropore-appris.yaml"
+
 ESCAMOTE = "escamote"
 ENTETE = (
     "# Gestes appris du micropore : écrit par le Pi (vidange-micropore), jamais à la main.\n"

@@ -48,6 +48,9 @@ from vidange.reglages import Lavage
 
 journal = donner_journal("lavage.eau")
 
+# Le fichier de l'eau du fût, dans le dossier des données (vidange-lavage, programme principal).
+NOM_EAU = "lavage.json"
+
 # Noms des signaux (docs/entrees-sorties.yaml, fluidnc.yaml).
 FLOTTEUR = "flotteur_lavage"
 EAU = "eau_reseau_lavage"
