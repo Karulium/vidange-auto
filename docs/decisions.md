@@ -1015,3 +1015,21 @@ non (procédure `spray/essai-materiel.md`, puis `pi/systeme/essai-spray.md`).
   8. Contact appris une fois par format (pas par rangée) : gardé, vérifié à l'essai.
   À faire plus tard : vision de la caméra du micropore (QR, trous, contrôle de chaque pièce), branchement dans le
   programme principal, bouton « rouleau » à l'écran et dans l'API.
+- **Fermeture des seaux, côté Pi** (tâche 41, 07/11/2026, niveau 1, tranché par Claude ; les questions de la PR sont
+  encore ouvertes) :
+  1. Le bras est tourné par le servo de la PCA9685 (`servo_fermeture_seaux`), angles de l'AXE du servo. Étalonnage
+     (`fermeture → bras → butee_servo_deg`) : angle où le doigt touche le plat ; travail = butée + surcourse,
+     rangé = butée − 160° (EXEMPLES, à étalonner à la mise en service).
+  2. Le bras est « rangé » pour le Pi seulement s'il l'a ordonné, que l'attente (0,5 s) est passée et que la carte
+     du plateau est vivante et n'a pas redémarré depuis `stabilisation_s` ; jamais ordonné depuis le démarrage du
+     Pi : « inconnu », le plateau ne monte pas au-dessus de la limite du bras (règle 5). Le premier ordre se donne
+     sans rampe, plateau en bas (zéro de la montée d'abord).
+  3. Nouvelle règle 11 du chariot : pas de rotation trigo du plateau tant que le couvercle touche le rouleau
+     (`fermeture → rotation → sens_horaire` donne le signe de l'angle de l'axe A).
+  4. Position du chariot pendant la fermeture : pas trouvée dans les fichiers du Remplissage, posée en réglage
+     (`fermeture → chariot_y`, EXEMPLE 0,50 comme la pose du couvercle).
+  5. Diamètre du couvercle dans la table des formats (`griffe → formats → diametre_couvercle`) ; le contrôle de la
+     bande du haut vérifie le bord du couvercle du 1er seau (≤ `bord_x_max`).
+  6. Une erreur de fermeture (pas de contact, contact trop tôt, couvercle bloqué, carte redémarrée) n'arrête pas le
+     cycle : retour à l'approche, bras rangé, alerte et seau « fermeture à vérifier ». Seul « le couvercle reste
+     contre le rouleau » met le module en alarme (le bras ne bouge pas).

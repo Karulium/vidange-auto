@@ -209,6 +209,13 @@ micropore:
       seau_d: {approche_deg: 70.57, contact_deg: 73.12, appui_deg: 82.04, contact_mm: 51, camera_rouleau_deg: 32}
   premier_trou_deg: 20
 
+# Le couvercle imaginaire de la Fermeture des seaux (tâche 41) : il touche le rouleau à Hc (+ écart)
+# bras au travail, et pousse de tant de newtons par mètre de plateau au-dessus (10 000 N/m : 60 N au
+# clip, à Hf, pour un clip de 6 mm).
+fermeture:
+  raideur_n_par_m: 10000
+  ecart_contact_m: 0.0
+
 # Capteurs (entrées tout-ou-rien de docs/entrees-sorties.yaml) actionnés au départ.
 capteurs_actionnes: []
 

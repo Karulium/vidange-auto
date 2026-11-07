@@ -740,6 +740,42 @@ module_spray(spray, ..., micropore_escamote=micropore.escamotee)
 - `vidange-micropore etat | servo | escamote | apprendre | lame | charger | historique | annuler` pour les
   essais et l'apprentissage (`systeme/essai-micropore.md`).
 
+
+## Fermeture des seaux (tâche 41)
+
+Un bras à rouleau, porté par le poteau du chariot de remplissage, est tourné **à vide** par un servo DS3225
+(« rangé » ↔ « travail »). C'est le **plateau** qui ferme : il monte jusqu'à `Hf` contre le rouleau, sous la
+surveillance de la balance du plateau, puis tourne **en sens horaire** pour clipser tout le tour. Le signal du
+servo vient d'une voie de la PCA9685 du boîtier du chariot (comme le micropore, tâche 40 bis). Le bras n'a
+**aucun capteur** : c'est la balance qui prouve qu'il est au travail. Réglages : `machine.yaml → fermeture`
+(EXEMPLES marqués) et `griffe → formats → diametre_couvercle`.
+
+```python
+bras = BrasFermeture(reglages.machine.fermeture, reglages.pesees.i2c, materiel)
+fermeture = Fermeture(reglages.machine, bras, registre)
+fermeture.brancher(remplissage)  # règles 4, 5 et 11, geste de fermeture, bras rangé au démarrage
+fond.ajouter(bras.observer)  # battement de l'angle, redémarrages de la carte
+module_remplissage(...)  # ajoute les étapes « ranger_le_bras » (début) et « fermer_le_seau »
+```
+
+- **Gestes** (`Remplissage.geste_fermer`, puis `Fermeture.geste_fermer`) : barres ouvertes, plateau à
+  `H_app`, chariot à `fermeture → chariot_y` ; bras au travail (rampe) ; pesée `P0` ; montée lente jusqu'au
+  contact (`F = (P − P0) × 9,81 > force_contact_n`) dans la fenêtre `Hc ± fenetre_contact_m`, puis jusqu'à
+  `Hf` avec `F ≤ force_max_n` ; rotation horaire ; descente à `H_app` jusqu'à `F < force_contact_n` ; bras
+  rangé. Pas de contact, contact trop tôt, effort trop grand : retour à `H_app`, bras rangé, alerte au
+  registre et seau « fermeture à vérifier » ; le Pi ne refait pas l'essai tout seul. Couvercle qui reste
+  contre le rouleau : alarme, le bras ne bouge pas.
+- **Règle 5** (déjà là) : le bras ne tourne que plateau ≤ `galet_plateau_max_z`, et le plateau ne monte
+  au-dessus que bras **vu rangé** (`BrasFermeture.est_range` : ordonné rangé, attente passée, carte
+  vivante). **Règle 11** (`ReglesRemplissage.refus_rotation_trigo`) : jamais de rotation trigo tant que le
+  couvercle est contre le rouleau. Au démarrage (bras « inconnu ») : zéro de la montée, puis
+  `geste_ranger_bras` (premier ordre sans rampe, plateau en bas), puis le reste.
+- Le signal du servo n'est **jamais coupé**, même à l'arrêt ; une carte redémarrée (compteur changé) reçoit
+  l'angle tout de suite et compte « rangé » de nouveau après `stabilisation_s` ; en plein geste, le geste
+  est arrêté (retour à `H_app`, bras rangé, alerte).
+- `vidange-fermeture etat | servo | ranger | travail` (étalonnage du bras) et `vidange-remplissage fermer
+  <format>` (geste entier) pour les essais (`systeme/essai-fermeture.md`).
+
 ## Cartes de pesée du bus RS485 (tâche 22 bis)
 
 Trois cartes RP2040 + HX711 (griffe, préhension, plateau du remplissage) sur un bus RS485 à elles

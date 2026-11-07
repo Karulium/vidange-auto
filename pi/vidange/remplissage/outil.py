@@ -13,6 +13,11 @@
   vidange-remplissage vidage seau_a           ramener au vidage (plateau à la hauteur du format)
   vidange-remplissage ranger seau_a file_1    pousser le seau du plateau sur cette file
   vidange-remplissage ranger seau_a bande_haut   ... ou sur la bande du haut (plateau à 0,4985)
+  vidange-remplissage fermer seau_a           fermer le seau du plateau (couvercle posé à la main) :
+                                              bras de fermeture rangé, plateau à l'approche, bras au
+                                              travail, montée en appui, rotation horaire, retour
+                                              (tâche 41 ; le bras et la balance sont lus pour de
+                                              vrai, --galet-range est inutile)
   vidange-remplissage couvercles              mode couvercles (retourneur)
   vidange-remplissage inspection              mode inspection des bocaux, un arrêt de 45°
   ... --faux                                  avec un faux FluidNC (essai de l'outil)
@@ -68,6 +73,7 @@ ATTENDUS = {
     "centrer": 1,
     "vidage": 1,
     "ranger": 2,
+    "fermer": 1,
     "couvercles": 0,
     "inspection": 0,
 }
@@ -132,6 +138,10 @@ def main(arguments: list[str] | None = None) -> int:
     with ExitStack() as pile:
         try:
             fabrique = FausseFabrique(liste) if options.faux else None
+            if fabrique is not None and options.commande == "fermer" and reglages.pesees.i2c:
+                i2c = reglages.pesees.i2c
+                plages = [(v.angle_min_deg, v.angle_max_deg) for v in i2c.pca9685.voies.values()]
+                fabrique.carte_pesee(i2c.carte).brancher_boitier(plages)
             seulement = {PANNEAU, PLATEAU_FUT, *reglages.pesees.tour}
             materiel = pile.enter_context(Materiel(liste, fabrique, seulement))
             liaison = Liaison(
@@ -151,6 +161,11 @@ def main(arguments: list[str] | None = None) -> int:
             time.sleep(0.5)
             poste = PosteFut(machine.poste_fut, materiel, lecture_directe=True)
             en_bas = options.manivelle_en_bas
+            if options.commande == "fermer" and (
+                machine.fermeture is None or reglages.pesees.i2c is None
+            ):
+                print("machine.yaml n'a pas de partie « fermeture »", file=sys.stderr)
+                return 2
             remplissage = Remplissage(
                 machine,
                 chariot,
@@ -159,6 +174,8 @@ def main(arguments: list[str] | None = None) -> int:
                 bras_galet_range=lambda: True if options.galet_range else None,
                 micropore_rentre=lambda: True if options.micropore_rentre else None,
             )
+            if options.commande == "fermer":
+                options.fermeture = _brancher_fermeture(reglages, materiel, remplissage, arret)
             return _faire(options, remplissage, chariot)
         except (ErreurEtape, ErreurFluidnc, ErreurMateriel) as erreur:
             print(f"ÉCHEC : {erreur}", file=sys.stderr)
@@ -168,6 +185,20 @@ def main(arguments: list[str] | None = None) -> int:
             return 1
         finally:
             arret.set()
+
+
+def _brancher_fermeture(reglages, materiel, remplissage, arret):
+    """« fermer » : le vrai bras de la fermeture (ou un faux boîtier avec --faux), lu et renvoyé en
+    fond pendant le geste (la carte veut un ordre toutes les 2 s)."""
+    from vidange.fermeture import BrasFermeture, Fermeture
+    from vidange.fiabilite.constats import lancer_boucle
+
+    assert reglages.machine.fermeture is not None and reglages.pesees.i2c is not None
+    bras = BrasFermeture(reglages.machine.fermeture, reglages.pesees.i2c, materiel)
+    fermeture = Fermeture(reglages.machine, bras)
+    fermeture.brancher(remplissage)
+    lancer_boucle("bras_fermeture", 0.2, bras.observer, arret)
+    return fermeture
 
 
 def _jouer(remplissage: Remplissage, geste: Callable[[], Geste]) -> None:
@@ -234,6 +265,22 @@ def _faire(options: argparse.Namespace, remplissage: Remplissage, chariot: Chari
         "couvercles": r.geste_mode_couvercles,
         "inspection": r.geste_mode_inspection,
     }
+    if commande == "fermer":
+        format = valeurs[0]
+        if format not in r.reglages.formats:
+            print(f"Format inconnu : {format}", file=sys.stderr)
+            return 2
+        # Le seau plein est là, son couvercle posé à la main.
+        r.seau = SeauPlateau(format, angle_anse=chariot.position().a)
+        # Comme au démarrage du programme : zéro de la montée (plateau en bas), bras rangé (premier
+        # ordre sans rampe), puis seulement le reste.
+        _jouer(remplissage, lambda: r.geste_plateau(r.course_z[0]))
+        _jouer(remplissage, r.geste_ranger_bras)
+        _jouer(remplissage, r.geste_fermer)
+        for message in options.fermeture.messages:
+            print(message)
+        _etat(remplissage, chariot)
+        return 0
     if commande in ("pose", "centrer", "vidage", "ranger"):
         format = valeurs[0]
         if format not in r.reglages.formats:

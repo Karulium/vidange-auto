@@ -72,6 +72,12 @@ class Pas:
     vitesse_a: float | None = None
     # Le plateau monte jusqu'à ce que la balance gagne tant de kg (contact du fond d'un seau).
     contact_kg: float | None = None
+    # Le plateau monte à cette vitesse au plus (m/s : montée en appui de la fermeture) ; None : sa
+    # vitesse normale.
+    vitesse_z: float | None = None
+    # Le mouvement s'arrête dès que la balance lit ce poids (kg, absolu) ou plus : effort maximal
+    # de la fermeture (tâche 41), pour le plateau qui monte comme pour celui qui tourne.
+    poids_max_kg: float | None = None
     # Attente après le mouvement (s), puis pesée (médiane des dernières lectures).
     attente_s: float = 0.0
     pesee: bool = False
@@ -84,6 +90,8 @@ class Resultat:
     contact: bool = False
     # Poids lu sur le plateau (kg), si le pas demandait une pesée.
     poids_kg: float | None = None
+    # Le mouvement a été arrêté parce que la balance a lu poids_max_kg.
+    depasse: bool = False
 
 
 class Chariot(Protocol):
@@ -154,6 +162,7 @@ class ChariotFluidnc:
         self._rapports_a_l_envoi = 0
         self._fin_mouvement: float | None = None
         self._contact = False
+        self._depasse = False
         self._contact_depuis_kg: float | None = None
         self._en_pause = False
         nom = f"carte « {liaison.nom} » connectée et sans alarme"
@@ -178,14 +187,18 @@ class ChariotFluidnc:
             self._derniere_lecture = maintenant
             self._lectures.append((maintenant, kg))
             pas, depart = self._pas, self._contact_depuis_kg
-            if pas is None or pas.contact_kg is None or depart is None or self._contact:
+            if pas is None or self._fin_mouvement is not None:
                 return
-            if self._fin_mouvement is not None:
-                return
-            if kg >= depart + pas.contact_kg:
-                self._contact = True
-        if self._contact:
+            contact = depasse = False
+            if pas.contact_kg is not None and depart is not None and not self._contact:
+                contact = self._contact = kg >= depart + pas.contact_kg
+            if pas.poids_max_kg is not None and not self._depasse:
+                depasse = self._depasse = kg >= pas.poids_max_kg
+        if contact:
             journal.info("Remplissage : contact du plateau (%.2f kg, départ %.2f kg)", kg, depart)
+        if depasse:
+            journal.warning("Remplissage : effort maximal (%.2f kg lus)", kg)
+        if contact or depasse:
             self.liaison.annuler_deplacement()
 
     def peser(self) -> float:
@@ -250,6 +263,8 @@ class ChariotFluidnc:
                 vitesse = min(vitesse, getattr(self.reglages.vitesses, pas.vitesse))
             if cle == "a" and pas.vitesse_a is not None:
                 vitesse = min(vitesse, pas.vitesse_a)
+            if cle == "z" and pas.vitesse_z is not None:
+                vitesse = min(vitesse, pas.vitesse_z)
             duree = max(duree, abs(ecart) / vitesse)
             carres += (
                 self._vers_carte(cle, getattr(cible, cle))
@@ -257,14 +272,16 @@ class ChariotFluidnc:
             ) ** 2
             positions[self._lettres[cle]] = self._vers_carte(cle, getattr(cible, cle))  # type: ignore[index]
         with self._verrou:
-            self._pas, self._contact = pas, False
+            self._pas, self._contact, self._depasse = pas, False, False
             self._cible = positions
             self._f = math.sqrt(carres) / duree * 60 if duree > 0 else 0.0
             self._fin_mouvement = None if positions else self._horloge()
             self._rapports_a_l_envoi = self.liaison.etat.rapports_recus
             recentes = [kg for _, kg in self._lectures][-self.reglages.pesee.lectures :]
             self._contact_depuis_kg = median(recentes) if recentes else None
-        if pas.contact_kg is not None and self._contact_depuis_kg is None:
+        if (
+            pas.contact_kg is not None or pas.poids_max_kg is not None
+        ) and self._contact_depuis_kg is None:
             raise ErreurEtape(
                 "balance du plateau sans lecture : pas de contact", QUOI_FAIRE_BALANCE
             )
@@ -286,7 +303,7 @@ class ChariotFluidnc:
                     return False
                 if etat.rapports_recus <= self._rapports_a_l_envoi + 1:
                     return False
-                if not self._contact and not self._arrive(etat.positions):
+                if not self._contact and not self._depasse and not self._arrive(etat.positions):
                     raise ErreurEtape(
                         f"chariot de remplissage arrêté avant la fin de « {pas.texte} »"
                     )
@@ -307,9 +324,9 @@ class ChariotFluidnc:
         pose = self.position()
         with self._verrou:
             pas = self._pas
-            contact = self._contact
+            contact, depasse = self._contact, self._depasse
         poids = self.peser() if pas is not None and pas.pesee else None
-        return Resultat(pose=pose, contact=contact, poids_kg=poids)
+        return Resultat(pose=pose, contact=contact, poids_kg=poids, depasse=depasse)
 
     def _carte_prete(self) -> bool:
         etat = self.liaison.etat
@@ -333,7 +350,12 @@ class ChariotFluidnc:
             self._en_pause = False
             pas, cible, f = self._pas, dict(self._cible), self._f
             self._rapports_a_l_envoi = self.liaison.etat.rapports_recus
-            reprendre = pas is not None and self._fin_mouvement is None and not self._contact
+            reprendre = (
+                pas is not None
+                and self._fin_mouvement is None
+                and not self._contact
+                and not self._depasse
+            )
         if reprendre and cible:
             self.liaison.deplacer_manuel(cible, f)
 

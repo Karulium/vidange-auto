@@ -1444,7 +1444,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   La pesée garde son rythme : la vérifier dans un test.
   Côté Pi : lecture et écriture de ces registres dans `pi/vidange/materiel/carte_pesee.py`, avec le faux, plus les
   signaux dans `docs/entrees-sorties.yaml` (`exemple: true`).
-- [ ] **41. Fermeture des seaux** — Modèle : Sonnet, effort moyen. À faire après la tâche 40.
+- [x] **41. Fermeture des seaux** — Modèle : Sonnet, effort moyen. À faire après la tâche 40.
   Source, recopiée ici le 06/11/2026 : `fermeture-seaux/logiciel/fermeture-seaux-pour-logiciel.md` du projet
   mécanique (module gelé).
   - Le servo DS3225 tourne le bras à vide, entre rangé (−160°, sens horaire) et travail (sur sa butée, 2,5° au-delà).
