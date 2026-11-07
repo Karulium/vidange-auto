@@ -7,6 +7,10 @@ int main(void) {
     essais_hx711();
     essais_modbus();
     essais_mesures();
+    essais_pca9685();
+    essais_vl6180x();
+    essais_plateau();
+    essais_rythme();
     if (essai_echecs) {
         printf("%d échec(s)\n", essai_echecs);
         return 1;

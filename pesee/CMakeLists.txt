@@ -40,10 +40,20 @@ foreach(I RANGE 0 ${DERNIER} 2)
     src/main.c
     src/hx711.c
     src/mesures.c
-    src/modbus.c)
+    src/modbus.c
+    src/pca9685.c
+    src/vl6180x.c
+    src/plateau.c)
   target_include_directories(${NOM} PRIVATE src "${DOSSIER_GENERE}")
   target_compile_options(${NOM} PRIVATE -Wall -Wextra)
+  # L'I2C (servos et capteur de distance) : la carte de CARTE_PESEE_I2C seulement.
+  if(NOM STREQUAL CARTE_PESEE_I2C)
+    set(AVEC_I2C 1)
+  else()
+    set(AVEC_I2C 0)
+  endif()
   target_compile_definitions(${NOM} PRIVATE
+    REGLAGE_AVEC_I2C=${AVEC_I2C}
     REGLAGE_ADRESSE=${ADRESSE}
     REGLAGE_NOM="${NOM}"
     REGLAGE_VERSION="${VERSION_GIT}")
@@ -52,6 +62,8 @@ foreach(I RANGE 0 ${DERNIER} 2)
     pico_multicore
     pico_sync
     hardware_uart
+    hardware_i2c
+    pico_rand
     hardware_watchdog)
   # Fenêtre texte par l'USB (le bus RS485 passe par l'UART).
   pico_enable_stdio_usb(${NOM} 1)

@@ -52,6 +52,65 @@ programme:
   # Fenêtre texte sur le câble USB (essais à l'établi) : une ligne d'état tous les ... (ms).
   periode_affichage_ms: 1000
 
+# L'I2C de UNE seule carte : celle du plateau du remplissage (pesee_plateau_remplissage), qui
+# commande en plus les servos du boîtier du chariot (PCA9685) et lit son capteur de distance
+# (VL6180X). Les cartes de la griffe et de la préhension n'ont pas d'I2C et ne changent pas. Copié
+# dans le programme de cette carte quand on le fabrique (registres : pesee/README.md). Le Pi ne
+# s'en sert que pour le contrôle du démarrage : l'angle d'un servo est demandé en degrés, la carte
+# en fait l'impulsion. Tout est EXEMPLE (décisions du 06/11/2026, « Électronique du chariot »).
+i2c:
+  carte: pesee_plateau_remplissage
+  # I2C0 sur GP4 (SDA) et GP5 (SCL). Deux résistances de tirage au 3,3 V sur le boîtier du chariot.
+  broches:
+    sda: 4
+    scl: 5
+  frequence_hz: 100000
+  # Une transaction I2C sans fin au bout de ce temps (µs) est abandonnée. Sous 1750 (silence de
+  # fin de trame du bus des pesées).
+  delai_transaction_us: 1500
+  # Après une panne d'une puce : nouvel essai toutes les ... (ms).
+  reessai_ms: 500
+  # Plus d'ordre du Pi depuis ce temps (ms) : la carte garde les angles, aucun mouvement.
+  silence_pi_ms: 2000
+  pca9685:
+    adresse: 0x40
+    frequence_pwm_hz: 50
+    horloge_hz: 25000000
+    reveil_us: 1000
+    # Une voie par servo, nommée comme son signal de entrees-sorties.yaml (son « broche » y est
+    # CH et le numéro du canal). L'ordre fait l'ordre des registres : 16, 17, 18.
+    voies:
+      # DS3225 d'escamotage de la tête du Micropore (tâche 40).
+      servo_escamotage_micropore:
+        canal: 0
+        angle_min_deg: 0
+        angle_max_deg: 270
+        impulsion_min_us: 500
+        impulsion_max_us: 2500
+      # MG90S de la lame du Micropore (tâche 40).
+      servo_lame_micropore:
+        canal: 1
+        angle_min_deg: 0
+        angle_max_deg: 180
+        impulsion_min_us: 500
+        impulsion_max_us: 2400
+      # DS3225 du bras de la Fermeture des seaux (tâche 41) : seulement son signal, le + vient de
+      # bec_servo.
+      servo_fermeture_seaux:
+        canal: 2
+        angle_min_deg: 0
+        angle_max_deg: 270
+        impulsion_min_us: 500
+        impulsion_max_us: 2500
+  vl6180x:
+    # Son signal dans entrees-sorties.yaml.
+    signal: tof_micropore
+    adresse: 0x29
+    # Une mesure toutes les 50 ms (environ 20 par seconde).
+    periode_ms: 50
+    sondage_ms: 5
+    delai_max_ms: 100
+
 # Côté Pi : l'ordre des questions, répété sans fin. Une carte peut revenir plusieurs fois par
 # tour : la griffe doit avoir 80 mesures par seconde (une question et sa réponse ≈ 3 à 4 ms).
 tour:

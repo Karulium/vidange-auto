@@ -987,3 +987,14 @@ non (procédure `spray/essai-materiel.md`, puis `pi/systeme/essai-spray.md`).
   8. Le 24 V de la boîte du spray suit l'arrêt d'urgence (à confirmer par l'Implantation) : la carte voit le pilote
      redémarré et demande une nouvelle prise d'origine.
   9. Un seul fil EN pour les 5 pilotes, 10 kΩ vers le 3,3 V (moteurs coupés pendant le démarrage de la carte).
+- **Servos et ToF du chariot, réponses à la PR n° 84** (tâche 40 bis, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Les registres donnent l'angle de l'axe du servo (0 à 270° pour un DS3225), pas celui du bras ; la conversion se
+     fait dans les tâches 40 (Micropore) et 41 (Fermeture).
+  2. Au redémarrage de la carte, la PCA9685 coupe les servos jusqu'au prochain ordre du Pi (≤ 1 s) : les gestes du
+     Micropore et de la Fermeture doivent le supporter (pour le Micropore : ToF relu avant tout mouvement du plateau).
+  3. Renvoi des angles chaque seconde (≈ 7 ms par seconde sur le bus des pesées) : accepté, mesuré à l'étape 21 de
+     l'essai.
+  4. Compteur de démarrages au hasard après une coupure de courant (pas d'écriture en flash) : le Pi cherche
+     « différent », pas « +1 ».
+  À savoir : la carte du plateau est une RP2040-Zero (Guidage caméra, 06/11) ; son voyant n'est pas GP25 (Pico) :
+  mettre `voyant: null` (ou la broche de sa LED) pour cette carte à la mise en service.

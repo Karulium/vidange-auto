@@ -10,9 +10,16 @@ add_executable(essais
   essais_hx711.c
   essais_modbus.c
   essais_mesures.c
+  essais_i2c.c
+  essais_plateau.c
+  essais_rythme.c
+  faux_i2c.c
   ../src/hx711.c
   ../src/modbus.c
-  ../src/mesures.c)
+  ../src/mesures.c
+  ../src/pca9685.c
+  ../src/vl6180x.c
+  ../src/plateau.c)
 target_include_directories(essais PRIVATE . ../src)
 target_compile_options(essais PRIVATE -Wall -Wextra -Werror -fsanitize=address,undefined)
 target_link_options(essais PRIVATE -fsanitize=address,undefined)

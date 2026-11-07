@@ -26,6 +26,15 @@
 #include "pico/stdlib.h"
 #include "reglages_genere.h"
 
+// Seule la carte du plateau du remplissage a l'I2C (servos et capteur de distance du boîtier du
+// chariot) : REGLAGE_AVEC_I2C vaut 1 pour son programme seulement (CMakeLists.txt).
+#if REGLAGE_AVEC_I2C
+#include "hardware/i2c.h"
+#include "hardware/structs/watchdog.h"
+#include "pico/rand.h"
+#include "plateau.h"
+#endif
+
 #define UART (REGLAGE_BLOC_UART ? uart1 : uart0)
 
 // ------------------------------------------------- partagé entre les deux cœurs
@@ -60,6 +69,35 @@ static void attendre_us(void *contexte, uint32_t us) {
 }
 
 static const broches_hx711_t hx711 = {lire_dt, ecrire_sck, attendre_us, NULL};
+
+// --------------------------------------------------------------------- I2C
+
+#if REGLAGE_AVEC_I2C
+#define I2C (REGLAGE_I2C_BLOC ? i2c1 : i2c0)
+// Mémoire qui survit à un redémarrage par le chien de garde (pas à la mise sous tension).
+#define MAGIE_DEMARRAGES 0x50445741u
+
+static bool i2c_ecrire(void *contexte, uint8_t adr, const uint8_t *octets, size_t n) {
+    (void)contexte;
+    return i2c_write_timeout_us(I2C, adr, octets, n, false, REGLAGE_I2C_DELAI_TRANSACTION_US) ==
+           (int)n;
+}
+
+static bool i2c_lire(void *contexte, uint8_t adr, const uint8_t *index, size_t ni, uint8_t *dest,
+                     size_t n) {
+    (void)contexte;
+    if (i2c_write_timeout_us(I2C, adr, index, ni, true, REGLAGE_I2C_DELAI_TRANSACTION_US) !=
+        (int)ni) {
+        return false;
+    }
+    return i2c_read_timeout_us(I2C, adr, dest, n, false, REGLAGE_I2C_DELAI_TRANSACTION_US) ==
+           (int)n;
+}
+
+static const i2c_bus_t bus_i2c = {i2c_ecrire, i2c_lire, NULL};
+static const plateau_config_t config_plateau = REGLAGE_I2C_CONFIG;
+static plateau_t plateau;
+#endif
 
 // ------------------------------------------------------------------- RS485
 
@@ -161,6 +199,19 @@ int main(void) {
     gpio_pull_up(REGLAGE_BROCHE_RS485_RX);
 
     redemarre_par_chien = watchdog_enable_caused_reboot();
+#if REGLAGE_AVEC_I2C
+    i2c_init(I2C, REGLAGE_I2C_FREQUENCE_HZ);
+    gpio_set_function(REGLAGE_I2C_BROCHE_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(REGLAGE_I2C_BROCHE_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(REGLAGE_I2C_BROCHE_SDA);
+    gpio_pull_up(REGLAGE_I2C_BROCHE_SCL);
+    uint16_t demarrages = plateau_demarrages_suivant(
+        watchdog_hw->scratch[0] == MAGIE_DEMARRAGES, (uint16_t)watchdog_hw->scratch[1],
+        (uint16_t)get_rand_32());
+    watchdog_hw->scratch[0] = MAGIE_DEMARRAGES;
+    watchdog_hw->scratch[1] = demarrages;
+    plateau_init(&plateau, &config_plateau, &bus_i2c, demarrages, time_us_64());
+#endif
     watchdog_enable(REGLAGE_CHIEN_DE_GARDE_MS, true);
     critical_section_init(&verrou);
     multicore_launch_core1(coeur1);
@@ -170,7 +221,13 @@ int main(void) {
     uint32_t questions = 0;
     mesures_init(&mesures, REGLAGE_SANS_MESURE_MS, REGLAGE_EXEMPLE, time_us_64());
     modbus_init(&bus, REGLAGE_ADRESSE);
+#if REGLAGE_AVEC_I2C
+    uint16_t registres[NB_REGISTRES_PLATEAU_MAX];
+    const size_t nb_registres = plateau_nb_registres(&plateau);
+#else
     uint16_t registres[NB_REGISTRES];
+    const size_t nb_registres = NB_REGISTRES;
+#endif
     uint8_t reponse[MODBUS_REPONSE_MAX];
 
     for (;;) {
@@ -185,14 +242,38 @@ int main(void) {
             uint8_t octet = (uint8_t)uart_getc(UART);
             uint64_t t_us = time_us_64();
             if (modbus_recevoir(&bus, octet, t_us)) {
+                size_t n;
+#if REGLAGE_AVEC_I2C
+                uint8_t fonction = modbus_fonction(&bus);
+                if (fonction == 6 || fonction == 16) {
+                    uint16_t premier = 0;
+                    uint16_t valeurs[PLATEAU_VOIES_MAX];
+                    size_t nombre = modbus_lire_ecriture(&bus, &premier, valeurs, PLATEAU_VOIES_MAX);
+                    uint8_t code = nombre == 0 ? MODBUS_NOMBRE_FAUX
+                                               : plateau_ecrire(&plateau, premier, valeurs, nombre, t_us);
+                    n = modbus_repondre_ecriture(&bus, code, reponse);
+                } else {
+                    mesures_registres(&mesures, bus.trames_abimees, t_us, registres);
+                    plateau_registres(&plateau, t_us, registres);
+                    n = modbus_repondre(&bus, registres, nb_registres, reponse);
+                }
+#else
                 mesures_registres(&mesures, bus.trames_abimees, t_us, registres);
-                size_t n = modbus_repondre(&bus, registres, NB_REGISTRES, reponse);
+                n = modbus_repondre(&bus, registres, nb_registres, reponse);
+#endif
                 envoyer(reponse, n);
                 modbus_oublier(&bus);
                 questions++;
             }
         }
         uint64_t t_us = time_us_64();
+#if REGLAGE_AVEC_I2C
+        // Une courte transaction I2C seulement quand rien de plus pressé n'attend : ni mesure du
+        // HX711 prête, ni octet du bus à lire.
+        if (!hx711_pret(&hx711) && !uart_is_readable(UART)) {
+            plateau_pas(&plateau, t_us);
+        }
+#endif
         mesures_avancer(&mesures, t_us);
         bool muet = mesures_muet(&mesures, t_us);
         allumer_voyant(muet, t_us);
