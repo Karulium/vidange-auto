@@ -64,6 +64,15 @@ class PiecesAvecLaGriffe(PiecesSimulees):
         )
         if pieces.plan.magasin is not None:
             pieces.plan.magasin.brancher_griffe(self.griffe.griffe)
+        spray = pieces.spray
+        zone = ZoneDuBras(
+            MACHINE,
+            self.griffe.griffe,
+            pieces.prehension,
+            bras_au_repos=None if spray is None else (lambda: not spray.bras_spray_sorti()),
+        )
+        zone.brancher()
+        self.zone = zone
         return PiecesRemplissage(
             pieces.remplissage,
             pieces.prehension,
@@ -72,7 +81,7 @@ class PiecesAvecLaGriffe(PiecesSimulees):
             spray=pieces.spray,
             griffe_partie=self.griffe.partie,
             couvercle=pieces.couvercle,
-            zone_bras_spray=ZoneDuBras(MACHINE, self.griffe.griffe, pieces.prehension).libre,
+            zone_bras_spray=zone.libre,
             griffe=self.griffe,
         )
 
@@ -106,6 +115,18 @@ def test_le_lot_de_seaux_part_avec_la_vraie_griffe(lot_joue):
     assert faites.count("remplissage.ranger") == 2
     assert faites.count("griffe.essuyer_le_bord") == 2
     assert faites.count("griffe.tasser") >= 8
+
+
+def test_la_zone_du_bras_du_spray_est_verrouillee_dans_le_lot(lot_joue):
+    # Tâche 45 octies : la griffe et la préhension du lot passent par le verrou de la zone, qui
+    # suit le bras du spray du lot ; à la fin, bras rangé : plus de verrou.
+    _, pieces, planning, _ = lot_joue
+    zone = pieces.zone
+    assert pieces.griffe.griffe.verrou_spray == zone.refus_griffe
+    assert pieces.scenario.prehension.verrou_spray == zone.refus_prehension
+    assert zone.bras_au_repos is not None and not zone.verrouillee()
+    faites = [f"{ligne.module}.{ligne.etape}" for ligne in planning.lignes]
+    assert faites.count("remplissage.spray_sortir_le_bras") == 2
 
 
 def test_chaque_seau_suit_l_ordre_du_cycle(lot_joue):

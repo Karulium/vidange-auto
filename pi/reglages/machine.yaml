@@ -486,6 +486,14 @@ griffe:
       # (Maquette v45.120, 07/11 : sinon elle interdit à tort la colonne de bocaux x 1,2075).
       - {x: [1.15, 1.204], y_min: [0.30, 0.30, 0.30]}
       - {x: [1.20, 1.22], y_min: [0.0, 0.015, 0.055]}
+    # Exceptions à la table « butée haute » (tâche 45 octies) : zones du mât (godet fermé, bras le
+    # long du pont) mesurées par la Maquette pour la pose de l'entonnoir sur UN bocal, griffe
+    # traînée. Une entrée : {bocal: bocal_2_0, x: [.., ..], y: [.., ..], source: "Maquette v45.xxx"} ;
+    # la zone doit couvrir la pose finale et le chemin d'approche. Vérifié au démarrage : le mât
+    # pour ce bocal est dedans (x bocal + 0,140 − 0,316), aucun autre bocal. Vide : la mesure du
+    # 07/11 (v45.120, « bocal_2_0 libre ») a été faite le mât à x bocal − 0,316 = 0,8915, sans le
+    # décalage de l'oreille ; le mât y est à 1,0315 (question à la Maquette, PR de la 45 octies).
+    exceptions_butee_haute: []
   # Mât à x < 0,78 et axes de 1,11 à la butée haute : la tête passe dans l'ouverture du poste du
   # fût ; permis seulement le mât à au plus 0,16 / 0,135 / 0,105 de l'axe du fût (godet fermé / à
   # moitié ouvert / grand ouvert). Sous 1,11, ce sont les règles du fût.
@@ -1822,8 +1830,10 @@ spray:
     # ou de ce qu'elles tiennent n'est dans x 0,66-0,95, y −0,03-0,24, plus bas que z 0,85 (fil
     # Spray, 07/11/2026). C'est la zone qui fait foi, pas « griffe partie » ; outil traîné par le
     # pont compris (en butée haute, avec sa charge). EXEMPLE tant que la Maquette ne l'a pas
-    # balayée.
-    zone: {exemple: true, x: [0.66, 0.95], y: [-0.03, 0.24], z_max: 0.85}
+    # balayée. Verrou (tâche 45 octies) : tant que le bras n'est pas vu rangé et arrêté, un pas de
+    # la griffe ou de la préhension qui entrerait dans la zone attend, au plus attente_max_s
+    # (une sortie, une dose et un rangement, avec de la marge ; EXEMPLE), puis alarme.
+    zone: {exemple: true, x: [0.66, 0.95], y: [-0.03, 0.24], z_max: 0.85, attente_max_s: 120}
   dose:
     # ≈ 10 ml pour 10 L (Karulium 25/09) ; en g, densité ≈ 1 : proportionnelle au volume du seau
     # (A 10,8 L, B 5 L, C 10 L, D 10 L). EXEMPLES (à régler aux essais).

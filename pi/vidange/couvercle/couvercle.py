@@ -29,7 +29,7 @@ from vidange.chef import ErreurEtape
 from vidange.griffe.bras import G
 from vidange.journal import donner_journal
 from vidange.prehension.prehension import Attente, Prehension
-from vidange.prehension.regles import Objet
+from vidange.prehension.regles import Objet, Pose
 from vidange.prehension.tete import Pas, Resultat
 from vidange.reglages import Machine
 from vidange.stockage import places
@@ -335,15 +335,49 @@ class Couvercle:
 
     # ------------------------------------------------------------ poser (étapes 7 à 14)
 
-    def _transport(self, prehension: Prehension, x: float, y: float) -> Geste:
+    def _dans_le_chemin_decale(self, prehension: Prehension, format: str, pose: Pose) -> bool:
+        """Format C, couvercle tenu : la tête est-elle dans le chemin de la descente décalée (outil
+        au-dessus du seau, entre l'y de la pose et celui du décalage, sous la face du début) ?"""
+        decalee = self.reglages.formats[format].descente_decalee
+        if decalee is None or prehension.objet is None or prehension.objet.sorte != "couvercle":
+            return False
+        tolerance = prehension.reglages.tolerance_m
+        cible = self.reglages.pose
+        bas_y, haut_y = sorted((cible.y, decalee.y))
+        return (
+            pose.z < decalee.debut_z - 1e-6
+            and abs(pose.x - cible.x) <= tolerance
+            and bas_y - tolerance <= pose.y <= haut_y + tolerance
+        )
+
+    def _remontee_droite_max_z(
+        self, prehension: Prehension, format: str, pose: Pose
+    ) -> float | None:
+        """Pour une remontée après un choc, couvercle C tenu : pas au-dessus de la face du
+        recentrage tant que l'outil n'est pas revenu à l'y du décalage (§ 5.1)."""
+        decalee = self.reglages.formats[format].descente_decalee
+        if decalee is None or not self._dans_le_chemin_decale(prehension, format, pose):
+            return None
+        if abs(pose.y - decalee.y) <= prehension.reglages.tolerance_m:
+            return None
+        return max(decalee.recentrage_z, pose.z)
+
+    def _transport(
+        self, prehension: Prehension, x: float, y: float, format: str | None = None
+    ) -> Geste:
         """Étapes 7 et 8 : Z à vitesse normale, puis X et Y aux vitesses du Portique, le vide
-        surveillé pendant tout le trajet (arrêt sur place au-dessus de −40 kPa)."""
+        surveillé pendant tout le trajet (arrêt sur place au-dessus de −40 kPa). Pose refaite
+        (après une alarme ou une coupure) avec le couvercle C encore tenu dans le chemin décalé :
+        d'abord ce chemin à l'envers (§ 5.1), jamais la remontée droite."""
         perte = prehension.reglages.vide.perte_kpa
         regles = prehension.regles
         tete = prehension.tete
         assert prehension.pose is not None
         if tete.choc:
             tete.oublier_choc()
+        if format is not None and self._dans_le_chemin_decale(prehension, format, prehension.pose):
+            yield from self._monter_avec_vide(prehension, format)
+            assert prehension.pose is not None
         haut = regles.hauteur_trajet(prehension.objet, prehension.pose.y)
         if prehension.pose.z < haut - 1e-6:
             resultat = yield Pas(
@@ -383,7 +417,13 @@ class Couvercle:
         # Format C (§ 5.1) : l'outil arrive décalé vers l'allée, descend ainsi jusqu'à la face de
         # recentrage, revient à l'y de la pose à face constante, puis descend comme les autres.
         decalee = reg.formats[format].descente_decalee
-        yield from self._transport(prehension, pose.x, pose.y if decalee is None else decalee.y)
+        # Toute remontée avant le lâcher (choc compris) garde le chemin décalé du couvercle C.
+        prehension.remontee_droite_max_z = lambda tete: self._remontee_droite_max_z(
+            prehension, format, tete
+        )
+        yield from self._transport(
+            prehension, pose.x, pose.y if decalee is None else decalee.y, format
+        )
         # 9) descente rapide jusqu'à Z_pose + 0,040, 10) lente.
         etapes: list[tuple[str, float, str | None]] = []
         rapide = zp + pose.rapide_m
@@ -472,18 +512,22 @@ class Couvercle:
             self._perdu(prehension)
 
     def _monter_avec_vide(self, prehension: Prehension, format: str) -> Geste:
-        """La tête remonte avec le couvercle (erreurs 10a et 10b). Format C, sous la face du début
-        de la descente décalée : par le même chemin, à l'envers (choix de Claude, tâche 45
-        septies : la remontée droite repasserait à 2,3 mm de la plaque du micropore)."""
+        """La tête remonte avec le couvercle (erreurs 10a et 10b, pose refaite après un arrêt).
+        Format C, sous la face du début de la descente décalée : le même chemin à l'envers (fiche
+        de la pose, § 5.1, fil Préhension du 07/11/2026) : montée droite à 10 mm/s jusqu'à la face
+        du recentrage, décalage à l'y du décalage à face constante, puis montée en haut (la
+        remontée droite repasserait à 2,3 mm de la plaque du micropore)."""
         perte = prehension.reglages.vide.perte_kpa
         decalee = self.reglages.formats[format].descente_decalee
         assert prehension.pose is not None
         if decalee is not None and prehension.pose.z < decalee.debut_z - 1e-6:
-            if prehension.pose.z < decalee.recentrage_z - 1e-6:
+            ecart = decalee.recentrage_z - prehension.pose.z
+            if ecart > 1e-6:
                 resultat = yield Pas(
                     "remonter avec le couvercle jusqu'au recentrage",
                     {"z": decalee.recentrage_z},
                     vide_perte_kpa=perte,
+                    duree_s=ecart / decalee.vitesse_m_s,
                 )
                 assert resultat is not None
                 if resultat.arret == "vide":
@@ -528,6 +572,8 @@ class Couvercle:
             )
         journal.info("Couvercle : lâché")
         prehension.objet, prehension.poids_porte_n = None, 0.0
+        # Après le lâcher, la tête seule remonte tout droit (§ 5.1).
+        prehension.remontee_droite_max_z = lambda tete: None
 
     def _degager(self, prehension: Prehension, z_contact: float) -> Geste:
         pose = self.reglages.pose

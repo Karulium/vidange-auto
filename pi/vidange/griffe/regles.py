@@ -362,12 +362,24 @@ class ReglesGriffe:
         du poste (griffe → ouverture_fut) ?"""
         return self.distance_axe_fut(x, y) > self.griffe.ouverture_fut.rayon_mat_max[0] + _EGAL
 
+    def exception_butee_haute(self, pose: Pose) -> str | None:
+        """Le bocal de l'exception de la table en butée haute où est le mât, ou None."""
+        for exception in self.griffe.y_min_mat.exceptions_butee_haute:
+            (x0, x1), (y0, y1) = exception.x, exception.y
+            if x0 - _EGAL <= pose.x <= x1 + _EGAL and y0 - _EGAL <= pose.y <= y1 + _EGAL:
+                return exception.bocal
+        return None
+
     def _refus_y_min_mat(self, pose: Pose, classe: int) -> str | None:
         """Tables « y minimum du mât » (agitateur fixe) : en butée haute la première, dessous la
         seconde ; plus le cercle autour de l'axe du fût pour l'ouverture du poste."""
         g = self.griffe
         tables = g.y_min_mat
-        bandes = tables.butee_haute if self.en_butee_haute(pose.z) else tables.sous_butee
+        haute = self.en_butee_haute(pose.z)
+        if haute and classe == 0 and self.bloquee(pose.a) and self.exception_butee_haute(pose):
+            # Zone mesurée par la Maquette pour un bocal (pose de l'entonnoir, tâche 45 octies).
+            return None
+        bandes = tables.butee_haute if haute else tables.sous_butee
         tete = g.tete
         for bande in bandes:
             minimum = bande.y_min[classe]

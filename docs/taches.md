@@ -773,7 +773,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      y 0,49 à face constante 0,545 à 10 mm/s, puis descente droite jusqu'au contact. A, B et D descendent droit. Le
      recul du servo du micropore pour le couvercle C est **annulé** : l'enlever s'il est codé.
   Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
-- [ ] **45 octies. Tête de la griffe à 0° en mode bocaux, verrou de la zone du spray, remontée du couvercle C** —
+- [x] **45 octies. Tête de la griffe à 0° en mode bocaux, verrou de la zone du spray, remontée du couvercle C** —
   Modèle : Opus, effort moyen. Suite de la 45 septies (PR n° 100) :
   1. **Défaut** : sur la machine imaginaire, un lot de 4 bocaux ou plus s'arrête au 4ᵉ bocal (« tête à −180°, il faut
      0° ») : la griffe ressort parfois du fût tête tournée (vient de la tâche 43 bis). Chaque prise du mode bocaux

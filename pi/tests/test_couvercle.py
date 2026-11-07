@@ -270,6 +270,137 @@ def test_format_c_pas_de_seau_la_tete_remonte_par_le_chemin_decale():
     assert pas_y[i + 1][1] == pytest.approx(0.498)
     assert textes[i + 2] == "remonter avec le couvercle"
     assert monde.tenus == 1 and monde.sur_le_seau == 0
+    # Montée droite à 10 mm/s jusqu'à la face 0,545 (fiche, § 5.1).
+    assert pas_y[i][3] == pytest.approx((0.545 - pas_y[i - 1][2]) / 0.010)
+
+
+class FaussePrehensionCouvercle:
+    """Juste ce que la pose du couvercle lit : la tête est où le dernier pas l'a mise."""
+
+    def __init__(self, pose, objet):
+        from vidange.prehension.regles import ReglesPrehension
+
+        class Tete:
+            choc = False
+
+        self.reglages = MACHINE.prehension
+        self.regles = ReglesPrehension(MACHINE)
+        self.tete = Tete()
+        self.pose = pose
+        self.objet = objet
+        self.remontee_droite_max_z = lambda pose: None
+
+
+def derouler(geste, prehension, jusqu_a):
+    """Les pas d'un geste jusqu'au pas `jusqu_a` (compris), chacun allé au bout."""
+    from vidange.prehension.tete import Resultat
+
+    pas_vus, resultat = [], None
+    while True:
+        pas = next(geste) if not pas_vus else geste.send(resultat)
+        pas_vus.append(pas)
+        if pas.texte == jusqu_a:
+            return pas_vus
+        prehension.pose = prehension.pose.avec(**pas.cibles)
+        resultat = Resultat(pose=prehension.pose)
+
+
+def couvercle_c_tenu(z, y):
+    from vidange.couvercle.couvercle import Couvercle
+    from vidange.prehension.regles import Pose
+
+    couvercle = Couvercle(MACHINE)
+    fausse = FaussePrehensionCouvercle(Pose(x=0.925, y=y, z=z, a=0.0), None)
+    fausse.objet = couvercle.objet(fausse, "seau_c")
+    return couvercle, fausse
+
+
+def objet_par_nom(self, nom):
+    from vidange.prehension.regles import Objet
+
+    return Objet.depuis(nom, MACHINE.prehension.objets[nom])
+
+
+FaussePrehensionCouvercle.objet_par_nom = objet_par_nom
+
+
+@pytest.mark.parametrize("y", [0.49, 0.494])
+def test_format_c_pose_refaite_couvercle_tenu_bas_par_le_chemin_decale(y):
+    # Pose refaite après un arrêt (alarme, coupure) avant le lâcher, couvercle C encore tenu sous
+    # la face 0,545 : le chemin décalé à l'envers, jamais la remontée droite (§ 5.1).
+    couvercle, fausse = couvercle_c_tenu(0.50, y)
+    pas = derouler(couvercle.geste_poser(fausse, "seau_c"), fausse, "trajet du couvercle")
+    textes = [p.texte for p in pas]
+    assert textes[0] == "remonter avec le couvercle jusqu'au recentrage"
+    assert pas[0].cibles == {"z": pytest.approx(0.545)}
+    assert pas[0].duree_s == pytest.approx(0.045 / 0.010)
+    assert textes[1].startswith("décaler le couvercle C à y 0,498")
+    assert pas[1].cibles == {"y": pytest.approx(0.498)}
+    assert textes[2] == "remonter avec le couvercle"
+    assert textes[-1] == "trajet du couvercle"
+
+
+def test_format_c_pose_refaite_dans_la_descente_decalee_monte_droit():
+    # Entre 0,70 et 0,545, à y 0,498 : c'est déjà le chemin décalé, la tête monte droit.
+    couvercle, fausse = couvercle_c_tenu(0.60, 0.498)
+    pas = derouler(couvercle.geste_poser(fausse, "seau_c"), fausse, "trajet du couvercle")
+    textes = [p.texte for p in pas]
+    assert "remonter avec le couvercle jusqu'au recentrage" not in textes
+    assert not [t for t in textes if t.startswith("décaler")]
+    assert textes[0] == "remonter avec le couvercle"
+
+
+def test_format_a_pose_refaite_couvercle_tenu_monte_droit():
+    from vidange.couvercle.couvercle import Couvercle
+    from vidange.prehension.regles import Pose
+
+    couvercle = Couvercle(MACHINE)
+    fausse = FaussePrehensionCouvercle(Pose(x=0.925, y=0.49, z=0.50, a=0.0), None)
+    fausse.objet = couvercle.objet(fausse, "seau_a")
+    pas = derouler(couvercle.geste_poser(fausse, "seau_a"), fausse, "trajet du couvercle")
+    assert [p.texte for p in pas][0] == "monter avec le couvercle"
+
+
+def test_format_c_remontee_apres_un_choc_pas_au_dessus_du_recentrage():
+    from vidange.prehension.regles import Pose
+
+    couvercle, fausse = couvercle_c_tenu(0.50, 0.49)
+    geste = couvercle.geste_poser(fausse, "seau_c")
+    next(geste)
+    plafond = fausse.remontee_droite_max_z
+    # Sous 0,545 à l'y de la pose : pas plus haut que 0,545 tout droit.
+    assert plafond(Pose(x=0.925, y=0.49, z=0.50, a=0.0)) == pytest.approx(0.545)
+    # À l'y du décalage, ou au-dessus de 0,70, ou ailleurs : pas de limite.
+    assert plafond(Pose(x=0.925, y=0.498, z=0.60, a=0.0)) is None
+    assert plafond(Pose(x=0.925, y=0.49, z=0.75, a=0.0)) is None
+    assert plafond(Pose(x=1.40, y=0.83, z=0.50, a=0.0)) is None
+    # Couvercle lâché : la tête seule remonte tout droit.
+    fausse.objet = None
+    assert plafond(Pose(x=0.925, y=0.49, z=0.50, a=0.0)) is None
+
+
+def test_la_remontee_apres_un_choc_suit_la_limite_du_geste():
+    from vidange.entonnoir.simulation import entonnoir_du_simulateur
+
+    with Simulateur(REGLAGES, LISTE, "vidange_fut") as simulateur:
+        prehension = entonnoir_du_simulateur(simulateur, avec_module=False).prehension
+        tete = prehension.tete
+        simulateur.etat_axes.positions["prehension_z"] = 0.50
+        pose = tete.position()
+        assert pose.z == pytest.approx(0.50)
+        prehension.objet = prehension.objet_par_nom("couvercle")
+        prehension.remontee_droite_max_z = lambda p: 0.52
+        cibles = []
+        tete.executer = lambda pas, cible, poids: cibles.append((pas.texte, cible.z))
+        tete._choc = True
+        prehension.arreter()
+        assert cibles == [("remontée lente après le choc", pytest.approx(0.52))]
+        # Sans objet tenu, la limite ne compte pas (remontee_choc_m : 5 cm).
+        cibles.clear()
+        prehension.objet = None
+        tete._choc = True
+        prehension.arreter()
+        assert cibles == [("remontée lente après le choc", pytest.approx(pose.z + 0.05))]
 
 
 def test_seul_le_recentrage_du_c_bouge_le_pont_tete_basse():

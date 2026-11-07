@@ -400,6 +400,8 @@ class Versement:
                 if not griffe.plan.reprendre:
                     break
             self.etat.tare_n = griffe.tare_n
+            # Tête à A = 0 dans le fût, avant la sortie (tâche 45 octies).
+            yield from griffe._tete_a_dans_le_fut(reglages.a_deg, choc=True)
             yield from griffe._monter(choc=True)
             avant = yield from self._net()
             if bas <= avant <= haut:

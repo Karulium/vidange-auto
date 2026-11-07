@@ -269,12 +269,26 @@ class BandeGriffe(Modele):
     y_min: tuple[float, float, float]
 
 
+class ExceptionButeeHaute(Modele):
+    """Une zone du mât où la table « y minimum du mât » en butée haute ne compte pas (tâche 45
+    octies) : axes en butée haute, godet fermé, tête bras le long du pont, pour la pose de
+    l'entonnoir sur UN bocal par la Préhension (griffe traînée par le pont). Figée d'après une
+    mesure de la Maquette (`source`), qui doit couvrir la pose finale ET le chemin d'approche.
+    Vérifiée au démarrage : le mât de la griffe pour cette pose est dedans, aucun autre bocal."""
+
+    bocal: Nom
+    x: Intervalle
+    y: Intervalle
+    source: str = Field(min_length=1)
+
+
 class YMinMatGriffe(Modele):
     """Tables « y minimum du mât » de l'agitateur fixe (docs/decisions.md, 02/11/2026) : une
     pour les axes en butée haute, une pour les axes dessous."""
 
     butee_haute: list[BandeGriffe] = Field(min_length=1)
     sous_butee: list[BandeGriffe] = Field(min_length=1)
+    exceptions_butee_haute: list[ExceptionButeeHaute] = Field(default_factory=list)
 
 
 class OuvertureFutGriffe(Modele):
@@ -2535,6 +2549,9 @@ class ZoneBrasSpray(Modele):
     x: Intervalle
     y: Intervalle
     z_max: float
+    # Tant que le bras n'est pas vu rangé, un pas de la griffe ou de la préhension qui entrerait
+    # dans la zone attend, au plus tant (s), puis alarme (tâche 45 octies).
+    attente_max_s: float = Field(gt=0)
 
     @model_validator(mode="after")
     def _verifier(self) -> "ZoneBrasSpray":
@@ -2566,6 +2583,11 @@ class BrasSpray(Modele):
         zone = self.zone
         if not (zone.x[0] <= x <= zone.x[1] and zone.y[0] <= y <= zone.y[1]):
             raise ValueError("bras → zone : elle doit contenir l'axe du bras (axe_xy)")
+        if zone.attente_max_s < 2 * self.temps_max_s:
+            raise ValueError(
+                f"bras → zone → attente_max_s ({zone.attente_max_s:g} s) : au moins une sortie "
+                f"et un rangement du bras (2 × temps_max_s = {2 * self.temps_max_s:g} s)"
+            )
         return self
 
 
@@ -4022,6 +4044,59 @@ class Machine(Modele):
                     f"mat_y_max ({chaine.mat_y_max:g}) : la préhension y est en haut"
                 )
         erreurs += self._verifier_versement_bocal()
+        erreurs += self._verifier_exceptions_butee_haute()
+        return erreurs
+
+    def mat_griffe_entonnoir(self, x: float, y: float) -> tuple[float, float]:
+        """Le mât de la griffe (même pont) quand la Préhension pose l'entonnoir sur le bocal en
+        (x, y) : la ventouse tient l'oreille (x + decalage_oreille), et le mât de la griffe est
+        à l'écart des deux mâts de la tête de préhension."""
+        griffe, entonnoir, prehension = self.griffe, self.entonnoir, self.prehension
+        assert griffe is not None and entonnoir is not None and prehension is not None
+        ecart = prehension.decalage_mat_x - griffe.decalage_mat_x
+        return (
+            round(x + entonnoir.decalage_oreille_x_m - ecart, 6),
+            round(y + entonnoir.decalage_oreille_y_m, 6),
+        )
+
+    def _verifier_exceptions_butee_haute(self) -> list[str]:
+        """Chaque exception de la table « y minimum du mât » en butée haute : un bocal connu, le
+        mât de la griffe pour la pose de l'entonnoir sur ce bocal dans sa zone, et aucun autre
+        bocal (l'exception n'affaiblit pas la règle ailleurs)."""
+        from vidange.stockage import places
+
+        griffe = self.griffe
+        assert griffe is not None
+        exceptions = griffe.y_min_mat.exceptions_butee_haute
+        if not exceptions:
+            return []
+        if self.entonnoir is None or self.prehension is None or self.stockage is None:
+            return ["griffe → y_min_mat → exceptions_butee_haute : sans entonnoir ni stockage"]
+        erreurs = []
+        bocaux = places.places_bocaux(self)
+        for exception in exceptions:
+            nom = f"griffe → y_min_mat → exceptions_butee_haute → {exception.bocal}"
+            (x0, x1), (y0, y1) = exception.x, exception.y
+            if x0 >= x1 or y0 >= y1:
+                erreurs.append(f"{nom} : x et y du plus petit au plus grand")
+                continue
+            if exception.bocal not in bocaux:
+                erreurs.append(f"{nom} : bocal inconnu du stockage")
+                continue
+            for bocal, (x, y) in bocaux.items():
+                mx, my = self.mat_griffe_entonnoir(x, y)
+                dedans = x0 - 1e-9 <= mx <= x1 + 1e-9 and y0 - 1e-9 <= my <= y1 + 1e-9
+                if bocal == exception.bocal and not dedans:
+                    erreurs.append(
+                        f"{nom} : la zone (x {x0:g}-{x1:g}, y {y0:g}-{y1:g}) ne contient pas le "
+                        f"mât de la griffe pour la pose de l'entonnoir sur ce bocal ({mx:g} ; "
+                        f"{my:g}) : la mesure n'est pas à la bonne place"
+                    )
+                elif bocal != exception.bocal and dedans:
+                    erreurs.append(
+                        f"{nom} : la zone contient aussi le mât pour le bocal « {bocal} » "
+                        f"({mx:g} ; {my:g}) : une exception ne vaut que pour un bocal"
+                    )
         return erreurs
 
     def _verifier_versement_bocal(self) -> list[str]:

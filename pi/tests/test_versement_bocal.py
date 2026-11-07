@@ -472,23 +472,74 @@ def test_fut_vide_alerte_et_le_poste_le_dit():
 # ---------------------------------------------------------------- avec le module de l'entonnoir
 
 
+# Un lot de taille normale (plus de limite à 3 bocaux depuis la tâche 45 octies).
+LOT = [
+    BOCAL,
+    "bocal_1_3",
+    "bocal_2_3",
+    "bocal_2_4",
+    "bocal_3_3",
+    "bocal_3_4",
+    "bocal_4_3",
+    "bocal_4_4",
+]
+
+
 def test_lot_de_bocaux_avec_le_vrai_versement():
     reglages = reglages_simules(apres="entonnoir.verser")
-    bocaux = [BOCAL, "bocal_1_3", "bocal_2_3"]
     with Simulateur(reglages, LISTE, "vidange_fut") as simulation:
         scenario = entonnoir_du_simulateur(simulation, avec_module=False)
         griffe = griffe_du_simulateur(simulation, machouiller=lambda: False)
         versement = Versement(griffe, scenario.entonnoir)
-        module = module_entonnoir(
-            scenario.entonnoir, scenario.prehension, bocaux, versement=versement
-        )
+        tournes = []
+        executer = griffe.bras.executer
+
+        def noter(pas, cible):
+            if pas.texte.startswith("tête à 0° dans le fût"):
+                tournes.append((griffe.regles.dans_le_fut(griffe.bras.position()), cible.a))
+            executer(pas, cible)
+
+        griffe.bras.executer = noter
+        module = module_entonnoir(scenario.entonnoir, scenario.prehension, LOT, versement=versement)
         planning = simulation.jouer([module])
         assert planning.fini, planning.probleme
-        assert set(versement.doses) == set(bocaux)
+        assert set(versement.doses) == set(LOT)
         assert all(0.290 <= dose <= 0.310 for dose in versement.doses.values())
         assert griffe.bras.fut.verse_kg == pytest.approx(sum(versement.doses.values()))
         suite = [ligne.etape for ligne in planning.lignes]
-        assert suite.count("verser") == 3 and suite[-1] == "enlever_a_la_main"
+        assert suite.count("verser") == len(LOT) and suite[-1] == "enlever_a_la_main"
+        # Défaut d'avant la tâche 45 octies : la prise tourne la raclette vers le centre du fût
+        # et la sortie prenait l'orientation bloquée la plus proche (parfois −180°). Maintenant,
+        # la tête est mise à 0° dans le fût, avant la sortie (ici : plusieurs fois sur 8 bocaux).
+        assert tournes and all(dedans and a == 0 for dedans, a in tournes)
+
+
+def test_la_prise_du_mode_bocaux_finit_tete_a_0_dans_le_fut():
+    with Simulateur(reglages_simules(), LISTE, "vidange_fut") as simulation:
+        griffe = griffe_du_simulateur(simulation)
+        centre_x, centre_y = griffe.fut.centre_fut
+        dans_le_fut = Pose(x=centre_x + 0.05, y=centre_y, z=griffe.fut.fut_bord_z, a=-100.0, b=0.0)
+        assert griffe.regles.dans_le_fut(dans_le_fut)
+        griffe.pose = dans_le_fut
+        pas = list(griffe._tete_a_dans_le_fut(0.0))
+        assert [(p.texte, p.cibles) for p in pas] == [("tête à 0° dans le fût", {"a": 0.0})]
+        # Godet pas fermé : fermé d'abord. La tête ne peut pas tourner là : d'abord au centre.
+        griffe.pose = dans_le_fut.avec(b=0.3)
+        griffe.regles.refus_mouvement = lambda depart, arrivee, contexte: "gêné"
+        pas = list(griffe._tete_a_dans_le_fut(0.0))
+        assert [p.texte for p in pas] == [
+            "fermer le godet",
+            "vers le centre du fût",
+            "tête à 0° dans le fût",
+        ]
+        assert pas[1].cibles == {"x": centre_x, "y": centre_y}
+        # Déjà à 0° : rien.
+        griffe.pose = dans_le_fut.avec(a=0.2)
+        assert list(griffe._tete_a_dans_le_fut(0.0)) == []
+        # Hors du fût, tête à −180° : jamais de sortie, alarme.
+        griffe.pose = dans_le_fut.avec(z=GRIFFE.trajet.z, a=-180.0)
+        with pytest.raises(ErreurEtape, match="tête à -180° hors du fût, il faut 0°"):
+            list(griffe._tete_a_dans_le_fut(0.0))
 
 
 def lot_avec_la_tete_de_prehension(bocaux, preparer=lambda scenario, versement: None):
@@ -558,7 +609,16 @@ def test_derniere_rangee_tete_de_prehension_qui_tient_un_objet_refusee():
 
 def test_lot_avec_les_bocaux_autrefois_refuses():
     # Rangée 1 et dernière rangée, l'entonnoir posé par la Préhension d'un bocal à l'autre.
-    bocaux = ["bocal_0_5", "bocal_8_0", "bocal_0_6"]
+    bocaux = [
+        "bocal_0_5",
+        "bocal_8_0",
+        "bocal_0_6",
+        "bocal_8_3",
+        "bocal_1_2",
+        "bocal_0_3",
+        "bocal_8_4",
+        "bocal_4_4",
+    ]
     planning, versement, *_ = lot_avec_la_tete_de_prehension(bocaux)
     assert planning.fini, planning.probleme
     assert set(versement.doses) == set(bocaux)
@@ -607,3 +667,74 @@ def test_outil_versement(capsys):
     # pas l'entonnoir sur 4 bocaux, la griffe traînée irait au-dessus de l'agitateur.
     assert "ne peut pas poser l'entonnoir" in sortie and "pose finale seulement) : 4" in sortie
     assert "bocal_2_0  (1,2075 ; 0,2506) : mât de la griffe à 1,0315" in sortie
+
+
+# ------------------------------------------------ pose de l'entonnoir, griffe traînée (45 octies)
+
+EXCEPTION_VIDE = "    exceptions_butee_haute: []"
+
+
+def exception(bocal, x, y):
+    return (
+        f'    exceptions_butee_haute:\n      - {{bocal: {bocal}, x: {x}, y: {y}, source: "essai"}}'
+    )
+
+
+def test_pas_d_exception_a_la_table_en_butee_haute_dans_le_depot():
+    # La mesure de la Maquette du 07/11 (v45.120) a été faite le mât à x bocal − 0,316 : pour
+    # bocal_2_0, 0,8915 ; mais la ventouse tient l'oreille (x bocal + 0,140) et le mât de la
+    # griffe y est à 1,0315. Aucune exception tant que la bonne place n'est pas mesurée.
+    assert GRIFFE.y_min_mat.exceptions_butee_haute == []
+    assert MACHINE.mat_griffe_entonnoir(1.2075, 0.2506) == (1.0315, 0.2506)
+
+
+def test_exception_a_la_mauvaise_place_refusee_au_demarrage(reglages):
+    # La pose mesurée par la Maquette (0,8915 ; 0,2506) ne contient pas le vrai mât.
+    remplacer(
+        reglages / "machine.yaml",
+        EXCEPTION_VIDE,
+        exception("bocal_2_0", "[0.885, 0.898]", "[0.245, 0.256]"),
+    )
+    message = erreur_de(reglages)
+    assert "exceptions_butee_haute → bocal_2_0 : la zone (x 0.885-0.898" in message
+    assert "(1.0315 ; 0.2506) : la mesure n'est pas à la bonne place" in message
+
+
+def test_exception_qui_couvre_un_autre_bocal_refusee_au_demarrage(reglages):
+    # bocal_2_0 (mât 1,0315 ; 0,2506) et bocal_1_0 (1,0865 ; 0,1553) dans la même zone : non.
+    remplacer(
+        reglages / "machine.yaml",
+        EXCEPTION_VIDE,
+        exception("bocal_2_0", "[1.00, 1.10]", "[0.15, 0.26]"),
+    )
+    assert "la zone contient aussi le mât pour le bocal « bocal_1_0 »" in erreur_de(reglages)
+
+
+def test_exception_d_un_bocal_inconnu_refusee_au_demarrage(reglages):
+    remplacer(
+        reglages / "machine.yaml",
+        EXCEPTION_VIDE,
+        exception("bocal_9_9", "[1.00, 1.06]", "[0.24, 0.30]"),
+    )
+    assert "exceptions_butee_haute → bocal_9_9 : bocal inconnu du stockage" in erreur_de(reglages)
+
+
+def test_exception_a_la_bonne_place_pour_un_seul_bocal(reglages):
+    from vidange.reglages import charger_reglages
+
+    remplacer(
+        reglages / "machine.yaml",
+        EXCEPTION_VIDE,
+        exception("bocal_2_0", "[1.00, 1.06]", "[0.24, 0.30]"),
+    )
+    machine = charger_reglages(reglages).machine
+    regles = ReglesGriffe(machine)
+    haut = Pose(x=1.0315, y=0.2506, z=machine.griffe.trajet.z, a=0, b=0)
+    assert regles.exception_butee_haute(haut) == "bocal_2_0"
+    assert regles.refus_pose(haut, Contexte()) is None
+    # La règle d'avant partout ailleurs : sous la butée haute, godet ouvert, tête tournée, ou
+    # un autre bocal (bocal_0_0, même x, y 0,06).
+    assert REGLES.refus_pose(haut, Contexte()) is not None
+    assert regles.refus_pose(haut.avec(z=1.15), Contexte()) is not None
+    assert regles.refus_pose(haut.avec(b=0.5), Contexte()) is not None
+    assert regles.refus_pose(haut.avec(y=0.06), Contexte()) is not None

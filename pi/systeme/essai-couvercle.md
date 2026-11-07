@@ -93,6 +93,21 @@ Le chariot de remplissage n'a pas besoin d'être préparé pour cette étape : l
    l'anse est relevée (erreur 10a) : la tête remonte **avec** le couvercle par le même chemin à l'envers
    (0,545, retour à y 0,498, puis en haut) ; regarder le même jeu à la remontée.
 
+8. **Format C : toute remontée avec le couvercle encore tenu** (tâche 45 octies, fil Préhension du 07/11,
+   § 5.1 ; **testé sur le vrai matériel : non**). Même installation qu'au point 7, vitesses divisées par 2 :
+   - **erreur 10a** (anse relevée) ou **10b** (plateau vide) : la tête remonte **tout droit à 10 mm/s** jusqu'à la
+     face 0,545 (de 0,44 à 0,545 : ≈ 10 s), puis va à **y 0,498** sans changer de hauteur, puis monte en haut ;
+   - **arrêt avant le lâcher** : si une alarme arrête la tête pendant l'approche lente (sous 0,545, à y 0,49),
+     couvercle encore tenu, la pose refaite après l'acquittement et le Go **commence** par le même chemin à
+     l'envers (0,545 à 10 mm/s, y 0,498, puis en haut), jamais par une montée droite à y 0,49. Ne pas
+     provoquer l'alarme en coupant l'air ou une carte (le couvercle tomberait) : regarder ce cas quand il
+     arrive, ou demander à Claude une façon sûre de le faire ;
+   - **choc** : ne pas en provoquer exprès (personne à côté de la tête qui bouge). Sur la machine imaginaire,
+     la remontée lente d'après un choc s'arrête à la face 0,545 au plus quand le couvercle C est tenu sous
+     0,545 à y 0,49 ;
+   - **après le lâcher** (couvercle posé) : la tête seule remonte tout droit, comme pour A, B et D.
+   À chaque remontée, filmer le côté mur : au moins 8 mm entre le couvercle et la plaque fixe du micropore.
+
 ## Étape 5 : les erreurs, une par une (seau A)
 
 1. **Anse relevée** (relever l'anse du seau plein avant l'étape 4) : « couvercle mal posé … vérifier l'anse du

@@ -205,6 +205,15 @@ class Griffe:
         # bouge le pont ou le chariot Y traîne aussi la tête de préhension (même chariot) ; ses
         # règles à elle sont vérifiées. Sans préhension branchée : rien.
         self.verrou_pont: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
+        # Verrou de la zone du bras du spray (vidange.spray.zone, tâche 45 octies) : tant que le
+        # bras n'est pas vu rangé, un pas qui entrerait dans sa zone ATTEND (raison, ou None), au
+        # plus attente_spray_max_s, puis alarme. Sans spray : rien.
+        self.verrou_spray: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
+        self.attente_spray_max_s = 0.0
+        self._attente_spray: str | None = None
+        self._attente_depuis = 0.0
+        self._en_pause = False
+        self._pause_depuis = 0.0
 
     # ------------------------------------------------------------ état
 
@@ -222,6 +231,16 @@ class Griffe:
     def occupee(self) -> bool:
         """Un geste est en cours (pont partagé avec la préhension, tâche 45 sexies)."""
         return self._geste is not None
+
+    def trajet_en_cours(self) -> tuple[Pose, Pose] | None:
+        """(départ, cible) du pas qui bouge la tête en ce moment ; None sans pas parti (un pas qui
+        attend le bras du spray n'est pas parti)."""
+        pas, pose = self._pas, self.pose
+        if self._geste is None or pas is None or pose is None or not pas.cibles:
+            return None
+        if self._attente_spray is not None:
+            return None
+        return pose, pose.avec(**pas.cibles)
 
     def tete_tourne(self) -> bool:
         """Un pas en cours fait tourner la tête (règle 14 du chariot de remplissage)."""
@@ -289,6 +308,15 @@ class Griffe:
             refus = self.verrou_pont(self.pose, cible)
         if refus is not None:
             raise ErreurEtape(f"griffe, « {pas.texte} » refusé : {refus}", QUOI_FAIRE)
+        attente = self.verrou_spray(self.pose, cible)
+        if attente is not None:
+            # Le bras du spray bouge : le pas attend (geste_fini le relance).
+            if self._attente_spray is None:
+                self._attente_depuis = self._horloge()
+                journal.info("Griffe : « %s » attend : %s", pas.texte, attente)
+            self._attente_spray = attente
+            return
+        self._attente_spray = None
         journal.debug("Griffe : %s", pas.texte)
         if self.garde is not None and "a" in pas.cibles:
             self.garde.noter("griffe_a", self.pose.a, en_rotation=True)
@@ -299,6 +327,21 @@ class Griffe:
         while self._geste is not None:
             pas = self._pas
             assert pas is not None and self.pose is not None
+            if self._attente_spray is not None:
+                if self._en_pause:
+                    return False
+                if self._horloge() - self._attente_depuis > self.attente_spray_max_s:
+                    raison, self._attente_spray = self._attente_spray, None
+                    self._geste = self._pas = None
+                    raise ErreurEtape(
+                        f"griffe, « {pas.texte} » : attend depuis plus de "
+                        f"{self.attente_spray_max_s:g} s : {raison}",
+                        QUOI_FAIRE,
+                    )
+                self._envoyer(pas)
+                if self._attente_spray is not None:
+                    return False
+                continue
             if not pas.cibles:
                 if pas.jusqu_a is not None and not pas.jusqu_a():
                     return False
@@ -316,15 +359,23 @@ class Griffe:
         return True
 
     def pauser(self) -> None:
+        if not self._en_pause:
+            self._en_pause = True
+            self._pause_depuis = self._horloge()
         self.bras.pauser()
 
     def reprendre(self) -> None:
+        # Le temps de la pause ne compte pas dans l'attente du bras du spray.
+        if self._en_pause and self._attente_spray is not None:
+            self._attente_depuis += self._horloge() - self._pause_depuis
+        self._en_pause = False
         self.bras.reprendre()
 
     def arreter(self) -> None:
         """Alarme : le mouvement s'arrête. Si le plateau du fût n'est plus vu, le pont se retire
         hors de la zone du plateau (en remontant d'abord)."""
         self._geste = self._pas = None
+        self._attente_spray = None
         self.bras.arreter()
         if self.poste.etat().plateau is True:
             return
@@ -392,6 +443,29 @@ class Griffe:
         if pose.z < self.reglages.trajet.z - _EGAL:
             etapes.append({"z": self.reglages.trajet.z})
         return etapes
+
+    def _tete_a_dans_le_fut(self, a: float, choc: bool = False) -> Geste:
+        """Mode bocaux (tâche 45 octies) : la prise finit tête à `a` (une orientation bloquée),
+        dans le fût, avant la sortie. La prise tourne la raclette vers le centre du fût ; sans ce
+        pas, la sortie prenait l'orientation bloquée la plus proche (parfois −180°) et le
+        versement refusait. Dans le fût, les demi-tours sont permis (règles de la griffe). Si la
+        tête ne peut pas tourner là où elle est, elle va d'abord au centre du fût."""
+        assert self.pose is not None
+        if abs(self.pose.a - a) <= self.reglages.rotation.tolerance_deg:
+            return
+        if not self.regles.dans_le_fut(self.pose):
+            raise ErreurEtape(
+                f"griffe : tête à {self.pose.a:g}° hors du fût, il faut {a:g}° avant la sortie",
+                QUOI_FAIRE,
+            )
+        if self.pose.b > _EGAL:
+            yield Pas("fermer le godet", {"b": 0.0}, choc=choc)
+        contexte = self.contexte()
+        cible = self._angle_proche(self.pose.a, [a])
+        if self.regles.refus_mouvement(self.pose, self.pose.avec(a=cible), contexte) is not None:
+            centre_x, centre_y = self.fut.centre_fut
+            yield Pas("vers le centre du fût", {"x": centre_x, "y": centre_y}, choc=choc)
+        yield Pas(f"tête à {a:g}° dans le fût", {"a": cible}, choc=choc)
 
     def _monter(self, choc: bool = False) -> Geste:
         assert self.pose is not None

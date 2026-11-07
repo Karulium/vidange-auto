@@ -745,8 +745,8 @@ def test_zone_du_bras_reglee():
 def test_zone_du_bras_verifiee(reglages):
     remplacer(
         reglages / "machine.yaml",
-        "zone: {exemple: true, x: [0.66, 0.95], y: [-0.03, 0.24], z_max: 0.85}",
-        "zone: {exemple: true, x: [0.75, 0.95], y: [-0.03, 0.24], z_max: 0.85}",
+        "zone: {exemple: true, x: [0.66, 0.95], y: [-0.03, 0.24], z_max: 0.85, attente_max_s: 120}",
+        "zone: {exemple: true, x: [0.75, 0.95], y: [-0.03, 0.24], z_max: 0.85, attente_max_s: 120}",
     )
     assert "bras → zone : elle doit contenir l'axe du bras" in erreur_de(reglages)
 
@@ -797,3 +797,185 @@ def test_zone_du_bras_position_inconnue_pas_libre():
     assert not zone.libre()
     assert "position de la griffe inconnue (carte muette)" in (zone.refus() or "")
     assert ZoneDuBras(MACHINE).libre()
+
+
+# ------------------------------------------------------------ verrou de la zone (tâche 45 octies)
+
+
+def zone_avec_griffe_et_prehension(simulation, repos):
+    """La zone du bras sur la griffe et la préhension imaginaires du même pont ; `repos["vu"]` :
+    le bras est vu rangé et arrêté."""
+    from vidange.cycle.griffe_du_lot import brancher_pont
+    from vidange.entonnoir.simulation import entonnoir_du_simulateur
+    from vidange.griffe.simulation import griffe_du_simulateur
+    from vidange.spray.zone import ZoneDuBras
+
+    prehension = entonnoir_du_simulateur(simulation, avec_module=False).prehension
+    griffe = griffe_du_simulateur(simulation)
+    brancher_pont(griffe, prehension)
+    zone = ZoneDuBras(MACHINE, griffe, prehension, bras_au_repos=lambda: repos["vu"])
+    zone.brancher()
+    return zone, griffe, prehension
+
+
+def test_verrou_de_la_zone_pendant_que_le_bras_bouge():
+    from vidange.griffe.regles import Pose as PoseGriffe
+    from vidange.prehension.regles import Pose as PosePrehension
+
+    repos = {"vu": True}
+    with Simulateur(REGLAGES, LISTE, "vidange_fut") as simulation:
+        zone, griffe, prehension = zone_avec_griffe_et_prehension(simulation, repos)
+        assert griffe.verrou_spray == zone.refus_griffe
+        assert prehension.verrou_spray == zone.refus_prehension
+        assert griffe.attente_spray_max_s == SPRAY.bras.zone.attente_max_s == 120
+        # Griffe en butée haute au-dessus de la zone, qui descend dedans (bas du godet sous 0,85).
+        haut = PoseGriffe(x=0.80, y=0.10, z=1.29, a=0, b=0)
+        bas = haut.avec(z=0.95)
+        assert zone.refus_griffe(haut, bas) is None
+        repos["vu"] = False
+        assert zone.verrouillee()
+        assert "la tête de la griffe entrerait dans la zone du bras du spray" in (
+            zone.refus_griffe(haut, bas) or ""
+        )
+        # Déjà dedans : elle peut en sortir ; un pas qui reste dehors passe.
+        assert zone.refus_griffe(bas, haut) is None
+        assert zone.refus_griffe(haut, haut.avec(x=0.50)) is None
+        # La préhension et ce qu'elle tient (seau pendu sous la tête en haut).
+        tete = PosePrehension(x=0.80, y=0.45, z=0.83, a=0)
+        assert zone.refus_prehension(tete, tete.avec(y=0.30)) is None
+        prehension.objet = prehension.objet_par_nom("seau", "seau_a")
+        assert "la tête de préhension (ou ce qu'elle tient) entrerait" in (
+            zone.refus_prehension(tete, tete.avec(y=0.30)) or ""
+        )
+        prehension.objet = None
+        # Lecture du bras impossible : verrouillée (prudent).
+        zone.bras_au_repos = lambda: 1 / 0
+        assert zone.verrouillee()
+
+
+def test_verrou_de_la_zone_outil_traine_par_le_pont():
+    repos = {"vu": False}
+    with Simulateur(REGLAGES, LISTE, "vidange_fut") as simulation:
+        zone, griffe, prehension = zone_avec_griffe_et_prehension(simulation, repos)
+        etat = simulation.etat_axes.positions
+        # Tête de préhension basse (face 0,80) à x 1,20, y 0,10, hors de la zone (x ≤ 0,95).
+        etat["prehension_z"] = 0.80
+        tete = prehension.tete.position()
+        etat["pont_x"] += 1.20 - tete.x
+        etat["chariot_y"] += 0.10 - tete.y
+        tete = prehension.tete.position()
+        assert (round(tete.x, 6), round(tete.y, 6)) == (1.2, 0.1)
+        mat = griffe.bras.position()
+        # Un pas de la griffe (en butée haute) qui recule le pont de 35 cm traîne la tête dedans.
+        refus = zone.refus_griffe(mat, mat.avec(x=mat.x - 0.35))
+        assert "la tête de préhension (traînée par le pont) entrerait" in (refus or "")
+        assert zone.refus_griffe(mat, mat.avec(x=mat.x + 0.20)) is None
+
+
+def test_un_pas_en_route_vers_la_zone_la_rend_occupee():
+    from vidange.griffe.regles import Pose as PoseGriffe
+
+    repos = {"vu": True}
+    with Simulateur(REGLAGES, LISTE, "vidange_fut") as simulation:
+        zone, griffe, prehension = zone_avec_griffe_et_prehension(simulation, repos)
+        assert zone.libre()
+        mat = griffe.bras.position()
+        haut = PoseGriffe(x=0.80, y=0.10, z=mat.z, a=0, b=0)
+        griffe.trajet_en_cours = lambda: (haut, haut.avec(z=0.95))
+        assert "la tête de la griffe va dans la zone du bras du spray" in (zone.refus() or "")
+        griffe.trajet_en_cours = lambda: (haut, haut.avec(x=0.50))
+        assert zone.libre()
+
+
+def test_le_pas_de_la_griffe_attend_le_bras_puis_part():
+    from vidange.chef import ErreurEtape
+    from vidange.griffe.bras import Pas as PasGriffe
+    from vidange.griffe.bras import Resultat as ResultatGriffe
+    from vidange.griffe.griffe import Griffe
+
+    with Simulateur(REGLAGES, LISTE, "vidange_fut") as simulation:
+        from vidange.griffe.simulation import griffe_du_simulateur
+
+        griffe: Griffe = griffe_du_simulateur(simulation)
+        temps = {"t": 0.0}
+        griffe._horloge = lambda: temps["t"]
+        envoyes = []
+        griffe.bras.executer = lambda pas, cible: envoyes.append((pas.texte, cible))
+        griffe.bras.fini = lambda: True
+        griffe.bras.resultat = lambda: ResultatGriffe(pose=envoyes[-1][1])
+        bouge = {"oui": True}
+        griffe.verrou_spray = lambda depart, arrivee: "le bras bouge" if bouge["oui"] else None
+        griffe.attente_spray_max_s = 10.0
+        depart = griffe.bras.position()
+
+        def geste():
+            yield PasGriffe("fermer le godet", {"b": 0.0})
+
+        griffe.lancer(geste)
+        assert not griffe.geste_fini() and envoyes == []
+        assert griffe.trajet_en_cours() is None  # pas parti : la zone n'est pas prise
+        # La pause ne compte pas dans l'attente, et rien ne part en pause.
+        griffe.pauser()
+        temps["t"] = 30.0
+        bouge["oui"] = False
+        assert not griffe.geste_fini() and envoyes == []
+        griffe.reprendre()
+        assert griffe.geste_fini()
+        assert [texte for texte, _ in envoyes] == ["fermer le godet"]
+        assert envoyes[0][1] == depart.avec(b=0.0)
+        # Trop longtemps : alarme, rien n'est parti.
+        envoyes.clear()
+        bouge["oui"] = True
+        griffe.lancer(geste)
+        temps["t"] += 10.5
+        with pytest.raises(ErreurEtape, match="attend depuis plus de 10 s : le bras bouge"):
+            griffe.geste_fini()
+        assert envoyes == []
+
+
+def test_le_pas_de_la_prehension_attend_le_bras_puis_part():
+    from vidange.chef import ErreurEtape
+    from vidange.entonnoir.simulation import entonnoir_du_simulateur
+    from vidange.prehension.tete import Pas as PasPrehension
+    from vidange.prehension.tete import Resultat as ResultatPrehension
+
+    with Simulateur(REGLAGES, LISTE, "vidange_fut") as simulation:
+        prehension = entonnoir_du_simulateur(simulation, avec_module=False).prehension
+        temps = {"t": 0.0}
+        prehension._horloge = lambda: temps["t"]
+        envoyes = []
+        tete = prehension.tete
+        tete.executer = lambda pas, cible, poids: envoyes.append((pas.texte, cible))
+        tete.fini = lambda: True
+        tete.resultat = lambda: ResultatPrehension(pose=envoyes[-1][1])
+        bouge = {"oui": True}
+        prehension.verrou_spray = lambda depart, arrivee: "le bras bouge" if bouge["oui"] else None
+        prehension.attente_spray_max_s = 10.0
+        depart = tete.position()
+
+        def geste():
+            yield PasPrehension("monter un peu", {"z": depart.z - 0.01})
+
+        prehension.lancer(geste)
+        assert not prehension.geste_fini() and envoyes == []
+        assert prehension.trajet_en_cours() is None
+        temps["t"] = 5.0
+        bouge["oui"] = False
+        assert prehension.geste_fini()
+        assert [texte for texte, _ in envoyes] == ["monter un peu"]
+        envoyes.clear()
+        bouge["oui"] = True
+        prehension.lancer(geste)
+        temps["t"] += 10.5
+        with pytest.raises(ErreurEtape, match="attend depuis plus de 10 s : le bras bouge"):
+            prehension.geste_fini()
+        assert envoyes == []
+
+
+def test_attente_de_la_zone_verifiee(reglages):
+    remplacer(
+        reglages / "machine.yaml",
+        "z_max: 0.85, attente_max_s: 120}",
+        "z_max: 0.85, attente_max_s: 5}",
+    )
+    assert "bras → zone → attente_max_s (5 s) : au moins une sortie" in erreur_de(reglages)

@@ -154,9 +154,26 @@ cas n'ont été joués que sur la machine imaginaire. À faire à la console d'a
 5. Essayer le refus : mettre une capsule dans la tête de préhension (aimants) avant le versement de `bocal_8_3` :
    alarme « tête de préhension basse refusée : elle tient un(e) capsule », la griffe ne passe pas y 0,80.
 6. Quand tout est bon : `tete_basse → exemple: false` (garder 0,90 sauf si un jeu est trop petit).
-7. **Lot de plus de 3 bocaux.** Sur la machine imaginaire, au 4e bocal, la griffe sort parfois du fût tête à
-   180° et le versement s'arrête (« tête à −180°, il faut 0° ») : question de la PR n° 100. Faire les lots de
-   3 bocaux au plus en attendant la réponse.
+7. **Lot de plus de 3 bocaux** : voir l'étape 8 (corrigé par la tâche 45 octies).
+
+## Étape 8 : la tête à 0° avant de sortir du fût, lots de taille normale (tâche 45 octies)
+
+**Testé sur le vrai matériel : non.** Sur la machine imaginaire, un lot de 4 bocaux ou plus s'arrêtait au 4e
+(« tête à −180°, il faut 0° »). La cause : à chaque prise, la griffe tourne sa raclette vers le centre du fût ;
+en sortant, elle prenait l'orientation « bras le long du pont » la plus proche, 0° ou ±180°. Maintenant, chaque
+prise du mode bocaux finit **tête à 0°, dans le fût**, godet fermé, avant de monter (journal : « tête à 0° dans
+le fût »). Si la tête ne peut pas tourner là où elle est, elle va d'abord au centre du fût.
+
+1. Console d'abord, fût de maïs au poste, vitesses divisées par 4, Karulium à l'arrêt d'urgence : faire une
+   prise à la main au bord du fût (raclette tournée vers le centre, A vers −120°, par exemple), godet fermé, axes
+   dans le fût. Tourner la tête à 0° (`$J=G53 A0 F600` sur la carte du portique) **dans le fût** : regarder la
+   tête et la raclette contre la paroi et le maïs. Rien ne doit forcer sur la paroi. Si ça touche, dire à Claude
+   à quel endroit (la griffe irait alors d'abord au centre du fût, ce qu'elle fait déjà quand ses règles le
+   demandent).
+2. En lot de **8 bocaux** (par exemple `bocal_1_2`, `bocal_1_3`, `bocal_2_3`, `bocal_2_4`, `bocal_3_3`,
+   `bocal_3_4`, `bocal_4_3`, `bocal_4_4`), même prudence : à chaque bocal, la tête doit sortir du fût **à 0°**
+   (raclette côté −x). Le lot doit aller au bout sans « tête à −180° ».
+3. Regarder le temps : le demi-tour dans le fût ajoute quelques secondes à certaines prises. Le dire s'il gêne.
 
 ## Ce qu'il faut renvoyer à Claude
 

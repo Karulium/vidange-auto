@@ -216,6 +216,14 @@ class PiecesSimulees:
             # Le bocal neuf de semence est mis par la vraie Préhension simulée (tâche 19 quater).
             _, self.monde_bocal_neuf = bocal_neuf_du_simulateur(simulateur, scenario, stockage)
         self.scenario = scenario
+        # La zone du bras du spray : la préhension simulée seulement (pas de griffe) ; verrou
+        # tant que le bras n'est pas vu rangé (tâche 45 octies).
+        zone = ZoneDuBras(
+            simulateur.reglages.machine,
+            prehension=scenario.prehension,
+            bras_au_repos=None if spray is None else (lambda: not spray.bras_spray_sorti()),
+        )
+        zone.brancher()
         return PiecesRemplissage(
             scenario.remplissage,
             scenario.prehension,
@@ -225,10 +233,7 @@ class PiecesSimulees:
             # Pas de griffe sur la machine imaginaire : elle n'est jamais au poste.
             griffe_partie=lambda: True,
             couvercle=couvercle,
-            # La zone du bras du spray : la préhension simulée seulement (pas de griffe).
-            zone_bras_spray=ZoneDuBras(
-                simulateur.reglages.machine, prehension=scenario.prehension
-            ).libre,
+            zone_bras_spray=zone.libre,
         )
 
     def entonnoir(self, lot: LotBocaux) -> PiecesEntonnoir:
