@@ -1022,11 +1022,20 @@ prehension:
   # Vide (fiche) : prise bonne à −55 kPa ; perdu au-dessus de −40 pendant la levée (« feed hold »,
   # redescendre, reposer, reprendre ; après 2 échecs, alerte). ≈ 100 lectures/s, moyennées.
   # Zéro recalé à chaque démarrage, vanne fermée. Délais, relâche, moyenne, zéro : EXEMPLES.
+  # relache_s : attente après la coupure des électroaimants (capsule, couvercle percé).
   vide:
     prise_kpa: -55
     perte_kpa: -40
     delai_prise_s: 3
     relache_s: 0.5
+    # Lâcher à la ventouse (fil Préhension, 07/11/2026, tâche 45 undecies), pour tous les objets
+    # (seau, couvercle, entonnoir...) : fermer « aspirer » ne lâche rien (clapet anti-retour).
+    # « aspirer » fermée, puis « souffler » ouverte souffle_s (≈ 0,2 à 0,5 s d'après le fil :
+    # EXEMPLE, à régler à l'essai) ; lâché quand le vide est revenu au-dessus de −5 kPa (chiffre du
+    # fil), attendu au plus delai_lacher_s (EXEMPLE) ; sinon un nouveau souffle, puis alerte.
+    souffle_s: 0.3
+    lache_kpa: -5
+    delai_lacher_s: 2
     frequence_hz: 100
     moyenne: 5
     essais_max: 2
@@ -2171,10 +2180,10 @@ entonnoir:
   # Pose : posé à l'attendu ± 5 mm ; 10 mm de plus ou davantage = la pointe sur le bord du verre.
   # EXEMPLES.
   pose: {tolerance_m: 0.005, bord_du_verre_m: 0.010}
-  # Vide : 2 s pour atteindre −55 kPa, puis un seul nouvel essai (remonter de 5 mm) ; lâché quand il
-  # est revenu au-dessus de −5 kPa (attendu 2 s au plus, puis un deuxième souffle de la durée
-  # prehension → vide → relache_s, puis alerte). EXEMPLES.
-  vide: {delai_prise_s: 2, lache_kpa: -5, delai_lacher_s: 2, remontee_reessai_m: 0.005}
+  # Vide : 2 s pour atteindre −55 kPa, puis un seul nouvel essai (souffler, remonter de 5 mm).
+  # EXEMPLES. Le lâcher (souffle, vide revenu au-dessus de −5 kPa, un deuxième souffle, puis
+  # alerte) est celui de prehension → vide (tâche 45 undecies).
+  vide: {delai_prise_s: 2, remontee_reessai_m: 0.005}
   # Caméra du plafond : ± 5 mm sur le centre du col ; le cône (60°, pointe Ø 70 dans un col Ø 89)
   # capte 9,5 mm d'erreur. Figés.
   col: {precision_m: 0.005, capture_m: 0.0095}
@@ -2203,15 +2212,13 @@ couvercle:
     epaisseur_dernier_m: 0.009
     decollage_m: 0.03
   # Aspirer par impulsions d'environ 1 s, 2 au plus, puis souffler et 1 nouvel essai (remonter de
-  # 5 mm, redescendre au contact) ; souffler environ 0,2 s au lâcher, jusqu'à −5 kPa.
+  # 5 mm, redescendre au contact). Le lâcher (souffler ≈ 0,2 à 0,5 s, jusqu'à −5 kPa) est celui de
+  # prehension → vide (tâche 45 undecies).
   vide:
     impulsion_s: 1.0
     impulsions_max: 2
     essais_max: 2
     remontee_reessai_m: 0.005
-    lache_kpa: -5
-    souffle_s: 0.2
-    delai_lacher_s: 2
   pose:
     x: 0.925
     y: 0.49

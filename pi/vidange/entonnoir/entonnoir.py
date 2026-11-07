@@ -69,8 +69,9 @@ QUOI_FAIRE_PERDU = (
     "ce n'est pas fait."
 )
 QUOI_FAIRE_COLLE = (
-    "L'entonnoir est resté collé à la ventouse au lâcher : regarder la ventouse et le tuyau de "
-    "vide. Le détacher à la main si besoin, puis acquitter et donner le Go."
+    "L'entonnoir est resté collé à la ventouse au lâcher : regarder la ventouse, le tuyau de "
+    "vide et la vanne « souffler ». Le détacher à la main si besoin, puis acquitter et donner le "
+    "Go."
 )
 QUOI_FAIRE_POSE = (
     "L'entonnoir tenu n'a pas pu se poser sur le col : regarder la vidéo (pointe sur le bord du "
@@ -429,8 +430,7 @@ class Entonnoir:
                 break
             # Souffler, remonter de 5 mm, redescendre, réessayer une seule fois.
             essais += 1
-            tete.vanne(False)
-            yield Pas("souffle", attente_s=vide.relache_s)
+            yield from prehension.souffler()
             if essais > 1:
                 yield from prehension.monter()
                 raise ErreurEtape(
@@ -597,40 +597,14 @@ class Entonnoir:
             yield from self._vide_perdu(prehension)
 
     def _lacher(self, prehension: Prehension, bocal: str) -> Geste:
-        """Geste 11 : vanne fermée (souffle), vide revenu au-dessus de −5 kPa, puis la tête remonte
-        de 0,030 en vitesse d'approche (l'entonnoir doit rester posé), puis en rapide."""
+        """Geste 11 : le lâcher de la Préhension (« souffler », vide revenu au-dessus de −5 kPa, un
+        nouveau souffle, puis alerte ; tâche 45 undecies), puis la tête remonte de 0,030 en
+        vitesse d'approche (l'entonnoir doit rester posé), puis en rapide."""
         reg = self.reglages
         tete = prehension.tete
-        relache = prehension.reglages.vide.relache_s
         assert prehension.pose is not None
         z = prehension.pose.z
-
-        def lache() -> bool:
-            valeur = tete.vide_kpa()
-            return valeur is not None and valeur > reg.vide.lache_kpa
-
-        tete.vanne(False)
-        yield Pas("souffle", attente_s=relache)
-        resultat = yield Attente(
-            "vide lâché",
-            lache,
-            reg.vide.delai_lacher_s,
-            "vide pas revenu",
-            QUOI_FAIRE_COLLE,
-            sans_alarme=True,
-        )
-        assert resultat is not None
-        if resultat.delai_depasse:
-            tete.vanne(False)
-            yield Pas("nouveau souffle", attente_s=relache)
-            yield Attente(
-                "vide lâché (nouveau souffle)",
-                lache,
-                reg.vide.delai_lacher_s,
-                f"entonnoir resté collé à la ventouse (vide au-dessous de {reg.vide.lache_kpa:g} "
-                "kPa après un nouveau souffle)",
-                QUOI_FAIRE_COLLE,
-            )
+        yield from prehension.lacher_ventouse("entonnoir", QUOI_FAIRE_COLLE)
         prehension.objet, prehension.poids_porte_n = None, 0.0
         tete.acceleration_seau(False)
         self._changer(bocal, False)

@@ -68,8 +68,9 @@ QUOI_FAIRE_SANS_SEAU = (
     "Regarder la vidéo et le plateau, puis acquitter et donner le Go : la pose est refaite."
 )
 QUOI_FAIRE_COLLE = (
-    "Le couvercle est resté collé à la ventouse : regarder la ventouse et le tuyau de vide, "
-    "détacher le couvercle à la main SANS toucher à la tête, puis acquitter et donner le Go."
+    "Le couvercle est resté collé à la ventouse : regarder la ventouse, le tuyau de vide et la "
+    "vanne « souffler », détacher le couvercle à la main SANS toucher à la tête, puis acquitter "
+    "et donner le Go."
 )
 QUOI_FAIRE_PALIER = (
     "Le palier pesé de la tête ne revient pas à vide après la pose : regarder la ventouse (un "
@@ -230,8 +231,7 @@ class Couvercle:
             # Les reposer sur la pile (contact M8), souffler, puis refaire la prise (une fois).
             yield from prehension.descendre(z_contact, "reposer le(s) couvercle(s)")
             prehension.objet, prehension.poids_porte_n = None, 0.0
-            tete.vanne(False)
-            yield Pas("souffle", attente_s=reg.vide.souffle_s)
+            yield from prehension.souffler()
             essais_poids += 1
             if essais_poids >= 2:
                 yield from prehension.monter()
@@ -292,7 +292,8 @@ class Couvercle:
 
     def _aspirer(self, prehension: Prehension) -> Generator[Pas | Attente, Resultat | None, bool]:
         """Étape 4 : « aspirer » par impulsions (≈ 1 s) jusqu'à −55 kPa ; pas atteint en
-        `impulsions_max` impulsions : « souffler » et rendre faux (la prise est refaite)."""
+        `impulsions_max` impulsions : « souffler » et rendre faux (la prise est refaite). Entre
+        deux impulsions, « aspirer » est fermée (le clapet anti-retour garde le vide)."""
         reg = self.reglages.vide
         tete = prehension.tete
         vide = prehension.reglages.vide
@@ -317,8 +318,7 @@ class Couvercle:
             if impulsion < reg.impulsions_max:
                 tete.vanne(False)
                 yield Pas("pause entre deux impulsions", attente_s=vide.relache_s)
-        tete.vanne(False)
-        yield Pas("souffle", attente_s=reg.souffle_s)
+        yield from prehension.souffler()
         return False
 
     def _perdu(self, prehension: Prehension) -> None:
@@ -540,36 +540,10 @@ class Couvercle:
             self._perdu(prehension)
 
     def _lacher(self, prehension: Prehension) -> Geste:
-        reg = self.reglages.vide
-        tete = prehension.tete
-
-        def lache() -> bool:
-            valeur = tete.vide_kpa()
-            return valeur is not None and valeur > reg.lache_kpa
-
-        tete.aimants(False)
-        tete.vanne(False)
-        yield Pas("souffle", attente_s=reg.souffle_s)
-        resultat = yield Attente(
-            "vide lâché",
-            lache,
-            reg.delai_lacher_s,
-            "vide pas revenu",
-            QUOI_FAIRE_COLLE,
-            sans_alarme=True,
-        )
-        assert resultat is not None
-        if resultat.delai_depasse:
-            tete.vanne(False)
-            yield Pas("nouveau souffle", attente_s=reg.souffle_s)
-            yield Attente(
-                "vide lâché (nouveau souffle)",
-                lache,
-                reg.delai_lacher_s,
-                f"couvercle resté collé à la ventouse (vide au-dessous de {reg.lache_kpa:g} kPa "
-                "après un nouveau souffle)",
-                QUOI_FAIRE_COLLE,
-            )
+        """Étape 11 : électroaimants coupés, puis le lâcher de la Préhension (souffler, vide
+        revenu au-dessus de −5 kPa, un nouveau souffle, puis alerte ; tâche 45 undecies)."""
+        prehension.tete.aimants(False)
+        yield from prehension.lacher_ventouse("couvercle", QUOI_FAIRE_COLLE)
         journal.info("Couvercle : lâché")
         prehension.objet, prehension.poids_porte_n = None, 0.0
         # Après le lâcher, la tête seule remonte tout droit (§ 5.1).
@@ -577,7 +551,6 @@ class Couvercle:
 
     def _degager(self, prehension: Prehension, z_contact: float) -> Geste:
         pose = self.reglages.pose
-        reg = self.reglages.vide
         tete = prehension.tete
         yield Pas(
             "dégagement lent",
@@ -587,8 +560,7 @@ class Couvercle:
         if tete.contact_tete():
             # Resté collé à la ventouse : nouveau souffle, puis alerte s'il est encore là.
             journal.warning("Couvercle : le M8 ne retombe pas, nouveau souffle")
-            tete.vanne(False)
-            yield Pas("nouveau souffle", attente_s=reg.souffle_s)
+            yield from prehension.souffler("nouveau souffle")
             if tete.contact_tete():
                 raise ErreurEtape(
                     f"couvercle : le M8 voit encore le couvercle {pose.m8_retombe_m * 1000:g} mm "

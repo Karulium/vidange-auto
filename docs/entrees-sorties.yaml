@@ -335,15 +335,17 @@ cartes:
 #   fdc_mors_ouverts, moteur_mors, verrou_plateau_engage, inclinaison_bocal,
 #   demi_tour_vers_tete_en_bas, demi_tour_vers_debout, electroaimant_verrou_plateau.
 # (tâche 37, préhension : sur la carte FluidNC n° 4 ; le Pi lit contact_tete dans l'état de la
-#   carte et commande vanne_vide et electroaimants_capsule par elle : lettres et numéros dans
-#   pi/reglages/fluidnc.yaml ; vide_venturi est lu par l'ADS1115 de l'armoire) :
+#   carte et commande vanne_vide, vanne_souffler (tâche 45 undecies) et electroaimants_capsule par
+#   elle : lettres et numéros dans pi/reglages/fluidnc.yaml ; vide_venturi est lu par l'ADS1115 de
+#   l'armoire) :
 #   contact_tete, fdc_prehension_haut, origine_rotation_tete, alarme_prehension_z,
-#   alarme_rotation_tete, moteur_prehension_z, moteur_rotation_tete, vanne_vide,
+#   alarme_rotation_tete, moteur_prehension_z, moteur_rotation_tete, vanne_vide, vanne_souffler,
 #   electroaimants_capsule, vide_venturi, compte_tours_tete (tâche 36 bis : le tour de la tête
 #   à la prise d'origine de sa rotation).
 # (tâche 43, entonnoir à bocaux : AUCUN signal à lui. Il emploie ceux de la préhension : vanne_vide
-#   (la fiche dit ev_aspirer), contact_tete (contact_ventouse), vide_venturi (vide_prehension) et
-#   electroaimants_capsule, éteints (aimants_prehension). Pas de capteur de présence de l'entonnoir :
+#   (la fiche dit ev_aspirer), vanne_souffler (ev_souffler, tâche 45 undecies), contact_tete
+#   (contact_ventouse), vide_venturi (vide_prehension) et electroaimants_capsule, éteints
+#   (aimants_prehension). Pas de capteur de présence de l'entonnoir :
 #   le Pi tient son état entonnoir_place.)
 # (tâche 36 bis, griffe : sur la carte FluidNC n° 1, lus dans son état) : origine_godet_griffe,
 #   origine_rotation_griffe.
@@ -1179,11 +1181,26 @@ signaux:
     type: logique
     tension: 5
     module: prehension
+  # Les deux électrovannes de la ventouse (fil Préhension, fiche achats/modules/prehension.json,
+  # étape 9 ; Implantation, sorties-carte-4.md, 07/11/2026) : 2/2 24 V normalement fermées, plus
+  # un clapet anti-retour qui garde le vide. Sorties P0 et P1 de la carte n° 4 (M64/M65 P0 et
+  # P1), sorties auxiliaires 24 V n° 1 et 2, sur le 24 V COUPÉ (fermées à l'arrêt d'urgence ;
+  # diode de roue libre sur chaque bobine si la sortie n'en a pas ; ≤ 0,5 A par vanne). Le Pi ne
+  # les ouvre jamais en même temps (refus clair). Repères de broche : EXEMPLES, ils viendront du
+  # fichier de configuration de la carte achetée ; P0 et P1 ne changent pas.
   vanne_vide:
     exemple: true
-    description: Vanne du venturi de la ventouse (commandée = vide), par un relais de l'armoire
+    description: Électrovanne « aspirer » (ev_aspirer), air vers le venturi (commandée = vide)
     carte: fluidnc_prehension
     broche: S5
+    type: logique
+    tension: 5
+    module: prehension
+  vanne_souffler:
+    exemple: true
+    description: Électrovanne « souffler » (ev_souffler), ventouse remise à l'air (commandée = lâcher)
+    carte: fluidnc_prehension
+    broche: S14
     type: logique
     tension: 5
     module: prehension

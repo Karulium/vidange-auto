@@ -47,7 +47,7 @@ def test_verifier_des_reglages_corrects(reglages, tmp_path, capsys):
     sortie = capsys.readouterr().err
     assert "Réglages corrects" in sortie
     assert "valeurs d'EXEMPLE" in sortie
-    assert "entrees-sorties.yaml : 125 lignes d'EXEMPLE" in sortie
+    assert "entrees-sorties.yaml : 126 lignes d'EXEMPLE" in sortie
     assert "machine.yaml, micropore" in sortie
     # La simple vérification n'écrit pas de journal sur le disque.
     assert not (tmp_path / "donnees").exists()
@@ -228,7 +228,8 @@ def test_au_demarrage_seules_les_vannes_de_la_ventouse_sont_fermees(
     # (seule commande permise), puis lit le vide. Rien n'est ouvert, rien ne bouge.
     raccords, messages, _ = raccords_faux(entrees_sorties)
     prehension = raccords.ports["prehension"].__self__
-    vanne = charger_reglages(reglages).fluidnc.cartes["prehension"].sorties["vanne_vide"]
+    sorties = charger_reglages(reglages).fluidnc.cartes["prehension"].sorties
+    vanne, souffle = sorties["vanne_vide"], sorties["vanne_souffler"]
     prehension.sorties[vanne] = True
     arguments = [*options(reglages, tmp_path), "--entrees-sorties", str(entrees_sorties)]
     arret = threading.Event()
@@ -236,8 +237,9 @@ def test_au_demarrage_seules_les_vannes_de_la_ventouse_sont_fermees(
     fil.start()
     try:
         attendre(lambda: "READY=1" in messages)
-        assert prehension.sorties[vanne] is False
+        assert prehension.sorties[vanne] is False and prehension.sorties[souffle] is False
         assert f"M65 P{vanne}" in prehension.lignes_recues
+        assert f"M65 P{souffle}" in prehension.lignes_recues
         commandes = [ligne for ligne in prehension.lignes_recues if not ligne.startswith("?")]
         assert not [ligne for ligne in commandes if ligne.startswith(("M64", "M62", "$J", "$H"))]
         assert prehension.prises_origine == []
@@ -245,7 +247,7 @@ def test_au_demarrage_seules_les_vannes_de_la_ventouse_sont_fermees(
         arret.set()
         fil.join(10)
     journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
-    assert "vannes de la ventouse fermées (vanne_vide)" in journal
+    assert "vannes de la ventouse fermées (vanne_vide, vanne_souffler)" in journal
 
 
 def test_sans_cle_la_machine_demarre_sans_api(reglages, tmp_path):

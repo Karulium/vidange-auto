@@ -90,12 +90,17 @@ cartes:
       origine_rotation_tete: A
       # Alarme du pilote de Z (macro0, sans macro) : à vérifier à l'essai du portique.
       alarme_prehension_z: "0"
-    # Sorties « user_outputs » digital0 à 3 de fluidnc/prehension.yaml : ventouse, capsules,
-    # puis jet d'air du col et chauffage du lavage (place libre sur cette carte, EXEMPLE).
+    # Sorties « user_outputs » digital0 à 6 de fluidnc/prehension.yaml. P0 et P1 : les deux
+    # électrovannes de la ventouse (Implantation, sorties-carte-4.md, 07/11/2026 : sorties
+    # auxiliaires 24 V n° 1 et 2 de la carte, sur le 24 V coupé ; ces numéros ne changent pas) :
+    # « aspirer » (vanne_vide, ev_aspirer de la fiche) et « souffler » (vanne_souffler,
+    # ev_souffler). Jamais ouvertes en même temps (le Pi refuse). P2 : réservée au frein du Z de la
+    # préhension (commandée = desserré). P3 : libre. Capsules, jet d'air du col et chauffage du
+    # lavage : la fiche n'en dit rien, EXEMPLE (le plan de câblage choisit).
     sorties:
       vanne_vide: 0
-      electroaimants_capsule: 1
-      air_col_lavage: 2
-      chauffage_lavage: 3
-      # Frein du Z de la préhension (commandée = desserré), EXEMPLE.
-      frein_prehension_z: 4
+      vanne_souffler: 1
+      frein_prehension_z: 2
+      electroaimants_capsule: 4
+      air_col_lavage: 5
+      chauffage_lavage: 6

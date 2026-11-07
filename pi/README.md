@@ -535,11 +535,20 @@ Etape(
 - **Prise** : descente au contact (palpage de FluidNC), cote à ± 5 mm, vide −55 kPa, levée lente puis
   normale ; vide au-dessus de −40 kPa pendant la levée → arrêt, reposer, reprendre, alerte au 2ᵉ échec ;
   poids contrôlé (deux seaux emboîtés : reposés).
+- **Lâcher à la ventouse** (tâche 45 undecies) : deux électrovannes NF, « aspirer » (`vanne_vide`, P0) et
+  « souffler » (`vanne_souffler`, P1), plus un clapet anti-retour ; fermer « aspirer » ne lâche rien.
+  `prehension.lacher_ventouse(quoi)` : « aspirer » fermée, « souffler » ouverte `vide → souffle_s` puis
+  refermée (`prehension.souffler()`), vide revenu au-dessus de `vide → lache_kpa` (−5 kPa) en
+  `delai_lacher_s`, sinon un nouveau souffle, puis alerte « … resté collé à la ventouse ». Pour tous les
+  lâchers (seau, couvercle, entonnoir...). Jamais les deux vannes ouvertes : `tete.vanne(True)` ou
+  `tete.souffler(True)` quand l'autre l'est est refusé (`DeuxVannes`, `ErreurEtape`) ; une alarme referme
+  « souffler ».
 - **Choc** en trajet (> 15 N d'écart pendant > 50 ms) : arrêt du pont et de la tête, remontée lente, photo.
 - `tient_un_objet()` (verrou du noyau du Lavage), `hors_boite_camera_dosage()` (verrou de la caméra du
   dosage), `refus_manuel(pose)` (mode manuel du téléphone).
 - **Porte-bocal** : `approcher_mors()` (« Ø 98 » à faible courant) ajouté pour la pose du bocal.
-- Essai sur la machine : `vidange-prehension etat | vide | prendre-poser | porte-bocal | visser`.
+- Essai sur la machine : `vidange-prehension etat | vide [--sans-souffler] | prendre-poser | porte-bocal |
+  visser`.
 
 ## Lavage des seaux (tâche 21)
 
@@ -792,7 +801,8 @@ module_remplissage(...)  # ajoute les étapes « ranger_le_bras » (début) et �
 L'entonnoir n'a ni capteur ni moteur : la Préhension le prend par une oreille soudée (ventouse, électroaimants
 éteints), la caméra du plafond le situe, la griffe le remplit. Pas de poste de repos : il reste sur le dernier
 bocal rempli, Karulium le pose et l'enlève à la main. Réglages : `machine.yaml → entonnoir` (EXEMPLES marqués)
-et `prehension → objets → entonnoir`. Aucun signal à lui : `vanne_vide`, `contact_tete`, `vide_venturi`.
+et `prehension → objets → entonnoir`. Aucun signal à lui : `vanne_vide`, `vanne_souffler`, `contact_tete`,
+`vide_venturi`.
 
 ```python
 entonnoir = Entonnoir(
@@ -830,8 +840,8 @@ La Préhension prend un couvercle propre à la pile du stockage (ventouse seule,
 vide −55 kPa, un seul couvercle contrôlé au palier pesé) et le pose sur le seau plein, sans appuyer : c'est la
 fermeture qui clipse. Réglages : `machine.yaml → couvercle` (EXEMPLES marqués : masses des couvercles, tolérance,
 fenêtre du contact, durées du vide) et `prehension → vitesses → couvercle_pile | couvercle_pose`. `Z_pose` se
-calcule : `H_app + 0,459 − Hc` (A, B, C 0,439 ; D 0,446). Aucun signal à lui : `vanne_vide`, `contact_tete`,
-`vide_venturi`, le palier pesé et la balance du chariot.
+calcule : `H_app + 0,459 − Hc` (A, B, C 0,439 ; D 0,446). Aucun signal à lui : `vanne_vide`,
+`vanne_souffler`, `contact_tete`, `vide_venturi`, le palier pesé et la balance du chariot.
 
 ```python
 couvercle = Couvercle(reglages.machine, stockage=stockage, photo=...)

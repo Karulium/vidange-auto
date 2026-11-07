@@ -55,7 +55,8 @@ def test_reglages_de_l_entonnoir_du_depot():
     assert (ENTONNOIR.col.precision_m, ENTONNOIR.col.capture_m) == (0.005, 0.0095)
     # Les seuils du vide de la prise (−55 kPa) et de la perte (−40 kPa) sont ceux de la Préhension.
     assert (PREHENSION.vide.prise_kpa, PREHENSION.vide.perte_kpa) == (-55, -40)
-    assert ENTONNOIR.vide.lache_kpa == -5
+    # Le lâcher (souffle, −5 kPa) est celui de la Préhension (tâche 45 undecies).
+    assert PREHENSION.vide.lache_kpa == -5
     # Aucun signal propre à l'entonnoir : celui de la liste est sans ligne.
     assert not [nom for nom, signal in LISTE.signaux.items() if signal.module == "entonnoir"]
 
@@ -78,16 +79,13 @@ def test_garde_sur_les_cols_voisins_verifiee(reglages):
 
 def test_vide_et_objet_de_l_entonnoir_verifies(reglages):
     machine = reglages / "machine.yaml"
-    remplacer(machine, "lache_kpa: -5", "lache_kpa: -45")
     remplacer(
         machine,
         "    entonnoir: {rayon_m: 0.09, dessus_m: 0, dessous_m: 0.159, poids_n: 8.8, "
         "tolerance_n: 4}\n",
         "",
     )
-    message = erreur_de(reglages)
-    assert "lache_kpa (-45) doit être au-dessus de prehension → vide → perte_kpa (-40)" in message
-    assert "il manque l'objet « entonnoir » dans prehension → objets" in message
+    assert "il manque l'objet « entonnoir » dans prehension → objets" in erreur_de(reglages)
 
 
 def test_la_ventouse_doit_atteindre_chaque_bocal(reglages):
@@ -390,9 +388,10 @@ def test_transport_et_pose_sur_le_bocal_suivant():
         assert (entonnoir.place, entonnoir.tenu) == ("bocal_0_1", False)
         assert banc.monde.ou == "bocal_0_1"
         assert prehension.objet is None and prehension.poids_porte_n == 0.0
-        # Tête remontée en haut, vanne fermée : lâché.
+        # Tête remontée en haut ; lâché par « souffler », « aspirer » fermée avant (tâche 45
+        # undecies).
         assert prehension.pose.z == pytest.approx(1.10)
-        assert banc.tete.sorties[-1] == "vanne fermée"
+        assert banc.tete.sorties[-3:] == ["vanne fermée", "souffler ouverte", "souffler fermée"]
         # Accélération réduite pendant le transport, rendue ensuite.
         assert banc.tete.accelerations[:3] == [False, True, False]
         assert entonnoir.pose_ratee is None
@@ -447,16 +446,17 @@ def test_vide_pas_atteint_un_seul_nouvel_essai():
         banc.tete.vides_refuses = 1
         banc.prendre()
         assert banc.entonnoir.tenu
-        # Vanne ouverte, souffle, remonté de 5 mm, redescendu, vanne rouverte.
+        # « aspirer » ouverte, souffle, remonté de 5 mm, redescendu, « aspirer » rouverte.
         assert banc.tete.sorties.count("vanne ouverte") == 2
         assert banc.tete.sorties.count("vanne fermée") == 1
+        assert banc.tete.sorties.count("souffler ouverte") == 1
     with Simulateur(REGLAGES, LISTE, "entonnoir") as simulation:
         banc = Banc(simulation)
         banc.tete.vides_refuses = 2
         with pytest.raises(ErreurEtape, match="la ventouse ne prend pas l'entonnoir"):
             banc.prendre()
         assert banc.tete.sorties.count("vanne ouverte") == 2
-        assert banc.tete.sorties[-1] == "vanne fermée"
+        assert banc.tete.sorties[-1] == "souffler fermée"
         # Il n'a pas bougé de son bocal ; la tête est remontée.
         assert banc.entonnoir.place == "bocal_0_0" and not banc.entonnoir.tenu
         assert banc.monde.ou == "bocal_0_0"
@@ -562,9 +562,9 @@ def test_entonnoir_colle_a_la_ventouse_au_lacher():
         banc.prendre()
         banc.tete.vides_colles = 1
         banc.poser("bocal_0_1")
-        # Un nouveau souffle de 0,5 s a suffi.
+        # Un nouveau souffle a suffi.
         assert banc.entonnoir.place == "bocal_0_1"
-        assert banc.tete.sorties.count("vanne fermée") == 2
+        assert banc.tete.sorties.count("souffler ouverte") == 2
     with Simulateur(REGLAGES, LISTE, "entonnoir") as simulation:
         banc = Banc(simulation)
         banc.prendre()

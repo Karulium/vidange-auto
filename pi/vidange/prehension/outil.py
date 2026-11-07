@@ -1,7 +1,11 @@
 """Outil « vidange-prehension » : essayer la tête de préhension (cartes n° 1 et n° 4).
 
   vidange-prehension etat                     position, contact, vide, force
-  vidange-prehension vide                     vanne ouverte 5 s : le vide lu (ventouse sur vitre)
+  vidange-prehension vide                     « aspirer » ouverte 5 s, fermée 2 s (le clapet
+                                              garde le vide), puis le lâcher par « souffler » :
+                                              le vide lu (ventouse sur vitre ; tâche 45 undecies)
+  vidange-prehension vide --sans-souffler     pareil, sans le lâcher : l'objet reste tenu
+                                              (essai de la reprise, essai-fiabilite.md § 4 bis)
   vidange-prehension prendre-poser seau 1.6 0.6 0.6  1.9 0.6 0.6 --format seau_a
                                               prendre un objet (x y contact_z), le poser ailleurs
   vidange-prehension porte-bocal 1.0 0.75 0.95 --manivelle-en-bas
@@ -89,6 +93,11 @@ def main(arguments: list[str] | None = None) -> int:
     )
     lecteur.add_argument("--faux", action="store_true", help="avec de faux FluidNC")
     lecteur.add_argument("--format", help="format du seau (machine.yaml → griffe → formats)")
+    lecteur.add_argument(
+        "--sans-souffler",
+        action="store_true",
+        help="vide : ne pas lâcher à la fin (l'objet reste tenu par le clapet)",
+    )
     lecteur.add_argument(
         "--manivelle-en-bas",
         action="store_true",
@@ -218,6 +227,44 @@ def _jouer(prehension: Prehension, geste: Callable[[], Geste], delai_s: float) -
         raise
 
 
+def _vide(tete: TeteFluidnc, reglages: Reglages, souffler: bool) -> int:
+    """« aspirer » 5 s, fermée 2 s (le vide doit tenir : clapet anti-retour), puis le lâcher (sauf
+    `souffler` faux) : « souffler » ouverte souffle_s (jamais avec « aspirer »), et le vide doit
+    revenir au-dessus de lache_kpa en delai_lacher_s. Rend 1 si le vide n'est pas revenu."""
+    vide = reglages.machine.prehension.vide  # type: ignore[union-attr]
+    tete.vanne(True)
+    try:
+        for _ in range(10):
+            time.sleep(0.5)
+            print(f"« aspirer » ouverte : vide {tete.vide_kpa():.1f} kPa")
+    finally:
+        tete.vanne(False)
+    for _ in range(4):
+        time.sleep(0.5)
+        print(f"« aspirer » fermée (le clapet garde le vide) : vide {tete.vide_kpa():.1f} kPa")
+    if not souffler:
+        print("Pas de « souffler » : l'objet reste tenu (l'enlever à la main).")
+        return 0
+    tete.souffler(True)
+    try:
+        time.sleep(vide.souffle_s)
+    finally:
+        tete.souffler(False)
+    fin = time.monotonic() + vide.delai_lacher_s
+    while time.monotonic() < fin:
+        time.sleep(0.1)
+        valeur = tete.vide_kpa()
+        if valeur is not None and valeur > vide.lache_kpa:
+            print(f"« souffler » {vide.souffle_s:g} s : lâché, vide {valeur:.1f} kPa")
+            return 0
+    print(
+        f"« souffler » {vide.souffle_s:g} s : vide {tete.vide_kpa():.1f} kPa, pas revenu "
+        f"au-dessus de {vide.lache_kpa:g} kPa en {vide.delai_lacher_s:g} s",
+        file=sys.stderr,
+    )
+    return 1
+
+
 def _faire(
     options: argparse.Namespace, reglages: Reglages, prehension: Prehension, tete: TeteFluidnc
 ) -> int:
@@ -232,14 +279,7 @@ def _faire(
         print(f"force (poids porté − poussée) : {tete.peser():.1f} N")
         return 0
     if options.commande == "vide":
-        tete.vanne(True)
-        try:
-            for _ in range(10):
-                time.sleep(0.5)
-                print(f"vide : {tete.vide_kpa():.1f} kPa")
-        finally:
-            tete.vanne(False)
-        return 0
+        return _vide(tete, reglages, souffler=not options.sans_souffler)
     if options.commande == "entonnoir":
         return _entonnoir(prehension, reglages, valeurs, delai)
     if options.commande == "couvercle":

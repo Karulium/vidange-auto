@@ -345,6 +345,7 @@ def test_objet_tenu_au_demarrage_du_programme(tmp_path):
 
 FLUIDNC = REGLAGES.fluidnc.model_copy(update={"liaison": reglages_essai().liaison})
 VANNE = FLUIDNC.cartes["prehension"].sorties["vanne_vide"]
+SOUFFLE = FLUIDNC.cartes["prehension"].sorties["vanne_souffler"]
 
 
 def vannes_sur(faux, fluidnc=FLUIDNC, presence=lambda nom: None, vraie_machine=False):
@@ -371,24 +372,41 @@ def test_aspirer_restee_ouverte_apres_un_plantage_est_fermee_jamais_ouverte():
         vannes.fermer()
     finally:
         liaison.arreter()
-    assert faux.sorties[VANNE] is False
-    assert f"M65 P{VANNE}" in faux.lignes_recues
+    assert faux.sorties[VANNE] is False and faux.sorties[SOUFFLE] is False
+    assert f"M65 P{VANNE}" in faux.lignes_recues and f"M65 P{SOUFFLE}" in faux.lignes_recues
     # Rien d'autre : jamais d'ouverture (« souffler » ou autre), jamais de mouvement.
     assert not [ligne for ligne in faux.lignes_recues if ligne.startswith(("M64", "M62", "$"))]
     assert faux.prises_origine == [] and all(v == 0 for v in faux.positions.values())
     (constat,) = vannes.constats()
-    assert constat.niveau == "ok" and constat.texte == "fermées au démarrage (vanne_vide)"
+    assert constat.niveau == "ok"
+    assert constat.texte == "fermées au démarrage (vanne_vide, vanne_souffler)"
     # Une seule fois.
     avant = list(faux.lignes_recues)
     vannes.fermer()
     assert faux.lignes_recues == avant
 
 
-def test_souffler_fermee_aussi_le_jour_ou_elle_est_cablee():
+def test_les_deux_vannes_cablees_en_p0_et_p1_fermees_au_demarrage():
+    # Tâche 45 undecies (Implantation, sorties-carte-4.md) : « aspirer » P0, « souffler » P1.
+    assert (VANNE, SOUFFLE) == (0, 1)
+    faux = FauxFluidnc()
+    faux.sorties[SOUFFLE] = True
+    liaison, vannes = vannes_sur(faux)
+    liaison.demarrer()
+    try:
+        vannes.fermer()
+    finally:
+        liaison.arreter()
+    assert vannes.fermees == ["vanne_vide", "vanne_souffler"]
+    assert faux.sorties == {VANNE: False, SOUFFLE: False}
+    assert not [ligne for ligne in faux.lignes_recues if ligne.startswith(("M64", "M62"))]
+
+
+def test_sans_souffler_dans_les_reglages_seule_aspirer_est_fermee():
     carte = FLUIDNC.cartes["prehension"]
-    libre = min(set(range(8)) - set(carte.sorties.values()))
-    avec = carte.model_copy(update={"sorties": {**carte.sorties, "vanne_souffler": libre}})
-    fluidnc = FLUIDNC.model_copy(update={"cartes": {**FLUIDNC.cartes, "prehension": avec}})
+    sorties = {nom: n for nom, n in carte.sorties.items() if nom != "vanne_souffler"}
+    sans = carte.model_copy(update={"sorties": sorties})
+    fluidnc = FLUIDNC.model_copy(update={"cartes": {**FLUIDNC.cartes, "prehension": sans}})
     faux = FauxFluidnc()
     liaison, vannes = vannes_sur(faux, fluidnc)
     liaison.demarrer()
@@ -396,9 +414,8 @@ def test_souffler_fermee_aussi_le_jour_ou_elle_est_cablee():
         vannes.fermer()
     finally:
         liaison.arreter()
-    assert vannes.fermees == ["vanne_vide", "vanne_souffler"]
-    assert faux.sorties == {VANNE: False, libre: False}
-    assert not [ligne for ligne in faux.lignes_recues if ligne.startswith(("M64", "M62"))]
+    assert vannes.fermees == ["vanne_vide"]
+    assert faux.sorties == {VANNE: False}
 
 
 def test_vannes_pas_fermees_la_check_list_le_dit():

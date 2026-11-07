@@ -1158,7 +1158,9 @@ AXES_PREHENSION = {
 }
 # Signaux de la tête lus ou commandés par sa carte FluidNC (docs/entrees-sorties.yaml).
 ENTREES_PREHENSION = ("contact_tete",)
-SORTIES_PREHENSION = ("vanne_vide", "electroaimants_capsule")
+# « aspirer » (vanne_vide, ev_aspirer de la fiche) et « souffler » (vanne_souffler, ev_souffler) :
+# sorties P0 et P1 de la carte n° 4 (Implantation, sorties-carte-4.md, 07/11/2026).
+SORTIES_PREHENSION = ("vanne_vide", "vanne_souffler", "electroaimants_capsule")
 # Objets que la tête sait prendre (les modules qui s'en servent en ajouteront).
 OBJETS_PREHENSION = ("seau", "couvercle", "bocal", "capsule")
 
@@ -1235,10 +1237,19 @@ class VidePrehension(Modele):
     # Prise bonne quand le vide atteint prise_kpa ; perdue s'il remonte au-dessus de perte_kpa.
     prise_kpa: float = Field(lt=0)
     perte_kpa: float = Field(lt=0)
-    # Attente maximale du vide après l'ouverture de la vanne (s).
+    # Attente maximale du vide après l'ouverture de la vanne « aspirer » (s).
     delai_prise_s: float = Field(gt=0)
-    # Attente après la fermeture de la vanne, pour que l'objet se détache (s).
+    # Attente après la coupure des électroaimants (capsule, couvercle percé), pour que l'objet
+    # se détache (s) ; aussi la pause entre deux impulsions d'« aspirer » (couvercle).
     relache_s: float = Field(ge=0)
+    # Lâcher à la ventouse (fil Préhension, 07/11/2026, tâche 45 undecies) : fermer « aspirer »
+    # ne lâche rien (le clapet anti-retour garde le vide). Lâcher = « aspirer » fermée, puis
+    # « souffler » ouverte souffle_s (≈ 0,2 à 0,5 s) et refermée ; lâché quand le vide est revenu
+    # au-dessus de lache_kpa (−5 kPa), attendu au plus delai_lacher_s, puis un nouveau souffle,
+    # puis alerte. Jamais les deux vannes ouvertes en même temps.
+    souffle_s: float = Field(gt=0)
+    lache_kpa: float = Field(lt=0)
+    delai_lacher_s: float = Field(gt=0)
     # Lectures par seconde, et combien sont moyennées.
     frequence_hz: float = Field(gt=0)
     moyenne: int = Field(ge=1)
@@ -1257,6 +1268,11 @@ class VidePrehension(Modele):
     def _verifier(self) -> "VidePrehension":
         if self.prise_kpa >= self.perte_kpa:
             raise ValueError("prise_kpa doit être un vide plus fort (plus bas) que perte_kpa")
+        if self.lache_kpa <= self.perte_kpa:
+            raise ValueError(
+                f"lache_kpa ({self.lache_kpa:g}) doit être au-dessus de perte_kpa "
+                f"({self.perte_kpa:g}) : un objet encore tenu passerait pour lâché"
+            )
         if self.tenu_au_demarrage_kpa < self.perte_kpa:
             raise ValueError(
                 f"tenu_au_demarrage_kpa ({self.tenu_au_demarrage_kpa:g}) doit être au-dessus de "
@@ -3376,9 +3392,8 @@ class VideEntonnoir(Modele):
 
     # Délai pour atteindre le vide de la prise avant un nouvel essai (s).
     delai_prise_s: float = Field(gt=0)
-    # Lâché : le vide est revenu au-dessus de ce seuil (kPa), attendu au plus delai_lacher_s.
-    lache_kpa: float = Field(lt=0)
-    delai_lacher_s: float = Field(gt=0)
+    # Le lâcher (souffle, vide revenu au-dessus de −5 kPa) est celui de la Préhension
+    # (prehension → vide → souffle_s, lache_kpa, delai_lacher_s ; tâche 45 undecies).
     # Après un vide pas atteint : remonter de tant avant de redescendre (m).
     remontee_reessai_m: float = Field(gt=0)
 
@@ -3480,10 +3495,8 @@ class VideCouvercle(Modele):
     # Essais de prise (souffler, remonter de remontee_reessai_m, redescendre au contact).
     essais_max: int = Field(ge=1)
     remontee_reessai_m: float = Field(gt=0)
-    # Lâché : le vide est revenu au-dessus de ce seuil (kPa) ; « souffler » dure souffle_s.
-    lache_kpa: float = Field(lt=0)
-    souffle_s: float = Field(gt=0)
-    delai_lacher_s: float = Field(gt=0)
+    # Le lâcher (souffle, vide revenu au-dessus de −5 kPa) est celui de la Préhension
+    # (prehension → vide → souffle_s, lache_kpa, delai_lacher_s ; tâche 45 undecies).
 
 
 class PoseCouvercle(Modele):
@@ -5195,7 +5208,7 @@ class Machine(Modele):
                 )
         bas, haut = self.axes["prehension_z"].course
         haut = min(haut, prehension.haut_z)
-        pile, pose, vide = couvercle.pile, couvercle.pose, couvercle.vide
+        pile, pose = couvercle.pile, couvercle.pose
         fond = self.stockage.plateau_z
         bas_pile = fond + pile.epaisseur_dernier_m - prehension.tolerance_m
         if bas_pile < bas:
@@ -5210,11 +5223,6 @@ class Machine(Modele):
             )
         if pile.haut_sans_memoire_z <= fond + pile.epaisseur_dernier_m:
             erreurs.append("couvercle → pile → haut_sans_memoire_z doit être au-dessus du fond")
-        if vide.lache_kpa <= prehension.vide.perte_kpa:
-            erreurs.append(
-                f"couvercle → vide → lache_kpa ({vide.lache_kpa:g}) doit être au-dessus de "
-                f"prehension → vide → perte_kpa ({prehension.vide.perte_kpa:g})"
-            )
         if pose.fenetre_m >= pose.rapide_m:
             erreurs.append("couvercle → pose : fenetre_m doit être plus petit que rapide_m")
         if pose.m8_retombe_m >= pose.degagement_m:
@@ -5438,11 +5446,6 @@ class Machine(Modele):
             erreurs.append(
                 f"entonnoir : face de transport {entonnoir.face_transport_z:g} m (oreille_z + "
                 f"levee_m) au-dessus de la butée haute ({min(prehension.haut_z, haut):g} m)"
-            )
-        if entonnoir.vide.lache_kpa <= prehension.vide.perte_kpa:
-            erreurs.append(
-                f"entonnoir → vide → lache_kpa ({entonnoir.vide.lache_kpa:g}) doit être au-dessus "
-                f"de prehension → vide → perte_kpa ({prehension.vide.perte_kpa:g})"
             )
         if entonnoir.bord_col_z <= self.stockage.bocaux.pose_z:
             erreurs.append(

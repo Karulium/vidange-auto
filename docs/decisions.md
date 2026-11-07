@@ -1076,9 +1076,10 @@ questions à Karulium ; en attendant, les choix ci-dessous sont ceux de Claude (
 - **La masse du couvercle (`m_c`) et sa tolérance** servent deux fois : au contrôle « un seul couvercle » (palier pesé,
   étape 6) et à la balance du chariot (étape 13, `P − P0`). Masses en EXEMPLE (A 0,13 ; B 0,10 ; C 0,16 ; D 0,13 kg),
   tolérance 30 %.
-- **Aspirer / souffler** : la tête n'a qu'une vanne de vide (`vanne_vide`) : « aspirer par impulsions » = vanne
-  ouverte `impulsion_s` (1 s) au plus deux fois ; « souffler » = vanne fermée pendant `souffle_s` (0,2 s), comme
-  l'Entonnoir. Pendant le trajet, la vanne reste ouverte (pas de nouvelle impulsion à −50 kPa) ; arrêt sur place au-dessus
+- **Aspirer / souffler** : ~~la tête n'a qu'une vanne de vide (`vanne_vide`)~~ (remplacé par la tâche 45
+  undecies : deux vannes, « souffler » est la vraie vanne `vanne_souffler`) : « aspirer par impulsions » = vanne
+  ouverte `impulsion_s` (1 s) au plus deux fois ; « souffler » = ~~vanne fermée pendant `souffle_s` (0,2 s)~~
+  « aspirer » fermée puis `vanne_souffler` ouverte `prehension → vide → souffle_s`, comme l'Entonnoir. Pendant le trajet, la vanne reste ouverte (pas de nouvelle impulsion à −50 kPa) ; arrêt sur place au-dessus
   de −40 kPa.
 - **Contact M8 lu à l'arrêt** : `Tete.contact_tete()` (nouveau) lit le M8 en dehors d'une descente au contact ; il sert
   au dégagement (étape 12 : le M8 doit retomber dans les 5 premiers mm, sinon « souffler » une fois de plus, puis alerte).
@@ -1171,8 +1172,10 @@ caméra en chiffres de la fiche) et objet `entonnoir` dans `prehension → objet
 - **Entonnoir, réponses à la PR n° 88** (tâche 43, 07/11/2026, niveau 1, tranché par Claude) :
   1. Pont qui roule tête basse en tenant l'entonnoir (levée 0,060 au-dessus de la pose, garde de 4 cm sur les cols
      voisins) : exception gardée, car c'est le geste figé de la fiche de l'Entonnoir, et limitée à cet objet.
-  2. Pas de vanne `ev_souffler` : lâcher en fermant la vanne du vide (deuxième essai, puis alerte). Rien à ajouter
-     avant l'essai.
+  2. ~~Pas de vanne `ev_souffler` : lâcher en fermant la vanne du vide (deuxième essai, puis alerte).~~ **Faux,
+     remplacé** (fil Préhension, 07/11/2026, tâche 45 undecies) : il y a deux électrovannes et un clapet
+     anti-retour ; fermer « aspirer » ne lâche rien. Lâcher = « souffler » ≈ 0,2 à 0,5 s, puis vide revenu
+     au-dessus de −5 kPa (deuxième souffle, puis alerte). Voir « Lâcher de la ventouse par « souffler » ».
   3. Deuxième essai de pose avec le même centre (pas de nouvelle photo possible, l'entonnoir est dans la tête) :
      gardé.
   4. Bocaux « suspects » (pose ratée deux fois) : le lot continue ; à la fin du lot, leur liste s'affiche et
@@ -1908,7 +1911,8 @@ du bas du godet), `programme.yaml` (`fiabilite → objet_tenu → attente_vannes
     envoie « M65 » (sortie coupée) pour chaque vanne de la ventouse qui y est déclarée, une fois, liaisons lancées,
     **avant** la lecture du vide et avant le chef (donc avant tout Go et tout mouvement). Jamais « M64 ».
   - Le dépôt n'a qu'une vanne, `vanne_vide` (« aspirer » ; réponse à la PR n° 88 : pas de `ev_souffler`, « souffler »
-    = vanne fermée). Le code ferme aussi `vanne_souffler` **le jour où elle sera câblée** (même nom dans
+    = vanne fermée ; **remplacé** : `vanne_souffler` est câblée en P1 depuis la tâche 45 undecies). Le code ferme
+    aussi `vanne_souffler` **le jour où elle sera câblée** (même nom dans
     `docs/entrees-sorties.yaml` et `fluidnc.yaml`) : question à Karulium (PR de la 45 decies).
   - Attente au plus `fiabilite → objet_tenu → attente_vannes_s` (5 s, EXEMPLE) que la carte se connecte, puis sa
     réponse à chaque ordre. Carte absente, muette, en alarme (FluidNC refuse « M65 » ; le Pi ne la débloque pas),
@@ -1953,3 +1957,74 @@ du bas du godet), `programme.yaml` (`fiabilite → objet_tenu → attente_vannes
      vannes passent sur une carte à programme.
   3. Attente de 5 s de la carte au démarrage (`fiabilite → objet_tenu → attente_vannes_s`, EXEMPLE) : gardée, mesurée
      à l'essai (§ 4 ter).
+
+## Lâcher de la ventouse par « souffler », 2 électrovannes (tâche 45 undecies, 07/11/2026)
+
+Code : `pi/vidange/prehension/tete.py` (`DeuxVannes`, `SOUFFLER`, `TeteFluidnc.souffler`),
+`pi/vidange/prehension/prehension.py` (`souffler`, `lacher_ventouse`), `couvercle/couvercle.py`,
+`entonnoir/entonnoir.py`, simulations (`prehension`, `couvercle`, `entonnoir`, `remplissage`),
+`prehension/outil.py` (`vidange-prehension vide [--sans-souffler]`) ; réglages `machine.yaml`
+(`prehension → vide → souffle_s, lache_kpa, delai_lacher_s`), `fluidnc.yaml` et `fluidnc/prehension.yaml`
+(sorties de la carte n° 4), `docs/entrees-sorties.yaml` (`vanne_souffler`) ; essais : `essai-prehension.md`
+(étape 1 point 5, étape 2 bis, étape 5), `essai-fiabilite.md` (§ 4 bis, § 4 ter), `essai-couvercle.md`,
+`essai-entonnoir.md`. Testé sur le vrai matériel : non.
+
+- **Réponses des fils (07/11/2026)** :
+  1. **Deux électrovannes** (fil Préhension, fiche `achats/modules/prehension.json`, étape 9) : `ev_aspirer`
+     envoie l'air au venturi, `ev_souffler` remet la ventouse à l'air avec un peu d'air ; 2/2 24 V normalement
+     fermées, plus un clapet anti-retour. Fermer « aspirer » ne lâche **rien** (le clapet garde le vide).
+     **Lâcher = ouvrir `ev_souffler` ≈ 0,2 à 0,5 s, puis attendre que le vide remonte au-dessus de −5 kPa.**
+     Vaut pour tous les lâchers de la ventouse (entonnoir, couvercle, seau, Pétri, et ce que d'autres modules
+     prennent à la ventouse). Remplace le point 2 de « Entonnoir, réponses à la PR n° 88 ».
+  2. **Câblage** (Implantation, `implantation/logiciel/sorties-carte-4.md`) : carte FluidNC n° 4 (6 axes,
+     type « 6-Pack »), `ev_aspirer` (ex-`vanne_vide`) = sortie **P0**, `ev_souffler` = sortie **P1** (M62/M64/
+     M65 P0 et P1), sorties auxiliaires 24 V n° 1 et 2, sur le **24 V coupé** (K2 : fermées à l'arrêt
+     d'urgence) ; diode de roue libre sur chaque bobine si la sortie n'en a pas, ≤ 0,5 A par vanne. **P2**
+     réservée au frein du Z de la préhension (si la Préhension le commande par la carte : sortie n° 3 ou module
+     de sortie), **P3** libre. Les numéros de GPIO viendront de la configuration de la carte achetée ; P0 et P1
+     ne changent pas.
+  3. **Le logiciel empêche les deux vannes d'être ouvertes en même temps** (refus clair, vérifié aussi dans les
+     tests ; l'Implantation dit « ferme l'une avant d'ouvrir l'autre »).
+  4. Le nom `vanne_souffler` attendu par la tâche 45 decies (fermeture au démarrage) devient la vraie vanne.
+- **Choix de Claude** :
+  - **Noms** : on garde les noms du code `vanne_vide` (« aspirer », `ev_aspirer` de la fiche) et
+    `vanne_souffler` (« souffler », `ev_souffler`), comme la tâche 43 l'avait fait pour les autres signaux de la
+    Préhension : renommer `vanne_vide` toucherait beaucoup de fichiers sans rien changer à la machine. Les
+    commentaires de `fluidnc.yaml` et `docs/entrees-sorties.yaml` donnent les deux noms.
+  - **Sorties de la carte n° 4** (`fluidnc.yaml`) : `vanne_vide` 0, `vanne_souffler` 1, `frein_prehension_z` 2
+    (était 4, EXEMPLE), 3 libre ; les électroaimants des capsules (étaient en 1), le jet d'air du col et le
+    chauffage du lavage passent en 4, 5 et 6 (EXEMPLE : la fiche de l'Implantation n'en parle pas, question à
+    Karulium). `fluidnc/prehension.yaml` suit (broches en EXEMPLE). `vanne_souffler` est ajoutée à
+    `docs/entrees-sorties.yaml` (repère S14, EXEMPLE) et aux sorties exigées de la carte de la préhension
+    (`SORTIES_PREHENSION`) : sans elle, `vidange --verifier` refuse.
+  - **Un seul lâcher pour tous les objets** : `Prehension.lacher_ventouse(quoi)` = `souffler()` (« aspirer »
+    fermée **d'abord**, « souffler » ouverte `prehension → vide → souffle_s`, refermée), puis attente du vide
+    au-dessus de `lache_kpa` au plus `delai_lacher_s` ; sinon un nouveau souffle, puis alarme « `quoi` resté
+    collé à la ventouse » (comme le couvercle et l'entonnoir le faisaient déjà). Réglages : `souffle_s` 0,3 s
+    (EXEMPLE, entre 0,2 et 0,5 du fil), `lache_kpa` −5 (fil), `delai_lacher_s` 2 s (EXEMPLE). Vérifié au
+    démarrage : `lache_kpa` au-dessus de `perte_kpa`. Les réglages du lâcher propres au couvercle
+    (`lache_kpa`, `souffle_s`, `delai_lacher_s`) et à l'entonnoir (`lache_kpa`, `delai_lacher_s`) sont
+    **enlevés** : un seul jeu, dans `prehension → vide`. `relache_s` reste pour les électroaimants (capsule,
+    couvercle percé) et la pause entre deux impulsions du couvercle.
+  - **Lâchers corrigés** (tous passaient par « vanne fermée ») : Préhension `_relacher` (pose d'un objet,
+    reposer après un vide perdu à la levée, reposer après un mauvais poids ; donc aussi le Stockage, le Lavage,
+    le Remplissage, le retourneur de couvercles, qui lâchent par la Préhension) ; Couvercle : lâcher sur le
+    seau (étape 11), nouveau souffle du dégagement (étape 12), souffle après les impulsions ratées (étape 4),
+    couvercles reposés sur la pile (étape 6) ; Entonnoir : lâcher sur le col (geste 11), souffle avant le
+    nouvel essai de prise. Ce qui reste une **fermeture** d'« aspirer » (pas un lâcher) : la pause entre deux
+    impulsions, l'arrêt après un vide perdu en route (l'objet est déjà tombé), le démarrage. Les objets aux
+    électroaimants (capsule, couvercle percé du bocal neuf) ne changent pas.
+  - **Jamais les deux ouvertes** : `DeuxVannes` (dans `tete.py`, employé par la vraie tête et par la tête du
+    simulateur) refuse d'ouvrir l'une tant que l'autre est ouverte, ou peut-être ouverte (ordre de fermeture
+    refusé par la carte) : `ErreurEtape` avec un « quoi faire », le module part en alarme. Une alarme (et le
+    départ du geste suivant) referme « souffler » si un souffle était en cours. Ce refus protège la machine
+    (l'air, le geste), jamais les personnes.
+  - **Démarrage** : inchangé (tâche 45 decies) ; il ferme maintenant les deux vannes, puisque `vanne_souffler`
+    est déclarée. Jamais « souffler » ouverte au démarrage. Le premier départ de la tête ferme aussi les deux.
+  - **Simulateur** : le vide vient à l'ouverture d'« aspirer », **reste** à sa fermeture (clapet) et part à
+    l'ouverture de « souffler » (`vides_colles` : tant de souffles sans effet) ; les faux mondes du couvercle,
+    de l'entonnoir et du remplissage lâchent l'objet au souffle.
+  - **Outil** : `vidange-prehension vide` = « aspirer » 5 s, fermée 2 s (le clapet doit garder le vide), puis
+    le lâcher (souffle, vide revenu au-dessus de −5 kPa) ; `--sans-souffler` garde l'objet tenu (essai de la
+    reprise, § 4 bis).
+

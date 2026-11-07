@@ -4,7 +4,7 @@
 FluidNC, une **fausse** pesée, un **faux** capteur de vide et des objets **imaginaires** (simulateur).
 
 Cette procédure se fait une fois la carte FluidNC n° 4 câblée (Z de la tête, rotation, contact de la tête,
-vanne du venturi, électroaimants), le portique essayé (`essai-griffe.md`, étape 1 : repère du pont et du
+les deux électrovannes de la ventouse « aspirer » et « souffler », électroaimants), le portique essayé (`essai-griffe.md`, étape 1 : repère du pont et du
 chariot), la carte de pesée de la préhension étalonnée (`pesee/essai-etabli.md`) et le porte-bocal essayé
 (`essai-porte-bocal.md`). Elle vérifie que les cartes font ce que le Pi attend, puis mesure les chiffres
 marqués EXEMPLE (`pi/reglages/machine.yaml`, partie `prehension` ; `docs/entrees-sorties.yaml`,
@@ -37,9 +37,17 @@ veulent dire `sudo -u vidange /opt/vidange-auto/pi/.venv/bin/vidange-fluidnc` (e
    `P` doit apparaître dans `Pn:`, et disparaître quand on lâche.
 4. Palpage : main sous la tête, `G91 G38.3 Z-20 F300` puis `G90` : la tête descend lentement et **s'arrête
    tout de suite** quand on appuie sur le plateau.
-5. `M64 P0` : la vanne du venturi s'ouvre (on entend l'air) ; `M65 P0` : elle se ferme. `M64 P1` : les
-   électroaimants tiennent une capsule ; `M65 P1` : ils la lâchent. Si c'est inversé, échanger les numéros
-   dans `pi/reglages/fluidnc.yaml` (sorties).
+5. Les deux électrovannes (tâche 45 undecies ; Implantation, `sorties-carte-4.md` : sorties auxiliaires
+   24 V n° 1 et 2 de la carte, sur le 24 V coupé). **Dans la console, rien n'empêche d'ouvrir les deux : ne
+   jamais envoyer `M64 P0` et `M64 P1` sans `M65` de l'autre entre les deux** (le programme, lui, refuse).
+   - `M64 P0` : « aspirer » s'ouvre, le venturi souffle (on l'entend) ; `M65 P0` : il s'arrête.
+   - `M64 P1` : « souffler » s'ouvre, un petit souffle sort de la ventouse ; `M65 P1` : il s'arrête.
+   - `M64 P0`, puis appuyer sur l'arrêt d'urgence : le venturi doit **s'arrêter tout de suite** (24 V
+     coupé). Réarmer, `M65 P0`. Même chose avec `M64 P1`.
+   - `M64 P4` : les électroaimants tiennent une capsule ; `M65 P4` : ils la lâchent (P4 : EXEMPLE, la
+     fiche de l'Implantation ne dit pas où ils sont câblés).
+   Si une vanne est inversée (P0 souffle à la ventouse), le câblage est faux : P0 et P1 ne changent pas
+   (fiche), c'est le fil qu'il faut échanger.
 6. Console du portique (`vidange-fluidnc console portique`) : `$/axes/x/acceleration_mm_per_sec2=150`
    doit répondre `ok` (accélération réduite quand la tête tient un seau). Remettre ensuite la valeur de
    `fluidnc/` (et recopier cette valeur normale dans `prehension → acceleration → normale_mm_s2`).
@@ -74,11 +82,34 @@ la tête (tours compris) dans `pi/donnees/angles.json` à chaque arrêt.
 1. Vanne fermée : `vidange-es lister vide_venturi` doit dire ≈ 0 kPa. Au-delà de ± 5 kPa, la conversion de
    `docs/entrees-sorties.yaml` n'est pas celle du capteur : y mettre les 2 points de la notice du capteur
    **3,3 V** (tension → kPa), par exemple « 0 kPa → … V » et « −100 kPa → … V ».
-2. Ventouse posée sur une vitre propre : `vidange-prehension vide` (vanne ouverte 5 s) : le vide doit
-   descendre sous −55 kPa en moins de 3 s (`vide → delai_prise_s`), vers −70 à −85 kPa. Si possible,
-   comparer une fois avec un manomètre.
+2. Ventouse posée sur une vitre propre : `vidange-prehension vide` (« aspirer » ouverte 5 s) : le vide
+   doit descendre sous −55 kPa en moins de 3 s (`vide → delai_prise_s`), vers −70 à −85 kPa. Si possible,
+   comparer une fois avec un manomètre. La suite de la commande est l'étape 2 bis.
 3. `vidange-prehension etat` deux ou trois fois de suite : le zéro (recalé à chaque lancement, vanne fermée)
    doit rester à moins de ± 5 kPa.
+
+## Étape 2 bis : le lâcher par « souffler » (tâche 45 undecies)
+
+**Testé sur le vrai matériel : non.** Les tests automatiques n'utilisent qu'une fausse carte et un faux
+vide. Fil Préhension (07/11/2026) : fermer « aspirer » ne lâche **rien** (le clapet anti-retour garde le
+vide) ; le lâcher, c'est « aspirer » fermée, puis « souffler » ouverte ≈ 0,2 à 0,5 s
+(`prehension → vide → souffle_s`, EXEMPLE 0,3 s), puis attendre que le vide remonte au-dessus de −5 kPa
+(`lache_kpa`, au plus `delai_lacher_s`, EXEMPLE 2 s). Le Pi n'ouvre jamais les deux vannes en même temps.
+
+1. Toujours `vidange-prehension vide` sur la vitre. Après les 5 s d'« aspirer », la commande ferme
+   « aspirer » et lit le vide 2 s : il doit **rester** sous −50 kPa (lignes « « aspirer » fermée (le
+   clapet garde le vide) »). S'il remonte vite, le clapet fuit : le dire dans la PR.
+2. Puis elle ouvre « souffler » `souffle_s` et la referme. Elle doit écrire « « souffler » 0.3 s : lâché,
+   vide … kPa » et la vitre doit se décoller **toute seule**.
+3. Réglage de `souffle_s` : refaire avec 0,2, puis 0,5 (machine.yaml). Garder **le plus court qui lâche à
+   chaque fois** (vitre, puis seau vide, couvercle et entonnoir tenus à la main), plus 0,1 s de marge. Noter
+   le temps que met le vide pour passer au-dessus de −5 kPa : `delai_lacher_s` doit le couvrir largement.
+4. `vidange-prehension vide --sans-souffler` avec un seau vide tenu à la main contre la ventouse : à la fin,
+   le seau **reste tenu** (pas de souffle). L'enlever à la main.
+5. Pincer le tuyau de « souffler » (ou la ventouse sur une vitre mouillée qui colle) et relancer
+   `vidange-prehension vide` : la commande doit dire « pas revenu au-dessus de -5 kPa » et rendre une
+   erreur. Dans un geste (étape 5), le programme souffle une deuxième fois, puis s'arrête avec l'alerte
+   « … resté collé à la ventouse ».
 
 ## Étape 3 : la force
 
@@ -102,13 +133,16 @@ le fond intérieur d'un seau vide posé là (contact_z), et une deuxième place 
 
 1. `vidange-prehension prendre-poser seau 1.6 0.6 0.60  1.9 0.6 0.60 --format seau_a` (avec vos cotes) :
    la tête monte, le pont va au-dessus du seau, la tête descend (lente sur les 3 derniers cm), s'arrête au
-   contact, ouvre la vanne, lève lentement, pèse, va poser le seau et remonte. L'outil écrit le vide et le
-   poids de la prise.
+   contact, ouvre « aspirer », lève lentement, pèse, va poser le seau, ferme « aspirer », **souffle** (on
+   entend le petit souffle), attend que le vide revienne au-dessus de −5 kPa et remonte. L'outil écrit le
+   vide et le poids de la prise. Si le seau remonte avec la tête, le lâcher ne marche pas : arrêt d'urgence.
 2. Refaire avec une cote fausse de 1 cm (0.59) : l'outil doit s'arrêter (« contact à … attendu à … »).
 3. Mettre deux seaux emboîtés : l'outil doit les reposer et dire « deux seaux emboîtés pris ».
 4. Pendant une levée, couper l'air du venturi (ou glisser une cale sous la lèvre) : la tête doit s'arrêter,
    redescendre, reposer, reprendre ; au 2ᵉ échec, s'arrêter avec l'alerte.
 5. Même chose avec un couvercle (`prendre-poser couvercle ...`).
+6. Pincer le tuyau de « souffler » pendant une pose : la tête doit souffler une deuxième fois, puis
+   s'arrêter avec l'alerte « seau resté collé à la ventouse » sans remonter. Enlever le seau à la main.
 
 ## Étape 6 : le porte-bocal
 
@@ -158,5 +192,7 @@ le fond intérieur d'un seau vide posé là (contact_z), et une deuxième place 
 ## Ce qu'il faut renvoyer
 
 Dans la PR de correction de la tâche 37 : les chiffres mesurés (machine.yaml, entrees-sorties.yaml,
-fluidnc/prehension.yaml), et ce qui ne s'est pas passé comme écrit ici. Quand tout est vrai, passer
+fluidnc/prehension.yaml), et ce qui ne s'est pas passé comme écrit ici. Pour le lâcher (tâche 45
+undecies) : `souffle_s` et `delai_lacher_s` retenus, le temps que le clapet garde le vide, et les vrais
+numéros de broche de P0 et P1 (fichier de configuration de la carte achetée). Quand tout est vrai, passer
 `prehension → exemple` à `false`.

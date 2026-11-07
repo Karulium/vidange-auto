@@ -826,7 +826,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   3. Le Portique (`portique/logiciel/bras-traine.md`, corrigé) donne le bas du godet en butée haute vers 1,087 :
      vérifier contre le chiffre du dépôt et corriger si besoin.
   Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
-- [ ] **45 undecies. Lâcher de la ventouse par « souffler » (2 électrovannes)** — Modèle : Opus, effort moyen.
+- [x] **45 undecies. Lâcher de la ventouse par « souffler » (2 électrovannes)** — Modèle : Opus, effort moyen.
   Réponses des fils du 07/11/2026 (à recopier dans `docs/decisions.md`, en corrigeant le point 2 de « Entonnoir,
   réponses à la PR n° 88 », qui est faux) :
   1. **Deux électrovannes** (fil Préhension, fiche achats/modules/prehension.json, étape 9) : `ev_aspirer` envoie l'air
