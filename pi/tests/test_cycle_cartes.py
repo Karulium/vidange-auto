@@ -12,6 +12,7 @@ import pytest
 from vidange.chef import Chef
 from vidange.cycle import ModeBocaux, ModeSeaux
 from vidange.cycle.machine import (
+    BOCAL_NEUF,
     BOCAUX_SALES,
     CARTES_PAS_CONSTRUITES,
     NOMS_DES_PIECES,
@@ -29,7 +30,9 @@ from vidange.lavage.lavage import Lavage
 from vidange.materiel import FausseFabrique, Materiel
 from vidange.micropore.avance import AvanceFluidnc
 from vidange.micropore.tete import TeteMicropore
+from vidange.mycelium.agitateur import AgitateurFluidnc
 from vidange.pesees.tour import TourPesees
+from vidange.porte_bocal.porte_bocal import PorteBocalFluidnc
 from vidange.poste_fut import PosteFut
 from vidange.prehension.prehension import Prehension
 from vidange.prehension.tete import TeteFluidnc
@@ -126,8 +129,12 @@ def test_tout_present_les_cartes_sont_construites_et_les_postes_prets(banc, regl
     assert isinstance(cartes.tete_micropore, TeteMicropore)
     assert isinstance(cartes.bras_fermeture, BrasFermeture)
     assert isinstance(cartes.avance_micropore, AvanceFluidnc)
+    assert isinstance(cartes.agitateur, AgitateurFluidnc)
+    assert isinstance(cartes.porte_bocal, PorteBocalFluidnc)
     assert isinstance(cartes.tete, TeteFluidnc)
     assert isinstance(cartes.prehension, Prehension)
+    # La Préhension voit le porte-bocal du Mycélium (zone du porte-bocal, mors).
+    assert cartes.prehension.porte_bocal is cartes.porte_bocal
     assert isinstance(cartes.lavage, Lavage)
     # Les cartes sont celles des liaisons du programme (une seule liaison par carte).
     assert cartes.chariot.liaison is banc.liaisons["chariot"]
@@ -137,6 +144,8 @@ def test_tout_present_les_cartes_sont_construites_et_les_postes_prets(banc, regl
     pieces = banc.pieces(cartes)
     for poste in POSTES_DU_CHARIOT:
         assert pieces.manque(poste) is None, poste
+    # Le Mycélium a ses pièces ; il lui manque le QR du bocal et le codeur de la rotation.
+    assert pieces.manque("mycelium") == BOCAL_NEUF
     # Il ne reste que ce qui n'est pas écrit (photo du plafond).
     assert pieces.manque("entonnoir") == PHOTO_DU_PLAFOND
     assert pieces.manque("lavage_bocaux") == BOCAUX_SALES
@@ -187,6 +196,25 @@ def test_port_fluidnc_introuvable_le_poste_dit_laquelle(reglages_depot, liste):
     constat = next(c for c in cartes.constats() if "chariot (carte FluidNC" in c.sujet)
     assert constat.niveau == "attention" and constat.texte == raison
     assert "relancer le programme" in constat.quoi_faire
+
+
+def test_sans_la_carte_du_mycelium_le_poste_mycelium_dit_laquelle(reglages_depot, liste):
+    ports = {
+        nom: FauxFluidnc().ouvrir
+        for nom in reglages_depot.fluidnc.cartes
+        if nom != "mycelium_lavage"
+    }
+    banc = Banc(reglages_depot, liste, ports=ports)
+    try:
+        cartes = banc.cartes()
+    finally:
+        banc.fermer()
+    raison = cartes.absentes["agitateur"]
+    assert "mycelium_lavage" in raison
+    assert cartes.absentes["porte_bocal"] == raison
+    # La tête est construite, sans porte-bocal : la zone du porte-bocal lui reste interdite.
+    assert "tete" not in cartes.absentes and cartes.prehension.porte_bocal is None
+    assert banc.pieces(cartes).manque("mycelium") == raison
 
 
 def test_numero_de_serie_trouve_par_le_vrai_chemin(reglages_depot, liste):

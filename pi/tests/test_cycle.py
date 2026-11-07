@@ -8,7 +8,6 @@ import pytest
 from vidange.chef import Carnet, Chef, ErreurChef
 from vidange.cycle import ORDRE_SEAU, ModeSeaux, verifier_ordre
 from vidange.cycle.machine import (
-    BOCAL_NEUF,
     CAMERA_ABSENTE,
     CARTE_SPRAY,
     CARTES_PAS_CONSTRUITES,
@@ -247,7 +246,7 @@ def test_les_pieces_de_la_machine_disent_ce_qui_manque(reglages_depot):
     # Sans la vision donnée aux pièces, la raison est dite (jamais « tâche 40 ter manquante »).
     assert mode.etats["qr_du_flanc"].raison == VISION_ABSENTE
     assert mode.etats["spray"].raison == CARTE_SPRAY
-    assert mode.etats["mycelium"].raison == BOCAL_NEUF
+    assert mode.etats["mycelium"].raison == CARTES_PAS_CONSTRUITES
     assert mode.etats["micropore"].raison == VISION_ABSENTE
     assert mode.etats["fut"].raison == "poste du fût pas suivi (entrées/sorties pas ouvertes)"
     assert mode.refus_lot() == f"« seau_vide » pas lancé : {CARTES_PAS_CONSTRUITES}"
@@ -421,8 +420,8 @@ def test_cycle_se_joue_seul():
 
 def test_reprise_apres_une_coupure_au_milieu_d_un_seau(reglages_depot, liste, tmp_path):
     carnet = Carnet(tmp_path / "etat-cycle.json")
-    # Coupure de courant au bout de 1830 s simulées : 4e seau, dosage de sa 3e couche.
-    coupe = duree_max(reglages_depot, 1830)
+    # Coupure de courant au bout de 2460 s simulées : 4e seau, dosage de sa 3e couche.
+    coupe = duree_max(reglages_depot, 2460)
     with Simulateur(coupe, liste, "cycle", carnet=carnet) as simulateur:
         _, planning, _ = jouer_cycle(simulateur)
     assert planning.probleme.startswith("bloqué au bout de duree_max_s")

@@ -125,6 +125,9 @@ class Pas:
     porte_bocal: Literal["tete_en_bas", "debout", "ouvrir", "serrer"] | None = None
     # Prise d'origine de la manivelle (tour lent).
     origine: bool = False
+    # Bocal neuf de semence pris au stockage et posé sur le porte-bocal par la Préhension
+    # (tâche 19 quater) : le pas dure tant que son geste dure ; la manivelle reste en bas.
+    bocal_neuf: bool = False
 
     @property
     def bouge(self) -> bool:

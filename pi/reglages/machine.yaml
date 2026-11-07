@@ -863,6 +863,12 @@ prehension:
     # de la pose sur le seau 10 mm/s (fiche, Portique du 28/10, plus lent pour la pose). EXEMPLES.
     couvercle_pile: 0.02
     couvercle_pose: 0.01
+    # Bocal neuf de semence (tâche 19 quater, fiche de la Préhension du 07/11) : levée de 3 cm après
+    # la prise 20 mm/s ; approche du col du bocal et du porte-bocal 5 mm/s ; appui et décollage
+    # 2 mm/s. (L'approche de la capsule, 10 mm/s, est « approche ».) EXEMPLES.
+    bocal_levee: 0.02
+    bocal_col: 0.005
+    bocal_appui: 0.002
   # Descente lente sur les 3 derniers cm (EXEMPLE) ; contact à plus de 5 mm de la cote attendue :
   # arrêt et alerte (fiche).
   descente: {approche_m: 0.03, ecart_contact_max_m: 0.005}
@@ -2062,6 +2068,48 @@ couvercle:
     seau_b: {masse_kg: 0.10}
     seau_c: {masse_kg: 0.16, descente_lente_z: [0.67, 0.57]}
     seau_d: {masse_kg: 0.13}
+
+# Bocal neuf de semence (tâche 19 quater ; fiche de la Préhension `bocal-neuf-pour-logiciel.md`, 07/11/2026) :
+# la tête dévisse la capsule du bocal sur sa place du stockage (stockage → bocaux → semence ; dessus de la
+# capsule : stockage → bocaux → capsule_haut_z, 0,644 sur le tapis de 1 mm), la range dans la boîte des
+# capsules, prend un couvercle percé, le visse sur le bocal, porte le bocal au porte-bocal (geste de
+# prehension → porte_bocal) et le pose (mors à Ø 98, lâcher, remontée, serrage). Appui de dévissage et de
+# vissage F_devis (80 N, 60 à 100 N tenus) : prehension → vissage. Sens (fiche) : angles vus de dessus,
+# horaire = NÉGATIF ; dévissage trigo (positif) de −270° à +90°, vissage horaire de +270° à −90°
+# (cordon ± 500°). Les boîtes sont celles de stockage → boites (x 2,95 depuis l'agrandissement de 43 cm :
+# la fiche écrit 2,52, avant l'agrandissement). Le couple de serrage C_vis (≈ 1,5 N·m au mât) se règle À LA
+# MAIN sur le pilote de la rotation, au premier essai : le logiciel ne le commande pas.
+# Chiffres de la fiche : hauteur du bocal, angles, 360° au plus, essai après 120° puis tous les 60°, 3 mm de
+# décollage, 5 mm de levée, 0,3 s, 3 cm, approche 3 cm, ± 8 mm, ± 3 mm, ± 2 mm, ± 30 g, erreur du codeur
+# 2° pendant 0,2 s. EXEMPLES : masses (À PESER), tolérance des pesées, relâchement de la poussée (pas de
+# 0,5 mm, 20 pas au plus, 10 N, 2 N), essais, et tout le reste. À régler aux essais :
+# pi/systeme/essai-bocal-neuf.md.
+bocal_neuf:
+  exemple: true
+  bocal: {hauteur_m: 0.147, m_capsule_kg: 0.025, m_couv_perce_kg: 0.025, m_bocal_plein_kg: 1.0, tolerance_pct: 30}
+  approche_m: 0.030
+  devissage:
+    angle_depart_deg: -270
+    rotation_max_deg: 360
+    premier_essai_deg: 120
+    pas_essai_deg: 60
+    sans_bocal_m: 0.010
+    relache_n: 10
+    relache_pas_m: 0.0005
+    relache_pas_max: 20
+    decollage_m: 0.003
+  vissage: {angle_depart_deg: 270, rotation_max_deg: 360, hauteur_tolerance_m: 0.002, appui_nul_n: 2, levee_m: 0.005, essais_max: 2}
+  cale: {err_deg: 2, duree_s: 0.2}
+  boites:
+    capsules: capsules_enlevees
+    couvercles_perces: couvercles_perces
+    approche_m: 0.030
+    centrage_m: 0.003
+    fenetre_m: 0.008
+    attente_lacher_s: 0.3
+    remontee_m: 0.03
+    prises_max: 2
+  palier_vide_n: 0.3
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

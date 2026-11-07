@@ -17,6 +17,9 @@ vidange-prehension, vidange-micropore, vidange-lavage) :
 - « tete » : la tête de la Préhension (cartes FluidNC du portique et de la tête, palier pesé, vide
   du venturi) et la Préhension ;
 - « lavage » : le Lavage (eau du fût, sur les cartes FluidNC de fluidnc.yaml) sur cette tête ;
+- « agitateur » et « porte_bocal » (tâche 19 quater) : l'agitateur du Mycélium (carte FluidNC
+  « mycelium_lavage » et balance du plateau) et son porte-bocal (mors, demi-tour), que la Préhension
+  voit aussi (zone du porte-bocal, manivelle en bas) ;
 - « spray » : la carte ESP32 n° 5 du spray (bus rs485_spray), qui répond.
 Une pièce absente (signal pas dans la liste, ligne `exemple: true` ou réglage d'EXEMPLE sur la vraie
 machine, numéro de série introuvable, carte qui ne répond pas) n'arrête jamais le démarrage : elle
@@ -27,8 +30,10 @@ sorties) : les boucles en fond de ces pièces partiront avec le lot.
 
 Ce qui manque encore pour qu'un lot parte sur la machine, sans rien inventer :
 - griffe (case vide d'ORDRE_SEAU) : son enchaînement avec la préhension (solveur, tâche 23) ;
-- mycélium : la pose du bocal de semence neuf dans le porte-bocal par la préhension n'est pas
-  écrite (case vide `nouveau_bocal` du Mycélium) ;
+- mycélium : le geste du bocal neuf de semence est écrit (vidange.bocal_neuf, tâche 19 quater),
+  mais il lui manque deux sources que la machine n'a pas encore : la lecture du QR du bocal par la
+  caméra de la tête de la griffe, et l'erreur du codeur de la rotation de la tête (calage du
+  moteur) ;
 - QR du flanc et micropore : la vision (vidange.vision.inspection, tâche 40 ter) attend ses
   réglages vrais (vision.yaml → inspection) et la caméra ;
 - stockage : il faut le signal de la boucle du tiroir et des panneaux ;
@@ -39,7 +44,7 @@ Ce qui manque encore pour qu'un lot parte sur la machine, sans rien inventer :
 - nuit UV-ozone : tout est là (le Nettoyage tourne déjà) ; elle ne manque que si le Nettoyage n'est
   pas construit ou si un signal de la nuit manque dans la liste des entrées/sorties.
 Tant que ces cases vides restent, `remplissage`, `entonnoir` et `lavage_bocaux` ne sont jamais
-appelés sur la machine.
+appelés sur la machine (le poste « mycelium », cœur du lot, dit lequel manque).
 """
 
 from collections.abc import Callable, Iterable, Mapping
@@ -63,6 +68,8 @@ from vidange.materiel import Materiel
 from vidange.micropore.appris import NOM_APPRIS, FichierAppris
 from vidange.micropore.avance import AvanceFluidnc
 from vidange.micropore.tete import TeteMicropore
+from vidange.mycelium.agitateur import AgitateurFluidnc
+from vidange.mycelium.regles import ReglesMycelium
 from vidange.nettoyage.nettoyage import (
     GENERATEUR,
     LAMPE_UV,
@@ -71,6 +78,13 @@ from vidange.nettoyage.nettoyage import (
     Nettoyage,
 )
 from vidange.pesees.tour import CapteurPesee, TourPesees
+from vidange.porte_bocal.porte_bocal import (
+    ENTREES as ENTREES_PORTE_BOCAL,
+)
+from vidange.porte_bocal.porte_bocal import (
+    SORTIES as SORTIES_PORTE_BOCAL,
+)
+from vidange.porte_bocal.porte_bocal import PorteBocalFluidnc, signaux_porte_bocal
 from vidange.poste_fut import PosteFut
 from vidange.prehension.prehension import Prehension
 from vidange.prehension.tete import (
@@ -100,8 +114,9 @@ CARTES_PAS_CONSTRUITES = (
 )
 CARTE_SPRAY = "carte du spray pas ouverte (signal absent de docs/entrees-sorties.yaml ?)"
 BOCAL_NEUF = (
-    "pose du bocal de semence neuf dans le porte-bocal par la préhension pas écrite (case vide "
-    "« nouveau_bocal » du Mycélium)"
+    "bocal de semence neuf (vidange.bocal_neuf) : il manque la lecture du QR du bocal par la "
+    "caméra de la tête de la griffe et l'erreur du codeur de la rotation de la tête (calage du "
+    "moteur), pas encore branchées"
 )
 PHOTO_DU_PLAFOND = (
     "lecture de la photo du plafond (entonnoir sur le bocal, centre du col) pas écrite"
@@ -117,6 +132,7 @@ CARTE_PONT = "portique"
 CARTE_TETE = "prehension"
 PESEE_PLATEAU = "pesee_plateau_remplissage"
 PESEE_TETE = "pesee_prehension"
+CARTE_MYCELIUM = "mycelium_lavage"
 VIDE = "vide_venturi"
 
 # Les pièces de chaque poste, dans l'ordre où leur absence est dite.
@@ -127,6 +143,7 @@ PIECES_DES_POSTES: dict[str, tuple[str, ...]] = {
     "couvercle": ("chariot", "tete"),
     "fermeture": ("chariot", "bras_fermeture"),
     "spray": ("spray",),
+    "mycelium": ("tete", "agitateur", "porte_bocal"),
     "entonnoir": ("tete",),
     "lavage_bocaux": ("tete", "lavage"),
 }
@@ -137,6 +154,8 @@ NOMS_DES_PIECES = {
     "tete_micropore": "tête du micropore (servos, ToF)",
     "bras_fermeture": "bras de la fermeture (servo)",
     "avance_micropore": "moteur d'avance du ruban du micropore",
+    "agitateur": "agitateur du Mycélium (carte FluidNC, balance du plateau)",
+    "porte_bocal": "porte-bocal du Mycélium (mors, demi-tour)",
     "tete": "tête de la Préhension",
     "lavage": "Lavage (eau du fût, brosses)",
     "spray": "carte du spray",
@@ -161,6 +180,8 @@ class CartesMachine:
     tete_micropore: TeteMicropore | None = None
     bras_fermeture: BrasFermeture | None = None
     avance_micropore: AvanceFluidnc | None = None
+    agitateur: AgitateurFluidnc | None = None
+    porte_bocal: PorteBocalFluidnc | None = None
     tete: TeteFluidnc | None = None
     prehension: Prehension | None = None
     lavage: Lavage | None = None
@@ -370,6 +391,36 @@ def construire_cartes(
         faire.signaux(avance.signal)
         cartes.avance_micropore = AvanceFluidnc(faire.carte_fluidnc(avance.carte), avance)
 
+    def agitateur() -> None:
+        if machine.mycelium is None:
+            raise Absente("machine.yaml n'a pas de partie « mycelium »")
+        liaison = faire.carte_fluidnc(CARTE_MYCELIUM)
+        balance = faire.balance(PESEE_PLATEAU)
+        cartes.agitateur = AgitateurFluidnc(
+            machine, liaison, balance, reglages.fluidnc.cartes[CARTE_MYCELIUM]
+        )
+
+    def porte_bocal() -> None:
+        if machine.porte_bocal is None:
+            raise Absente("machine.yaml n'a pas de partie « porte_bocal »")
+        faire.signaux(*ENTREES_PORTE_BOCAL, *SORTIES_PORTE_BOCAL)
+        liaison = faire.carte_fluidnc(CARTE_MYCELIUM)
+        signaux = signaux_porte_bocal(liaison, reglages.fluidnc.cartes[CARTE_MYCELIUM])
+        cartes.porte_bocal = PorteBocalFluidnc(machine, liaison, signaux)
+
+    def manivelle() -> str | None:
+        """Ce que voit la tête de la manivelle : « haut », « bas » ou None (inconnue)."""
+        if cartes.agitateur is None or machine.mycelium is None:
+            return None
+        regles = ReglesMycelium(machine)
+        try:
+            pose = cartes.agitateur.position()
+        except Exception:
+            return None
+        if regles.en_haut(pose):
+            return "haut"
+        return "bas" if regles.en_bas(pose) else None
+
     def tete() -> None:
         if machine.prehension is None or machine.griffe is None:
             raise Absente("machine.yaml n'a pas de partie « prehension » (ou « griffe »)")
@@ -386,11 +437,13 @@ def construire_cartes(
         vide = CapteurVide(machine.prehension.vide, lambda: materiel.mesurer(VIDE))
         signaux = signaux_prehension(liaison, reglages.fluidnc.cartes[CARTE_TETE])
         cartes.tete = TeteFluidnc(machine, pont, liaison, signaux, force, vide)
-        # Sans le Mycélium (pas construit ici), la manivelle est inconnue : la tête ne va jamais
-        # dans la zone du porte-bocal (vidange.prehension).
+        # Sans l'agitateur ni le porte-bocal (pièces absentes), la manivelle est inconnue : la
+        # tête ne va jamais dans la zone du porte-bocal (vidange.prehension).
         cartes.prehension = Prehension(
             machine,
             cartes.tete,
+            cartes.porte_bocal,
+            manivelle=manivelle,
             panneau_rabattu=poste.panneau_vu_rabattu,
             echange_fut=lambda: poste.echange_en_cours,
             garde=garde,
@@ -444,6 +497,8 @@ def construire_cartes(
         ("tete_micropore", tete_micropore),
         ("bras_fermeture", bras_fermeture),
         ("avance_micropore", avance_micropore),
+        ("agitateur", agitateur),
+        ("porte_bocal", porte_bocal),
         ("tete", tete),
         ("lavage", lavage),
         ("spray", spray),
@@ -519,7 +574,7 @@ class PiecesMachine:
         if poste == "spray":
             return CARTE_SPRAY if self.spray is None else self.manque_cartes(poste)
         if poste == "mycelium":
-            return BOCAL_NEUF
+            return self.manque_cartes(poste) or BOCAL_NEUF
         if poste == "stockage" and (
             self.materiel is None or BOUCLE not in self.materiel.branchements
         ):
@@ -562,10 +617,11 @@ class PiecesMachine:
         avec_spray: bool,
         avec_couvercle: bool,
     ) -> PiecesRemplissage:
-        # Jamais appelé : le poste « mycelium » (cœur) manque toujours (BOCAL_NEUF), et la griffe
-        # est une case vide. Les cartes sont là (self.cartes) ; le Mycélium (agitateur,
-        # porte-bocal), le Stockage, le Micropore, la Fermeture, le Couvercle et le Spray seront
-        # assemblés dessus comme dans vidange.cycle.simulation.
+        # Jamais appelé : le poste « mycelium » (cœur) manque toujours (BOCAL_NEUF : QR du bocal,
+        # codeur de la rotation), et la griffe est une case vide. Les cartes sont là
+        # (self.cartes, dont l'agitateur et le porte-bocal) ; le Mycélium, le Stockage, le
+        # BocalNeuf, le Micropore, la Fermeture, le Couvercle et le Spray seront assemblés dessus
+        # comme dans vidange.cycle.simulation.
         raise NotImplementedError(BOCAL_NEUF)
 
     def entonnoir(self, lot: LotBocaux) -> PiecesEntonnoir:

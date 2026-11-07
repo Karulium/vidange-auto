@@ -33,6 +33,7 @@ Tâche 45 bis, même méthode (`vidange-simulateur cycle --lot bocaux|lavage_boc
 
 from typing import TYPE_CHECKING
 
+from vidange.bocal_neuf.simulation import MondeBocalNeuf, bocal_neuf_du_simulateur
 from vidange.couvercle.simulation import MondeCouvercle, couvercle_du_simulateur
 from vidange.cycle.mode_bocaux import (
     LotBocaux,
@@ -100,6 +101,7 @@ class PiecesSimulees:
         self.scenario: ScenarioRemplissage | None = None
         self.spray: Spray | None = None
         self.monde_couvercle: MondeCouvercle | None = None
+        self.monde_bocal_neuf: MondeBocalNeuf | None = None
 
     def manque(self, poste: str) -> str | None:
         from vidange.fermeture.simulation import fermeture_possible
@@ -193,6 +195,9 @@ class PiecesSimulees:
             couvercle, self.monde_couvercle = couvercle_du_simulateur(
                 simulateur, scenario, stockage, cycle.couvercles, cycle.pas_couvercles_m
             )
+        if cycle.bocal_neuf is not None and reglages_machine_a_bocal_neuf(simulateur):
+            # Le bocal neuf de semence est mis par la vraie Préhension simulée (tâche 19 quater).
+            _, self.monde_bocal_neuf = bocal_neuf_du_simulateur(simulateur, scenario, stockage)
         self.scenario = scenario
         return PiecesRemplissage(
             scenario.remplissage,
@@ -238,6 +243,10 @@ class PiecesSimulees:
         simulateur.ajouter_fond(spray.observer)
         self.spray = spray
         return spray
+
+
+def reglages_machine_a_bocal_neuf(simulateur: Simulateur) -> bool:
+    return simulateur.reglages.machine.bocal_neuf is not None
 
 
 def _cycle(simulateur: Simulateur) -> CycleSimule:

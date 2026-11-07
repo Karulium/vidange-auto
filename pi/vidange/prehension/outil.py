@@ -14,6 +14,12 @@
   vidange-prehension couvercle seau_a         un couvercle pris à la pile du stockage, posé sur le
                                               seau plein du chariot (tâche 41 bis) ; le chariot est
                                               préparé avant : vidange-remplissage couvercle-preparer
+  vidange-prehension bocal-neuf semence_0_0 pleurote_grise SEM-0001 0 12 --manivelle-en-bas
+                                              le bocal de semence de cette place (variété, QR lu à
+                                              la main, capsules déjà dans leur boîte, couvercles
+                                              percés dans la leur) dévissé, rebouché d'un couvercle
+                                              percé, posé au porte-bocal (tâche 19 quater ;
+                                              procédure : pi/systeme/essai-bocal-neuf.md)
   ... --faux                                  avec de faux FluidNC (essai de l'outil : etat)
 
 Les gestes sont ceux du programme, avec tous leurs verrous (vidange.prehension). Les cotes sont
@@ -98,6 +104,7 @@ def main(arguments: list[str] | None = None) -> int:
             "visser",
             "entonnoir",
             "couvercle",
+            "bocal-neuf",
         ],
     )
     lecteur.add_argument("valeurs", nargs="*", help="objet et cotes (voir plus haut)")
@@ -127,6 +134,7 @@ def main(arguments: list[str] | None = None) -> int:
         "visser": 6,
         "entonnoir": 2,
         "couvercle": 1,
+        "bocal-neuf": 5,
     }
     if len(options.valeurs) != attendus[options.commande]:
         lecteur.error(f"« {options.commande} » attend {attendus[options.commande]} valeurs")
@@ -141,7 +149,9 @@ def main(arguments: list[str] | None = None) -> int:
                 fabrique.regler(VIDE, 0.0)
             ouvrir = _faux_ouvrir(reglages, machine.axes["prehension_z"].lettre or "Z")
             liaisons = {}
-            noms = [PONT, TETE] + ([PORTE_BOCAL] if options.commande == "porte-bocal" else [])
+            noms = [PONT, TETE] + (
+                [PORTE_BOCAL] if options.commande in ("porte-bocal", "bocal-neuf") else []
+            )
             for nom in noms:
                 liaison = Liaison(
                     nom, reglages.fluidnc, ouvrir=ouvrir.get(nom) if options.faux else None
@@ -234,6 +244,8 @@ def _faire(
         return _entonnoir(prehension, reglages, valeurs, delai)
     if options.commande == "couvercle":
         return _couvercle(prehension, reglages, valeurs[0], delai)
+    if options.commande == "bocal-neuf":
+        return _bocal_neuf(prehension, reglages, valeurs, delai)
     objet = valeurs[0] if options.commande == "prendre-poser" else None
     try:
         cotes = [float(valeur) for valeur in valeurs[1 if objet else 0 :]]
@@ -321,6 +333,46 @@ def _couvercle(prehension: Prehension, reglages: Reglages, format: str, delai: f
     )
     _jouer(prehension, lambda: couvercle.geste_poser(prehension, format), delai)
     print("Couvercle posé sur le seau (sans appuyer).")
+    return 0
+
+
+def _bocal_neuf(
+    prehension: Prehension, reglages: Reglages, valeurs: list[str], delai: float
+) -> int:
+    """Le vrai geste du bocal neuf de semence (tâche 19 quater) sur une place du stockage. Le QR est
+    celui que Karulium lit sur le bocal et tape ici (la caméra de la tête de la griffe n'est pas
+    branchée) ; l'inventaire (une place, deux boîtes) est celui qu'il donne."""
+    from vidange.bocal_neuf import BocalNeuf
+    from vidange.stockage import places
+    from vidange.stockage.stockage import Stockage
+
+    machine = reglages.machine
+    if machine.bocal_neuf is None or machine.stockage is None:
+        print("machine.yaml n'a pas de partie « bocal_neuf »", file=sys.stderr)
+        return 2
+    place, variete, qr = valeurs[:3]
+    try:
+        capsules, couvercles = int(valeurs[3]), int(valeurs[4])
+    except ValueError:
+        print(
+            "Les nombres de capsules et de couvercles s'écrivent en chiffres : 0 12",
+            file=sys.stderr,
+        )
+        return 2
+    if place not in places.places_semence(machine):
+        print(
+            f"« {place} » n'est pas une place de semence (stockage → bocaux → semence)",
+            file=sys.stderr,
+        )
+        return 2
+    stockage = Stockage(machine, boucle_fermee=lambda: None)
+    stockage.poser_bocal(place, variete)
+    boites = machine.bocal_neuf.boites
+    stockage.inventaire.changer_boite(boites.capsules, capsules)
+    stockage.inventaire.changer_boite(boites.couvercles_perces, couvercles)
+    neuf = BocalNeuf(machine, prehension, stockage, lire_qr=lambda _place: qr)
+    _jouer(prehension, lambda: neuf.geste_nouveau_bocal(variete), delai)
+    print(f"Bocal {neuf.bocal().code} ({variete}) posé et serré dans le porte-bocal.")
     return 0
 
 
