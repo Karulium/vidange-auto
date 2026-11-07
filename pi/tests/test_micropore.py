@@ -343,7 +343,9 @@ def test_scenario_micropore_sur_les_2_seaux(tmp_path):
         (poste_y, MICROPORE.ruban_z - b[0].hauteur_m),
         (0.42, MICROPORE.ruban_z - b[1].hauteur_m),
     ]
-    assert rangees == pytest.approx(attendu)
+    assert [v for paire in rangees for v in paire] == pytest.approx(
+        [v for paire in attendu for v in paire]
+    )
     # Rien à vérifier, une mesure par seau au registre.
     assert registre.trouver("seau", "S0101")["a_verifier"] is None
     mesures = registre.lire("SELECT valeur FROM mesures WHERE nom = 'micropore_morceaux'")
