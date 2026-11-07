@@ -3003,6 +3003,111 @@ class Fermeture(Modele):
         return self
 
 
+# ------------------------------------------------------------- entonnoir à bocaux (tâche 43)
+
+
+class PriseEntonnoir(Modele):
+    """Contrôle du contact quand la ventouse descend sur l'oreille (fiche, geste 6)."""
+
+    # Contact plus haut que l'attendu de plus de tant : « entonnoir mal posé ».
+    trop_haut_m: float = Field(gt=0)
+    # Pas de contact avant tant sous l'attendu : « entonnoir absent ».
+    trop_bas_m: float = Field(gt=0)
+
+
+class PoseEntonnoir(Modele):
+    """Contrôle du contact quand l'entonnoir se pose sur un col (fiche, geste 10)."""
+
+    # Posé : contact à l'attendu ± tolerance_m.
+    tolerance_m: float = Field(gt=0)
+    # Plus haut de bord_du_verre_m ou plus : la pointe est sur le bord du verre, pas dedans.
+    bord_du_verre_m: float = Field(gt=0)
+
+
+class VideEntonnoir(Modele):
+    """Seuils propres à l'entonnoir ; la prise (−55 kPa) et la perte (−40 kPa) sont celles de la
+    Préhension (prehension → vide)."""
+
+    # Délai pour atteindre le vide de la prise avant un nouvel essai (s).
+    delai_prise_s: float = Field(gt=0)
+    # Lâché : le vide est revenu au-dessus de ce seuil (kPa), attendu au plus delai_lacher_s.
+    lache_kpa: float = Field(lt=0)
+    delai_lacher_s: float = Field(gt=0)
+    # Après un vide pas atteint : remonter de tant avant de redescendre (m).
+    remontee_reessai_m: float = Field(gt=0)
+
+
+class ColEntonnoir(Modele):
+    """Ce que la caméra du plafond doit donner, et ce que le cône rattrape (fiche, § 3)."""
+
+    # Précision demandée sur le centre du col (m) et erreur que le cône 60° capte seul (m).
+    precision_m: float = Field(gt=0)
+    capture_m: float = Field(gt=0)
+
+
+class Entonnoir(Modele):
+    """Entonnoir à bocaux (module sans capteur ni moteur : fiche entonnoir-pour-logiciel.md du
+    06/11/2026). La Préhension le prend par une oreille soudée à plat, ventouse, électroaimants
+    éteints. Repère du portique, en mètres ; « z » = face de la ventouse. Rien n'est câblé pour
+    ce module : ces réglages protègent la machine, jamais les personnes."""
+
+    exemple: bool = False
+    # La ventouse tient l'oreille à tant de l'axe du bocal (oreille côté +x), figé.
+    decalage_oreille_x_m: float
+    decalage_oreille_y_m: float
+    # Face de la ventouse au contact de l'oreille, entonnoir posé : À MESURER sur la pièce reçue.
+    oreille_z: float
+    # Pointe et haut du cône, entonnoir posé : à mesurer aussi.
+    pointe_z: float
+    cone_haut_z: float
+    # Bord du col des bocaux posés (mesuré).
+    bord_col_z: float
+    # Levée de transport (m) : l'entonnoir roule à cette hauteur au-dessus de sa pose.
+    levee_m: float = Field(gt=0)
+    # Garde minimale entre la pointe en transport et le bord des cols voisins (m).
+    garde_voisins_min_m: float = Field(gt=0)
+    # Fin de la descente rapide : tant au-dessus du haut de l'oreille (m).
+    approche_m: float = Field(gt=0)
+    # Après le lâcher, la tête remonte de tant en vitesse d'approche (l'entonnoir reste posé).
+    remontee_lacher_m: float = Field(gt=0)
+    prise: PriseEntonnoir
+    pose: PoseEntonnoir
+    vide: VideEntonnoir
+    col: ColEntonnoir
+
+    @property
+    def face_transport_z(self) -> float:
+        """Face de la ventouse quand l'entonnoir roule."""
+        return self.oreille_z + self.levee_m
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "Entonnoir":
+        erreurs = []
+        if self.pointe_z >= self.oreille_z:
+            erreurs.append("pointe_z doit être plus bas que oreille_z")
+        if self.cone_haut_z > self.oreille_z:
+            erreurs.append("cone_haut_z ne peut pas dépasser oreille_z (l'oreille est en haut)")
+        if self.pointe_z >= self.cone_haut_z:
+            erreurs.append("pointe_z doit être plus bas que cone_haut_z")
+        garde = self.pointe_z + self.levee_m - self.bord_col_z
+        if garde < self.garde_voisins_min_m - 1e-9:
+            erreurs.append(
+                f"en transport la pointe n'est qu'à {garde * 1000:.0f} mm au-dessus du bord des "
+                f"cols voisins ({self.bord_col_z:g} m) : il en faut "
+                f"{self.garde_voisins_min_m * 1000:g}"
+            )
+        if self.col.precision_m > self.col.capture_m:
+            erreurs.append(
+                f"col → precision_m ({self.col.precision_m:g}) plus grande que capture_m "
+                f"({self.col.capture_m:g}) : le cône ne se centrerait pas seul"
+            )
+        if self.pose.tolerance_m >= self.pose.bord_du_verre_m:
+            erreurs.append("pose → tolerance_m doit être plus petit que bord_du_verre_m")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -3056,6 +3161,9 @@ class Machine(Modele):
     # Demande la griffe (formats), le remplissage (plateau, règle 5) et le micropore n'est pas
     # nécessaire.
     fermeture: Fermeture | None = None
+    # Entonnoir à bocaux (None : pas d'entonnoir). Demande la préhension (objet « entonnoir ») et
+    # le stockage (places des bocaux).
+    entonnoir: Entonnoir | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -3131,6 +3239,7 @@ class Machine(Modele):
         erreurs += self._verifier_spray()
         erreurs += self._verifier_micropore()
         erreurs += self._verifier_fermeture()
+        erreurs += self._verifier_entonnoir()
         if self.camera_dosage is not None and (self.prehension is None or self.mycelium is None):
             erreurs.append(
                 "camera_dosage : il faut aussi les parties « prehension » et « mycelium »"
@@ -4264,6 +4373,56 @@ class Machine(Modele):
                 )
         return erreurs
 
+    def _verifier_entonnoir(self) -> list[str]:
+        """L'objet « entonnoir » existe, les hauteurs tiennent dans la course de la tête, le seuil
+        de lâcher est au-dessus de celui de la perte, et la ventouse atteint l'oreille de chaque
+        bocal (pont et chariot dans leurs courses)."""
+        from vidange.stockage import places
+
+        entonnoir = self.entonnoir
+        if entonnoir is None:
+            return []
+        if self.prehension is None or self.stockage is None:
+            return ["entonnoir : il faut aussi les parties « prehension » et « stockage »"]
+        erreurs = []
+        prehension = self.prehension
+        if "entonnoir" not in prehension.objets:
+            erreurs.append("entonnoir : il manque l'objet « entonnoir » dans prehension → objets")
+        bas, haut = self.axes["prehension_z"].course
+        mini = entonnoir.oreille_z - entonnoir.prise.trop_bas_m
+        if mini < bas:
+            erreurs.append(
+                f"entonnoir → oreille_z : la descente de contrôle irait à {mini:g} m, sous la "
+                f"course de la tête ({bas:g} à {haut:g} m)"
+            )
+        if entonnoir.face_transport_z > min(prehension.haut_z, haut):
+            erreurs.append(
+                f"entonnoir : face de transport {entonnoir.face_transport_z:g} m (oreille_z + "
+                f"levee_m) au-dessus de la butée haute ({min(prehension.haut_z, haut):g} m)"
+            )
+        if entonnoir.vide.lache_kpa <= prehension.vide.perte_kpa:
+            erreurs.append(
+                f"entonnoir → vide → lache_kpa ({entonnoir.vide.lache_kpa:g}) doit être au-dessus "
+                f"de prehension → vide → perte_kpa ({prehension.vide.perte_kpa:g})"
+            )
+        if entonnoir.bord_col_z <= self.stockage.bocaux.pose_z:
+            erreurs.append(
+                "entonnoir → bord_col_z doit être au-dessus du bocal posé (bocaux → pose_z)"
+            )
+        debut_x, fin_x = self.axes["pont_x"].course
+        debut_y, fin_y = self.axes["chariot_y"].course
+        for nom, (x, y) in places.places_bocaux(self).items():
+            pont = x + entonnoir.decalage_oreille_x_m - prehension.decalage_mat_x
+            tete_y = y + entonnoir.decalage_oreille_y_m
+            if not debut_x <= pont <= fin_x or not debut_y <= tete_y <= fin_y:
+                erreurs.append(
+                    f"entonnoir : la ventouse n'atteint pas l'oreille du bocal « {nom} » "
+                    f"(pont à {pont:g} m, chariot à {tete_y:g} m ; courses {debut_x:g} à "
+                    f"{fin_x:g} et {debut_y:g} à {fin_y:g} m)"
+                )
+                break
+        return erreurs
+
     def _se_chevauchent(self, nom_a: str, nom_b: str) -> bool:
         """Deux zones se chevauchent si elles se recouvrent sur tous les axes à la fois."""
         zone_a, zone_b = self.zones[nom_a], self.zones[nom_b]
@@ -4971,6 +5130,16 @@ class FermetureSimulee(Modele):
     ecart_contact_m: float = 0.0
 
 
+class EntonnoirSimule(Modele):
+    """L'entonnoir imaginaire (scénario « entonnoir »)."""
+
+    # Les bocaux du lot à remplir (noms du quinconce du Stockage), dans le désordre : le Pi choisit
+    # l'ordre.
+    bocaux: list[Nom] = Field(min_length=1)
+    # Durée du versement de la griffe dans un bocal (s).
+    verse_s: float = Field(ge=0)
+
+
 class ScenarioSimule(Modele):
     """Un scénario : capteurs actionnés au départ et événements, à la place de ceux du haut."""
 
@@ -5015,6 +5184,8 @@ class ReglagesSimulateur(Modele):
     micropore: MicroporeSimule | None = None
     # Le couvercle imaginaire de la Fermeture des seaux.
     fermeture: FermetureSimulee | None = None
+    # L'entonnoir imaginaire (lot de bocaux, durée du versement).
+    entonnoir: EntonnoirSimule | None = None
 
 
 # ---------------------------------------------------------- accelerometre.yaml

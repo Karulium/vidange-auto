@@ -8,6 +8,9 @@
                                               bocal pris là, posé au porte-bocal, repris, reposé
   vidange-prehension visser 1.5 0.5 0.85  1.7 0.5 0.9
                                               capsule prise là, vissée sur le bocal d'ici
+  vidange-prehension entonnoir bocal_0_0 bocal_0_1
+                                              entonnoir (posé à la main sur le 1er bocal) pris par
+                                              l'oreille, posé sur le 2e (tâche 43)
   ... --faux                                  avec de faux FluidNC (essai de l'outil : etat)
 
 Les gestes sont ceux du programme, avec tous leurs verrous (vidange.prehension). Les cotes sont
@@ -83,7 +86,7 @@ def main(arguments: list[str] | None = None) -> int:
         help="manivelle du mycélium vue en bas, caméra du dosage à 0° (porte-bocal)",
     )
     lecteur.add_argument(
-        "commande", choices=["etat", "vide", "prendre-poser", "porte-bocal", "visser"]
+        "commande", choices=["etat", "vide", "prendre-poser", "porte-bocal", "visser", "entonnoir"]
     )
     lecteur.add_argument("valeurs", nargs="*", help="objet et cotes (voir plus haut)")
     options = lecteur.parse_args(arguments)
@@ -104,7 +107,14 @@ def main(arguments: list[str] | None = None) -> int:
     if machine.prehension is None or machine.poste_fut is None:
         print("machine.yaml n'a pas de partie « prehension »", file=sys.stderr)
         return 2
-    attendus = {"etat": 0, "vide": 0, "prendre-poser": 7, "porte-bocal": 3, "visser": 6}
+    attendus = {
+        "etat": 0,
+        "vide": 0,
+        "prendre-poser": 7,
+        "porte-bocal": 3,
+        "visser": 6,
+        "entonnoir": 2,
+    }
     if len(options.valeurs) != attendus[options.commande]:
         lecteur.error(f"« {options.commande} » attend {attendus[options.commande]} valeurs")
     arret = threading.Event()
@@ -207,6 +217,8 @@ def _faire(
         finally:
             tete.vanne(False)
         return 0
+    if options.commande == "entonnoir":
+        return _entonnoir(prehension, reglages, valeurs, delai)
     objet = valeurs[0] if options.commande == "prendre-poser" else None
     try:
         cotes = [float(valeur) for valeur in valeurs[1 if objet else 0 :]]
@@ -239,6 +251,38 @@ def _faire(
     print("Capsule prise.")
     _jouer(prehension, lambda: prehension.geste_visser(x2, y2, z2), delai)
     print("Capsule vissée.")
+    return 0
+
+
+def _entonnoir(prehension: Prehension, reglages: Reglages, valeurs: list[str], delai: float) -> int:
+    """Les vrais gestes de l'Entonnoir (tâche 43) : pris sur le 1er bocal, posé sur le 2e."""
+    from vidange.entonnoir import Entonnoir
+
+    machine = reglages.machine
+    if machine.entonnoir is None or machine.stockage is None:
+        print("machine.yaml n'a pas de partie « entonnoir »", file=sys.stderr)
+        return 2
+    depart, arrivee = valeurs
+    entonnoir = Entonnoir(machine)
+    try:
+        entonnoir.demarrer_lot([depart])
+        if arrivee not in entonnoir.places:
+            raise ValueError(f"lot de bocaux : « {arrivee} » n'est pas une place du quinconce")
+    except ValueError as erreur:
+        print(erreur, file=sys.stderr)
+        return 2
+    # Karulium a posé l'entonnoir à la main sur le 1er bocal (il le dit en lançant l'essai).
+    entonnoir.demander_la_pose()
+    _jouer(prehension, lambda: entonnoir.geste_prendre(prehension), delai)
+    print(
+        f"Entonnoir pris : vide {prehension.vide_prise_kpa:.1f} kPa, "
+        f"poids {prehension.poids_porte_n:.1f} N"
+    )
+    _jouer(prehension, lambda: entonnoir.geste_poser(prehension, arrivee), delai)
+    if entonnoir.pose_ratee:
+        print(f"Pose ratée deux fois : remis sur {entonnoir.place}, {arrivee} marqué suspect.")
+    else:
+        print(f"Entonnoir posé sur {entonnoir.place}.")
     return 0
 
 

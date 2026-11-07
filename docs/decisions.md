@@ -1086,3 +1086,61 @@ code : `pi/vidange/air/`.
    compresseur (test : `test_apres_la_nuit_uv_ozone_le_compresseur_est_referme`).
 3. Non : pas de rappel de fin de journée.
 
+
+## Entonnoir à bocaux (tâche 43, 07/11/2026)
+
+Source : `entonnoir/logiciel/entonnoir-pour-logiciel.md` du projet mécanique (fiche v3 du 28/10, écrite le
+06/11). Réglages : `pi/reglages/machine.yaml`, partie `entonnoir` (hauteurs de l'entonnoir posé, seuils de
+contrôle, du vide et délais en EXEMPLE ; décalage de l'oreille, levée, bord du col, garde, précision de la
+caméra en chiffres de la fiche) et objet `entonnoir` dans `prehension → objets` ; code : `pi/vidange/entonnoir/`.
+
+- **Aucun signal propre à l'entonnoir.** Il emploie ceux de la Préhension, sous leurs noms du code (pas ceux
+  que la fiche proposait) : `vanne_vide` (`ev_aspirer`), `contact_tete` (`contact_ventouse`), `vide_venturi`
+  (`vide_prehension`), `electroaimants_capsule` (`aimants_prehension`, éteints). Rien n'est ajouté à
+  `docs/entrees-sorties.yaml`.
+- **`entonnoir_place`** : un nom de bocal, `hors_machine` ou `inconnu`, plus « tenu par la tête ». Gardé dans
+  `donnees/entonnoir.json` (réécrit d'un coup à chaque changement). Après une coupure : gardé tel quel, sauf
+  s'il était tenu, alors `inconnu` (les électrovannes NF lâchent le vide), avec une photo du plafond. Première
+  mise en route : `hors_machine` ; fichier illisible : `inconnu`.
+- **Pose et enlèvement à la main = le Go de Karulium** (étapes `demander_la_pose` et `enlever_a_la_main`, qui
+  demandent le Go) : pas de bouton à part. Sans ce Go, la griffe ne verse dans aucun bocal
+  (`Entonnoir.refus_versement`, et la condition d'entrée de l'étape `verser`). Quand l'entonnoir est perdu
+  (absent, introuvable à la caméra, vide perdu), l'étape part en alarme ; après « acquitter » et le Go, elle ne
+  fait plus rien et le module revient à `demander_la_pose` : le geste 1 recommence sur le bocal à remplir.
+- **Pas de photo du fond au hublot** tant que `Entonnoir.sur_le_plateau()` (sur un bocal, tenu, ou inconnu) : à
+  passer en argument à `ReglesStockage.refus_photo_du_fond`.
+- **Gestes** (`geste_prendre`, `geste_poser`) : aimants éteints, ventouse en x bocal + 0,140, descente
+  rapide jusqu'à 2 cm au-dessus de l'oreille puis vitesse d'approche, contact trop bas de 15 mm = absent, trop
+  haut de 10 mm = mal posé ; vide −55 kPa en 2 s, un seul nouvel essai (souffle, remonter 5 mm) ; levée de
+  0,060 ; transport à cette hauteur avec le vide surveillé (−40 kPa : arrêt, tête en haut, photo, alerte,
+  `inconnu`) ; pose en vitesse d'approche, posé à ± 5 mm, sinon relever et réessayer une fois, puis le remettre
+  sur le bocal d'où il vient et marquer le bocal visé « suspect » (le lot continue) ; lâcher, vide revenu
+  au-dessus de −5 kPa (un deuxième souffle, puis alerte), remontée de 0,030 en vitesse d'approche puis en
+  rapide. Le centre du col vient de la caméra (± 5 mm ; le cône en capte 9,5).
+- **Règles ajoutées à la Préhension** : la tête ne tourne jamais en tenant l'entonnoir ; l'entonnoir roule à
+  `oreille_z + levee_m` (exception à la règle « pont jamais tête basse », voulue par la fiche, limitée à cet
+  objet) ; accélération « en charge » (0,5 m/s²) comme pour un seau ; son axe est à 0,140 m en −x de la tête
+  (`Objet.decalage_x_m`), et les règles du Stockage (boîtier de la caméra du bocal : axe de l'entonnoir à
+  x ≥ 1,205 si y < 0,38 ; boîtes à capsules : jamais au-dessus) s'appliquent à son axe, pas à celui de la tête.
+- **Réglages vérifiés au démarrage** : pointe sous l'oreille, garde d'au moins 4 cm sur les cols voisins en
+  transport, précision de la caméra ≤ capture du cône, seuil de lâcher au-dessus de celui de la perte,
+  hauteurs dans la course de la tête, ventouse atteignant l'oreille de chacun des 122 bocaux.
+- **Choix de la tâche 43 (tranchés par Claude)** : ordre de remplissage en serpentin (rangée par rangée, les
+  voisins à la suite, une rangée dans un sens et la suivante dans l'autre) ; l'entonnoir ne va jamais au coin
+  des suspects ni sur les places de séparation (lot refusé) ; son poids est pesé (pour la détection de choc)
+  mais pas contrôlé ; la lecture de la photo du plafond n'est pas écrite : un faux répond les places attendues
+  et le dit dans le journal.
+- **Pas fait** : le vrai versement de la griffe (case vide `verser(bocal)` du module), le branchement dans le
+  programme principal (comme les tâches 34 à 41), l'inventaire du Stockage (bocaux remplis) et la reprise d'un
+  lot après une coupure : seul `entonnoir_place` est gardé.
+- **Entonnoir, réponses à la PR n° 88** (tâche 43, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Pont qui roule tête basse en tenant l'entonnoir (levée 0,060 au-dessus de la pose, garde de 4 cm sur les cols
+     voisins) : exception gardée, car c'est le geste figé de la fiche de l'Entonnoir, et limitée à cet objet.
+  2. Pas de vanne `ev_souffler` : lâcher en fermant la vanne du vide (deuxième essai, puis alerte). Rien à ajouter
+     avant l'essai.
+  3. Deuxième essai de pose avec le même centre (pas de nouvelle photo possible, l'entonnoir est dans la tête) :
+     gardé.
+  4. Bocaux « suspects » (pose ratée deux fois) : le lot continue ; à la fin du lot, leur liste s'affiche et
+     Karulium les vérifie à la main. Le rangement à part viendra avec l'inventaire des bocaux.
+  5. Reprise d'un lot après une coupure : seul `entonnoir_place` est gardé pour l'instant ; la reprise se fera avec
+     l'inventaire des bocaux remplis (à prévoir quand le programme principal branchera le mode bocaux).

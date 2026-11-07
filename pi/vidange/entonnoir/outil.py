@@ -1,0 +1,112 @@
+"""Outil « vidange-entonnoir » : les places et les hauteurs que le Pi calcule, et l'état gardé.
+
+  vidange-entonnoir places                 où va la ventouse pour chaque bout de rangée
+  vidange-entonnoir places bocal_0_3       idem pour ce bocal (rangée 0, place 3)
+  vidange-entonnoir hauteurs               hauteurs de la prise, du transport, de la pose
+  vidange-entonnoir etat                   où le Pi croit que l'entonnoir est (fichier de donnees/)
+  vidange-entonnoir noter hors_machine     change cet état (programme principal ARRÊTÉ) :
+  vidange-entonnoir noter inconnu          « hors_machine », « inconnu » ou un nom de bocal
+
+Sert à l'essai sur le vrai matériel (pi/systeme/essai-entonnoir.md) : mesurer au mètre les cotes
+annoncées. Tout vient de pi/reglages/machine.yaml (partie « entonnoir »).
+"""
+
+import argparse
+import sys
+
+from vidange.demarrage import DOSSIER_PI, _chemin
+from vidange.entonnoir import etat as garde
+from vidange.entonnoir.etat import HORS_MACHINE, INCONNU, NOM_FICHIER
+from vidange.reglages import ErreurReglages, Machine, charger_reglages
+from vidange.stockage import places
+
+
+def _m(valeur: float) -> str:
+    return f"{valeur:.4f}".rstrip("0").rstrip(".").replace(".", ",")
+
+
+def _places(machine: Machine, bocal: str | None) -> list[str]:
+    assert machine.entonnoir is not None and machine.prehension is not None
+    reg, mat = machine.entonnoir, machine.prehension.decalage_mat_x
+    tous = places.places_bocaux(machine)
+    if bocal is not None:
+        choisis = [bocal]
+    else:
+        # Les deux bouts de chaque type de rangée (paire, impaire), première rangée de chaque.
+        choisis = [
+            places.nom_bocal(0, 0),
+            places.nom_bocal(0, machine.stockage.bocaux.paires.places - 1),  # type: ignore[union-attr]
+            places.nom_bocal(1, 0),
+            places.nom_bocal(1, machine.stockage.bocaux.impaires.places - 1),  # type: ignore[union-attr]
+        ]
+    lignes = ["Ventouse sur l'oreille (entonnoir posé sur le bocal) :"]
+    for nom in choisis:
+        x, y = tous[nom]
+        lignes.append(
+            f"  {nom:10} bocal ({_m(x)} ; {_m(y)}) → tête x {_m(x + reg.decalage_oreille_x_m)} "
+            f"y {_m(y + reg.decalage_oreille_y_m)}, pont x {_m(x + reg.decalage_oreille_x_m - mat)}"
+        )
+    return lignes
+
+
+def _hauteurs(machine: Machine) -> list[str]:
+    assert machine.entonnoir is not None
+    reg = machine.entonnoir
+    return [
+        "Haut de l'oreille, entonnoir posé (face de la ventouse au contact) : "
+        f"{_m(reg.oreille_z)} m",
+        f"  descente rapide jusqu'à {_m(reg.oreille_z + reg.approche_m)} m, puis vitesse "
+        "d'approche",
+        f"  pas de contact avant {_m(reg.oreille_z - reg.prise.trop_bas_m)} m : « entonnoir "
+        "absent »",
+        f"  contact au-dessus de {_m(reg.oreille_z + reg.prise.trop_haut_m)} m : « mal posé »",
+        f"Pointe posée {_m(reg.pointe_z)} m, haut du cône {_m(reg.cone_haut_z)} m",
+        f"Transport : face à {_m(reg.face_transport_z)} m (levée {_m(reg.levee_m)}), pointe à "
+        f"{_m(reg.pointe_z + reg.levee_m)} m, garde sur les cols voisins "
+        f"{_m(reg.pointe_z + reg.levee_m - reg.bord_col_z)} m (bord à {_m(reg.bord_col_z)} m)",
+        f"Pose : posé si contact à {_m(reg.oreille_z)} ± {_m(reg.pose.tolerance_m)} m ; pointe sur "
+        f"le bord du verre à {_m(reg.oreille_z + reg.pose.bord_du_verre_m)} m ou plus",
+    ]
+
+
+def main(arguments: list[str] | None = None) -> int:
+    lecteur = argparse.ArgumentParser(prog="vidange-entonnoir", description=__doc__.split("\n")[0])
+    lecteur.add_argument("commande", choices=["places", "hauteurs", "etat", "noter"])
+    lecteur.add_argument("valeur", nargs="?", help="un bocal (places) ou le nouvel état (noter)")
+    lecteur.add_argument("--reglages", help="dossier des réglages (défaut : pi/reglages)")
+    lecteur.add_argument("--donnees", help="dossier des données (défaut : pi/donnees)")
+    options = lecteur.parse_args(arguments)
+    dossier = _chemin(options.reglages, "VIDANGE_REGLAGES", DOSSIER_PI / "reglages")
+    fichier = _chemin(options.donnees, "VIDANGE_DONNEES", DOSSIER_PI / "donnees") / NOM_FICHIER
+    try:
+        machine = charger_reglages(dossier).machine
+    except ErreurReglages as erreur:
+        print(erreur, file=sys.stderr)
+        return 2
+    if machine.entonnoir is None or machine.stockage is None:
+        print("machine.yaml n'a pas de partie « entonnoir »", file=sys.stderr)
+        return 2
+    tous = places.places_bocaux(machine)
+    if options.commande == "places":
+        if options.valeur is not None and options.valeur not in tous:
+            print(f"bocal inconnu « {options.valeur} » (exemple : bocal_0_3)", file=sys.stderr)
+            return 2
+        print("\n".join(_places(machine, options.valeur)))
+    elif options.commande == "hauteurs":
+        print("\n".join(_hauteurs(machine)))
+    elif options.commande == "etat":
+        etat, existe = garde.lire(fichier)
+        print(f"Fichier : {fichier} ({'trouvé' if existe else 'absent : hors machine'})")
+        print(f"entonnoir_place = {etat.place}{' (tenu par la tête)' if etat.tenu else ''}")
+    else:
+        valeur = options.valeur
+        if valeur is None or (valeur not in (HORS_MACHINE, INCONNU) and valeur not in tous):
+            print("noter : hors_machine, inconnu ou un nom de bocal (bocal_0_3)", file=sys.stderr)
+            return 2
+        garde.ecrire(fichier, garde.EtatGarde(valeur, False))
+        print(f"entonnoir_place = {valeur} (écrit dans {fichier})")
+    return 0
+
+
+def lancer() -> None:
+    sys.exit(main())

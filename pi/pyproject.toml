@@ -57,6 +57,7 @@ vidange-portique = "vidange.portique.outil:lancer"
 vidange-spray = "vidange.spray.outil:lancer"
 vidange-micropore = "vidange.micropore.outil:lancer"
 vidange-fermeture = "vidange.fermeture.outil:lancer"
+vidange-entonnoir = "vidange.entonnoir.outil:lancer"
 
 [tool.setuptools.packages.find]
 include = ["vidange*"]

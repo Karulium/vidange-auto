@@ -7,6 +7,7 @@
   vidange-simulateur griffe                    vidange d'un fût par la griffe (« vidange_fut »)
   vidange-simulateur mycelium                  dosage du mycélium (« dosage_mycelium »)
   vidange-simulateur prehension                gestes de la préhension (« prehension »)
+  vidange-simulateur entonnoir                 lot de 4 bocaux avec l'entonnoir (« entonnoir »)
   vidange-simulateur lavage                    3 seaux lavés, eau comprise (« lavage »)
   vidange-simulateur lavage_couvercles         2 couvercles lavés et retournés
   vidange-simulateur lavage_bocaux             3 bocaux et capsules au lave-bocal
@@ -31,6 +32,7 @@ from pathlib import Path
 from vidange.chef import ErreurChef, Module
 from vidange.chef.exemple import module_exemple
 from vidange.demarrage import DOSSIER_PI, _chemin
+from vidange.entonnoir.simulation import entonnoir_du_simulateur
 from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.griffe.module import module_griffe
 from vidange.griffe.simulation import griffe_du_simulateur
@@ -74,6 +76,7 @@ MODULES: dict[str, Callable[[Simulateur], Module]] = {
     "prehension": lambda simulateur: module_prehension(
         prehension_du_simulateur(simulateur), _places(simulateur)
     ),
+    "entonnoir": lambda simulateur: entonnoir_du_simulateur(simulateur).module,
     "lavage": lambda simulateur: module_lavage(
         lavage_du_simulateur(simulateur), _lavage(simulateur).seaux
     ),
@@ -105,6 +108,7 @@ SCENARIOS = {
     "griffe": "vidange_fut",
     "mycelium": "dosage_mycelium",
     "prehension": "prehension",
+    "entonnoir": "entonnoir",
     "lavage": "lavage",
     "lavage_couvercles": "lavage_couvercles",
     "lavage_bocaux": "lavage_bocaux",

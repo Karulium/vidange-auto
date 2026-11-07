@@ -16,6 +16,10 @@ Pannes pour les essais (attributs de TeteSimulee) :
 - `choc_au_trajet` : le prochain trajet du pont s'arrête sur un choc ;
 - `appui_vissage_n` : appui lu pendant le vissage (au-delà de 150 N : arrêt).
 - `traction_n` : traction lue pendant un tirage (séparation de deux seaux du Remplissage).
+- `contact_physique(x, y)` : si donné, la cote où la face touche quelque chose sous (x ; y) (None :
+  rien) ; remplace `decalage_contact_m` (l'Entonnoir y met sa physique) ;
+- `vides_refuses` : tant de fois la vanne s'ouvre sans que le vide vienne (ventouse sale) ;
+- `vides_colles` : tant de fois la vanne se ferme sans que le vide parte (objet collé).
 """
 
 from collections.abc import Callable
@@ -94,6 +98,12 @@ class TeteSimulee:
         self.choc_au_trajet = False
         self.appui_vissage_n = 80.0
         self.traction_n = 0.0
+        self.contact_physique: Callable[[float, float], float | None] | None = None
+        self.vides_refuses = 0
+        self.vides_colles = 0
+        self._colle = False
+        # Appelé quand le vide est perdu pendant un pas (l'objet tenu tombe).
+        self.apres_perte_de_vide: Callable[[], object] = lambda: None
         # Ce qui a été fait, pour les tests.
         self.sorties: list[str] = []
         self.accelerations: list[bool | tuple[bool, float]] = []
@@ -129,7 +139,11 @@ class TeteSimulee:
         depart = self.position()
         contact, arret = False, None
         appui = appui_max = None
-        if pas.palper:
+        if pas.palper and self.contact_physique is not None:
+            sous = self.contact_physique(depart.x, depart.y)
+            if sous is not None and cible.z < sous <= depart.z:
+                cible, contact = cible.avec(z=sous), True
+        elif pas.palper:
             contact_z = None
             if pas.vitesse == "approche" and self.decalage_contact_m is not None:
                 attendu = cible.z + self.reglages.descente.ecart_contact_max_m
@@ -144,6 +158,7 @@ class TeteSimulee:
         if pas.vide_perte_kpa is not None and self.pertes_de_vide > 0:
             self.pertes_de_vide -= 1
             self._vide = False
+            self.apres_perte_de_vide()
             cible, arret = cible.avec(z=depart.z + (cible.z - depart.z) / 2), "vide"
         if pas.choc and self.choc_au_trajet and {"x", "y"} & set(pas.cibles):
             self.choc_au_trajet = False
@@ -209,6 +224,15 @@ class TeteSimulee:
 
     def vanne(self, ouverte: bool) -> None:
         self._vanne = self._vide = ouverte
+        if ouverte:
+            self._colle = False
+        if ouverte and self.vides_refuses > 0:
+            self.vides_refuses -= 1
+            self._vide = False
+        if not ouverte:
+            self._colle = self.vides_colles > 0
+            if self._colle:
+                self.vides_colles -= 1
         self.sorties.append(f"vanne {'ouverte' if ouverte else 'fermée'}")
 
     def aimants(self, actifs: bool) -> None:
@@ -216,6 +240,8 @@ class TeteSimulee:
         self.sorties.append(f"aimants {'actifs' if actifs else 'coupés'}")
 
     def vide_kpa(self) -> float | None:
+        if self._colle:
+            return self._vide_prise
         return self._vide_prise if self._vanne and self._vide else 0.0
 
     def acceleration_seau(self, reduite: bool, facteur: float = 1.0) -> None:

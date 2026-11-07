@@ -1488,7 +1488,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   - Brancher la coupure du compresseur de la nuit UV-ozone (tâche 38) sur ce relais, si la tâche 38 ne l'a pas déjà
     fait.
   - Tests.
-- [ ] **43. Entonnoir à bocaux** — Modèle : Sonnet, effort moyen. Source, recopiée ici le 06/11/2026 :
+- [x] **43. Entonnoir à bocaux** — Modèle : Sonnet, effort moyen. Source, recopiée ici le 06/11/2026 :
   `entonnoir/logiciel/entonnoir-pour-logiciel.md` du projet mécanique (v3 du 28/10).
   - L'entonnoir n'a ni capteur ni moteur. La Préhension le prend par sa ventouse, par l'oreille, en x bocal + 0,140,
     aimants éteints.

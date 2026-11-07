@@ -216,6 +216,12 @@ fermeture:
   raideur_n_par_m: 10000
   ecart_contact_m: 0.0
 
+# L'entonnoir imaginaire (tâche 43) : le lot de bocaux à remplir (noms du quinconce du Stockage ;
+# le Pi choisit l'ordre) et la durée du versement de la griffe dans un bocal.
+entonnoir:
+  bocaux: [bocal_0_2, bocal_0_0, bocal_0_1, bocal_1_0]
+  verse_s: 5
+
 # Capteurs (entrées tout-ou-rien de docs/entrees-sorties.yaml) actionnés au départ.
 capteurs_actionnes: []
 
@@ -238,6 +244,7 @@ evenements:
 #         vidange-simulateur griffe      (scénario « vidange_fut » par défaut),
 #         vidange-simulateur mycelium    (scénario « dosage_mycelium » par défaut),
 #         vidange-simulateur prehension  (scénario « prehension » par défaut),
+#         vidange-simulateur entonnoir   (scénario « entonnoir » par défaut),
 #         vidange-simulateur lavage      (scénario « lavage » par défaut),
 #         vidange-simulateur lavage_couvercles, vidange-simulateur lavage_bocaux,
 #         vidange-simulateur remplissage (scénario « remplissage » par défaut),
@@ -362,6 +369,10 @@ scenarios:
   # Karulium passe outre (Go, noté au journal).
   purge_trop_longue:
     capteurs_actionnes: [reed_panneau_poste_fut]
+  # Entonnoir à bocaux (tâche 43) : Karulium pose l'entonnoir sur le premier bocal (Go), la caméra
+  # le voit, la griffe verse, l'entonnoir passe de bocal en bocal, Karulium l'enlève à la fin (Go).
+  entonnoir:
+    capteurs_actionnes: []
   # Fermeture, purge, mode UV-ozone, nuit lancée tout de suite (Go) : 2 min de génération, 2 h de
   # contact, retour sous 0,1 ppm stable 15 min ; le store se rouvre ensuite.
   nuit_uv_ozone:

@@ -127,6 +127,9 @@ class Resultat:
     # Appui (N) à la fin du pas, et le plus fort pendant le pas.
     appui_n: float | None = None
     appui_max_n: float | None = None
+    # Après une attente « sans alarme » (vidange.prehension.Attente) : le délai est passé sans que
+    # la condition soit vraie.
+    delai_depasse: bool = False
 
 
 def _surveille_la_force(pas: Pas) -> bool:

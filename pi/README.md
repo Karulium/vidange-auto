@@ -776,6 +776,43 @@ module_remplissage(...)  # ajoute les étapes « ranger_le_bras » (début) et �
 - `vidange-fermeture etat | servo | ranger | travail` (étalonnage du bras) et `vidange-remplissage fermer
   <format>` (geste entier) pour les essais (`systeme/essai-fermeture.md`).
 
+## Entonnoir à bocaux (tâche 43)
+
+L'entonnoir n'a ni capteur ni moteur : la Préhension le prend par une oreille soudée (ventouse, électroaimants
+éteints), la caméra du plafond le situe, la griffe le remplit. Pas de poste de repos : il reste sur le dernier
+bocal rempli, Karulium le pose et l'enlève à la main. Réglages : `machine.yaml → entonnoir` (EXEMPLES marqués)
+et `prehension → objets → entonnoir`. Aucun signal à lui : `vanne_vide`, `contact_tete`, `vide_venturi`.
+
+```python
+entonnoir = Entonnoir(
+    reglages.machine,
+    donnees / "entonnoir.json",
+    vision=...,
+    photo=...,
+    marquer_suspect=lambda b: stockage.inventaire.changer_bocal(b, "suspect"),
+)
+module_entonnoir(
+    entonnoir,
+    prehension,
+    bocaux,
+    verser=...,
+    air=chef.condition_permission("air"),
+    photo=portique.etapes_photo("stockage"),
+)
+entonnoir.refus_versement(bocal)  # la griffe ne verse que dans le bocal noté entonnoir_place
+entonnoir.sur_le_plateau()  # pas de photo du fond au hublot tant qu'il y est
+```
+
+- **`entonnoir_place`** : un bocal, `hors_machine` ou `inconnu` (+ « tenu »), gardé dans
+  `donnees/entonnoir.json`. Coupure pendant qu'il était tenu : `inconnu` et photo du plafond.
+- **Étapes du module** : `demander_la_pose` (Go), `controler_la_camera`, `verser`, `lire_le_col_suivant`,
+  `prendre_l_entonnoir`, `poser_sur_le_bocal`, `enlever_a_la_main` (Go). Perdu (absent, introuvable, vide perdu) :
+  alarme, puis retour au geste 1 après « acquitter » et le Go.
+- **Règles de la Préhension** : pas de rotation en le tenant ; il roule à 0,060 au-dessus de sa pose ; son axe
+  est à 0,140 en −x de la tête (`Objet.decalage_x_m`) pour les règles du Stockage.
+- `vidange-entonnoir places | hauteurs | etat | noter`, `vidange-prehension entonnoir <bocal> <bocal>` (vrais
+  gestes) et `vidange-simulateur entonnoir` pour les essais (`systeme/essai-entonnoir.md`).
+
 ## Cartes de pesée du bus RS485 (tâche 22 bis)
 
 Trois cartes RP2040 + HX711 (griffe, préhension, plateau du remplissage) sur un bus RS485 à elles

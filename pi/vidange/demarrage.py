@@ -577,6 +577,13 @@ def principal(
             "rampe et position du chariot d'EXEMPLE : les régler au premier essai sur les 4 vrais "
             "seaux (pi/systeme/essai-fermeture.md), puis passer « exemple » à false."
         )
+    entonnoir = reglages.machine.entonnoir
+    if entonnoir is not None and entonnoir.exemple:
+        journal.warning(
+            "machine.yaml, entonnoir : hauteurs de l'oreille, de la pointe et du cône, seuils de "
+            "contrôle, du vide et délais d'EXEMPLE : les mesurer sur l'entonnoir reçu "
+            "(pi/systeme/essai-entonnoir.md), puis passer « exemple » à false."
+        )
     camera_dosage = reglages.machine.camera_dosage
     if camera_dosage is not None and camera_dosage.exemple:
         journal.warning(
