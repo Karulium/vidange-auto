@@ -2102,3 +2102,8 @@ recopiées ici. Fichiers : `pi/reglages/fluidnc.yaml`, `fluidnc/mycelium_lavage.
      rinçage P3 de la carte n° 4 (en place). À confirmer par l'Implantation (ou une 2e carte de sortie).
   2. Voie du relais du chauffage (`relais_2` K8 en EXEMPLE) et 24 V ou autre tension pour la commande du SSR :
      à donner dans `relais-du-pi.md`.
+- **Réponses à la PR n° 105** (tâche 45 duodecies, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Sorties en plus des fiches (verrou du plateau P6 et vanne des rampes P7 sur la carte n° 3, rinçage P3 de la carte
+     n° 4, EXEMPLE) : gardées ; question posée à l'Implantation (à confirmer dans ses fiches, ou module de sorties).
+  2. Relais du chauffage `relais_chauffage_lavage` sur `relais_2` voie K8, 24 V (EXEMPLE) : gardé jusqu'à la fiche
+     `implantation/logiciel/relais-du-pi.md`.
