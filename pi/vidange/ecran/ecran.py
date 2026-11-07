@@ -59,7 +59,7 @@ from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import FondTexte, ReglagesEcran
 
 if TYPE_CHECKING:
-    from vidange.cycle import ModeSeaux
+    from vidange.cycle import ModeBocaux, ModeNuit, ModeSeaux
 
 journal = donner_journal("ecran")
 
@@ -199,9 +199,13 @@ class Ecran:
         poste: PosteFut | None = None,
         nettoyage: Nettoyage | None = None,
         mode_seaux: "ModeSeaux | None" = None,
+        mode_bocaux: "ModeBocaux | None" = None,
+        mode_nuit: "ModeNuit | None" = None,
     ) -> None:
         """`mode_seaux` : quand aucun cycle ne tourne, la page d'état dit si un lot de seaux peut
-        partir, ou ce qui manque (tâche 45)."""
+        partir, ou ce qui manque (tâche 45). `mode_bocaux` : de même pour un lot de bocaux (mode
+        « production », si les seaux sont prêts) et pour laver les bocaux (mode « lavage »).
+        `mode_nuit` : en mode « UV-ozone », la nuit peut partir ou ce qui manque (tâche 45 bis)."""
         self.reglages = reglages
         self.liaison = liaison
         self.chef = chef
@@ -212,6 +216,8 @@ class Ecran:
         self.poste = poste
         self.nettoyage = nettoyage
         self.mode_seaux = mode_seaux
+        self.mode_bocaux = mode_bocaux
+        self.mode_nuit = mode_nuit
         self._etat_poste: EtatPoste | None = None
         self._horloge = horloge
         self._aujourdhui = aujourdhui
@@ -505,8 +511,8 @@ class Ecran:
         )
         # Mode seaux (tâche 45), quand rien ne tourne : quel poste manque, et pourquoi.
         seaux, pourquoi = "", ""
-        if not montre and self.mode_seaux is not None:
-            seaux, pourquoi = self.mode_seaux.texte_ecran()
+        if not montre:
+            seaux, pourquoi = self._texte_des_postes()
         if montre:
             module = montre[0]
             page.mettre(
@@ -590,6 +596,34 @@ class Ecran:
             page.mettre("t_seaux_fut", "Pas de fût en cours")
         page.mettre("t_alarmes_jour", f"Alarmes aujourd'hui : {alarmes}")
         page.mettre("b_retour", "RETOUR", "bouton")
+
+    def _texte_des_postes(self) -> tuple[str, str]:
+        """Ce que la page d'état dit quand rien ne tourne, selon le mode de la machine : lot de
+        seaux (puis lot de bocaux s'il n'y a rien à dire sur les seaux), laver les bocaux, ou nuit
+        UV-ozone. Les autres modes (maïs) : rien."""
+        mode = self.mode.actuel
+        if mode == "uv_ozone" and self.mode_nuit is not None:
+            return self.mode_nuit.texte_ecran()
+        if mode == "lavage" and self.mode_bocaux is not None:
+            refus = self.mode_bocaux.refus_lavage()
+            return (
+                ("Lavage des bocaux : prêt", "")
+                if refus is None
+                else ("Lavage des bocaux : pas prêt", refus)
+            )
+        if mode != "production":
+            return "", ""
+        seaux, pourquoi = "", ""
+        if self.mode_seaux is not None:
+            seaux, pourquoi = self.mode_seaux.texte_ecran()
+        if self.mode_bocaux is not None:
+            bocaux, raison = self.mode_bocaux.texte_ecran()
+            if not pourquoi:
+                # Les seaux sont prêts (ou absents) : on dit aussi pour les bocaux.
+                pourquoi = f"{bocaux} : {raison}" if raison else ""
+                if not seaux:
+                    seaux = bocaux
+        return seaux, pourquoi
 
     def _composer_mode(self, page: _Composition) -> None:
         page.mettre("t_titre", f"MODE : {self.mode.libelle.upper()}", "mode")

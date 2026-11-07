@@ -705,7 +705,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
     question dans la PR.
   Tests : démarrage avec faux matériel ⇒ les modules attendus sont prêts ; un module sans réglage ⇒ pas lancé, avec
   la raison ; reprise après coupure au milieu d'un seau (carnet) ; lot complet simulé sans alarme.
-- [ ] **45 bis. Programme principal : mode bocaux et nuit UV-ozone** — Modèle : Sonnet. À faire après la 45 :
+- [x] **45 bis. Programme principal : mode bocaux et nuit UV-ozone** — Modèle : Sonnet. À faire après la 45 :
   même branchement pour `module_entonnoir`, `module_lavage_bocaux` et la nuit UV-ozone.
 - [ ] 23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi
 

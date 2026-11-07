@@ -18,13 +18,40 @@ Le couvercle (tâche 41 bis) est pris sur une pile imaginaire (simulateur.yaml �
 par la vraie Préhension simulée, posé sur le seau plein, pesé par la fausse balance, puis clipsé
 par la vraie fermeture.
 La lecture du QR du flanc est une fausse caméra (la vraie est la tâche 40 ter).
+
+Tâche 45 bis, même méthode (`vidange-simulateur cycle --lot bocaux|lavage_bocaux|nuit|tout`) :
+- lot de bocaux (`jouer_bocaux`) : le vrai `module_entonnoir` sur la Préhension simulée, un faux
+  entonnoir qui répond ce que le vrai ferait, la fausse photo du plafond ; chaque versement de la
+  griffe dure `entonnoir → verse_s` (la griffe est une case vide) ;
+- lavage des bocaux (`jouer_lavage_bocaux`) : le vrai `module_lavage_bocaux` et le lave-bocal
+  imaginaire ;
+- nuit UV-ozone (`jouer_nuit`) : le vrai Nettoyage (poste « nuit » du programme principal branché
+  à lui), son faux store et sa fausse enceinte ; Karulium ferme le store et lance la nuit (Go).
 """
 
 from typing import TYPE_CHECKING
 
 from vidange.couvercle.simulation import MondeCouvercle, couvercle_du_simulateur
+from vidange.cycle.mode_bocaux import (
+    LotBocaux,
+    ModeBocaux,
+    PiecesEntonnoir,
+    PiecesLavageBocaux,
+)
+from vidange.cycle.mode_nuit import ModeNuit
 from vidange.cycle.mode_seaux import Lot, ModeSeaux, PiecesRemplissage
-from vidange.cycle.ordre import verifier_ordre
+from vidange.cycle.ordre import (
+    DEBUT_DU_LAVAGE_BOCAUX,
+    DEBUT_DU_LOT_BOCAUX,
+    ORDRE_BOCAUX,
+    Poste,
+    verifier_ordre,
+)
+from vidange.entonnoir.simulation import entonnoir_du_simulateur
+from vidange.lavage.simulation import bocaux_du_simulateur
+from vidange.nettoyage.nettoyage import GENERATEUR, OZONE_DEDANS, OZONE_DEHORS
+from vidange.nettoyage.nettoyage import LAMPE_UV as LAMPE
+from vidange.nettoyage.simulation import module_nuit, nettoyage_du_simulateur
 from vidange.reglages import CycleSimule, SeauRemplissageSimule
 from vidange.remplissage.module import SeauAFaire
 from vidange.remplissage.remplissage import Remplissage
@@ -40,6 +67,23 @@ if TYPE_CHECKING:
 # Postes joués en faux par le simulateur, vérifiés dans le planning comme les postes lancés : la
 # griffe (chaque versement est une rotation du seau, étapes « ramener_au_vidage » et « verser »).
 JOUES_EN_FAUX = ("griffe",)
+# Le lot de bocaux : le versement de la griffe est joué en faux (case vide), il est dans les étapes
+# de l'entonnoir (« entonnoir.verser »).
+JOUES_EN_FAUX_BOCAUX = ("versement",)
+# Les gestes de Karulium et les phases de la nuit du simulateur (module_nuit), dans l'ordre.
+ORDRE_DE_LA_NUIT = (
+    Poste(
+        "nuit",
+        "Nuit UV-ozone : lancée (Go), génération, contact, retour sous le seuil",
+        etapes=(
+            "nettoyage_nuit.lancer_la_nuit",
+            "nettoyage_nuit.generation",
+            "nettoyage_nuit.contact",
+            "nettoyage_nuit.retour",
+        ),
+    ),
+)
+DEBUT_DE_LA_NUIT = "nettoyage_nuit.lancer_la_nuit"
 
 
 class PiecesSimulees:
@@ -78,6 +122,21 @@ class PiecesSimulees:
         cycle = reglages.simulateur.cycle
         if poste == "couvercle" and (cycle is None or not cycle.couvercles):
             return "simulateur.yaml, cycle : pas de pile de couvercles (couvercles)"
+        if poste == "entonnoir" and (
+            reglages.simulateur.entonnoir is None or reglages.machine.entonnoir is None
+        ):
+            return "simulateur.yaml ou machine.yaml n'a pas de partie « entonnoir »"
+        lavage = reglages.simulateur.lavage
+        if poste == "lavage_bocaux" and (lavage is None or not lavage.bocaux):
+            return "simulateur.yaml, lavage : pas de bocaux à laver (bocaux)"
+        if poste in ("enceinte", "ozone", "purge") and (
+            reglages.simulateur.nettoyage is None or reglages.machine.nettoyage is None
+        ):
+            return "simulateur.yaml ou machine.yaml n'a pas de partie « nettoyage »"
+        if poste == "ozone":
+            for signal in (OZONE_DEDANS, OZONE_DEHORS, GENERATEUR, LAMPE):
+                if signal not in self.simulateur.materiel.branchements:
+                    return f"pas de signal « {signal} » dans docs/entrees-sorties.yaml"
         spray = reglages.machine.spray
         if poste == "spray" and (
             spray is None or spray.signal not in self.simulateur.fabrique.branchements
@@ -144,6 +203,22 @@ class PiecesSimulees:
             couvercle=couvercle,
         )
 
+    def entonnoir(self, lot: LotBocaux) -> PiecesEntonnoir:
+        """L'entonnoir imaginaire sur la Préhension simulée ; le versement de la griffe est un
+        faux (il dure `verse_s`)."""
+        scenario = entonnoir_du_simulateur(self.simulateur, avec_module=False)
+        return PiecesEntonnoir(
+            scenario.entonnoir,
+            scenario.prehension,
+            verser=scenario.monde.verser,
+            versement_fini=scenario.monde.versement_fini,
+        )
+
+    def lavage_bocaux(self) -> PiecesLavageBocaux:
+        lavage = self.simulateur.reglages.simulateur.lavage
+        assert lavage is not None
+        return PiecesLavageBocaux(bocaux_du_simulateur(self.simulateur), lavage.bocaux)
+
     def _spray(self, remplissage: Remplissage) -> Spray:
         """Le vrai Spray sur la fausse carte n° 5 du simulateur, branché au chariot (règle 6,
         rotation du seau pendant la dose), lu en fond comme sur la machine."""
@@ -199,4 +274,76 @@ def jouer_cycle(simulateur: Simulateur) -> tuple[ModeSeaux, Planning, list[str]]
     faites = [f"{ligne.module}.{ligne.etape}" for ligne in planning.lignes]
     verifies = [*mode.postes_lances, *JOUES_EN_FAUX]
     problemes = verifier_ordre(faites, verifies) if planning.fini else []
+    return mode, planning, problemes
+
+
+def lot_bocaux_du_simulateur(simulateur: Simulateur) -> LotBocaux:
+    """Le lot de bocaux de la partie « entonnoir » de simulateur.yaml."""
+    simule = simulateur.reglages.simulateur.entonnoir
+    if simule is None:
+        raise ErreurSimulation("simulateur.yaml n'a pas de partie « entonnoir »")
+    return LotBocaux(tuple(simule.bocaux))
+
+
+def jouer_bocaux(simulateur: Simulateur) -> tuple[ModeBocaux, Planning, list[str]]:
+    """Prépare le mode bocaux (même code que la machine), joue le lot, puis vérifie l'ordre de
+    l'entonnoir (ORDRE_BOCAUX). Rend le mode, le planning et les écarts à l'ordre."""
+    mode = ModeBocaux(simulateur.reglages, PiecesSimulees(simulateur), simulateur.chef)
+    refus = mode.refus_lot()
+    if refus is not None:
+        raise ErreurSimulation(f"lot de bocaux impossible : {refus}")
+    planning = simulateur.jouer(mode.modules_du_lot(lot_bocaux_du_simulateur(simulateur)))
+    faites = [f"{ligne.module}.{ligne.etape}" for ligne in planning.lignes]
+    verifies = [nom for nom in mode.postes_lances if nom != "lavage_bocaux"]
+    problemes = (
+        verifier_ordre(
+            faites,
+            [*verifies, *JOUES_EN_FAUX_BOCAUX],
+            ORDRE_BOCAUX,
+            DEBUT_DU_LOT_BOCAUX,
+            "lot de bocaux",
+        )
+        if planning.fini
+        else []
+    )
+    return mode, planning, problemes
+
+
+def jouer_lavage_bocaux(simulateur: Simulateur) -> tuple[ModeBocaux, Planning, list[str]]:
+    """Prépare le mode bocaux, joue le lavage des bocaux et des capsules au lave-bocal, puis
+    vérifie l'ordre de la série."""
+    mode = ModeBocaux(simulateur.reglages, PiecesSimulees(simulateur), simulateur.chef)
+    refus = mode.refus_lavage()
+    if refus is not None:
+        raise ErreurSimulation(f"lavage des bocaux impossible : {refus}")
+    planning = simulateur.jouer(mode.modules_lavage())
+    faites = [f"{ligne.module}.{ligne.etape}" for ligne in planning.lignes]
+    problemes = (
+        verifier_ordre(
+            faites, ["lavage_bocaux"], ORDRE_BOCAUX, DEBUT_DU_LAVAGE_BOCAUX, "série de lavage"
+        )
+        if planning.fini
+        else []
+    )
+    return mode, planning, problemes
+
+
+def jouer_nuit(simulateur: Simulateur) -> tuple[ModeNuit, Planning, list[str]]:
+    """Prépare la nuit UV-ozone (le vrai Nettoyage, le poste « nuit » branché à lui, même code que
+    la machine), la joue sur la fausse enceinte, puis vérifie qu'elle a suivi ses phases et que le
+    générateur d'ozone est coupé à la fin."""
+    simulation = nettoyage_du_simulateur(simulateur)
+    mode = ModeNuit(simulateur.reglages, PiecesSimulees(simulateur), simulation.nettoyage)
+    refus = mode.refus_poste()
+    if refus is not None:
+        raise ErreurSimulation(f"nuit UV-ozone impossible : {refus}")
+    planning = simulateur.jouer([module_nuit(simulation)])
+    faites = [f"{ligne.module}.{ligne.etape}" for ligne in planning.lignes]
+    problemes = (
+        verifier_ordre(faites, ["nuit"], ORDRE_DE_LA_NUIT, DEBUT_DE_LA_NUIT, "nuit")
+        if planning.fini
+        else []
+    )
+    if planning.fini and simulation.nettoyage.commande(GENERATEUR):
+        problemes.append("le générateur d'ozone est resté en marche à la fin de la nuit")
     return mode, planning, problemes

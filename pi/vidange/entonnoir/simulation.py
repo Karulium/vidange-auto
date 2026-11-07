@@ -156,13 +156,18 @@ class ScenarioEntonnoir:
     entonnoir: Entonnoir
     prehension: Prehension
     monde: MondeEntonnoir
-    module: Module
+    # None si le programme principal (vidange.cycle.mode_bocaux) construit le module lui-même.
+    module: Module | None
     # Les bocaux que le Pi a marqués « suspects ».
     suspects: list[str] = field(default_factory=list)
 
 
-def entonnoir_du_simulateur(simulateur: Simulateur, fichier=None, **options) -> ScenarioEntonnoir:
-    """Le module « entonnoir » sur la Préhension simulée. `options` : ceux de Entonnoir."""
+def entonnoir_du_simulateur(
+    simulateur: Simulateur, fichier=None, avec_module: bool = True, **options
+) -> ScenarioEntonnoir:
+    """Le module « entonnoir » sur la Préhension simulée. `options` : ceux de Entonnoir.
+    `avec_module` faux : seulement les pièces (le programme principal, vidange.cycle.mode_bocaux,
+    construit alors le module avec son `module_entonnoir`, comme sur la machine)."""
     reglages = simulateur.reglages
     machine = reglages.machine
     simule = reglages.simulateur.entonnoir
@@ -198,11 +203,13 @@ def entonnoir_du_simulateur(simulateur: Simulateur, fichier=None, **options) -> 
     monde_a_faire.append(monde)
     monde.horloge = lambda: simulateur.temps
     monde.verse_s = simule.verse_s
-    module = module_entonnoir(
-        entonnoir,
-        prehension,
-        list(simule.bocaux),
-        verser=monde.verser,
-        versement_fini=monde.versement_fini,
-    )
+    module = None
+    if avec_module:
+        module = module_entonnoir(
+            entonnoir,
+            prehension,
+            list(simule.bocaux),
+            verser=monde.verser,
+            versement_fini=monde.versement_fini,
+        )
     return ScenarioEntonnoir(entonnoir, prehension, monde, module, suspects)

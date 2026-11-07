@@ -1281,3 +1281,51 @@ Réponses des fils mécaniques (Spray, Micropore, Guidage caméra) et de Karuliu
      pour l'angle de pose.
   5. Contact à 8-15 mm sous Z_pose (cas absent de la fiche) : accepté et noté au journal ; Hc revu à l'essai.
   6. Jamais de couvercle sans fermeture, ni de fermeture sans couvercle : oui.
+
+## Programme principal, mode bocaux et nuit UV-ozone (tâche 45 bis, 07/11/2026)
+
+Code : `pi/vidange/cycle/` (`mode_bocaux.py`, `mode_nuit.py`, `postes.py`, `ordre.py` → `ORDRE_BOCAUX` et `ORDRE_NUIT`) ;
+simulateur : `vidange-simulateur cycle --lot bocaux|lavage_bocaux|nuit|tout` ; essai :
+`pi/systeme/essai-mode-bocaux-nuit.md` (testé sur le vrai matériel : non). Aucun chiffre nouveau : tout ce que le
+code lit est déjà dans `machine.yaml` (`entonnoir`, `lavage → lave_bocal`, `nettoyage`) et `simulateur.yaml`.
+
+- **Même méthode que le mode seaux** : chaque poste est « prêt » ou « pas lancé : raison » (journal, check-list,
+  écran), avec la même vérification (`postes.py → etat_du_poste` : geste pas écrit, partie absente de machine.yaml,
+  EXEMPLE sur la vraie machine, matériel qui manque). On ne réécrit aucun module : `module_entonnoir`,
+  `module_lavage_bocaux` et le Nettoyage sont ceux des tâches 43, 21 bis et 38, branchés.
+- **Un seul mode, un seul lot à la fois (choix de Claude)** : on réutilise `ModeMachine` (mode.py), sans nouveau
+  mode (le bouton « Bocaux » demanderait de changer le projet Nextion). Un lot de seaux ou de bocaux part en mode
+  « production », laver les bocaux en mode « lavage » (c'est déjà ce que demande `Lavage.refus_mode`), la nuit en
+  mode « UV-ozone ». Pas de lot si un autre lot est en route (`postes.py → refus_lancement`) ; pas de changement de
+  mode pendant un lot (déjà vrai : `ModeMachine.refus`).
+- **Lot de bocaux** : postes `fut`, `entonnoir` (cœur), `versement`, `lavage_bocaux`. `versement` reste une
+  **case vide** (enchaînement de la griffe avec la préhension, solveur, tâche 23), comme `griffe` pour les seaux :
+  sur la vraie machine, **aucun lot de bocaux ne part** ; le simulateur joue le versement en faux (`verse_s`). Sur la
+  machine, l'entonnoir manque aussi parce que la Préhension (cartes de la tête) n'est pas construite par le
+  programme principal et que la lecture de la photo du plafond n'est pas écrite.
+- **Lavage des bocaux** : poste à part (il n'a pas besoin de la griffe). Sur la machine il manque : Lavage et
+  Préhension pas construits, liste des bocaux sales (caméra du plafond, règle 7) pas écrite. Le simulateur le joue
+  avec les bocaux de `simulateur.yaml → lavage`.
+- **Reprise d'un lot de bocaux après une coupure** (réponse au point 5 de la PR n° 88) : le lot est noté dans le
+  carnet du chef après chaque étape (bocal où est l'entonnoir, bocaux restants et versés, centre du col) ; il est
+  repris à son étape après le Go. `entonnoir_place` reste dans son fichier. **Pas repris** : une série de lavage de
+  bocaux (le carnet la signale alors comme module inconnu : regarder la machine, puis effacer le carnet).
+- **Nuit UV-ozone** : le Nettoyage la mène déjà (tâche 38). Postes `enceinte` et `ozone` (cœur : sans eux, la nuit
+  est refusée) et `purge` (capteurs de la purge : jamais bloquant, la purge finit en alerte). Le poste ajoute une
+  raison de refus au Nettoyage (`refus_nuit_en_plus`) : le bouton « NUIT » de l'écran, la page web et le
+  simulateur la voient. **Sur la vraie machine, tant que `nettoyage` est en EXEMPLE, la nuit est refusée** (règle 2
+  du dépôt). Une nuit déjà partie n'est jamais touchée. Après une coupure en pleine nuit : générateur coupé, attente
+  du retour sous le seuil, **jamais relancé seul** (déjà le cas, maintenant dit dans la check-list).
+- **Check-list** : « mode bocaux » et « nuit UV-ozone » sont des lignes « attention », jamais « bloquant » : les
+  seaux ne dépendent pas d'eux (le mode seaux, lui, reste bloquant comme avant).
+- **Écran** : quand rien ne tourne, la page d'état dit ce qui manque selon le mode : production (seaux d'abord, puis
+  bocaux), lavage (bocaux), UV-ozone (nuit). Les seaux ne s'affichent plus en mode lavage, UV-ozone ou maïs.
+- **Sécurité** : rien ne change. La chaîne UV-ozone, le store et les portes restent câblés ; le Pi n'a ajouté aucune
+  commande, seulement des refus.
+
+- **Mode bocaux et nuit UV-ozone, réponses à la PR n° 91** (tâche 45 bis, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Pas de mode « Bocaux » en plus à l'écran pour l'instant (le lot de bocaux part en mode « production »).
+  2. La nuit UV-ozone reste refusée tant que `nettoyage` est en EXEMPLE : on valide d'abord ses réglages pendant
+     l'essai du Nettoyage (générateur à blanc), puis on enlève `exemple: true`.
+  3. Pas de lot de bocaux sans le versement de la griffe : on attend son geste. À écrire avec la tâche 23 (ou une
+     petite tâche avant elle si la griffe a déjà une fiche pour ce versement).
