@@ -212,6 +212,8 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             "en_pause": etat_chef.en_pause,
             "modules": [asdict(module) for module in etat_chef.modules],
             "attendent_go": etat_chef.attendent_go,
+            # Pourquoi aucun Go n'est accepté (objet encore tenu au redémarrage...), ou "".
+            "go_empeche": etat_chef.go_empeche,
             "alarmes_ouvertes": registre.alarmes_ouvertes(),
             "rafraichir_s": reglages.rafraichir_s,
             "distance": pilote is not None and pilote.actif,

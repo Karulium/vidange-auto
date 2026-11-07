@@ -10,6 +10,7 @@
     chef.memoriser("exemple", seau="S1293", cycle=12)  # gardé dans le carnet (reprise)
     chef.sur_alarme.append(f)  # f(alarme) est appelée à chaque nouvelle alarme (bilan...)
     chef.interdire(refus)      # refus(geste) : pourquoi ce geste est interdit maintenant, ou None
+    chef.empecher_go(refus)    # refus() : pourquoi AUCUN Go n'est accepté maintenant, ou None
     chef.permission("dosage_semence")  # demandée par un module avant un geste : None = permis
     chef.conditions_generales.append(Condition("store fermé", test))  # pour toutes les étapes
     chef.jouer_programme(programme)  # programme du solveur (tâche 23) : None = accepté
@@ -36,6 +37,11 @@ ouverture d'une capsule, versement dans un seau ouvert) sont demandés au chef a
 le Nettoyage pendant la purge, raison « purge en cours »). Les conditions générales (store de
 l'enceinte fermé...) sont attendues avant chaque étape de chaque module, comme ses conditions
 d'entrée. Rien de cela ne protège personne : la sécurité est câblée.
+
+Go empêché (tâche 45 nonies) : un autre morceau du programme peut refuser tout Go pour un temps
+(`empecher_go` : un objet encore tenu à la ventouse au redémarrage, vidange.fiabilite.objet_tenu).
+La raison est dans l'état (`go_empeche`), pour l'écran et la page ; un Go donné est refusé avec
+elle. Rien de cela ne protège personne : la sécurité est câblée.
 
 Programme du solveur (tâche 23, `vidange.chef.programme`) : seulement si `solveur → actif` dans
 machine.yaml. Il ne change que l'ordre dans lequel le chef regarde les modules qui attendent la même
@@ -113,6 +119,8 @@ class EtatModule:
 class EtatChef:
     en_pause: bool
     modules: tuple[EtatModule, ...]
+    # Pourquoi aucun Go n'est accepté maintenant (objet encore tenu au redémarrage...), ou "".
+    go_empeche: str = ""
 
     @property
     def alarmes(self) -> list[Alarme]:
@@ -198,6 +206,8 @@ class Chef:
         self._interdictions: list[Callable[[str], str | None]] = []
         # Attendues avant chaque étape de chaque module (rapides, comme toutes les conditions).
         self.conditions_generales: list[Condition] = []
+        # Qui peut refuser tout Go : refus() → raison, ou None (rapide : appelé par etat()).
+        self._empechements_go: list[Callable[[], str | None]] = []
 
     # ------------------------------------------------------------ marche / arrêt
 
@@ -231,6 +241,19 @@ class Chef:
             raise ErreurChef(f"geste protégé inconnu « {geste} »")
         for refus in list(self._interdictions):
             raison = refus(geste)
+            if raison is not None:
+                return raison
+        return None
+
+    def empecher_go(self, refus: Callable[[], str | None]) -> None:
+        """`refus()` dira pourquoi aucun Go n'est accepté maintenant (ou None). Il doit être
+        rapide : l'état du chef le demande à chaque fois."""
+        self._empechements_go.append(refus)
+
+    def refus_go(self) -> str | None:
+        """Pourquoi aucun Go n'est accepté maintenant (None : un Go attendu peut être donné)."""
+        for refus in list(self._empechements_go):
+            raison = refus()
             if raison is not None:
                 return raison
         return None
@@ -409,6 +432,10 @@ class Chef:
                 raise ErreurChef(f"le module « {nom} » attend la fin de « {exclusif.nom} »")
             if not deroulement.attend_go:
                 raise ErreurChef(f"le module « {nom} » n'attend pas de Go")
+            empeche = self.refus_go()
+            if empeche is not None:
+                journal.warning("Go pour « %s » refusé : %s", nom, empeche)
+                raise ErreurChef(f"Go refusé : {empeche}")
             deroulement.go_recu = True
             journal.info("Go donné à « %s » (étape « %s »)", nom, deroulement.etape.nom)
             self._noter()
@@ -523,7 +550,9 @@ class Chef:
                 )
                 for d in self._deroulements.values()
             )
-            return EtatChef(en_pause=self._en_pause, modules=modules)
+            return EtatChef(
+                en_pause=self._en_pause, modules=modules, go_empeche=self.refus_go() or ""
+            )
 
     @staticmethod
     def _attente(d: _Deroulement, exclusif: _Deroulement | None) -> str:

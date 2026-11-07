@@ -26,6 +26,9 @@ Lot (tâche 45 quater) : un lot proposé par la page web (« Lot de seaux », «
 montré sur la page d'état (« ATTEND LE GO ») ; le bouton GO, puis « Oui », le lance. Le Pi propose,
 Karulium dit Go devant la machine. S'il ne peut pas partir, l'écran dit pourquoi.
 
+Objet encore tenu à la ventouse au redémarrage (tâche 45 nonies) : le bandeau dit « OBJET ENCORE
+TENU », la ligne d'information dit quoi faire, le bouton GO est éteint et un appui dit pourquoi.
+
 Nettoyage (tâche 38) : page « nettoyage », depuis la page du mode (ENCEINTE) : état du store et de
 ses verrous, purge, nuit UV-ozone, ozone dedans et dehors ; OUVRIR (libère les verrous) ou FERMER,
 LUMIÈRE, NUIT (à l'heure réglée, puis MAINTENANT), PASSER OUTRE (la purge). Le Pi ne commande pas
@@ -375,6 +378,9 @@ class Ecran:
                 self.chef.pause()
         elif bouton == "b_go":
             etat = self.chef.etat()
+            if etat.go_empeche:
+                self._dire(f"Go impossible : {etat.go_empeche}.")
+                return
             if not etat.attendent_go:
                 self._go_du_lot()
                 return
@@ -522,6 +528,8 @@ class Ecran:
         lot = None if self.lancement is None else self.lancement.texte_ecran()
         if self.pilote is not None and self.pilote.actif:
             page.mettre("b_bandeau", "À DISTANCE : TOUCHER = STOP", "distance")
+        elif etat.go_empeche:
+            page.mettre("b_bandeau", "OBJET ENCORE TENU : PAS DE GO", "alarme")
         elif nombre_alarmes:
             page.mettre("b_bandeau", f"ALARME ({nombre_alarmes}) : TOUCHER ICI", "alarme")
         elif etat.en_pause:
@@ -559,6 +567,8 @@ class Ecran:
             page.mettre("t_module", "Aucun cycle en cours")
             page.mettre("t_attend", seaux)
         info = self._message_actuel()
+        if not info and etat.go_empeche:
+            info = f"{etat.go_empeche[:1].upper()}{etat.go_empeche[1:]}."
         if not info and self.pilote is not None and self.pilote.actif:
             info = "Pilotage à distance en cours. Toucher un bouton pour l'arrêter."
         poste = self._etat_poste
@@ -573,7 +583,8 @@ class Ecran:
             page.mettre("b_pause", "REPRENDRE", "marche")
         else:
             page.mettre("b_pause", "PAUSE", "pause")
-        page.mettre("b_go", "GO", "go" if etat.attendent_go or lot is not None else "inactif")
+        go_possible = (etat.attendent_go or lot is not None) and not etat.go_empeche
+        page.mettre("b_go", "GO", "go" if go_possible else "inactif")
         page.mettre("b_compteurs", "COMPTEURS", "bouton")
         page.mettre("b_mode", "MODE", "bouton")
 

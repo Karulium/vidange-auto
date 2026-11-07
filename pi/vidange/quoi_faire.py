@@ -95,14 +95,21 @@ ERREUR_PROGRAMME = (
     "le signaler pour correction. Vérifier la machine, puis acquitter."
 )
 
+# Check-list de reprise (tâche 45 nonies, fil Préhension du 07/11/2026) : sans courant, la ventouse
+# garde d'abord son objet (clapet anti-retour), qui peut tomber plus tard ; les électroaimants
+# lâchent tout de suite. Le Pi refuse le Go tant que le vide dit qu'un objet est encore tenu.
+OBJET_TENU = "vérifier la tête et le seau : enlever à la main l'objet tenu ou tombé avant le Go"
+
 COUPURE_COURANT = (
     "Le Pi s'est arrêté net (coupure de courant ?) en plein cycle. Regarder la machine "
-    "(seau en cours, axes), " + PRISE_ORIGINE + ", puis donner le Go pour reprendre."
+    "(seau en cours, axes), " + OBJET_TENU + ", " + PRISE_ORIGINE + ", puis donner le Go pour "
+    "reprendre."
 )
 
 PLANTAGE = (
     "Le programme du Pi a planté puis a été relancé. Regarder la machine et le journal, "
-    "puis donner le Go pour reprendre ; signaler le plantage pour correction."
+    + OBJET_TENU
+    + ", puis donner le Go pour reprendre ; signaler le plantage pour correction."
 )
 
 

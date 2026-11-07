@@ -398,6 +398,21 @@ def test_go_lance_le_lot_propose_et_refuse_un_second_lot(machine):
         lancement.proposer_seaux(FORMAT, 1, VARIETE, "page web")
 
 
+def test_go_du_lot_refuse_tant_qu_un_objet_est_tenu(machine):
+    # Tâche 45 nonies : objet encore tenu à la ventouse au redémarrage : aucun lot ne part.
+    fond = FauxFond([])
+    lancement = Lancement(REGLAGES_LOT, MACHINE, machine.mode_seaux(), None, machine.stockage, fond)
+    raison = ["objet encore tenu à la ventouse (vide -50 kPa) : l'enlever à la main"]
+    machine.chef.empecher_go(lambda: raison[0])
+    lancement.proposer_seaux(FORMAT, 3, VARIETE, "page web")
+    assert lancement.refus_go() == raison[0]
+    with pytest.raises(ErreurChef, match="objet encore tenu à la ventouse"):
+        lancement.go("écran")
+    assert fond.demarres == [] and machine.chef.etat().modules == ()
+    raison[0] = None
+    assert lancement.go("écran") == ["remplissage", "mycelium"]
+
+
 def test_une_proposition_trop_vieille_est_oubliee(machine):
     horloge = [0.0]
     lancement = Lancement(

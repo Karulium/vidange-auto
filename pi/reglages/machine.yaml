@@ -486,14 +486,33 @@ griffe:
       # (Maquette v45.120, 07/11 : sinon elle interdit à tort la colonne de bocaux x 1,2075).
       - {x: [1.15, 1.204], y_min: [0.30, 0.30, 0.30]}
       - {x: [1.20, 1.22], y_min: [0.0, 0.015, 0.055]}
-    # Exceptions à la table « butée haute » (tâche 45 octies) : zones du mât (godet fermé, bras le
-    # long du pont) mesurées par la Maquette pour la pose de l'entonnoir sur UN bocal, griffe
-    # traînée. Une entrée : {bocal: bocal_2_0, x: [.., ..], y: [.., ..], source: "Maquette v45.xxx"} ;
-    # la zone doit couvrir la pose finale et le chemin d'approche. Vérifié au démarrage : le mât
-    # pour ce bocal est dedans (x bocal + 0,140 − 0,316), aucun autre bocal. Vide : la mesure du
-    # 07/11 (v45.120, « bocal_2_0 libre ») a été faite le mât à x bocal − 0,316 = 0,8915, sans le
-    # décalage de l'oreille ; le mât y est à 1,0315 (question à la Maquette, PR de la 45 octies).
-    exceptions_butee_haute: []
+    # Exceptions à la table « butée haute » (tâches 45 octies et 45 nonies) : zones du mât (godet
+    # fermé, bras le long du pont) mesurées par la Maquette pour la pose de l'entonnoir sur UN
+    # bocal, griffe traînée. La table n'y compte pas. Un trajet du pont qui y entre ou en sort
+    # passe par x = entree_x : en x seulement dans la zone, en y seulement à x = entree_x (dans un
+    # rectangle « libres » de la mesure). Vérifié au démarrage : le mât pour ce bocal est dans la
+    # zone (x bocal + 0,140 − 0,316), aucun autre bocal que la table refuse, entree_x dans la zone
+    # et la ligne x = entree_x dans un rectangle libre.
+    # Remesure de la Maquette du 07/11 (v45.121, griffe/logiciel/griffe-entrainee-entonnoir-
+    # maquette.md, carte au cm carte-griffe-butee-haute-bocaux.txt) : bocal_0_1 (mât 1,1415 ; 0,06)
+    # LIBRE par le chemin : arriver par R1 ou R2, descendre en y dans R2 (x ≥ 1,22) jusqu'à
+    # y ≤ 0,10, puis en −x dans R3. bocal_0_0 (contact), bocal_1_0 (moins de 1 cm) et bocal_2_0
+    # (contact, couvercle de la caméra du dosage) : pose à la main. Chiffres de la mesure, figés.
+    exceptions_butee_haute:
+      - bocal: bocal_0_1
+        # R3, le couloir du bas (x ≥ 1,10 et y ≤ 0,10).
+        x: [1.10, 1.30]
+        y: [0.04, 0.10]
+        # Bord de R2 (x ≥ 1,22) : on descend en y à ce x, jamais à travers la caméra du dosage
+        # (x 0,98-1,21, y 0,17-0,31).
+        entree_x: 1.22
+        # Rectangles libres de la mesure (plus de 1 cm), de x 0,79 à 1,30 et y 0,04 à 0,40.
+        libres:
+          - {x: [0.79, 1.30], y: [0.32, 0.40]}   # R1
+          - {x: [1.22, 1.30], y: [0.04, 0.40]}   # R2
+          - {x: [1.10, 1.30], y: [0.04, 0.10]}   # R3
+          - {x: [0.79, 0.97], y: [0.22, 0.40]}   # R4
+        source: "Maquette v45.121, 07/11/2026"
   # Mât à x < 0,78 et axes de 1,11 à la butée haute : la tête passe dans l'ouverture du poste du
   # fût ; permis seulement le mât à au plus 0,16 / 0,135 / 0,105 de l'axe du fût (godet fermé / à
   # moitié ouvert / grand ouvert). Sous 1,11, ce sont les règles du fût.
@@ -994,6 +1013,12 @@ prehension:
     essais_max: 2
     zero_lectures: 50
     zero_ecart_max_kpa: 5
+    # Reprise après une coupure (fil Préhension, 07/11/2026) : électrovannes « aspirer » et
+    # « souffler » normalement fermées, clapet anti-retour : l'objet à la ventouse reste d'abord
+    # tenu, puis peut tomber. Au démarrage, avant tout mouvement, une lecture brute plus basse que
+    # ce vide (kPa) = objet encore tenu : l'écran et la page le disent, pas de Go tant que c'est le
+    # cas, jamais de « souffler » automatique. Chiffre du fil Préhension.
+    tenu_au_demarrage_kpa: -20
   # Levée lente sur les 30 premiers mm (fiche).
   levee_lente_m: 0.03
   # Palier pesé du mât (Phidgets 3135 50 kg + HX711, carte de pesée RS485) : lecture = poids

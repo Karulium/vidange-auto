@@ -147,6 +147,10 @@ class PiloteDistance:
             return f"pas de voyant-buzzer « {SIGNAL_VOYANT} » (docs/entrees-sorties.yaml)"
         if not self.axes:
             return "aucun axe avec une carte FluidNC dans machine.yaml"
+        # Objet encore tenu à la ventouse au redémarrage (tâche 45 nonies) : aucun mouvement.
+        empeche = self.chef.refus_go()
+        if empeche is not None:
+            return empeche
         gestes = [
             f"« {m.module} » (étape « {m.etape} »)"
             for m in self.chef.etat().modules

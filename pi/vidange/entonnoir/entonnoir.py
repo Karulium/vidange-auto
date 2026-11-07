@@ -534,12 +534,19 @@ class Entonnoir:
             prehension.pose.y, y, abs_tol=1e-6
         ):
             return
-        resultat = yield Pas(
-            "trajet de l'entonnoir", {"x": x, "y": y}, choc=True, vide_perte_kpa=perte
-        )
-        assert resultat is not None
-        if resultat.arret == "vide":
-            yield from self._vide_perdu(prehension)
+        # Griffe traînée vers la zone d'une exception de sa table (bocal_0_1, tâche 45 nonies) :
+        # d'abord son chemin, puis le but.
+        points = [*prehension.chemin_pont(prehension.pose, x, y), (x, y)]
+        for numero, (px, py) in enumerate(points, start=1):
+            texte = (
+                "trajet de l'entonnoir"
+                if numero == len(points)
+                else ("trajet de l'entonnoir, chemin de la griffe traînée")
+            )
+            resultat = yield Pas(texte, {"x": px, "y": py}, choc=True, vide_perte_kpa=perte)
+            assert resultat is not None
+            if resultat.arret == "vide":
+                yield from self._vide_perdu(prehension)
 
     def _descendre_sur_le_col(
         self, prehension: Prehension

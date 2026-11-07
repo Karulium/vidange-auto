@@ -494,7 +494,25 @@ class Griffe:
 
     def _chemin(self, depart: Pose, x: float, y: float) -> list[tuple[float, float]]:
         """Les points d'un trajet à la hauteur des trajets, jamais en diagonale : d'abord en x
-        (mât à y ≥ mat_y_min), puis en y (mât à x ≥ mat_x_min_pour_y) ; retour à l'inverse."""
+        (mât à y ≥ mat_y_min), puis en y (mât à x ≥ mat_x_min_pour_y) ; retour à l'inverse.
+        Départ ou arrivée dans la zone d'une exception de la table en butée haute (griffe
+        traînée là pour la pose de l'entonnoir, tâche 45 nonies) : on en sort, ou on y entre, en
+        x seulement, par x = entree_x."""
+        tables = self.reglages.y_min_mat
+        sortie = tables.exception_requise(depart.x, depart.y)
+        entree = tables.exception_requise(x, y)
+        if sortie is entree:
+            return self._chemin_sans_exception(depart, x, y)
+        points: list[tuple[float, float]] = []
+        if sortie is not None and not math.isclose(depart.x, sortie.entree_x, abs_tol=_EGAL):
+            points.append((sortie.entree_x, depart.y))
+        debut = depart.avec(x=points[-1][0]) if points else depart
+        if entree is None:
+            return points + self._chemin_sans_exception(debut, x, y)
+        points += self._chemin_sans_exception(debut, entree.entree_x, y)
+        return points + [(x, y)]
+
+    def _chemin_sans_exception(self, depart: Pose, x: float, y: float) -> list[tuple[float, float]]:
         trajet = self.reglages.trajet
         if math.isclose(depart.x, x, abs_tol=_EGAL) and math.isclose(depart.y, y, abs_tol=_EGAL):
             return []

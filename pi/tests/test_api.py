@@ -135,6 +135,7 @@ def test_etat(b):
     assert etat["en_pause"] is False
     assert etat["rafraichir_s"] == 2
     assert etat["attendent_go"] == []
+    assert etat["go_empeche"] == ""
     (module,) = etat["modules"]
     assert module["module"] == "essai"
     assert module["etape"] == "un"
@@ -179,6 +180,22 @@ def test_go(b):
     assert client.post("/api/go/essai").json() == {"go": "essai"}
     tour(b.chef, b.horloge)
     assert b.banc.appels[-1] == "essai.deux"
+
+
+def test_go_refuse_tant_qu_un_objet_est_tenu(b):
+    # Tâche 45 nonies : la page dit pourquoi, et le Go est refusé (409, avec la raison).
+    raison = ["objet encore tenu à la ventouse (vide -50 kPa) : l'enlever à la main"]
+    b.chef.empecher_go(lambda: raison[0])
+    client = b.client()
+    b.jusqu_au_go()
+    etat = client.get("/api/etat").json()
+    assert etat["go_empeche"].startswith("objet encore tenu à la ventouse")
+    reponse = client.post("/api/go/essai")
+    assert reponse.status_code == 409
+    assert "Go refusé : objet encore tenu" in reponse.json()["detail"]
+    raison[0] = None
+    assert client.get("/api/etat").json()["go_empeche"] == ""
+    assert client.post("/api/go/essai").json() == {"go": "essai"}
 
 
 def test_go_a_un_module_inconnu(b):

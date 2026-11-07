@@ -21,7 +21,8 @@ Un lot est refusé, avec la raison, au bouton comme au Go (tout est revérifié 
 - lot de seaux : plus de seaux que de bocaux de semence posés de la variété, de places libres
   dans la boîte des capsules ou de couvercles percés (`refus_taille_lot` de vidange.cycle.
   mode_seaux, un seul endroit, sans pause de rechargement en milieu de lot) ;
-- lot de bocaux : moins de bocaux vides notés au stockage que demandé.
+- lot de bocaux : moins de bocaux vides notés au stockage que demandé ;
+- aucun Go n'est accepté (objet encore tenu à la ventouse au redémarrage, tâche 45 nonies).
 
 Les seaux d'un lot lancé ici n'ont pas de nom d'avance : chacun prend le QR lu sur son flanc.
 Au Go, les boucles de fond des pièces (FondDuLot : balances, vide, battement des servos) partent
@@ -188,6 +189,11 @@ class Lancement:
         proposition = self.proposition
         if proposition is None:
             return AUCUNE
+        for mode in (self.mode_seaux, self.mode_bocaux):
+            # Un Go empêché (objet encore tenu à la ventouse au redémarrage, tâche 45 nonies).
+            empeche = None if mode is None else mode.chef.refus_go()
+            if empeche is not None:
+                return empeche
         if isinstance(proposition.lot, Lot):
             assert self.mode_seaux is not None
             return self.mode_seaux.refus_lancer(proposition.lot)

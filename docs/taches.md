@@ -787,7 +787,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      constante, puis montée en haut. Après le lâcher, la tête seule remonte tout droit. Vérifier et compléter ce que
      la 45 septies a fait (elle couvre 10a et 10b).
   Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
-- [ ] **45 nonies. Reprise après coupure avec un objet tenu, et bocal_0_1 posé par la machine** — Modèle : Opus,
+- [x] **45 nonies. Reprise après coupure avec un objet tenu, et bocal_0_1 posé par la machine** — Modèle : Opus,
   effort moyen. Deux réponses des fils du 07/11/2026 (à recopier dans `docs/decisions.md`) :
   1. **Objet tenu à la ventouse à la coupure** (fil Préhension) : les électrovannes « aspirer » et « souffler » sont
      normalement fermées et un clapet anti-retour garde le vide ; l'objet reste d'abord tenu puis peut tomber au bout

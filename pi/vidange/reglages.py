@@ -269,16 +269,30 @@ class BandeGriffe(Modele):
     y_min: tuple[float, float, float]
 
 
+class RectangleMat(Modele):
+    """Un rectangle où peut aller le mât de la griffe (x, y du portique, m)."""
+
+    x: Intervalle
+    y: Intervalle
+
+
 class ExceptionButeeHaute(Modele):
     """Une zone du mât où la table « y minimum du mât » en butée haute ne compte pas (tâche 45
     octies) : axes en butée haute, godet fermé, tête bras le long du pont, pour la pose de
     l'entonnoir sur UN bocal par la Préhension (griffe traînée par le pont). Figée d'après une
-    mesure de la Maquette (`source`), qui doit couvrir la pose finale ET le chemin d'approche.
-    Vérifiée au démarrage : le mât de la griffe pour cette pose est dedans, aucun autre bocal."""
+    mesure de la Maquette (`source`).
+
+    Le chemin (tâche 45 nonies) : un trajet du pont qui entre dans la zone ou en sort passe par
+    x = `entree_x` (en x seulement dans la zone, en y seulement à x = `entree_x`), dans un des
+    rectangles `libres` de la mesure. Vérifiée au démarrage : le mât de la griffe pour cette
+    pose est dans la zone ; la zone ne permet le mât d'aucun autre bocal que la table refuse ;
+    l'entrée est dans la zone et la ligne x = `entree_x` dans un rectangle libre."""
 
     bocal: Nom
     x: Intervalle
     y: Intervalle
+    entree_x: float
+    libres: list[RectangleMat] = Field(min_length=1)
     source: str = Field(min_length=1)
 
 
@@ -289,6 +303,25 @@ class YMinMatGriffe(Modele):
     butee_haute: list[BandeGriffe] = Field(min_length=1)
     sous_butee: list[BandeGriffe] = Field(min_length=1)
     exceptions_butee_haute: list[ExceptionButeeHaute] = Field(default_factory=list)
+
+    def refuse_en_butee_haute(self, x: float, y: float) -> bool:
+        """La table « butée haute » seule (sans ses exceptions) refuse-t-elle le mât en (x ; y),
+        godet fermé, tête bras le long du pont ?"""
+        return any(
+            bande.x[0] <= x <= bande.x[1] and y < bande.y_min[0] - 1e-6
+            for bande in self.butee_haute
+        )
+
+    def exception_requise(self, x: float, y: float) -> ExceptionButeeHaute | None:
+        """L'exception sans laquelle la table refuserait le mât en (x ; y) : seul son chemin y
+        mène (tâche 45 nonies). None : le mât y est permis (ou refusé) par la table seule."""
+        if not self.refuse_en_butee_haute(x, y):
+            return None
+        for exception in self.exceptions_butee_haute:
+            (x0, x1), (y0, y1) = exception.x, exception.y
+            if x0 - 1e-6 <= x <= x1 + 1e-6 and y0 - 1e-6 <= y <= y1 + 1e-6:
+                return exception
+        return None
 
 
 class OuvertureFutGriffe(Modele):
@@ -1214,11 +1247,26 @@ class VidePrehension(Modele):
     # loin que zero_ecart_max_kpa de 0 : capteur déréglé ou vanne qui fuit, arrêt.
     zero_lectures: int = Field(ge=1)
     zero_ecart_max_kpa: float = Field(gt=0)
+    # Reprise après une coupure (fil Préhension, 07/11/2026, tâche 45 nonies) : au démarrage,
+    # avant tout mouvement, une lecture brute (moyenne de zero_lectures, vanne fermée) plus basse
+    # que ce vide (kPa) dit qu'un objet est encore tenu à la ventouse : pas de Go.
+    tenu_au_demarrage_kpa: float = Field(lt=0)
 
     @model_validator(mode="after")
     def _verifier(self) -> "VidePrehension":
         if self.prise_kpa >= self.perte_kpa:
             raise ValueError("prise_kpa doit être un vide plus fort (plus bas) que perte_kpa")
+        if self.tenu_au_demarrage_kpa < self.perte_kpa:
+            raise ValueError(
+                f"tenu_au_demarrage_kpa ({self.tenu_au_demarrage_kpa:g}) doit être au-dessus de "
+                f"perte_kpa ({self.perte_kpa:g}) : un vide qui tient encore l'objet passerait"
+            )
+        if self.tenu_au_demarrage_kpa >= -self.zero_ecart_max_kpa:
+            raise ValueError(
+                f"tenu_au_demarrage_kpa ({self.tenu_au_demarrage_kpa:g}) doit être plus bas que "
+                f"−zero_ecart_max_kpa ({-self.zero_ecart_max_kpa:g}) : un zéro décalé suffirait "
+                "à bloquer le Go"
+            )
         return self
 
 
@@ -4061,8 +4109,9 @@ class Machine(Modele):
 
     def _verifier_exceptions_butee_haute(self) -> list[str]:
         """Chaque exception de la table « y minimum du mât » en butée haute : un bocal connu, le
-        mât de la griffe pour la pose de l'entonnoir sur ce bocal dans sa zone, et aucun autre
-        bocal (l'exception n'affaiblit pas la règle ailleurs)."""
+        mât de la griffe pour la pose de l'entonnoir sur ce bocal dans sa zone, aucun autre
+        bocal que la table refuse (l'exception n'affaiblit pas la règle ailleurs), et un chemin
+        d'entrée dans les rectangles libres de la mesure."""
         from vidange.stockage import places
 
         griffe = self.griffe
@@ -4092,11 +4141,46 @@ class Machine(Modele):
                         f"mât de la griffe pour la pose de l'entonnoir sur ce bocal ({mx:g} ; "
                         f"{my:g}) : la mesure n'est pas à la bonne place"
                     )
-                elif bocal != exception.bocal and dedans:
+                elif (
+                    bocal != exception.bocal
+                    and dedans
+                    and griffe.y_min_mat.refuse_en_butee_haute(mx, my)
+                ):
                     erreurs.append(
                         f"{nom} : la zone contient aussi le mât pour le bocal « {bocal} » "
                         f"({mx:g} ; {my:g}) : une exception ne vaut que pour un bocal"
                     )
+            erreurs += self._verifier_chemin_exception(nom, exception)
+        return erreurs
+
+    @staticmethod
+    def _verifier_chemin_exception(nom: str, exception: ExceptionButeeHaute) -> list[str]:
+        """L'entrée de la zone (x = entree_x) est dans la zone, et la ligne x = entree_x, sur
+        toute la hauteur de la zone, dans un rectangle libre de la mesure."""
+        erreurs = []
+        (x0, x1), (y0, y1) = exception.x, exception.y
+        for numero, libre in enumerate(exception.libres, start=1):
+            (lx0, lx1), (ly0, ly1) = libre.x, libre.y
+            if lx0 >= lx1 or ly0 >= ly1:
+                erreurs.append(f"{nom} → libres n° {numero} : x et y du plus petit au plus grand")
+        if erreurs:
+            return erreurs
+        entree = exception.entree_x
+        if not x0 - 1e-9 <= entree <= x1 + 1e-9:
+            erreurs.append(
+                f"{nom} : entree_x ({entree:g}) hors de la zone (x {x0:g}-{x1:g}) : le chemin "
+                "n'y entre pas"
+            )
+        elif not any(
+            libre.x[0] - 1e-9 <= entree <= libre.x[1] + 1e-9
+            and libre.y[0] - 1e-9 <= y0
+            and y1 <= libre.y[1] + 1e-9
+            for libre in exception.libres
+        ):
+            erreurs.append(
+                f"{nom} : la ligne x = {entree:g} (y {y0:g}-{y1:g}) n'est dans aucun rectangle "
+                "libre de la mesure : le chemin d'entrée n'est pas sûr"
+            )
         return erreurs
 
     def _verifier_versement_bocal(self) -> list[str]:
@@ -5457,11 +5541,19 @@ class ReglagesBilan(Modele):
     lignes_journal: int = Field(ge=0, le=1000)
 
 
+class ReglagesObjetTenu(Modele):
+    """Reprise après une coupure avec un objet tenu à la ventouse (tâche 45 nonies)."""
+
+    # Tant qu'un objet est encore tenu au démarrage, le capteur de vide est relu tous les (s).
+    periode_s: float = Field(gt=0, le=10)
+
+
 class ReglagesFiabilite(Modele):
     sante: ReglagesSante
     chien_de_garde: ReglagesChienDeGarde
     onduleur: ReglagesOnduleur
     bilan: ReglagesBilan
+    objet_tenu: ReglagesObjetTenu
 
 
 class ReglagesApi(Modele):
