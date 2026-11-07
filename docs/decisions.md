@@ -1571,3 +1571,10 @@ Choix tranchés par Claude (PR de la tâche 23), en attendant les réponses de K
    `vidange-simulateur cycle --solveur` le montre.
 6. **Sur la vraie machine, aucun programme n'est encore calculé** (question n° 1 de la PR) : le chef sait le jouer,
    le programme principal ne le lui donne pas encore.
+- **Solveur, réponses à la PR n° 97** (tâche 23, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Calcul du programme sur la vraie machine : rien n'est branché tant que le gain est nul. Quand la griffe et la
+     préhension (même pont) seront écrites, le Pi le calculera pendant que la proposition de lot attend le Go, et ne
+     s'en servira que si `solveur → actif` est vrai et le programme accepté par le rejeu.
+  2. `solveur → ecart_max_s` : 30 s (EXEMPLE) pour les premiers lots, resserré quand les durées seront recalées sur
+     les vrais temps.
+  3. Une Pause pendant un programme : retour à l'ordre normal du chef (gardé, simple et sûr).
