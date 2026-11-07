@@ -182,9 +182,14 @@ def test_tenir_refuse_sans_le_mode(b):
         b.tenir()
 
 
-def test_pas_de_mouvement_si_le_voyant_ne_s_allume_pas(b):
+def test_pas_de_mouvement_si_le_voyant_ne_s_allume_pas(b, monkeypatch):
     b.pilote.activer(QUI)
-    b.fabrique.debrancher("voyant_buzzer")
+
+    # Le voyant-buzzer est sur un GPIO direct (le faux ne le débranche pas) : l'écriture échoue.
+    def ecriture_impossible(nom, valeur):
+        raise OSError("module relais du buzzer sans réponse")
+
+    monkeypatch.setattr(b.pilote.materiel, "ecrire", ecriture_impossible)
     with pytest.raises(ErreurDistance, match="Voyant-buzzer impossible à allumer"):
         b.tenir()
     assert b.pilote.etat()["mouvement"] is None

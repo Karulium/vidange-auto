@@ -2107,3 +2107,50 @@ recopiées ici. Fichiers : `pi/reglages/fluidnc.yaml`, `fluidnc/mycelium_lavage.
      n° 4, EXEMPLE) : gardées ; question posée à l'Implantation (à confirmer dans ses fiches, ou module de sorties).
   2. Relais du chauffage `relais_chauffage_lavage` sur `relais_2` voie K8, 24 V (EXEMPLE) : gardé jusqu'à la fiche
      `implantation/logiciel/relais-du-pi.md`.
+
+## Relais du Pi et voyant-buzzer sur son propre relais (tâche 45 tredecies, 07/11/2026)
+
+Fiches de l'Implantation du 07/11/2026 (`implantation/logiciel/relais-du-pi.md`, `sorties-carte-3.md`,
+`sorties-carte-4.md`), recopiées ici. Fichiers : `docs/entrees-sorties.yaml`, `pi/vidange/entrees_sorties.py`,
+`pi/systeme/essai-entrees-sorties.md`.
+
+- **Relais du Pi** : 2 cartes de 8 relais en I2C (PCF8574, adresses 0x20 = `relais_1`, 0x21 = `relais_2`), contacts
+  10 A 250 V. `relais_1` K1 : libre (pas le voyant-buzzer) ; K2 `voyant_pret_fut` (voyant du bouton « Prêt », 24 V) ;
+  K3 à K8 libres. `relais_2` : K1 `verrous_store` (commandé = sous tension = déverrouillé ; contact EN SÉRIE avec AL1
+  et AL2 de l'indicateur d'ozone, sécurité câblée) ; K2 `eclairage_enceinte` (12 V, 2 rubans LED) ; K3
+  `ventilateur_enceinte` (par `relais_230`, moteur EC) ; K4 `generateur_ozone` et K5 `lampe_uv` (par `relais_230`,
+  derrière la chaîne câblée, contact de porte, etc.) ; K6 `relais_compresseur` (commandé = alimenté ; commande la
+  BOBINE du contacteur `contacteur_comp` ≥ 16 A AC-3, jamais le moteur) ; K7 `coupure_ventilateur_armoire` (câblé sur
+  le contact REPOS : commandé = coupé ; Pi éteint ou planté = ventilateur en marche) ; K8 `relais_chauffage_lavage`
+  (24 V → K8 → contact 1 de `relais_flotteur` → entrée du SSR ; flotteur bas = SSR sans commande, sécurité câblée).
+  Le dépôt avait déjà exactement ces voies : rien n'a changé pour `relais_2`.
+- **`voyant_buzzer`** : PAS sur `relais_1` K1. Son propre module relais 1 voie (`relais_buzzer`), sur un GPIO direct du
+  Pi, en 24 V non coupé (choix du fil IA, 26/10) : l'alarme marche même si le bus I2C ou une carte relais tombe en
+  panne. Le numéro du GPIO est choisi par le logiciel parmi les broches libres (pas 8, 9, 14, 15, 18, 19, ni 2/3).
+- **Fiches cartes 3 et 4** : validé par l'Implantation, voir plus haut (tâche 45 duodecies) : carte n° 3 pleine 8/8
+  (P6 verrou du plateau, P7 vanne 3 voies des rampes) ; carte n° 4 P3 rinçage du lavage, P5 à P7 libres, P2 frein ;
+  modules de sorties 24 V à 4 voies dans les emplacements d'axe libres, rien à acheter. Les numéros gpio des cartes
+  FluidNC restent EXEMPLE jusqu'à la réception des cartes.
+- **Choix de Claude** :
+  - Nouvelle carte `relais_buzzer` dans `entrees-sorties.yaml` (1 sortie, 24 V, isolée, liaison `gpio`, repère
+    K1 → **GPIO23**, `niveau_actif: bas`, EXEMPLE) ; `voyant_buzzer` y est branché. GPIO23 : libre dans tout le dépôt
+    (les cartes d'entrées prennent 16, 17, 20, 22, 25, 26, 27 ; le Pi lui-même 6 et 12 ; bus et PWM 2 à 5, 8, 9, 14,
+    15, 18, 19). Un GPIO direct, sans I2C ; le code ne connaît que le nom `voyant_buzzer`.
+  - `relais_1` K1 est libre ; la carte `relais_1` garde `voyant_pret_fut` (K2) seulement.
+  - **Vérifié au démarrage** : une voie de relais ou un GPIO pris deux fois était déjà refusé (voie de la même carte,
+    ou GPIO d'une autre carte comme `relais_buzzer/K1` contre `entrees_24v_1/E1`). Nouveau : la liste
+    `gpio_reserves` (au début de `entrees-sorties.yaml` : GPIO2 à 5, 8, 9, 14, 15, 18, 19) ; une carte de GPIO direct
+    ou un signal tout-ou-rien du Pi sur l'une de ces broches empêche de démarrer, avec le nom de la carte et du
+    repère. Le chiffre est dans le fichier de réglages, pas dans le code.
+  - **Essai** : `pi/systeme/essai-entrees-sorties.md`, étape 6 (GPIO, 24 V non coupé même à l'arrêt d'urgence, panne
+    simulée de l'I2C, un relais I2C après l'autre). Testé sur le vrai matériel : non.
+- **Questions pour Karulium / Implantation** (recommandations ; voir la PR) :
+  1. GPIO23 pour le module `relais_buzzer` : l'Implantation doit l'écrire dans sa fiche (ou donner le sien).
+     Recommandation : GPIO23, `niveau_actif: bas` (la plupart des modules 1 voie du commerce s'activent à l'état bas).
+  2. Le module `relais_buzzer` est alimenté en 24 V non coupé ; son GPIO du Pi est en 3,3 V. Recommandation : un module
+     à optocoupleur (isolation du Pi), sinon un transistor ; à préciser sur la fiche.
+- **Réponses à la PR n° 106** (tâche 45 tredecies, 07/11/2026, niveau 1, tranché par Claude) :
+  1. `relais_buzzer` sur GPIO23, en **actif haut** (réponse de l'Implantation du 07/11, écrite dans
+     `implantation/logiciel/relais-du-pi.md`) : au démarrage, GPIO23 est une entrée tirée vers le bas ; un module
+     actif bas ferait sonner l'alarme à chaque démarrage du Pi. Corrigé dans `docs/entrees-sorties.yaml`.
+  2. Module du voyant-buzzer : relais 1 voie à **optocoupleur**, entrée 3,3 V, cavalier H/L sur H (Implantation).

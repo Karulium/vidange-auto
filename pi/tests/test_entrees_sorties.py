@@ -79,7 +79,7 @@ def test_adresse_i2c_en_double(entrees_sorties):
 
 def test_carte_inconnue(entrees_sorties):
     remplacer(entrees_sorties, "carte: relais_1", "carte: relais_9")
-    assert "signal « voyant_buzzer » : carte inconnue « relais_9 »" in erreur_de(entrees_sorties)
+    assert "signal « voyant_pret_fut » : carte inconnue « relais_9 »" in erreur_de(entrees_sorties)
 
 
 def test_module_inconnu(entrees_sorties):
@@ -97,7 +97,7 @@ def test_trop_d_entrees_sur_une_carte(entrees_sorties):
 def test_trop_de_sorties_sur_une_carte(entrees_sorties):
     remplacer(entrees_sorties, "sorties: 8", "sorties: 0")
     message = erreur_de(entrees_sorties)
-    assert "carte « relais_1 » : 2 sorties branchées pour 0 disponibles" in message
+    assert "carte « relais_1 » : 1 sorties branchées pour 0 disponibles" in message
 
 
 def test_24_volts_sans_isolement(entrees_sorties):
@@ -191,6 +191,46 @@ def test_toutes_les_erreurs_sont_dites_d_un_coup(entrees_sorties):
 # ------------------------------------------------- liaison des cartes au Pi
 
 
+def test_le_voyant_buzzer_a_son_propre_relais_sur_un_gpio():
+    liste = charger_entrees_sorties(DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml")
+    voyant = liste.signaux["voyant_buzzer"]
+    assert voyant.carte == "relais_buzzer"
+    liaison = liste.cartes["relais_buzzer"].liaison
+    assert liaison.type == "gpio"
+    # Pas d'I2C : l'alarme marche même si le bus ou une carte à relais tombe en panne.
+    assert liste.cartes["relais_buzzer"].sorties == 1
+    # relais_1 K1 est libre : seul le voyant du bouton « Prêt » reste sur la carte.
+    sur_relais_1 = [n for n, s in liste.signaux.items() if s.carte == "relais_1"]
+    assert sur_relais_1 == ["voyant_pret_fut"]
+    assert liaison.broches["K1"] not in liste.gpio_reserves
+
+
+def test_gpio_du_buzzer_pris_par_une_autre_carte(entrees_sorties):
+    remplacer(entrees_sorties, "K1: GPIO23", "K1: GPIO17")
+    message = erreur_de(entrees_sorties)
+    assert "broche GPIO17 du Pi (/dev/gpiochip0) : prise plusieurs fois" in message
+    assert "relais_buzzer/K1" in message
+
+
+def test_gpio_du_buzzer_reserve_aux_bus(entrees_sorties):
+    remplacer(entrees_sorties, "K1: GPIO23", "K1: GPIO14")
+    message = erreur_de(entrees_sorties)
+    assert "carte « relais_buzzer », repère K1 : la broche GPIO14 du Pi est réservée" in message
+
+
+def test_signal_tout_ou_rien_sur_un_gpio_reserve(entrees_sorties):
+    remplacer(entrees_sorties, "broche: GPIO6", "broche: GPIO15")
+    message = erreur_de(entrees_sorties)
+    assert "signal « onduleur_sur_batterie » : la broche GPIO15 du Pi est réservée" in message
+
+
+def test_voie_de_relais_prise_deux_fois(entrees_sorties):
+    # voyant_pret_fut sur K1 de relais_2 (déjà prise par verrous_store).
+    remplacer(entrees_sorties, "carte: relais_1\n    broche: K2", "carte: relais_2\n    broche: K1")
+    message = erreur_de(entrees_sorties)
+    assert "carte « relais_2 », broche K1 : utilisée par plusieurs signaux" in message
+
+
 def test_liaisons_de_la_liste_du_depot():
     liste = charger_entrees_sorties(DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml")
     assert liste.cartes["entrees_24v_1"].liaison.broches["E1"] == "GPIO17"
@@ -245,9 +285,11 @@ def test_voie_de_l_ads1115_inconnue(entrees_sorties):
 
 
 def test_liaison_vers_un_signal_qui_n_est_pas_un_bus_i2c(entrees_sorties):
-    remplacer(entrees_sorties, "signal: relais_1_bus", "signal: voyant_buzzer")
+    remplacer(entrees_sorties, "signal: relais_1_bus", "signal: voyant_pret_fut")
     message = erreur_de(entrees_sorties)
-    assert "carte « relais_1 » : liaison → signal « voyant_buzzer » doit être un signal" in message
+    assert (
+        "carte « relais_1 » : liaison → signal « voyant_pret_fut » doit être un signal" in message
+    )
 
 
 def test_liaison_vers_une_puce_sans_broches(entrees_sorties):
@@ -266,7 +308,7 @@ def test_signal_impossible_sur_cette_carte(entrees_sorties):
 def test_que_des_signaux_serie_sur_un_adaptateur_usb(entrees_sorties):
     remplacer(
         entrees_sorties,
-        "carte: relais_1\n    broche: K1",
+        "carte: relais_buzzer\n    broche: K1",
         "carte: rs485_ozone_dedans\n    broche: K1",
     )
     message = erreur_de(entrees_sorties)

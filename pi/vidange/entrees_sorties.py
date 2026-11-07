@@ -393,6 +393,8 @@ class EntreesSorties(Modele):
     """entrees-sorties.yaml en entier."""
 
     tension_max_sans_isolement: float = Field(gt=0)
+    # Broches du Pi prises par les bus, ports série et PWM : aucune carte tout-ou-rien dessus.
+    gpio_reserves: list[Texte] = Field(default_factory=list)
     modules: list[Nom] = Field(min_length=1)
     cartes: dict[Nom, Carte] = Field(min_length=1)
     signaux: dict[Nom, Signal] = Field(default_factory=dict)
@@ -563,6 +565,26 @@ class EntreesSorties(Modele):
                 else:
                     for repere, broche in liaison.broches.items():
                         prises[(liaison.fichier, broche.lower())].append(f"{nom_carte}/{repere}")
+        reserves = {broche.lower() for broche in self.gpio_reserves}
+        for nom_carte, carte in self.cartes.items():
+            liaison = carte.liaison
+            if isinstance(liaison, LiaisonGpio) and liaison.broches is not None:
+                for repere, broche in liaison.broches.items():
+                    if broche.lower() in reserves:
+                        erreurs.append(
+                            f"carte « {nom_carte} », repère {repere} : la broche {broche} du Pi "
+                            "est réservée aux bus et ports série (gpio_reserves)"
+                        )
+        for nom, signal in signaux.items():
+            carte = self.cartes[signal.carte]
+            if isinstance(carte.liaison, LiaisonGpio) and carte.liaison.broches is None:
+                if signal.type in TOUT_OU_RIEN:
+                    for broche in signal.broche:
+                        if broche.lower() in reserves:
+                            erreurs.append(
+                                f"signal « {nom} » : la broche {broche} du Pi est réservée aux "
+                                "bus et ports série (gpio_reserves)"
+                            )
         for (fichier, broche), qui in prises.items():
             # Un bus partagé est déjà vérifié par _verifier_broches.
             directs = [q for q in qui if "/" not in q]

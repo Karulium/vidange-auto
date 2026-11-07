@@ -14,11 +14,17 @@
 #   - « repos » oublié sur un contact, un capteur PNP/NPN ou un relais ; « adresse » oubliée en I2C ;
 #   - une liaison au Pi incomplète : repère sans broche, broche que la puce n'a pas,
 #     broche du Pi prise deux fois, signal qui ne peut pas être sur cette carte ;
+#   - une voie de relais ou un GPIO pris deux fois, ou un GPIO réservé aux bus (gpio_reserves) ;
 #   - un nom écrit deux fois, un nom inconnu, un nombre mal écrit.
 
 # Au-dessus de cette tension (en volts), un signal doit arriver sur une carte isolée
 # (entrées optocouplées, relais) : les broches nues des cartes (Pi, ESP32) grilleraient.
 tension_max_sans_isolement: 5
+
+# Broches du Pi que les bus, les ports série et le PWM matériel prennent (I2C 2/3, UART 4/5, 8/9,
+# 14/15, PWM 18/19) : aucune carte de relais ou d'entrées, ni signal tout-ou-rien, ne peut s'y
+# brancher. Vérifié au démarrage.
+gpio_reserves: [GPIO2, GPIO3, GPIO4, GPIO5, GPIO8, GPIO9, GPIO14, GPIO15, GPIO18, GPIO19]
 
 # Les modules de la machine (le champ « module » d'un signal doit être l'un d'eux).
 # « armoire » = ce qui est dans l'armoire électrique (écran, capteurs d'ambiance, voyant-buzzer).
@@ -190,6 +196,25 @@ cartes:
         K7: P6
         K8: P7
       niveau_actif: bas
+  # Module relais 1 voie du voyant-buzzer, sur un GPIO direct du Pi (pas sur l'I2C), alimenté en
+  # 24 V non coupé. GPIO23 en actif HAUT, validé par l'Implantation (07/11, relais-du-pi.md) :
+  # module à optocoupleur, entrée 3,3 V, cavalier H/L sur H. Au démarrage, GPIO23 est une entrée
+  # tirée vers le bas : en actif haut, l'alarme ne sonne pas à chaque démarrage du Pi. Le GPIO
+  # est pris parmi les broches libres : ni « gpio_reserves » (bus et ports série du Pi), ni celles
+  # des autres cartes (vérifié au démarrage).
+  relais_buzzer:
+    exemple: true
+    description: Module relais 1 voie du voyant-buzzer (GPIO direct, 24 V non coupé)
+    entrees: 0
+    sorties: 1
+    tension_max: 24
+    isolee: true
+    liaison:
+      type: gpio
+      fichier: /dev/gpiochip0
+      broches:
+        K1: GPIO23
+      niveau_actif: haut
   # 2ᵉ adaptateur USB-RS485, réservé aux 3 cartes de pesée embarquées (RP2040 + HX711 : griffe,
   # préhension, plateau du remplissage) et à la boîte du poste du fût (pesée du plateau du fût,
   # tâche 17 bis), séparé des liaisons série des capteurs d'ozone (docs/decisions.md, 28/10).
@@ -476,8 +501,11 @@ signaux:
     module: mycelium
   voyant_buzzer:
     exemple: true
+    # Pas sur relais_1 K1 (fiche de l'Implantation du 07/11/2026, docs/decisions.md) : son propre
+    # module relais 1 voie, sur un GPIO direct du Pi, en 24 V non coupé. L'alarme sonne même si
+    # l'I2C ou une carte à relais tombe en panne. Le GPIO est choisi par le logiciel (EXEMPLE).
     description: Voyant + buzzer « attention » avant un mouvement lancé à distance
-    carte: relais_1
+    carte: relais_buzzer
     broche: K1
     type: relais
     tension: 24
