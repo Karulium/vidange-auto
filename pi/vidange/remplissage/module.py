@@ -94,8 +94,14 @@ class Plan:
 
 
 def module_remplissage(
-    remplissage: Remplissage, prehension: Prehension, mycelium: Mycelium, plan: Plan
+    remplissage: Remplissage,
+    prehension: Prehension,
+    mycelium: Mycelium,
+    plan: Plan,
+    air: Condition | None = None,
 ) -> Module:
+    """`air` : condition d'entrée de la prise d'un seau par le venturi (sur la machine :
+    `chef.condition_permission("air")`, l'attente de mise en pression du module Air, tâche 42)."""
     chariot, tete = remplissage.chariot, prehension.tete
     magasin = plan.magasin
     # Règle 9 : la tête ne descend au-dessus du chariot que barres ouvertes, micropore rentré.
@@ -193,14 +199,15 @@ def module_remplissage(
             geste("fermer_le_seau", remplissage.geste_fermer, entree=(libre, manivelle_en_bas)),
         )
 
-    def geste_tete(nom: str, fabrique, ensuite=None) -> Etape:
+    def geste_tete(nom: str, fabrique, ensuite=None, avec_air: bool = False) -> Etape:
+        venturi = (air,) if avec_air and air is not None else ()
         return Etape(
             nom,
             QUOI_FAIRE_PREHENSION,
             action=lambda: prehension.lancer(fabrique),
             fin=fin_tete,
             delai_max=GESTE_PREHENSION,
-            entree=(tete.pretes, chariot.pretes, *boucle),
+            entree=(tete.pretes, chariot.pretes, *boucle, *venturi),
             ensuite=ensuite,
         )
 
@@ -338,7 +345,7 @@ def module_remplissage(
                 lambda: remplissage.geste_aller_a_la_pose(plan.seau.format),
                 entree=(manivelle_en_bas, pose_permise),
             ),
-            geste_tete("prendre_le_seau", prendre),
+            geste_tete("prendre_le_seau", prendre, avec_air=True),
             geste_tete("poser_le_seau", poser, apres_pose),
             geste_tete(
                 "rendre_le_seau_du_dessus", rendre, lambda: apres_rendu() or "orienter_l_anse"

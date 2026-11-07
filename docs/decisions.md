@@ -1144,3 +1144,38 @@ caméra en chiffres de la fiche) et objet `entonnoir` dans `prehension → objet
      Karulium les vérifie à la main. Le rangement à part viendra avec l'inventaire des bocaux.
   5. Reprise d'un lot après une coupure : seul `entonnoir_place` est gardé pour l'instant ; la reprise se fera avec
      l'inventaire des bocaux remplis (à prévoir quand le programme principal branchera le mode bocaux).
+
+## Programme principal, mode seaux (tâche 45, 07/11/2026)
+
+Code : `pi/vidange/cycle/` ; lot du simulateur : `pi/reglages/simulateur.yaml → cycle` (EXEMPLE) ; essai :
+`pi/systeme/essai-mode-seaux.md` (testé sur le vrai matériel : non).
+
+- **L'ordre du cycle d'un seau est écrit à un seul endroit** (`vidange/cycle/ordre.py`, `ORDRE_SEAU`) : fût, seau
+  vide posé, griffe, mycélium, spray, micropore, couvercle, fermeture, stockage, lavage des vides. Le démarrage le lit
+  (quels postes sont prêts, check-list, écran) ; le simulateur le lit (`vidange-simulateur cycle` vérifie que chaque
+  seau du lot passe par ces postes, dans cet ordre).
+- **Même code pour la machine et le simulateur** (`ModeSeaux`) ; seules les « pièces » (ce qui touche le matériel)
+  changent : `PiecesMachine` au démarrage, `PiecesSimulees` dans le simulateur.
+- **Un poste n'est pas lancé, avec la raison** (journal, check-list « mode seaux », écran quand rien ne tourne) : geste
+  pas écrit (case vide), partie absente de machine.yaml, EXEMPLE sur la vraie machine, matériel ou vision qui manque,
+  poste dont il a besoin pas prêt. Jamais de geste inventé.
+- **Choix de la tâche 45 (tranchés par Claude, en attendant les réponses de Karulium, PR de la tâche 45)** :
+  1. Cases vides d'`ORDRE_SEAU` : la griffe (son enchaînement avec la préhension sur le même pont et avec le seau du
+     chariot est le travail du solveur, tâche 23 ; dans le simulateur, chaque versement reste une rotation du seau),
+     le spray (à quel passage au poste il dose n'est écrit nulle part), le couvercle (tâche 41 bis, donc pas de
+     fermeture), le lavage des vides (travail à part, règle 7 du plafond).
+  2. Sur la vraie machine, il manque aussi : la lecture du QR du flanc du seau par une caméra (le Remplissage refuse
+     d'orienter l'anse sans elle), la pose du bocal de semence neuf par la préhension (case vide `nouveau_bocal` du
+     Mycélium), la vision du micropore (tâche 40 ter). Les cartes du chariot et de la tête seront construites dans
+     `vidange/cycle/machine.py` avec la lecture du QR.
+  3. Le « cœur » d'un lot (seau vide, mycélium, stockage) va ensemble. Sur la vraie machine, un lot ne part pas sans
+     les postes obligatoires (fût, seau vide, griffe, mycélium, couvercle, fermeture, stockage) ; le simulateur saute
+     ceux qui manquent et le dit.
+  4. Rien n'est lancé tout seul au démarrage (règle 6) : le lot est lancé par `ModeSeaux.lancer_lot`, après le Go de
+     Karulium (pas encore de bouton : question de la PR).
+  5. Le lot (seaux, seau en cours, couche, seau sur le plateau) est noté dans le carnet du chef après chaque étape du
+     Remplissage ; après une coupure il est reconstruit et repris à son étape, après le Go. L'état du bocal dans
+     l'agitateur n'est pas repris (le Mycélium ne le note pas encore).
+  6. Le Remplissage attend l'air comprimé (`chef.condition_permission("air")`) avant de prendre un seau par le
+     venturi, comme la Préhension et le Lavage (PR n° 87).
+

@@ -29,7 +29,7 @@ Un scénario nommé de simulateur.yaml (« echange_fut »...) remplace les capte
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 
-from vidange.chef import Chef, Condition, Etape, EtatChef, Module
+from vidange.chef import Carnet, Chef, Condition, Etape, EtatChef, Module
 from vidange.chef.chef import ATTENTE_GO
 from vidange.entrees_sorties import EntreesSorties
 from vidange.materiel import FausseFabrique, Materiel
@@ -51,8 +51,14 @@ class ErreurSimulation(Exception):
 
 class Simulateur:
     def __init__(
-        self, reglages: Reglages, liste: EntreesSorties, scenario: str | None = None
+        self,
+        reglages: Reglages,
+        liste: EntreesSorties,
+        scenario: str | None = None,
+        carnet: Carnet | None = None,
     ) -> None:
+        """`carnet` : le chef note l'état du cycle comme sur la machine (essais de reprise après
+        une coupure, tâche 45) ; sans carnet, rien n'est écrit."""
         self._tous = reglages
         self._reglages = reglages.simulateur
         self._machine = reglages.machine
@@ -87,8 +93,8 @@ class Simulateur:
         # Le tour des pesées du bus, à l'heure du simulateur (la pesée du poste du fût).
         self.pesees = TourPesees(reglages.pesees, self.materiel, horloge=self._horloge)
         self._axes = EtatAxes(reglages.machine, self._reglages, horloge=self._horloge)
-        # Le même chef que sur la machine, à l'heure du simulateur, sans carnet.
-        self.chef = Chef(reglages.machine, reglages.programme.chef, horloge=self._horloge)
+        # Le même chef que sur la machine, à l'heure du simulateur (sans carnet, sauf essai).
+        self.chef = Chef(reglages.machine, reglages.programme.chef, carnet, horloge=self._horloge)
         self._modules: dict[str, Module] = {}
         self._en_cours: dict[str, LignePlanning] = {}
         self._lignes: list[LignePlanning] = []

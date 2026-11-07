@@ -685,7 +685,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   bus RS485 `rs485_pesee` quand le Pi l'interroge (une adresse par carte, contrôle CRC), mise à jour depuis le Pi
   si c'est simple. Côté Pi : lecture des 3 cartes à tour de rôle, 115 200 bauds, adaptateur USB-RS485 reconnu par
   son numéro de série. Procédure d'essai à l'établi ; « testé sur le vrai matériel : non ».
-- [ ] **45. Programme principal : brancher les modules du mode seaux** — Modèle : Opus, effort élevé. **À faire
+- [x] **45. Programme principal : brancher les modules du mode seaux** — Modèle : Opus, effort élevé. **À faire
   avant la tâche 23.** Aujourd'hui `demarrage.py → preparer_chef` ne connaît que « lieu_sur » ; les modules existent
   (`module_echange_fut`, `module_griffe`, `module_remplissage`, `module_mycelium`, `module_spray`, Micropore,
   Fermeture, `module_prehension`, `module_lavage`, Stockage, Portique, Nettoyage, Air) mais ne sont joués que par le

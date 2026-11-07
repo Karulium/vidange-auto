@@ -173,6 +173,26 @@ stockage:
     - {seau: S0218, format: seau_a, variete: pleurote_grise}
     - {seau: S0219, format: seau_a, variete: pleurote_grise}
 
+# Le lot du mode seaux (« vidange-simulateur cycle », tâche 45) : joué par le MÊME code que le
+# programme principal de la machine (vidange.cycle). Un lot complet de seaux A (26 = 20 au tiroir et
+# 6 sur la bande du haut) : la file 1 du tiroir est déjà pleine (6), les 20 seaux vides sont sur 4
+# piles de 5 ; le 3e est posé avec un 2e seau emboîté (prise double). Fin de lot : le tiroir est
+# vidé (scénario « cycle » plus bas). Les seaux s'appellent S0301, S0302...
+cycle:
+  format: seau_a
+  variete: pleurote_grise
+  seaux: 20
+  prefixe: S
+  premier: 301
+  piles:
+    pile_1: {format: seau_a, nombre: 5}
+    pile_2: {format: seau_a, nombre: 5}
+    pile_4: {format: seau_a, nombre: 5}
+    pile_3: {format: seau_a, nombre: 5}
+  files_pleines: {file_1: 6}
+  prises_doubles: [3]
+  anse_deg: 30
+
 # L'enceinte imaginaire du Nettoyage (scénarios « fermeture_purge », « purge_trop_longue »,
 # « nuit_uv_ozone », « fuite_ozone ») : le store ouvert au départ met 25 s à descendre (2,18 m à
 # ≈ 9 cm/s), son reed rebondit 0,6 s (toutes les 0,15 s). Particules : 12 µg/m³ dans le conteneur,
@@ -348,6 +368,20 @@ scenarios:
   # tire le tiroir (boucle ouverte), le vide et le remet 5 min après ; Go (tiroir vide), et le
   # 15e seau est rangé dans la file 1 vidée.
   stockage:
+    capteurs_actionnes: [plateau_fut_en_place, boucle_stockage]
+    evenements:
+      - apres: remplissage.vider_le_tiroir
+        attente_s: 60
+        capteur: boucle_stockage
+        actionne: false
+      - apres: remplissage.vider_le_tiroir
+        attente_s: 360
+        capteur: boucle_stockage
+        actionne: true
+  # Lot du mode seaux (partie « cycle » plus haut) : plateau du fût au fond, boucle du stockage
+  # fermée. Fin de lot : 1 min après la demande, Karulium tire le tiroir, le vide et le remet 5 min
+  # après ; Go (tiroir vide).
+  cycle:
     capteurs_actionnes: [plateau_fut_en_place, boucle_stockage]
     evenements:
       - apres: remplissage.vider_le_tiroir

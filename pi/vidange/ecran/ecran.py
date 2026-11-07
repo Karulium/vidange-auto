@@ -32,6 +32,7 @@ import threading
 import time
 from collections.abc import Callable
 from datetime import date
+from typing import TYPE_CHECKING
 
 from vidange.chef import Chef, ErreurChef
 from vidange.chef.chef import EtatChef, EtatModule
@@ -56,6 +57,9 @@ from vidange.nettoyage.nettoyage import ERREUR, FERME, INCONNU, OUVERT
 from vidange.poste_fut import ABSENT, EN_PLACE, PRET, ErreurPoste, EtatPoste, PosteFut
 from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import FondTexte, ReglagesEcran
+
+if TYPE_CHECKING:
+    from vidange.cycle import ModeSeaux
 
 journal = donner_journal("ecran")
 
@@ -194,7 +198,10 @@ class Ecran:
         pilote: PiloteDistance | None = None,
         poste: PosteFut | None = None,
         nettoyage: Nettoyage | None = None,
+        mode_seaux: "ModeSeaux | None" = None,
     ) -> None:
+        """`mode_seaux` : quand aucun cycle ne tourne, la page d'état dit si un lot de seaux peut
+        partir, ou ce qui manque (tâche 45)."""
         self.reglages = reglages
         self.liaison = liaison
         self.chef = chef
@@ -204,6 +211,7 @@ class Ecran:
         self.pilote = pilote
         self.poste = poste
         self.nettoyage = nettoyage
+        self.mode_seaux = mode_seaux
         self._etat_poste: EtatPoste | None = None
         self._horloge = horloge
         self._aujourdhui = aujourdhui
@@ -495,6 +503,10 @@ class Ecran:
             + en_cours
             + [m for m in etat.modules if m.statut == "alarme"]
         )
+        # Mode seaux (tâche 45), quand rien ne tourne : quel poste manque, et pourquoi.
+        seaux, pourquoi = "", ""
+        if not montre and self.mode_seaux is not None:
+            seaux, pourquoi = self.mode_seaux.texte_ecran()
         if montre:
             module = montre[0]
             page.mettre(
@@ -505,13 +517,15 @@ class Ecran:
             page.mettre("t_attend", f"Attend : {module.attend}" if module.attend else "")
         else:
             page.mettre("t_module", "Aucun cycle en cours")
-            page.mettre("t_attend", "")
+            page.mettre("t_attend", seaux)
         info = self._message_actuel()
         if not info and self.pilote is not None and self.pilote.actif:
             info = "Pilotage à distance en cours. Toucher un bouton pour l'arrêter."
         poste = self._etat_poste
         if not info and poste is not None and poste.etat == EN_PLACE:
             info = "Poste du fût : chariot en place, pas prêt."
+        if not info:
+            info = pourquoi
         if not info and self.nettoyage is not None:
             info = texte_enceinte(self.nettoyage.etat())
         page.mettre("t_info", info)
