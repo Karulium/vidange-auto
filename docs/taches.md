@@ -895,6 +895,30 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 ## Partie 3 : fonctions en plus, voir `docs/fonctionnalites.md`
 
 - [ ] 24. Dérive de position : consigne contre pilotes boucle fermée (15). — Sonnet.
+  Ce que la machine a vraiment (decisions.md, réponse Implantation du 30/10) : les pilotes boucle fermée n'ont que
+  PUL, DIR, ENA et une sortie d'alarme **ALM** ; le Pi ne lit jamais la position du codeur. Le pilote rattrape
+  seul ses pas ; s'il n'y arrive pas (erreur de suivi au-delà de son réglage, fait sur le pilote), il lève ALM.
+  Les ALM arrivent dans « Pn: » de leur carte FluidNC (entrées `alarme_*` de `docs/entrees-sorties.yaml`).
+  1. **Un seul endroit pour les alarmes des pilotes** : la liste « axe → son entrée `alarme_*` » se lit dans les
+     réglages (aucun nom d'axe ni broche dans le code). Vérifiée au démarrage : un axe moteur boucle fermée de
+     `fluidnc/*.yaml` sans entrée d'alarme, ou une entrée `alarme_*` qui ne correspond à aucun axe = erreur claire.
+     Chaque geste qui fait bouger un axe s'arrête (arrêt de la carte, comme le portique aujourd'hui) et alerte
+     avec un « quoi faire » si l'ALM d'un de ses axes se lève. Reprendre ce qui existe (portique, barres du
+     remplissage) sans réécrire ce qui marche ; brancher les axes qui ne sont pas encore surveillés.
+  2. **« Le moteur cale » de la tête** (bocal neuf, dévissage) : `erreur_codeur` est remplacé par l'ALM de la
+     rotation de la tête (`alarme_rotation_tete`) ; le seuil (≈ 2° pendant 0,2 s) est un réglage du pilote, écrit
+     dans la procédure d'essai, pas dans le code. Le geste ne refuse plus de partir sur la vraie machine pour cette
+     raison (les autres raisons restent). Comment l'ALM se remet à zéro (coupure de ENA ? remise sous tension ?)
+     dépend du pilote : à écrire comme EXEMPLE dans les réglages et en question.
+  3. **Dérive après le moteur** (courroie ou pignon qui glisse : le codeur ne la voit pas) : contrôle d'origine
+     d'un axe à des moments réglés (EXEMPLE : début de lot, tous les N seaux), qui mesure l'écart entre la position
+     que croit FluidNC et son fin de course d'origine, puis le remet à jour. Écart au-delà d'un seuil (EXEMPLE) =
+     alerte « dérive » au journal et sur la page ; au-delà d'un 2ᵉ seuil = arrêt propre. Choisir la façon de mesurer
+     qui marche avec FluidNC tel qu'il est câblé (fins de course d'origine sur les cartes) ; si la seule bonne façon
+     demande un changement de câblage ou de configuration FluidNC, la coder derrière `actif: faux` et poser la
+     question avec ta recommandation. Le simulateur (faux FluidNC) sait glisser d'un nombre de mm donné, pour les
+     tests.
+  Hors de la tâche : la lecture des positions par la vision, la montée en vitesse (30).
 - [ ] 25. Comptes (58) et restauration d'un Pi neuf depuis la sauvegarde (79). — Sonnet.
 - [ ] 26. Entretien : compteurs par axe, calendrier, pièces d'usure, page maintenance (40 à 44). — Sonnet.
 - [ ] 27. Notifications sur le téléphone (ntfy), résumé du soir, escalade (60 à 63). — Sonnet.
