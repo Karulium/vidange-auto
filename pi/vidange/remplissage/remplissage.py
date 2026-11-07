@@ -100,7 +100,8 @@ QUOI_FAIRE_SEPARATION = (
 )
 QUOI_FAIRE_QR = (
     "La caméra ne lit pas le QR du flanc du seau (ou lit un autre seau) : regarder la vidéo (QR "
-    "sale, tourné vers le mur, mauvais seau ?). Corriger, puis acquitter et donner le Go."
+    "sale, effacé, mauvais seau ?). Mettre ce seau de côté (comme un format inconnu) ou "
+    "corriger, puis acquitter et donner le Go."
 )
 QUOI_FAIRE_BARRIERE = (
     "La barrière lumineuse du chariot ne répond pas : vérifier son câble et la carte n° 2, puis "
@@ -496,6 +497,32 @@ class Remplissage:
         pose = self._pose()
         if pose.y < self.reglages.ecarte_y - self.reglages.tolerance_y_m:
             yield from self._a_la_place(self.reglages.vidage_y, "retour au vidage")
+
+    def geste_aller_au_poste(self) -> Geste:
+        """Le seau VIDE au poste (y 0,135), avant la 1re couche (fil Spray, 07/11/2026) : barres
+        ouvertes, pousseur rentré, plateau à la hauteur du poste (bord du seau ≤ 0,68, donc
+        sous min(0,50 ; 0,68 − h) pour le bras du spray)."""
+        seau = self.seau
+        if seau is None:
+            raise ErreurEtape("remplissage : pas de seau sur le plateau")
+        yield from self._barres_ouvertes()
+        yield from self._pousseur_rentre()
+        poste = self.plateau_au_poste(seau.format)
+        if self._pose().z > poste:
+            yield Pas("plateau à la hauteur du poste", {"z": poste})
+        yield from self._rouler(self.reglages.poste_y, "seau vide au poste (spray, micropore)")
+
+    def geste_micropore_au_poste(self) -> Geste:
+        """Micropore (tâche 40) sur le seau vide au poste, après le spray : tour de repérage et
+        rangées du haut (rien sans micropore branché)."""
+        if self._au_poste is not None:
+            yield from self._au_poste()
+
+    def au_poste(self) -> bool:
+        """Le seau au poste (y 0,135), rien en cours."""
+        if not self.libre() or self.seau is None:
+            return False
+        return self.regles.a(self.chariot.position().y, self.reglages.poste_y)
 
     def geste_au_dosage(self, plateau_z: float) -> Geste:
         """Le seau au poste (y 0,135, bord du seau ≤ 0,68 : spray et micropore, tâches 39 et 40,
@@ -1026,15 +1053,27 @@ class Remplissage:
         self.seau_du_dessus = False
 
     def geste_orienter_anse(self) -> Geste:
-        """Le plateau tourne le seau : oreilles de l'anse à 45° (modulo 90°) des barres."""
+        """Lecture du QR du flanc, avant le serrage des barres (fil Guidage caméra, 07/11/2026) :
+        seau vide à la pose, plateau à `plateau_lecture_qr`, le plateau tourne le seau pendant que
+        la caméra du micropore lit (un tour complet au plus). Puis le plateau tourne le seau :
+        oreilles de l'anse à 45° (modulo 90°) des barres ; l'angle est gardé jusqu'à la poussée."""
         seau = self.seau
         if seau is None:
             raise ErreurEtape("remplissage : pas de seau sur le plateau")
         if self.vision is None:
             raise ErreurEtape("remplissage : pas de caméra pour le QR du flanc", QUOI_FAIRE_QR)
+        if self.reglages.plateau_lecture_qr is not None:
+            yield from self._plateau(
+                self.reglages.plateau_lecture_qr, "plateau à la hauteur de lecture du QR"
+            )
         lu = self.vision.lire_seau()
         if lu is None:
-            raise ErreurEtape("remplissage : QR du flanc du seau pas lu", QUOI_FAIRE_QR)
+            yield Pas("le seau tourne (lecture du QR du flanc)", {"a": self._pose().a + 360})
+            lu = self.vision.lire_seau()
+        if lu is None:
+            raise ErreurEtape(
+                "remplissage : QR du flanc du seau pas lu après un tour complet", QUOI_FAIRE_QR
+            )
         code, oreilles = lu
         if seau.code is not None and code != seau.code:
             raise ErreurEtape(

@@ -18,6 +18,11 @@
   vidange-simulateur nettoyage_purge_longue    HEPA colmaté : purge en alerte, passée outre (Go)
   vidange-simulateur nettoyage_nuit            nuit UV-ozone complète (génération, contact, retour)
   vidange-simulateur nettoyage_fuite           ozone dehors au-dessus du seuil : générateur coupé
+  vidange-simulateur cycle                     un lot complet de seaux d'un format (« cycle »),
+                                               préparé par le même code que le programme de la
+                                               machine ; dit d'abord ce qui est prêt, ce qui ne
+                                               l'est pas et pourquoi, puis vérifie que chaque seau
+                                               suit l'ordre du cycle (vidange.cycle.ordre)
 
 Les durées se règlent dans reglages/simulateur.yaml (vitesses des axes, délai du Go, capteurs).
 Tourne sur n'importe quel PC, sans la machine. Code de sortie 0 si le cycle va au bout, 1 sinon.
@@ -31,6 +36,7 @@ from pathlib import Path
 
 from vidange.chef import ErreurChef, Module
 from vidange.chef.exemple import module_exemple
+from vidange.cycle.simulation import jouer_cycle
 from vidange.demarrage import DOSSIER_PI, _chemin
 from vidange.entonnoir.simulation import entonnoir_du_simulateur
 from vidange.entrees_sorties import charger_entrees_sorties
@@ -102,8 +108,11 @@ GROUPES: dict[str, Callable[[Simulateur], list[Module]]] = {
     "remplissage": lambda simulateur: _remplissage(simulateur),
     "stockage": lambda simulateur: _stockage(simulateur),
 }
+# Le lot du mode seaux (tâche 45) : joué seul, par vidange.cycle.simulation.
+CYCLE = "cycle"
 # Scénario de simulateur.yaml joué par défaut avec un module (sinon : le haut du fichier).
 SCENARIOS = {
+    CYCLE: "cycle",
     "poste_fut": "echange_fut",
     "griffe": "vidange_fut",
     "mycelium": "dosage_mycelium",
@@ -158,7 +167,10 @@ def _lavage(simulateur: Simulateur) -> LavageSimule:
 def main(arguments: list[str] | None = None) -> int:
     lecteur = argparse.ArgumentParser(prog="vidange-simulateur", description=__doc__.split("\n")[0])
     lecteur.add_argument(
-        "modules", nargs="+", choices=sorted({*MODULES, *GROUPES}), help="modules à rejouer"
+        "modules",
+        nargs="+",
+        choices=sorted({*MODULES, *GROUPES, CYCLE}),
+        help="modules à rejouer",
     )
     lecteur.add_argument("--reglages", help="dossier des réglages (défaut : pi/reglages)")
     lecteur.add_argument(
@@ -174,6 +186,8 @@ def main(arguments: list[str] | None = None) -> int:
     )
     options = lecteur.parse_args(arguments)
     noms = list(dict.fromkeys(options.modules))
+    if CYCLE in noms and len(noms) > 1:
+        lecteur.error("« cycle » se joue seul (il lance lui-même les modules du lot)")
     scenario = options.scenario
     if scenario is None:
         scenarios = {SCENARIOS[nom] for nom in noms if nom in SCENARIOS}
@@ -199,6 +213,8 @@ def main(arguments: list[str] | None = None) -> int:
             update={"delai_go_s": options.delai_go}
         )
         reglages = reglages.model_copy(update={"simulateur": simulateur_reglages})
+    if CYCLE in noms:
+        return _jouer_cycle(reglages, liste, scenario, options.json)
     try:
         with Simulateur(reglages, liste, scenario) as simulateur:
             modules: list[Module] = []
@@ -216,6 +232,25 @@ def main(arguments: list[str] | None = None) -> int:
             json.dumps(planning.en_dict(), ensure_ascii=False, indent=1), encoding="utf-8"
         )
     return 0 if planning.fini else 1
+
+
+def _jouer_cycle(reglages, liste, scenario: str | None, chemin_json: str | None) -> int:
+    try:
+        with Simulateur(reglages, liste, scenario) as simulateur:
+            mode, planning, problemes = jouer_cycle(simulateur)
+    except (ErreurSimulation, ErreurChef) as erreur:
+        print(f"Simulation impossible : {erreur}", file=sys.stderr)
+        return 2
+    print(mode.en_texte())
+    print()
+    print(planning.en_texte())
+    for probleme in problemes:
+        print(f"Ordre du cycle pas suivi : {probleme}")
+    if chemin_json:
+        Path(chemin_json).write_text(
+            json.dumps(planning.en_dict(), ensure_ascii=False, indent=1), encoding="utf-8"
+        )
+    return 0 if planning.fini and not problemes else 1
 
 
 def lancer() -> None:

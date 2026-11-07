@@ -29,6 +29,7 @@ est notée et alertée sans arrêter. Bras pas rangé : alarme forte, le chariot
 """
 
 from collections.abc import Callable
+from dataclasses import replace
 
 from vidange.chef import Condition, Etape, Module
 from vidange.spray.spray import GESTE, QUOI_FAIRE, QUOI_FAIRE_BRAS, QUOI_FAIRE_CARTE, Spray
@@ -147,6 +148,31 @@ def module_spray(
     )
 
 
+def etapes_du_spray(
+    spray: Spray,
+    seau_au_poste: Callable[[], tuple[str | None, str] | None],
+    griffe_partie: Callable[[], bool],
+    micropore_escamote: Callable[[], bool | None],
+    prefixe: str = "spray_",
+) -> tuple[Etape, ...]:
+    """Les étapes du module « spray », nommées `prefixe` + nom, pour les mettre dans un autre
+    module (le remplissage du mode seaux : une fois par seau, seau vide au poste, tâche 45)."""
+    module = module_spray(spray, seau_au_poste, griffe_partie, micropore_escamote)
+
+    def renommee(etape: Etape) -> Etape:
+        ensuite = etape.ensuite
+        if ensuite is None:
+            return replace(etape, nom=prefixe + etape.nom)
+
+        def suivante() -> str | None:
+            nom = ensuite()
+            return None if nom is None else prefixe + nom
+
+        return replace(etape, nom=prefixe + etape.nom, ensuite=suivante)
+
+    return tuple(renommee(etape) for etape in module.etapes)
+
+
 def module_nettoyage_tubes(
     spray: Spray,
     fin_de_production: Callable[[], bool],
@@ -185,4 +211,4 @@ def module_nettoyage_tubes(
     )
 
 
-__all__ = ["GESTE", "module_nettoyage_tubes", "module_spray"]
+__all__ = ["GESTE", "etapes_du_spray", "module_nettoyage_tubes", "module_spray"]

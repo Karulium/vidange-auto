@@ -1668,6 +1668,10 @@ class Remplissage(Modele):
     # direction, modulo 90°.
     barres_direction_deg: float
     anse_deg: float
+    # Hauteur du plateau (dessus) pendant la lecture du QR du flanc par la caméra du micropore,
+    # seau vide à la pose, avant le serrage des barres (fil Guidage caméra, 07/11/2026). None :
+    # le plateau reste où la pose l'a laissé (valeur à venir du fil Micropore).
+    plateau_lecture_qr: float | None = None
     # La face de la tête de préhension touche le fond intérieur du seau à tant au-dessus du
     # plateau (pose du seau vide).
     face_au_dessus_plateau_m: float = Field(ge=0)
@@ -3952,6 +3956,8 @@ class Machine(Modele):
         )
         dans("couvercles → plateau_z", "plateau_z", r.couvercles.plateau_z)
         dans("inspection → plateau_z", "plateau_z", r.inspection.plateau_z)
+        if r.plateau_lecture_qr is not None:
+            dans("plateau_lecture_qr", "plateau_z", r.plateau_lecture_qr)
         dans("pousseur_rentre_m", "pousseur", r.pousseur_rentre_m)
         dans("barres → ouvertes_m", "barres", r.barres.ouvertes_m)
         approche = r.pose_seau.barres_approche_hw_m
@@ -5086,6 +5092,43 @@ class StockageSimule(Modele):
     files_pleines: dict[Nom, Annotated[int, Field(ge=0)]] = Field(default_factory=dict)
 
 
+class CycleSimule(Modele):
+    """Le lot du mode seaux joué par « vidange-simulateur cycle » (tâche 45) : des seaux vides d'un
+    format, pris sur les piles chargées au départ, remplis, dosés et rangés par le même code que
+    sur la machine. Les seaux sont nommés `prefixe` + numéro (à partir de `premier`)."""
+
+    format: Nom
+    variete: str
+    seaux: int = Field(ge=1)
+    prefixe: str = Field(min_length=1)
+    premier: int = Field(default=1, ge=0)
+    chiffres: int = Field(default=4, ge=1, le=9)
+    piles: dict[Nom, PileSimulee] = Field(min_length=1)
+    files_pleines: dict[Nom, Annotated[int, Field(ge=0)]] = Field(default_factory=dict)
+    # Numéros (dans le lot, à partir de 1) des seaux posés avec un 2e seau emboîté (prise double).
+    prises_doubles: list[Annotated[int, Field(ge=1)]] = Field(default_factory=list)
+    # Angle des oreilles de l'anse vu par la fausse caméra (°), le même pour tous les seaux.
+    anse_deg: float = 0.0
+
+    @model_validator(mode="after")
+    def _verifier_seaux(self) -> "CycleSimule":
+        sur_les_piles = sum(pile.nombre for pile in self.piles.values())
+        erreurs = []
+        if self.seaux > sur_les_piles:
+            erreurs.append(
+                f"{self.seaux} seaux à remplir, mais seulement {sur_les_piles} sur les piles"
+            )
+        autres = sorted({p.format for p in self.piles.values()} - {self.format})
+        if autres:
+            erreurs.append(f"piles d'un autre format que {self.format} : {', '.join(autres)}")
+        trop = [n for n in self.prises_doubles if n > self.seaux]
+        if trop:
+            erreurs.append(f"prises_doubles : seau n° {trop[0]} au-delà des {self.seaux} seaux")
+        if erreurs:
+            raise ValueError(" ; ".join(erreurs))
+        return self
+
+
 class NettoyageSimule(Modele):
     """L'enceinte imaginaire du Nettoyage : store, air, particules, surpression, ozone."""
 
@@ -5178,6 +5221,8 @@ class ReglagesSimulateur(Modele):
     remplissage: RemplissageSimule | None = None
     # Le stockage imaginaire (piles de seaux vides, seaux rangés dans le tiroir).
     stockage: StockageSimule | None = None
+    # Le lot du mode seaux (« vidange-simulateur cycle », tâche 45).
+    cycle: CycleSimule | None = None
     # L'enceinte imaginaire du Nettoyage (store, air, ozone).
     nettoyage: NettoyageSimule | None = None
     # La tête du micropore imaginaire (gestes appris, trous vus par la caméra).

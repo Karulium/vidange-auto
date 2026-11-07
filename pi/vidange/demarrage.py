@@ -9,8 +9,10 @@
    tout (code de sortie 3). Lance la copie de secours quotidienne.
 5. Ouvre les entrées/sorties et les liaisons avec les cartes FluidNC. Du matériel qui manque
    n'arrête pas le programme : la check-list le signale et refuse la production.
-6. Met en route le chef d'orchestre : reprend le cycle noté dans le carnet (après une coupure),
-   et propose le retour en lieu sûr (il attend le Go de Karulium).
+6. Met en route le chef d'orchestre : prépare le mode seaux (vidange.cycle : chaque poste du cycle
+   d'un seau est prêt, ou la check-list et l'écran disent pourquoi pas), reprend le cycle noté dans
+   le carnet (après une coupure, le lot de seaux en cours compris), et propose le retour en lieu
+   sûr (il attend le Go de Karulium).
 7. Lance la surveillance : santé du Pi, onduleur, chien de garde (et dit à systemd « prêt »),
    bilan de chaque alarme. Écrit la check-list de démarrage au journal.
    Lance l'API et la page web, si le fichier de secrets donne une clé (sinon la machine
@@ -48,6 +50,8 @@ from vidange.angles_gardes import AnglesGardes
 from vidange.api import ServeurApi, Services, constats_api, creer_app
 from vidange.cameras import Cameras, Flux
 from vidange.chef import Carnet, Chef, ErreurChef, Module
+from vidange.cycle import ModeSeaux
+from vidange.cycle.machine import PiecesMachine
 from vidange.distance import PiloteDistance
 from vidange.ecran import SIGNAL as SIGNAL_ECRAN
 from vidange.ecran import Ecran, LiaisonEcran, PortEcran, ouvrir_port_ecran
@@ -227,15 +231,22 @@ def noter_fin_brutale(registre: Registre, fin: FinPrecedente, carnet: Carnet) ->
         journal.error("Fin brutale pas notée dans le registre : %s", erreur)
 
 
-def preparer_chef(chef: Chef, lieu_sur: Module | None) -> tuple[list[str], str | None]:
+def preparer_chef(
+    chef: Chef,
+    lieu_sur: Module | None,
+    mode_seaux: ModeSeaux | None = None,
+    carnet: Carnet | None = None,
+) -> tuple[list[str], str | None]:
     """Reprend le cycle du carnet ; propose le retour en lieu sûr (exclusif, attend le Go).
 
     Rend les modules repris et l'erreur de reprise (carnet qui ne correspond pas au programme).
-    Les gestes des vrais modules arriveront avec les tâches des modules : pour l'instant,
-    seul « lieu_sur » est connu du programme.
+    Le programme connaît « lieu_sur » et les modules du lot de seaux noté dans le carnet (mode
+    seaux, reconstruits avec la mémoire du lot : seau en cours, couche).
     """
     modules = [module for module in (lieu_sur,) if module is not None]
     try:
+        if mode_seaux is not None and carnet is not None:
+            modules += mode_seaux.modules_a_reprendre(carnet.lire())
         repris = chef.reprendre_cycle(modules)
     except ErreurChef as erreur:
         journal.error("Reprise du cycle impossible : %s", erreur)
@@ -666,6 +677,21 @@ def principal(
     poste: PosteFut | None = None
     if poste_reglages is not None and materiel is not None and erreur_materiel is None:
         poste = PosteFut(poste_reglages, materiel, registre, pesees=pesees)
+    spray = preparer_spray(
+        reglages, materiel if erreur_materiel is None else None, dossier_donnees, registre, chef
+    )
+    # Le mode seaux : chaque poste du cycle d'un seau, prêt ou pourquoi pas (vrai matériel :
+    # réglages d'EXEMPLE interdits).
+    mode_seaux = ModeSeaux(
+        reglages,
+        PiecesMachine(
+            poste,
+            materiel if erreur_materiel is None else None,
+            vraie_machine=raccords.fabrique is None,
+            spray=spray,
+        ),
+        chef,
+    )
     sante = Sante(dossier_donnees, fiabilite.sante, registre, sauvegarde.copies, raccords.sondes)
     bilans = Bilans(
         dossier_donnees,
@@ -739,9 +765,6 @@ def principal(
         chef,
         mode,
     )
-    spray = preparer_spray(
-        reglages, materiel if erreur_materiel is None else None, dossier_donnees, registre, chef
-    )
     air = preparer_air(
         reglages, materiel if erreur_materiel is None else None, dossier_donnees, chef, nettoyage
     )
@@ -765,6 +788,8 @@ def principal(
                 garde=AnglesGardes(dossier_donnees / NOM_ANGLES),
                 compte_tours=compte_tours,
             ),
+            mode_seaux,
+            carnet,
         )
         chef.demarrer()
         cameras.demarrer()
@@ -808,6 +833,7 @@ def principal(
                 "enceinte": lambda: constats_nettoyage(nettoyage),
                 "spray": lambda: constats_spray(spray),
                 "air": lambda: constats_air(air),
+                "mode seaux": mode_seaux.constats,
             }
         )
         serveur = preparer_api(
@@ -840,6 +866,7 @@ def principal(
                 pilote=pilote,
                 poste=poste,
                 nettoyage=nettoyage,
+                mode_seaux=mode_seaux,
             )
             fil_ecran = ecran.demarrer(arret_ecran)
         gardien.pret()

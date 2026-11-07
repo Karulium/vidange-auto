@@ -1170,6 +1170,11 @@ remplissage:
   # barres vue de dessus (° depuis +x) : EXEMPLE.
   barres_direction_deg: 0
   anse_deg: 45
+  # Lecture du QR du flanc (en bas du flanc) par la caméra du micropore, seau vide posé à y 0,50 :
+  # plateau monté à cette hauteur, le plateau fait tourner le seau, puis l'anse est orientée,
+  # avant le serrage des barres (fil Guidage caméra, 07/11/2026). EXEMPLE : valeur à venir du fil
+  # Micropore.
+  plateau_lecture_qr: 0.46
   # Face de la ventouse de la préhension au contact du fond intérieur d'un seau posé (au-dessus
   # du dessus du plateau) : H + 0,003 (fil Remplissage avec la Préhension, PR n° 56, point 2).
   face_au_dessus_plateau_m: 0.003

@@ -129,6 +129,11 @@ def test_une_file_hors_de_la_course_est_refusee(reglages):
     )
 
 
+def test_la_hauteur_de_lecture_du_qr_hors_de_la_course_est_refusee(reglages):
+    remplacer(reglages / "machine.yaml", "plateau_lecture_qr: 0.46", "plateau_lecture_qr: 0.9")
+    assert "remplissage → plateau_lecture_qr : 0.9 hors de la course" in erreur_de(reglages)
+
+
 def test_les_barres_restent_sous_les_joues_pendant_la_pose(reglages):
     remplacer(
         reglages / "machine.yaml", "barres_approche_hw_m: 0.225", "barres_approche_hw_m: 0.24"
@@ -1000,7 +1005,8 @@ def test_qr_du_flanc_illisible():
         scenario.vision.illisible = True
 
     planning, _ = jouer_scenario(regler)
-    assert not planning.fini and "QR du flanc du seau pas lu" in planning.probleme
+    assert not planning.fini
+    assert "QR du flanc du seau pas lu après un tour complet" in planning.probleme
 
 
 def test_outil_simulateur_remplissage(capsys):

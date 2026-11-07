@@ -685,6 +685,28 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   bus RS485 `rs485_pesee` quand le Pi l'interroge (une adresse par carte, contrôle CRC), mise à jour depuis le Pi
   si c'est simple. Côté Pi : lecture des 3 cartes à tour de rôle, 115 200 bauds, adaptateur USB-RS485 reconnu par
   son numéro de série. Procédure d'essai à l'établi ; « testé sur le vrai matériel : non ».
+- [x] **45. Programme principal : brancher les modules du mode seaux** — Modèle : Opus, effort élevé. **À faire
+  avant la tâche 23.** Aujourd'hui `demarrage.py → preparer_chef` ne connaît que « lieu_sur » ; les modules existent
+  (`module_echange_fut`, `module_griffe`, `module_remplissage`, `module_mycelium`, `module_spray`, Micropore,
+  Fermeture, `module_prehension`, `module_lavage`, Stockage, Portique, Nettoyage, Air) mais ne sont joués que par le
+  simulateur.
+  - Construire les modules du **mode seaux** au démarrage, à partir du matériel (vrai ou faux) et des réglages, et
+    les donner au chef (`reprendre_cycle`, puis `lancer`) ; leurs conditions (`chef.condition_permission("air")`,
+    store, purge, préhension dégagée, bras rangé...) branchées comme le disent `docs/decisions.md` et les tâches.
+  - Un module dont le matériel ou les réglages manquent (`exemple: true` interdit sur la vraie machine, case vide,
+    geste pas encore écrit : pose du couvercle, tâche 41 bis ; vision du micropore, tâche 40 ter) n'est pas lancé,
+    et l'écran et la check-list disent lequel et pourquoi. Jamais de geste inventé.
+  - Un seul endroit qui dit l'ordre du cycle d'un seau (fût → griffe → remplissage, mycélium, spray, micropore,
+    couvercle, fermeture → stockage, lavage des vides), lu par le chef et par le simulateur.
+  - Simulateur : `vidange-simulateur cycle` joue un lot complet de seaux d'un format sur le faux matériel, avec le
+    même code de démarrage que la vraie machine.
+  - Le mode bocaux et la nuit UV-ozone ne sont pas dans cette tâche (tâche 45 bis).
+  - Si la tâche est trop grosse : faire d'abord le branchement et le cycle simulé jusqu'au remplissage, et poser la
+    question dans la PR.
+  Tests : démarrage avec faux matériel ⇒ les modules attendus sont prêts ; un module sans réglage ⇒ pas lancé, avec
+  la raison ; reprise après coupure au milieu d'un seau (carnet) ; lot complet simulé sans alarme.
+- [ ] **45 bis. Programme principal : mode bocaux et nuit UV-ozone** — Modèle : Sonnet. À faire après la 45 :
+  même branchement pour `module_entonnoir`, `module_lavage_bocaux` et la nuit UV-ozone.
 - [ ] 23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi
 
 ## Partie 3 : fonctions en plus, voir `docs/fonctionnalites.md`
@@ -1473,6 +1495,13 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   - effort au-delà de F_max ⇒ arrêt et descente ;
   - rotation trigo refusée en contact ;
   - redémarrage dans le bon ordre.
+- [ ] **40 ter. Vision du micropore** — Modèle : Sonnet, effort moyen. La caméra de la tête du micropore (tâche 40) :
+  lecture du QR du seau, position des trous, contrôle de chaque pièce posée, et l'angle caméra → rouleau (donné à la
+  main par `--camera-rouleau` pour l'instant).
+  Elle lit aussi le **QR du flanc** pour le Remplissage (`VisionSeau.lire_seau`, étape `orienter_l_anse`, plateau à
+  `plateau_lecture_qr`, pendant un tour avant le serrage des barres ; `docs/decisions.md`, réponses à la PR n° 89). Règles de la fiche `micropore/logiciel/micropore-pour-logiciel.md`
+  (§ vision). Tests sur des images fabriquées (OpenCV, comme la tâche 22) ; ce qui demande des photos réelles reste
+  un faux (tâche 22 ter).
 - [ ] **41 bis. Pose du couvercle sur le seau plein** — Modèle : Sonnet, effort moyen. À écrire d'abord : demander au
   fil du module qui fait ce geste (Préhension ou Remplissage) un fichier `<module>/logiciel/...-pour-logiciel.md`.
   Ne pas inventer le geste. Avant le premier cycle complet (`docs/decisions.md`, PR n° 86, point 3).
