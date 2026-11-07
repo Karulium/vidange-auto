@@ -843,7 +843,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   3. **Le logiciel empêche les deux vannes d'être ouvertes en même temps** (refus clair, vérifié aussi dans les tests).
   4. Le nom `vanne_souffler` attendu par la tâche 45 decies (fermeture au démarrage) devient la vraie vanne.
   Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
-- [ ] **45 duodecies. Sorties des cartes n° 3 et n° 4, chauffage du lavage par un relais du Pi** — Modèle : Sonnet,
+- [x] **45 duodecies. Sorties des cartes n° 3 et n° 4, chauffage du lavage par un relais du Pi** — Modèle : Sonnet,
   effort moyen. Fiches de l'Implantation du 07/11/2026 (dans `/mnt/project-files/implantation/logiciel/`, lire ces
   seuls fichiers : `sorties-carte-3.md`, `sorties-carte-4.md`) ; à recopier dans `docs/decisions.md` :
   1. **Carte n° 4** : P0 `vanne_vide` (ev_aspirer), P1 `vanne_souffler`, P2 frein du Z de la préhension, P3 libre,

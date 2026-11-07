@@ -408,6 +408,7 @@ si l'une pose problème, elle le dit dans sa PR.
      et seau C : (0,352 ; 0,65).
   2. Jet d'air et chauffage sur la carte 4 (la carte 3 n'a plus de sortie libre) : d'accord ; transmis au plan
      de câblage. Le code ne connaît que les noms.
+     **Remplacé** le 07/11/2026 (tâche 45 duodecies) : jet d'air sur la carte n° 3, chauffage sur un relais du Pi.
   3. Chauffage entre deux seaux : après la pompe qui suit le rinçage, le Pi remet quelques secondes d'eau du
      réseau jusqu'au flotteur haut (délai maximal : réglage), pour que le bain reste chauffé. La règle « chauffer
      seulement flotteur haut et pompe arrêtée » ne change pas.
@@ -2031,6 +2032,73 @@ Code : `pi/vidange/prehension/tete.py` (`DeuxVannes`, `SOUFFLER`, `TeteFluidnc.s
 - **Réponses à la PR n° 104** (tâche 45 undecies, 07/11/2026, niveau 1, tranché par Claude) :
   1. Électroaimants des capsules, jet d'air du col et chauffage du lavage sur la carte n° 4 en P4, P5, P6 (EXEMPLE) :
      gardés là ; question posée à l'Implantation (à ajouter à `implantation/logiciel/sorties-carte-4.md`).
+     **Remplacé** par la fiche du 07/11 (tâche 45 duodecies, plus bas) : électroaimants en P4 (confirmé), jet
+     d'air du col sur la carte n° 3 (P5), chauffage sur un relais du Pi.
   2. Durée du souffle `prehension → vide → souffle_s` 0,3 s (EXEMPLE) : réglée à l'essai (étape 2 bis) au plus court
      qui lâche toujours le seau, le couvercle et l'entonnoir, plus 0,1 s de marge.
   3. Objet resté collé à la ventouse après deux souffles : alarme, pour tous les objets (gardé).
+
+## Sorties des cartes n° 3 et n° 4, chauffage du lavage par un relais du Pi (tâche 45 duodecies, 07/11/2026)
+
+Fiches de l'Implantation du 07/11/2026 (`implantation/logiciel/sorties-carte-3.md` et `sorties-carte-4.md`),
+recopiées ici. Fichiers : `pi/reglages/fluidnc.yaml`, `fluidnc/mycelium_lavage.yaml`, `fluidnc/prehension.yaml`,
+`docs/entrees-sorties.yaml` ; essais : `essai-lavage.md`, `essai-porte-bocal.md`, `essai-prehension.md`.
+
+- **Fiche carte n° 3** (axes : agitateur NEMA 34, mors du porte-bocal ; modules de sortie 24 V dans les emplacements
+  libres). Tout sur le **24 V coupé** (sauf l'alimentation permanente de la vanne à bille si son modèle en demande
+  une). Numéros P définitifs, gpio à remplir à la réception de la carte :
+  P0 pont en H du demi-tour (JGY370), sens 1 (jamais avec P1) ; P1 sens 2 (jamais avec P0) ; P2 relais de la pompe
+  de vidange du lavage (`relais_pompe`, fusible 8 A) ; P3 électrovanne d'eau du lavage ; P4 vanne à bille motorisée
+  du lavage (fil de commande ouvrir/fermer) ; **P5 électrovanne du jet d'air du col des seaux** (`jet_col`, 24 V,
+  ≈ 5-8 W, diode de roue libre).
+- **Fiche carte n° 4** (carte 6 axes « 6-Pack » CDC-ESP32-FLUIDNC ; 4 axes : Z préhension, rotation préhension,
+  noyau, couronne du lavage) : P0 `ev_aspirer` (électrovanne 2/2 NF 24 V, vers le venturi ; sortie auxiliaire n° 1) ;
+  P1 `ev_souffler` (remise à l'air, lâcher ; sortie auxiliaire n° 2) ; P2 réservée au frein du Z de la préhension ;
+  P3 libre ; **P4 `electroaimants`** : les 3 électroaimants 24 V de la tête (capsules) en parallèle sur une seule
+  sortie (module MOSFET ≥ 3 A dans l'emplacement libre n° 4, voie 1, diode de roue libre, 24 V coupé), **jamais
+  commandés séparément**. Les 2 électrovannes sont sur le 24 V coupé (fermées à l'arrêt d'urgence), ≤ 0,5 A par
+  vanne, diode de roue libre ; **jamais ouvertes ensemble** (le logiciel interdit : il ferme l'une avant d'ouvrir
+  l'autre). **Le jet d'air du col et le chauffage ne sont PAS sur la carte n° 4.**
+- **Chauffage du lavage** (thermoplongeur 2 kW, 230 V) : PAS sur FluidNC. Le **Pi** commande un relais qui alimente
+  l'entrée du SSR de Karulium. **Sécurité câblée** contre le chauffage à sec : le flotteur alimente `relais_flotteur`
+  (armoire), dont un contact est en série avec la commande du SSR (flotteur bas, fil coupé ou flotteur débranché :
+  plus de commande, quoi que fasse le Pi) ; son 2e contact recopie le flotteur sur une entrée de la carte n° 3, que
+  le logiciel lit. Le logiciel attend « flotteur haut » et « pompe arrêtée », puis informe : il n'est pas la
+  sécurité. 2e barrière demandée au Lavage : thermostat de sécurité à réarmement manuel. La voie du relais viendra
+  de la fiche à venir `implantation/logiciel/relais-du-pi.md`.
+- **Choix de Claude** :
+  - **Carte n° 3** (`fluidnc.yaml`) : `demi_tour_vers_tete_en_bas` 0, `demi_tour_vers_debout` 1, `pompe_lavage` 2
+    (était 5), `eau_reseau_lavage` 3, `vanne_vidange_lavage` 4 (la « vanne à bille »), `air_col_lavage` 5 (était sur
+    la carte n° 4). Le dépôt avait déjà, sur cette carte, le verrou du plateau (P2), la vanne 3 voies (P6) et le
+    rinçage (P7) que la fiche ne cite pas : **EXEMPLES** `electroaimant_verrou_plateau` 6 et `vanne_rampes_lavage`
+    7. FluidNC n'a que 8 sorties « digital » : le **rinçage passe sur la carte n° 4, P3** (libre dans la fiche,
+    EXEMPLE ; le lavage accepte déjà un signal sur l'une ou l'autre carte). Question 1 ci-dessous.
+  - **Carte n° 4** : `vanne_vide` 0, `vanne_souffler` 1, `frein_prehension_z` 2, `rincage_lavage` 3 (EXEMPLE),
+    `electroaimants_capsule` 4. Le jet d'air (P5) et le chauffage (P6) en sont **enlevés**, y compris dans
+    `fluidnc/prehension.yaml`. Le code garde ses noms (`vanne_vide` = `ev_aspirer`, etc., voir la tâche 45
+    undecies).
+  - **Pont en H** : `DeuxVannes` (ventouse) est refaite sur une classe commune, `DeuxSortiesExclusives`
+    (`porte_bocal/signaux.py`), que le porte-bocal emploie pour les deux sens du demi-tour : refuser d'allumer un
+    sens tant que l'autre est allumé, ou peut-être allumé (ordre d'extinction refusé par la carte) ; `ErreurEtape`
+    avec un « quoi faire ». Le démarrage d'un demi-tour éteint déjà l'autre sens d'abord. Ce refus protège le
+    pont, jamais les personnes.
+  - **Chauffage** : signal `relais_chauffage_lavage` (relais du Pi, `relais_2` K8, 24 V, EXEMPLE) dans
+    `docs/entrees-sorties.yaml`, qui remplace `chauffage_lavage` (sortie de la carte n° 4). Le lavage l'écrit par le
+    `Materiel` du Pi (`signaux_lavage(liaisons, fluidnc, materiel)`) ; au repos ou à l'arrêt du programme le relais
+    retombe (mise au repos des sorties du Pi). `EauLavage.surveiller()` ferme le relais seulement fût rempli,
+    flotteur haut stable et pompe arrêtée (et pas en pause) ; sinon il garde la raison dans `chauffage_attend`
+    et la met au journal (« chauffage en attente (…) »). `flotteur_lavage` est le 2e contact de `relais_flotteur` :
+    sa description le dit. `relais_flotteur` lui-même est câblé, il n'a pas de signal du Pi.
+  - **Vérifié au démarrage** (`vidange --verifier`) : deux sorties de même numéro sur une carte (déjà), un signal du
+    lavage ou du porte-bocal absent ou sur deux cartes, les deux sorties du pont en H sur deux cartes, et le
+    chauffage mis par erreur parmi les sorties d'une carte FluidNC. Au lancement de la machine, `relais_chauffage_lavage`
+    absent de la liste ou en EXEMPLE sur la vraie machine : le lavage reste « absent ».
+  - **Essais** : `essai-lavage.md` (étape 2 bis : la sécurité câblée du chauffage), `essai-porte-bocal.md`
+    (`M64 P6` pour le verrou, pont en H P0 et P1 ; **P2 est maintenant la pompe**), `essai-prehension.md`.
+    Testé sur le vrai matériel : non.
+- **Questions pour Karulium / Implantation** (recommandations ; voir la PR) :
+  1. La carte n° 3 n'a que 8 sorties « digital » : la fiche en donne 6 (P0 à P5), mais le verrou du plateau, la vanne
+     3 voies et le rinçage en demandent 3 de plus. Recommandation : verrou P6 et vanne 3 voies P7 sur la carte n° 3,
+     rinçage P3 de la carte n° 4 (en place). À confirmer par l'Implantation (ou une 2e carte de sortie).
+  2. Voie du relais du chauffage (`relais_2` K8 en EXEMPLE) et 24 V ou autre tension pour la commande du SSR :
+     à donner dans `relais-du-pi.md`.

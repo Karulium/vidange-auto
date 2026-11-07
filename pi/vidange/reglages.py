@@ -1511,7 +1511,15 @@ SORTIES_LAVAGE = (
     "vanne_rampes_lavage",
     "rincage_lavage",
     "air_col_lavage",
-    "chauffage_lavage",
+)
+# Chauffage du lavage (thermoplongeur 2 kW) : PAS sur une carte FluidNC mais un relais du Pi
+# (docs/entrees-sorties.yaml). La sécurité contre le chauffage à sec est câblée (relais_flotteur).
+RELAIS_CHAUFFAGE_LAVAGE = "relais_chauffage_lavage"
+# Porte-bocal (carte n° 3) : le pont en H du demi-tour (jamais les deux ensemble) et le verrou.
+SORTIES_PORTE_BOCAL = (
+    "demi_tour_vers_tete_en_bas",
+    "demi_tour_vers_debout",
+    "electroaimant_verrou_plateau",
 )
 
 
@@ -7587,6 +7595,25 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
                 f"de l'axe {nom_axe} (« {axe.lettre} »), c'est son fin de course"
                 + ("" if lettre is None else f", pas « {lettre} »")
             )
+    if machine.porte_bocal is not None:
+        # Sortie absente ou en double d'une carte à l'autre : une seule carte par signal.
+        for nom in SORTIES_PORTE_BOCAL:
+            cartes_du_signal = [c for c, r in fluidnc.cartes.items() if nom in r.sorties]
+            if len(cartes_du_signal) != 1:
+                ou = ", ".join(cartes_du_signal) or "aucune carte"
+                erreurs.append(
+                    f"fluidnc.yaml : « {nom} » (porte-bocal) doit être dans les sorties d'une "
+                    f"seule carte ({ou})"
+                )
+        sens_1, sens_2 = SORTIES_PORTE_BOCAL[:2]
+        cartes_pont = {
+            c for c, r in fluidnc.cartes.items() if sens_1 in r.sorties or sens_2 in r.sorties
+        }
+        if len(cartes_pont) > 1:
+            erreurs.append(
+                f"fluidnc.yaml : les deux sorties du pont en H du demi-tour ({sens_1}, {sens_2}) "
+                "doivent être sur la même carte"
+            )
     if machine.lavage is not None:
         # Chaque signal du lavage est sur une seule carte (n° 3 ou n° 4 : le plan de câblage
         # choisit) ; le code ne connaît que son nom.
@@ -7603,6 +7630,14 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
                         f"fluidnc.yaml : « {nom} » (lavage) doit être dans les {quoi} d'une seule "
                         f"carte ({ou})"
                     )
+        # Le chauffage est un relais du Pi : sur une carte FluidNC, ce serait une erreur de plan.
+        erreurs += [
+            f"fluidnc.yaml, cartes → {carte} → sorties → {RELAIS_CHAUFFAGE_LAVAGE} : le chauffage "
+            "du lavage est un relais du Pi (docs/entrees-sorties.yaml), pas une sortie de carte "
+            "FluidNC"
+            for carte, reglage in fluidnc.cartes.items()
+            if RELAIS_CHAUFFAGE_LAVAGE in reglage.sorties
+        ]
     vision = valeurs["vision"]
     assert isinstance(vision, ReglagesVision)
     videos = ", ".join(programme.cameras.liste) or "aucune"

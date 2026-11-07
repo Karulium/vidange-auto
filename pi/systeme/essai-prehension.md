@@ -44,8 +44,11 @@ veulent dire `sudo -u vidange /opt/vidange-auto/pi/.venv/bin/vidange-fluidnc` (e
    - `M64 P1` : « souffler » s'ouvre, un petit souffle sort de la ventouse ; `M65 P1` : il s'arrête.
    - `M64 P0`, puis appuyer sur l'arrêt d'urgence : le venturi doit **s'arrêter tout de suite** (24 V
      coupé). Réarmer, `M65 P0`. Même chose avec `M64 P1`.
-   - `M64 P4` : les électroaimants tiennent une capsule ; `M65 P4` : ils la lâchent (P4 : EXEMPLE, la
-     fiche de l'Implantation ne dit pas où ils sont câblés).
+   - `M64 P4` : les 3 électroaimants (en parallèle, module de sortie 24 V coupé, diode de roue libre)
+     tiennent une capsule ; `M65 P4` : ils la lâchent (fiche `sorties-carte-4.md`, 07/11/2026).
+   - Le jet d'air du col et le chauffage du lavage ne sont **plus** sur cette carte (carte n° 3 pour l'air,
+     relais du Pi pour le chauffage : `essai-lavage.md`). `M64 P3` : l'électrovanne de rinçage du lavage
+     (EXEMPLE : P3 est libre dans la fiche ; `M65 P3` pour l'éteindre).
    Si une vanne est inversée (P0 souffle à la ventouse), le câblage est faux : P0 et P1 ne changent pas
    (fiche), c'est le fil qu'il faut échanger.
 6. Console du portique (`vidange-fluidnc console portique`) : `$/axes/x/acceleration_mm_per_sec2=150`

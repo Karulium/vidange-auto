@@ -19,8 +19,11 @@ rempli pour la série (pas encore vidé) avant de commencer.
 Rincer : électrovanne de rinçage (eau propre dans les rampes) duree_s, puis la pompe vide vers
 la bonde jusqu'au flotteur bas, pour garder le même niveau ; puis quelques secondes d'eau du
 réseau remettent le fût au flotteur haut (au plus remise_max_s), pour que le bain reste chauffé.
-Chauffer : le Pi n'alimente la prise du thermoplongeur (thermostat à 50 °C sur l'appareil) que
-fût rempli pour la série, flotteur haut et pompe arrêtée. Il ne mesure pas la température.
+Chauffer : le Pi ferme son relais (commande du SSR du thermoplongeur, thermostat à 50 °C sur
+l'appareil) que fût rempli pour la série, flotteur haut et pompe arrêtée ; sinon il attend et
+informe. Il ne mesure pas la température. Contre le chauffage à sec, la sécurité est CÂBLÉE :
+relais_flotteur est en série dans la commande du SSR (flotteur bas ou fil coupé : plus de
+commande, quoi que fasse le Pi) ; ce que fait le logiciel n'est pas une protection.
 
 La vanne à bille reste ouverte pendant la série, à condition que la vanne 3 voies revienne sur
 « rampes » dès que la pompe s'arrête (pas de siphon vers la bonde). Fût rempli, pompe arrêtée,
@@ -59,7 +62,8 @@ POMPE = "pompe_lavage"
 RAMPES = "vanne_rampes_lavage"
 RINCAGE = "rincage_lavage"
 AIR = "air_col_lavage"
-CHAUFFAGE = "chauffage_lavage"
+# Relais du Pi (pas une carte FluidNC) qui alimente la commande du SSR du thermoplongeur.
+CHAUFFAGE = "relais_chauffage_lavage"
 # Ce qui s'arrête à toute alarme (les vannes motorisées restent où elles sont).
 A_COUPER = (EAU, POMPE, RINCAGE, AIR, CHAUFFAGE)
 
@@ -116,6 +120,8 @@ class EauLavage:
         # Le fût doit être au flotteur haut (rempli, pas de vidange en cours) : surveillé.
         self._niveau_haut = False
         self._chauffage: bool | None = None
+        # Pourquoi le chauffage attend (fût rempli, mais chauffage pas permis), sinon None.
+        self.chauffage_attend: str | None = None
         # Flotteur : dernière valeur lue et depuis quand.
         self._flotteur: bool | None = None
         self._flotteur_depuis = 0.0
@@ -188,7 +194,7 @@ class EauLavage:
         if not marche:
             # Pompe arrêtée : vanne 3 voies sur « rampes » tout de suite (pas de siphon).
             self._commander_voie(rampes=True)
-            self.surveiller()
+        self.surveiller()
 
     def _commander_voie(self, rampes: bool) -> None:
         if self.voie_rampes is rampes:
@@ -208,15 +214,24 @@ class EauLavage:
         return bool(self._chauffage)
 
     def surveiller(self) -> bool:
-        """Prise du thermoplongeur : alimentée seulement fût rempli pour la série, flotteur haut
-        et pompe arrêtée. Rend toujours vrai (surveillance du chef)."""
-        permis = (
-            self.eau_dans_le_fut
-            and not self.pompe
-            and self._pause_depuis is None
-            and self.flotteur_haut()
-        )
+        """Relais du chauffage : fermé seulement fût rempli pour la série, flotteur haut et pompe
+        arrêtée ; sinon il attend et informe (journal, `chauffage_attend`). Ce n'est pas la
+        sécurité : le flotteur câblé coupe la commande du SSR quoi que fasse le Pi. Rend toujours
+        vrai (surveillance du chef)."""
+        raison = None
+        if self.eau_dans_le_fut:
+            if self.pompe:
+                raison = "pompe en marche"
+            elif self._pause_depuis is not None:
+                raison = "pause de Karulium"
+            elif not self.flotteur_haut():
+                raison = "flotteur pas haut"
+        permis = self.eau_dans_le_fut and raison is None
         self._regler_chauffage(permis)
+        if raison != self.chauffage_attend:
+            self.chauffage_attend = raison
+            if raison is not None:
+                journal.info("Lavage : chauffage en attente (%s)", raison)
         return True
 
     def niveau_tenu(self) -> bool:

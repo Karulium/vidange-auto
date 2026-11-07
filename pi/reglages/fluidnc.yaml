@@ -65,19 +65,24 @@ cartes:
       verrou_plateau_engage: "0"
       inclinaison_bocal: "1"
       flotteur_lavage: "2"
-    # Sorties du porte-bocal (« user_outputs » digital0 à 2 de fluidnc/mycelium_lavage.yaml) et
-    # de l'eau du lavage (digital3 à 7). FluidNC n'a que 8 sorties « digital » par carte : le jet
-    # d'air et le chauffage du lavage sont sur la carte n° 4 (EXEMPLE, le plan de câblage
-    # choisit ; un signal du lavage peut changer de carte sans toucher au code).
+    # Sorties de la carte n° 3 (« user_outputs » digital0 à 7 de fluidnc/mycelium_lavage.yaml).
+    # Implantation, sorties-carte-3.md, 07/11/2026 (les numéros P ne changent pas) : P0 et P1 le
+    # pont en H du demi-tour (JGY370), JAMAIS ENSEMBLE (le Pi refuse), P2 le relais de la pompe de
+    # vidange (fusible 8 A), P3 l'électrovanne d'eau, P4 la vanne à bille motorisée, P5 le jet d'air
+    # du col. Tout est sur le 24 V coupé. P6 et P7 : EXEMPLES, la fiche n'en parle pas (verrou du
+    # plateau et vanne 3 voies, qui étaient déjà sur cette carte). L'électrovanne de rinçage n'a
+    # plus de place ici (FluidNC n'a que 8 sorties « digital ») : elle est sur la carte n° 4, P3.
+    # Le chauffage du lavage n'est sur aucune carte FluidNC : c'est un relais du Pi (voir
+    # docs/entrees-sorties.yaml, relais_chauffage_lavage).
     sorties:
       demi_tour_vers_tete_en_bas: 0
       demi_tour_vers_debout: 1
-      electroaimant_verrou_plateau: 2
+      pompe_lavage: 2
       eau_reseau_lavage: 3
       vanne_vidange_lavage: 4
-      pompe_lavage: 5
-      vanne_rampes_lavage: 6
-      rincage_lavage: 7
+      air_col_lavage: 5
+      electroaimant_verrou_plateau: 6
+      vanne_rampes_lavage: 7
   prehension:
     description: Axes de la préhension
     numero_serie_usb: "EXEMPLE-PREHENSION"
@@ -90,17 +95,18 @@ cartes:
       origine_rotation_tete: A
       # Alarme du pilote de Z (macro0, sans macro) : à vérifier à l'essai du portique.
       alarme_prehension_z: "0"
-    # Sorties « user_outputs » digital0 à 6 de fluidnc/prehension.yaml. P0 et P1 : les deux
+    # Sorties « user_outputs » digital0 à 4 de fluidnc/prehension.yaml. P0 et P1 : les deux
     # électrovannes de la ventouse (Implantation, sorties-carte-4.md, 07/11/2026 : sorties
     # auxiliaires 24 V n° 1 et 2 de la carte, sur le 24 V coupé ; ces numéros ne changent pas) :
     # « aspirer » (vanne_vide, ev_aspirer de la fiche) et « souffler » (vanne_souffler,
     # ev_souffler). Jamais ouvertes en même temps (le Pi refuse). P2 : réservée au frein du Z de la
-    # préhension (commandée = desserré). P3 : libre. Capsules, jet d'air du col et chauffage du
-    # lavage : la fiche n'en dit rien, EXEMPLE (le plan de câblage choisit).
+    # préhension (commandée = desserré). P4 : les 3 électroaimants des capsules, en parallèle
+    # (module de sortie 24 V, jamais commandés séparément). Le jet d'air du col et le chauffage
+    # du lavage ne sont PAS sur cette carte (fiche du 07/11). P3 (libre dans la fiche) : EXEMPLE,
+    # l'électrovanne de rinçage du lavage, faute de place sur la carte n° 3.
     sorties:
       vanne_vide: 0
       vanne_souffler: 1
       frein_prehension_z: 2
+      rincage_lavage: 3
       electroaimants_capsule: 4
-      air_col_lavage: 5
-      chauffage_lavage: 6

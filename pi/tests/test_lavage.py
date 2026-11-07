@@ -93,7 +93,9 @@ def test_signaux_du_lavage_sur_une_seule_carte(reglages):
     fluidnc = reglages / "fluidnc.yaml"
     remplacer(fluidnc, '      flotteur_lavage: "2"\n', "")
     remplacer(
-        fluidnc, "      air_col_lavage: 5\n", "      air_col_lavage: 5\n      pompe_lavage: 3\n"
+        fluidnc,
+        "      rincage_lavage: 3\n",
+        "      rincage_lavage: 3\n      pompe_lavage: 5\n",
     )
     message = erreur_de(reglages)
     assert "« flotteur_lavage » (lavage) doit être dans les entrees d'une seule carte" in message
@@ -533,16 +535,115 @@ def test_tete_compteur_des_brosses_plein():
             banc.tete.executer(pas, pose.avec(a=-260.0), 5.0)
 
 
+class FauxRelaisDuPi:
+    """La carte des relais du Pi : retient ce qui est commandé."""
+
+    def __init__(self) -> None:
+        self.commandes: list[tuple[str, bool]] = []
+
+    def ecrire(self, nom: str, commande: bool) -> None:
+        self.commandes.append((nom, commande))
+
+
 def test_signaux_du_lavage_repartis_sur_les_cartes():
     liaisons = {
         nom: Liaison(nom, REGLAGES.fluidnc, ouvrir=FauxFluidnc().ouvrir)
         for nom in ("mycelium_lavage", "prehension")
     }
-    signaux = signaux_lavage(liaisons, REGLAGES.fluidnc)
+    relais = FauxRelaisDuPi()
+    signaux = signaux_lavage(liaisons, REGLAGES.fluidnc, relais)
     assert signaux._par_nom["pompe_lavage"].liaison.nom == "mycelium_lavage"
-    assert signaux._par_nom["chauffage_lavage"].liaison.nom == "prehension"
-    with pytest.raises(ValueError, match="« air_col_lavage » .* carte reliée"):
-        signaux_lavage({"mycelium_lavage": liaisons["mycelium_lavage"]}, REGLAGES.fluidnc)
+    assert signaux._par_nom["air_col_lavage"].liaison.nom == "mycelium_lavage"
+    assert signaux._par_nom["rincage_lavage"].liaison.nom == "prehension"
+    # Le chauffage n'est sur aucune carte FluidNC : c'est un relais du Pi.
+    assert CHAUFFAGE not in signaux._par_nom
+    signaux.sortie(CHAUFFAGE, True)
+    signaux.sortie(CHAUFFAGE, False)
+    assert relais.commandes == [(CHAUFFAGE, True), (CHAUFFAGE, False)]
+    with pytest.raises(ValueError, match="« rincage_lavage » .* carte reliée"):
+        signaux_lavage({"mycelium_lavage": liaisons["mycelium_lavage"]}, REGLAGES.fluidnc, relais)
+
+
+def test_chauffage_sans_relais_du_pi_refuse():
+    liaisons = {
+        nom: Liaison(nom, REGLAGES.fluidnc, ouvrir=FauxFluidnc().ouvrir)
+        for nom in ("mycelium_lavage", "prehension")
+    }
+    signaux = signaux_lavage(liaisons, REGLAGES.fluidnc)
+    with pytest.raises(ErreurEtape, match="relais du chauffage .* pas relié au Pi"):
+        signaux.sortie(CHAUFFAGE, True)
+
+
+def test_chauffage_du_lavage_est_un_relais_du_pi_dans_la_liste():
+    signal = LISTE.signaux[CHAUFFAGE]
+    assert signal.type == "relais" and signal.carte in LISTE.cartes
+    assert "câblée" in (DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml").read_text(
+        encoding="utf-8"
+    )
+    # Le 2e contact de relais_flotteur recopie le flotteur sur une entrée de la carte n° 3.
+    assert LISTE.signaux["flotteur_lavage"].carte == "fluidnc_mycelium_lavage"
+    for carte in REGLAGES.fluidnc.cartes.values():
+        assert CHAUFFAGE not in carte.sorties
+
+
+def test_sorties_des_cartes_3_et_4_selon_les_fiches():
+    """Fiches de l'Implantation du 07/11/2026 : numéros P (les noms viennent du code)."""
+    carte_3 = REGLAGES.fluidnc.cartes["mycelium_lavage"].sorties
+    assert [carte_3[n] for n in ("demi_tour_vers_tete_en_bas", "demi_tour_vers_debout")] == [0, 1]
+    assert [carte_3[n] for n in ("pompe_lavage", "eau_reseau_lavage")] == [2, 3]
+    assert [carte_3[n] for n in ("vanne_vidange_lavage", "air_col_lavage")] == [4, 5]
+    carte_4 = REGLAGES.fluidnc.cartes["prehension"].sorties
+    assert [carte_4[n] for n in ("vanne_vide", "vanne_souffler", "frein_prehension_z")] == [0, 1, 2]
+    assert carte_4["electroaimants_capsule"] == 4
+    assert "air_col_lavage" not in carte_4 and "chauffage_lavage" not in carte_4
+
+
+def test_chauffage_sur_une_carte_fluidnc_refuse(reglages):
+    remplacer(
+        reglages / "fluidnc.yaml",
+        "      rincage_lavage: 3\n",
+        "      rincage_lavage: 3\n      relais_chauffage_lavage: 5\n",
+    )
+    message = erreur_de(reglages)
+    assert "relais_chauffage_lavage : le chauffage du lavage est un relais du Pi" in message
+
+
+def test_sortie_en_double_sur_une_carte(reglages):
+    remplacer(reglages / "fluidnc.yaml", "      air_col_lavage: 5\n", "      air_col_lavage: 2\n")
+    message = erreur_de(reglages)
+    assert "sorties : « pompe_lavage » et « air_col_lavage » ont la même (2)" in message
+
+
+def test_sortie_du_porte_bocal_absente(reglages):
+    remplacer(reglages / "fluidnc.yaml", "      demi_tour_vers_debout: 1\n", "")
+    message = erreur_de(reglages)
+    assert (
+        "« demi_tour_vers_debout » (porte-bocal) doit être dans les sorties d'une seule" in message
+    )
+
+
+def test_pont_en_h_sur_deux_cartes_refuse(reglages):
+    fluidnc = reglages / "fluidnc.yaml"
+    remplacer(fluidnc, "      demi_tour_vers_debout: 1\n", "")
+    remplacer(
+        fluidnc,
+        "      rincage_lavage: 3\n",
+        "      rincage_lavage: 3\n      demi_tour_vers_debout: 5\n",
+    )
+    message = erreur_de(reglages)
+    assert "les deux sorties du pont en H du demi-tour" in message and "même carte" in message
+
+
+def test_chauffage_attend_et_informe():
+    eau, faux, horloge = eau_seule(litres=50)
+    eau.eau_dans_le_fut = True
+    eau.surveiller()
+    assert eau.chauffage_attend == "flotteur pas haut" and not faux.sorties[CHAUFFAGE]
+    horloge.temps = 2
+    eau.surveiller()
+    assert eau.chauffage_attend is None and faux.sorties[CHAUFFAGE]
+    eau._pompe(True)
+    assert eau.chauffage_attend == "pompe en marche" and not faux.sorties[CHAUFFAGE]
 
 
 def test_eau_coupee_pendant_une_pause():
@@ -562,5 +663,5 @@ def test_outil_avec_de_faux_fluidnc(capsys, tmp_path):
     assert "flotteur : bas" in texte and "premier remplissage : pas mesuré" in texte
     assert outil([*donnees, "brosses"]) == 0
     assert "Refusé, comme prévu : " in capsys.readouterr().out
-    assert outil([*donnees, "sortie", "chauffage_lavage", "1"]) == 1
+    assert outil([*donnees, "sortie", "relais_chauffage_lavage", "1"]) == 1
     assert "Chauffage refusé" in capsys.readouterr().err

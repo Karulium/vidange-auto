@@ -38,10 +38,17 @@ Dans les commandes ci-dessous, `vidange-fluidnc` et `vidange-porte-bocal` veulen
    apparaître dans `Pn:`. Pencher le capteur d'inclinaison : la lettre `1` doit apparaître ou disparaître.
    Noter ce que dit le capteur **actionné** (bocal debout ou tête en bas) : c'est `inclinaison_actionne`
    dans `machine.yaml`.
-4. `M64 P2` : l'électroaimant doit retirer le doigt (`0` disparaît). `M65 P2` : il le relâche.
-5. Doigt retiré à la main, `M64 P0` puis tout de suite `M65 P0` : le plateau doit tourner un peu dans le
-   sens « vers tête en bas ». Même chose avec `P1` : l'autre sens. Si les sens sont inversés, échanger les
-   numéros `0` et `1` dans `pi/reglages/fluidnc.yaml` (sorties).
+4. `M64 P6` : l'électroaimant doit retirer le doigt (`0` disparaît). `M65 P6` : il le relâche. (P6 : EXEMPLE,
+   la fiche de l'Implantation `sorties-carte-3.md` du 07/11/2026 ne dit pas où il est ; **P2 est maintenant le
+   relais de la pompe de vidange du lavage** : ne pas y toucher ici.)
+5. Pont en H du demi-tour (tâche 45 duodecies ; fiche `sorties-carte-3.md` : P0 et P1, 24 V coupé).
+   **Dans la console, rien n'empêche d'allumer P0 et P1 ensemble (court-circuit du pont) : ne jamais
+   envoyer `M64 P0` et `M64 P1` sans le `M65` de l'autre entre les deux** (le programme, lui, refuse).
+   Doigt retiré à la main (`M64 P6`), `M64 P0` puis tout de suite `M65 P0` : le plateau doit tourner un peu
+   dans le sens « vers tête en bas ». Même chose avec `P1` : l'autre sens. Si les sens sont inversés,
+   échanger les deux fils du moteur (P0 et P1 ne changent pas : fiche). Appuyer sur l'arrêt d'urgence
+   pendant `M64 P0` : le moteur doit s'arrêter tout de suite (24 V coupé). Réarmer, `M65 P0`.
+   Le refus du programme (jamais les deux sens) se voit sans la machine : `pytest -q -k pont_en_h`.
 6. `$HY` : les mors doivent s'ouvrir jusqu'à leur fin de course ; `?` : `MPos` doit dire Y = 103. Si
    FluidNC refuse `$HY` (axe en « cycle: 0 »), mettre `cycle: 3` pour Y et le dire dans la PR de correction
    (il faudra alors empêcher `$H` de l'ouvrir bocal tête en bas).

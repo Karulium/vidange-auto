@@ -422,3 +422,39 @@ def test_outil_sur_le_faux_fluidnc(reglages, capsys):
     assert "Mors serrés : écart 95.0 mm" in textes["serrer"].out
     assert "Manivelle en haut : H = " in textes["tete-en-bas"].out
     assert "Bocal tête en bas, manivelle en bas." in textes["tete-en-bas"].out
+
+
+def test_pont_en_h_jamais_les_deux_sens_ensemble():
+    with BancPorteBocal() as banc:
+        pont = banc.porte_bocal.pont
+        pont.commander("demi_tour_vers_tete_en_bas", True)
+        with pytest.raises(ErreurEtape, match="refus d'allumer « demi_tour_vers_debout »") as e:
+            pont.commander("demi_tour_vers_debout", True)
+        assert "jamais les deux" in e.value.quoi_faire
+        # Éteint, l'autre sens peut partir.
+        pont.commander("demi_tour_vers_tete_en_bas", False)
+        pont.commander("demi_tour_vers_debout", True)
+        with pytest.raises(ErreurEtape, match="refus d'allumer « demi_tour_vers_tete_en_bas »"):
+            pont.commander("demi_tour_vers_tete_en_bas", True)
+        pont.commander("demi_tour_vers_debout", False)
+
+
+def test_pont_en_h_sens_compte_allume_si_l_extinction_echoue():
+    ordres: list[tuple[str, bool]] = []
+
+    def commander(nom: str, actif: bool) -> None:
+        if not actif and nom == "demi_tour_vers_tete_en_bas":
+            raise ErreurEtape("carte muette")
+        ordres.append((nom, actif))
+
+    from vidange.porte_bocal.signaux import DeuxSortiesExclusives
+
+    pont = DeuxSortiesExclusives(
+        commander, ("demi_tour_vers_tete_en_bas", "demi_tour_vers_debout"), "{nom}/{autre}", "ok"
+    )
+    pont.commander("demi_tour_vers_tete_en_bas", True)
+    with pytest.raises(ErreurEtape, match="carte muette"):
+        pont.commander("demi_tour_vers_tete_en_bas", False)
+    with pytest.raises(ErreurEtape, match="demi_tour_vers_debout/demi_tour_vers_tete_en_bas"):
+        pont.commander("demi_tour_vers_debout", True)
+    assert ordres == [("demi_tour_vers_tete_en_bas", True)]

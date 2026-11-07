@@ -22,7 +22,12 @@ quand il est alimenté.
   web → « Mises à jour »). Tant qu'ils disent « EXEMPLE », ils sont refusés.
 - `pi/reglages/fluidnc.yaml` dit sur quelle carte est chaque signal du lavage (`flotteur_lavage`,
   `eau_reseau_lavage`, `vanne_vidange_lavage`, `pompe_lavage`, `vanne_rampes_lavage`, `rincage_lavage`,
-  `air_col_lavage`, `chauffage_lavage`) et son numéro : recopier le plan de câblage.
+  `air_col_lavage`) et son numéro : recopier le plan de câblage. Fiches de l'Implantation du 07/11/2026
+  (`sorties-carte-3.md`, `sorties-carte-4.md`) : carte n° 3, P0 et P1 pont en H du demi-tour, P2 relais de
+  la pompe (fusible 8 A), P3 eau, P4 vanne à bille, P5 jet d'air du col ; P6 (verrou du plateau) et P7
+  (vanne 3 voies) sont des EXEMPLES, et le rinçage est en P3 de la carte n° 4 (EXEMPLE). Le **chauffage**
+  n'est sur aucune carte FluidNC : c'est le relais du Pi `relais_chauffage_lavage` (voie en EXEMPLE dans
+  `docs/entrees-sorties.yaml`, à recopier de la fiche des relais du Pi quand elle existera).
 - Le programme principal est arrêté (`sudo systemctl stop vidange`) : une seule liaison par carte.
 - Prise d'origine des cartes n° 1, 3 et 4 faite (`$H`), sans alarme. La griffe est **en haut**.
 - Le panneau long du poste du fût est **rabattu** (mode lavage), le fût de lavage en place, sa bonde
@@ -45,8 +50,10 @@ Dans les commandes ci-dessous, `vidange-fluidnc` et `vidange-lavage` veulent dir
    - `vidange-lavage sortie air_col_lavage 2` : l'air sort de la buse du col ;
    - la pompe (`pompe_lavage`) seulement avec de l'eau dans le fût et la vanne à bille ouverte (étape 2).
    Si une sortie en commande une autre : échanger les numéros dans `pi/reglages/fluidnc.yaml`.
-3. Le chauffage : `vidange-lavage sortie chauffage_lavage 3` doit être **refusé** tant que le fût n'est pas
-   rempli (« Chauffage refusé »). C'est voulu.
+3. Le chauffage (relais du Pi, qui alimente la commande du SSR) : `vidange-lavage sortie
+   relais_chauffage_lavage 3` doit être **refusé** tant que le fût n'est pas rempli (« Chauffage refusé »).
+   C'est voulu : le logiciel n'allume le chauffage que « flotteur haut » et « pompe arrêtée », sinon il
+   attend et le dit dans le journal. **Ce n'est pas la sécurité** : elle est câblée (voir l'étape 2 bis).
 4. Flotteur : le soulever à la main et lancer `vidange-lavage etat` : « haut » ; le lâcher : « bas ».
 
 ## Étape 2 : remplir, chauffer, vider
@@ -55,8 +62,21 @@ Dans les commandes ci-dessous, `vidange-fluidnc` et `vidange-lavage` veulent dir
    Le temps est mesuré et **gardé** (`pi/donnees/lavage.json`) : les remplissages suivants sont refusés
    au-delà de ce temps + 20 %. Regarder que l'eau s'arrête **bien sous les poulies**. Si le premier
    remplissage a été faussé (robinet mal ouvert), effacer `pi/donnees/lavage.json` et recommencer.
-2. Fût plein, flotteur haut : `vidange-lavage sortie chauffage_lavage 5` : le relais statique alimente la
+2. Fût plein, flotteur haut : `vidange-lavage sortie relais_chauffage_lavage 5` : le relais statique alimente la
    prise (voyant de l'appareil). Le Pi ne le fait jamais pompe en marche ni flotteur bas.
+2 bis. **La sécurité câblée du chauffage** (à faire avant tout chauffage prolongé, sans le Pi qui commande :
+   `sudo systemctl stop vidange`, et le relais du Pi fermé à la main ou par `vidange-lavage sortie
+   relais_chauffage_lavage 30` fût plein). Le flotteur alimente `relais_flotteur` (armoire), dont un
+   contact est en série dans la commande du SSR ; son 2e contact recopie le flotteur sur `flotteur_lavage`
+   (entrée de la carte n° 3). Vérifier, **fût rempli puis vidé peu à peu** :
+   - flotteur haut : le SSR a sa commande (voyant de l'appareil) quand le relais du Pi est fermé ;
+   - flotteur **bas** (baisser le niveau à la main) : le SSR perd sa commande **même relais du Pi fermé** ;
+   - débrancher le fil du flotteur (ou le couper) : même résultat, le SSR n'a plus de commande ;
+   - `vidange-lavage etat` : « flotteur : haut » ou « bas » suit le 2e contact. Si le 2e contact est
+     inversé, le dire dans la PR de correction.
+   Si l'un de ces essais chauffe quand même : **arrêter, couper le thermoplongeur, ne pas continuer**.
+   La 2e barrière (thermostat de sécurité à réarmement manuel, demandée au Lavage) est à essayer avec la
+   fiche du Lavage.
 3. `vidange-lavage vider` : vanne 3 voies vers la bonde, vanne à bille ouverte, pompe jusqu'au flotteur bas,
    encore 60 s, puis arrêt et vanne fermée. Regarder qu'il ne reste presque plus d'eau. Mesurer la durée
    pour `lavage → eau → vidange_max_s` (prendre une bonne marge).
