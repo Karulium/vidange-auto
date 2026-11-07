@@ -1056,6 +1056,41 @@ non (procédure `spray/essai-materiel.md`, puis `pi/systeme/essai-spray.md`).
      (repère du chariot x 0,09 ; y 0,293), à z 0,51-0,55 ; à Y 0,50 rien de fixe dans cette zone (calcul du
      Remplissage sur la géométrie B1, pas un balayage de la Maquette) : à vérifier à la main à l'essai.
 
+## Pose du couvercle sur le seau plein (tâche 41 bis, 07/11/2026)
+
+Source : `prehension/logiciel/pose-couvercle-pour-logiciel.md` (fil Préhension, module gelé le 27/10). Code :
+`pi/vidange/couvercle/`, étapes dans `pi/vidange/remplissage/module.py`, réglages `machine.yaml → couvercle` (EXEMPLE) ;
+essai : `pi/systeme/essai-couvercle.md` (testé sur le vrai matériel : non). Les points ouverts de la PR sont des
+questions à Karulium ; en attendant, les choix ci-dessous sont ceux de Claude (niveau 1).
+
+- **Le poste « couvercle » est branché dans `ORDRE_SEAU`** (quatre étapes du Remplissage : `preparer_le_couvercle`,
+  `prendre_le_couvercle`, `poser_le_couvercle`, `controler_le_couvercle`), juste avant la fermeture. La condition de
+  la fermeture « préhension lâchée et remontée au-dessus de z 0,60 » (`fermeture → prehension_libre_z`, PR n° 86) est
+  déjà dans `Remplissage.prehension_degagee` : un test vérifie que la fermeture ne part qu'après la fin de la pose.
+- **Pas de couvercle sans fermeture, ni de fermeture sans couvercle** : un couvercle posé et pas clipsé ne tient
+  pas sur le seau ; si l'un des deux n'est pas prêt, l'autre est « pas lancé : attend … » (choix de Claude).
+- **Z_pose est calculé** : `H_app + dessus_pose_z (0,459) − Hc`, à partir de `fermeture` ; il donne le tableau de la
+  fiche (A, B, C 0,439 ; D 0,446). L'axe de l'outil à la pose (0,925 ; 0,49) est dans le fichier de réglages, et le
+  démarrage vérifie qu'il est cohérent (x = axe du plateau ; y = `fermeture → chariot_y` − 1 cm, la prise hors d'axe
+  de la pile).
+- **La masse du couvercle (`m_c`) et sa tolérance** servent deux fois : au contrôle « un seul couvercle » (palier pesé,
+  étape 6) et à la balance du chariot (étape 13, `P − P0`). Masses en EXEMPLE (A 0,13 ; B 0,10 ; C 0,16 ; D 0,13 kg),
+  tolérance 30 %.
+- **Aspirer / souffler** : la tête n'a qu'une vanne de vide (`vanne_vide`) : « aspirer par impulsions » = vanne
+  ouverte `impulsion_s` (1 s) au plus deux fois ; « souffler » = vanne fermée pendant `souffle_s` (0,2 s), comme
+  l'Entonnoir. Pendant le trajet, la vanne reste ouverte (pas de nouvelle impulsion à −50 kPa) ; arrêt sur place au-dessus
+  de −40 kPa.
+- **Contact M8 lu à l'arrêt** : `Tete.contact_tete()` (nouveau) lit le M8 en dehors d'une descente au contact ; il sert
+  au dégagement (étape 12 : le M8 doit retomber dans les 5 premiers mm, sinon « souffler » une fois de plus, puis alerte).
+- **Contact à la pose plus bas que la fenêtre** (au-dessous de Z_pose − 8 mm, mais au-dessus de Z_pose − 15 mm) : la
+  fiche n'en dit rien ; le couvercle est considéré posé et le Pi l'écrit au journal.
+- **Pas de mémoire sur coupure** pour le haut de la pile : après un redémarrage, la prochaine prise repart du « haut sans
+  mémoire » (0,90).
+- **Les cartes du chariot et de la tête ne sont pas encore branchées au programme principal** : sur la vraie machine le
+  poste est « pas lancé » (cartes du chariot, comme le seau vide ; EXEMPLE interdit), même règle que la tâche 45. Dans le
+  simulateur, le lot de 20 seaux passe avec couvercle et fermeture (pile imaginaire `simulateur.yaml → cycle →
+  couvercles`).
+
 ## Air comprimé (tâche 42, 07/11/2026)
 
 Source : fiche `air/logiciel/air-comprime-pour-logiciel.md` du projet mécanique (module gelé le 28/10/2026).

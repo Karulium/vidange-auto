@@ -18,6 +18,11 @@
                                               travail, montée en appui, rotation horaire, retour
                                               (tâche 41 ; le bras et la balance sont lus pour de
                                               vrai, --galet-range est inutile)
+  vidange-remplissage couvercle-preparer seau_a   avant la pose du couvercle par la préhension
+                                              (tâche 41 bis) : barres ouvertes, plateau à H_app,
+                                              chariot à y 0,50, pesée P0 (le seau plein est là)
+  vidange-remplissage couvercle-controler seau_a  après la pose : la balance voit-elle un couvercle
+                                              de plus (P − P0) ?
   vidange-remplissage couvercles              mode couvercles (retourneur)
   vidange-remplissage inspection              mode inspection des bocaux, un arrêt de 45°
   ... --faux                                  avec un faux FluidNC (essai de l'outil)
@@ -74,6 +79,8 @@ ATTENDUS = {
     "vidage": 1,
     "ranger": 2,
     "fermer": 1,
+    "couvercle-preparer": 1,
+    "couvercle-controler": 1,
     "couvercles": 0,
     "inspection": 0,
 }
@@ -286,6 +293,35 @@ def _faire(options: argparse.Namespace, remplissage: Remplissage, chariot: Chari
         _jouer(remplissage, r.geste_fermer)
         for message in options.fermeture.messages:
             print(message)
+        _etat(remplissage, chariot)
+        return 0
+    if commande in ("couvercle-preparer", "couvercle-controler"):
+        format = valeurs[0]
+        couvercle, fermeture = r.couvercle, r.fermeture
+        if couvercle is None or fermeture is None:
+            print(
+                "machine.yaml n'a pas de partie « couvercle » (ou « fermeture »)", file=sys.stderr
+            )
+            return 2
+        if format not in couvercle.formats:
+            print(f"Format inconnu : {format}", file=sys.stderr)
+            return 2
+        r.seau = SeauPlateau(format, angle_anse=chariot.position().a)
+        if commande == "couvercle-preparer":
+            plateau = fermeture.h_approche(format, r.course_z[0])
+            _jouer(remplissage, lambda: r.geste_preparer_couvercle(plateau, fermeture.chariot_y))
+            print(f"P0 : {r.poids_avant_couvercle_kg} kg")
+        else:
+            # Chaque appel de l'outil est un programme neuf : P0 est pris maintenant, le couvercle
+            # est posé à la main pendant l'attente, puis la balance est relue.
+            _jouer(remplissage, lambda: r._peser("pesée P0"))
+            r.poids_avant_couvercle_kg = r.derniere_pesee_kg
+            print("P0 prise. Posez le couvercle à la main sur le seau : pesée dans 20 secondes.")
+            time.sleep(20)
+            masse = couvercle.formats[format].masse_kg
+            tolerance = couvercle.tolerance_kg(format)
+            _jouer(remplissage, lambda: r.geste_controler_couvercle(masse, tolerance))
+            print(f"Balance : P − P0 = {r.derniere_pesee_kg - r.poids_avant_couvercle_kg:+.3f} kg")  # type: ignore[operator]
         _etat(remplissage, chariot)
         return 0
     if commande in ("pose", "centrer", "vidage", "ranger"):

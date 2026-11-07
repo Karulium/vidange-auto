@@ -192,6 +192,10 @@ cycle:
   files_pleines: {file_1: 6}
   prises_doubles: [3]
   anse_deg: 30
+  # La pile de couvercles du stockage imaginaire (tâche 41 bis) : de quoi couvrir le lot et son pas
+  # d'empilage (EXEMPLES ; à mesurer sur les vrais couvercles).
+  couvercles: 24
+  pas_couvercles_m: 0.009
 
 # L'enceinte imaginaire du Nettoyage (scénarios « fermeture_purge », « purge_trop_longue »,
 # « nuit_uv_ozone », « fuite_ozone ») : le store ouvert au départ met 25 s à descendre (2,18 m à

@@ -815,6 +815,30 @@ entonnoir.sur_le_plateau()  # pas de photo du fond au hublot tant qu'il y est
 - `vidange-entonnoir places | hauteurs | etat | noter`, `vidange-prehension entonnoir <bocal> <bocal>` (vrais
   gestes) et `vidange-simulateur entonnoir` pour les essais (`systeme/essai-entonnoir.md`).
 
+## Pose du couvercle sur le seau plein (tâche 41 bis)
+
+La Préhension prend un couvercle propre à la pile du stockage (ventouse seule, électroaimants coupés, contact M8,
+vide −55 kPa, un seul couvercle contrôlé au palier pesé) et le pose sur le seau plein, sans appuyer : c'est la
+fermeture qui clipse. Réglages : `machine.yaml → couvercle` (EXEMPLES marqués : masses des couvercles, tolérance,
+fenêtre du contact, durées du vide) et `prehension → vitesses → couvercle_pile | couvercle_pose`. `Z_pose` se
+calcule : `H_app + 0,459 − Hc` (A, B, C 0,439 ; D 0,446). Aucun signal à lui : `vanne_vide`, `contact_tete`,
+`vide_venturi`, le palier pesé et la balance du chariot.
+
+```python
+couvercle = Couvercle(reglages.machine, stockage=stockage, photo=...)
+module_remplissage(..., couvercle=couvercle)  # 4 étapes de plus, avant fermer_le_seau
+```
+
+- **Étapes** (module « remplissage », après la dernière couche) : `preparer_le_couvercle` (chariot à y 0,50, plateau
+  à H_app, barres ouvertes, pesée P0), `prendre_le_couvercle`, `poser_le_couvercle` (attend le bras de fermeture vu
+  rangé et la griffe partie), `controler_le_couvercle` (balance : P − P0 ≈ un couvercle), puis `fermer_le_seau`.
+- **Cas d'erreur** : étapes 3, 4, 6, 7, 10a, 10b, 11, 12 et 13 de la fiche, chacune avec son message et sa phrase
+  « quoi faire ». Anse relevée : erreur 10a (« vérifier l'anse du seau »).
+- Le Pi garde le haut de la pile (face au contact de la dernière prise ; sans mémoire : `pile → haut_sans_memoire_z`)
+  et compte les couvercles dans l'inventaire du Stockage.
+- `vidange-prehension couvercle <format>`, `vidange-remplissage couvercle-preparer | couvercle-controler <format>` et
+  `vidange-simulateur cycle` pour les essais (`systeme/essai-couvercle.md`).
+
 ## Cartes de pesée du bus RS485 (tâche 22 bis)
 
 Trois cartes RP2040 + HX711 (griffe, préhension, plateau du remplissage) sur un bus RS485 à elles

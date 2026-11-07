@@ -859,6 +859,10 @@ prehension:
     vissage_deg_s: 30
     # Descente du bocal sur les derniers mm entre les mors (porte_bocal → descente_lente_pose_m).
     pose_bocal: 0.003
+    # Couvercle (tâche 41 bis) : approche de la pile, décollage et dégagement 20 mm/s ; approche
+    # de la pose sur le seau 10 mm/s (fiche, Portique du 28/10, plus lent pour la pose). EXEMPLES.
+    couvercle_pile: 0.02
+    couvercle_pose: 0.01
   # Descente lente sur les 3 derniers cm (EXEMPLE) ; contact à plus de 5 mm de la cote attendue :
   # arrêt et alerte (fiche).
   descente: {approche_m: 0.03, ecart_contact_max_m: 0.005}
@@ -2000,6 +2004,57 @@ entonnoir:
   # Caméra du plafond : ± 5 mm sur le centre du col ; le cône (60°, pointe Ø 70 dans un col Ø 89)
   # capte 9,5 mm d'erreur. Figés.
   col: {precision_m: 0.005, capture_m: 0.0095}
+
+# Pose du couvercle sur le seau plein (tâche 41 bis ; fiche pose-couvercle-pour-logiciel.md du
+# 07/11/2026, module Préhension gelé le 27/10). Le couvercle propre vient de la pile du stockage
+# (stockage → piles → couvercles), pris par la ventouse seule (électroaimants coupés), contact M8,
+# vide −55 kPa (celui de prehension → vide), un seul couvercle contrôlé au palier pesé ; posé sur
+# le seau plein, plateau déjà à H_app, sans appuyer (c'est la fermeture qui clipse). Repère du
+# portique, en mètres ; « z » = face de la ventouse.
+# FIGÉS (fiche) : axe de l'outil à la pose (0,925 ; 0,49) — l'outil prend le couvercle 1 cm hors
+# d'axe vers −y (pile en y 0,84, outil en y 0,83), donc il arrive centré à y 0,50 —, dessus du
+# couvercle posé 0,459 quand le plateau est à Hc (Z_pose = H_app + 0,459 − Hc : A, B, C 0,439 ; D
+# 0,446, calculé), vide de prise −55 et d'arrêt −40 kPa (prehension → vide), descente de la pose
+# à 10 mm/s. Tout le reste est EXEMPLE : masses des couvercles à peser, tolérance ≈ 30 %, durées,
+# fenêtre du contact (± 8 mm), haut sans mémoire de la pile (0,90), épaisseur du dernier couvercle
+# (9 mm, étape 3 de la fiche). Un verrou du logiciel ne protège que la machine : la sécurité des
+# personnes reste câblée.
+couvercle:
+  exemple: true
+  tolerance_pct: 30
+  palier_vide_n: 0.5
+  pile:
+    haut_sans_memoire_z: 0.90
+    approche_m: 0.03
+    epaisseur_dernier_m: 0.009
+    decollage_m: 0.03
+  # Aspirer par impulsions d'environ 1 s, 2 au plus, puis souffler et 1 nouvel essai (remonter de
+  # 5 mm, redescendre au contact) ; souffler environ 0,2 s au lâcher, jusqu'à −5 kPa.
+  vide:
+    impulsion_s: 1.0
+    impulsions_max: 2
+    essais_max: 2
+    remontee_reessai_m: 0.005
+    lache_kpa: -5
+    souffle_s: 0.2
+    delai_lacher_s: 2
+  pose:
+    x: 0.925
+    y: 0.49
+    dessus_pose_z: 0.459
+    rapide_m: 0.040
+    fenetre_m: 0.008
+    sans_contact_m: 0.015
+    degagement_m: 0.02
+    m8_retombe_m: 0.005
+  # Masses À PESER sur les vrais couvercles (EXEMPLES : ≈ 1,25 N pour le A, comme prehension →
+  # objets). Format C : descente lente de la face 0,67 à 0,57 (fiche, § 5 point 1) ; le couvercle B
+  # n'a pas encore de diamètre mesuré (à mesurer).
+  formats:
+    seau_a: {masse_kg: 0.13}
+    seau_b: {masse_kg: 0.10}
+    seau_c: {masse_kg: 0.16, descente_lente_z: [0.67, 0.57]}
+    seau_d: {masse_kg: 0.13}
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

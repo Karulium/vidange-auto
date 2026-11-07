@@ -19,8 +19,9 @@ et Guidage caméra à la PR n° 89) :
                  au vidage, quand le seau pèse assez (micropore → fond_poids_min_kg)
     griffe       une couche de substrat versée par la griffe, le seau tourne
     mycelium     une dose de semence sur la couche (griffe puis mycélium, à chaque couche)
-    couvercle    couvercle posé sur le seau plein
-    fermeture    couvercle clipsé
+    couvercle    couvercle pris à la pile du stockage et posé sur le seau plein (tâche 41 bis) :
+                 chariot à y 0,50 plateau à H_app, pesée P0, prise, pose sans appuyer, balance
+    fermeture    couvercle clipsé (la préhension a lâché et est remontée au-dessus de z 0,60)
     stockage     seau plein rangé (tiroir, puis bande du haut)
     lavage       les seaux vides sales lavés (travail à part, après le lot)
 
@@ -46,6 +47,8 @@ class Poste:
     obligatoire: bool = False
     # Postes sans lesquels celui-ci ne sert à rien (la fermeture sans couvercle posé...).
     besoin: tuple[str, ...] = ()
+    # Postes d'après, sans lesquels celui-ci n'est pas lancé (le couvercle sans la fermeture).
+    besoin_ensuite: tuple[str, ...] = ()
 
 
 ORDRE_SEAU: tuple[Poste, ...] = (
@@ -103,9 +106,16 @@ ORDRE_SEAU: tuple[Poste, ...] = (
     ),
     Poste(
         "couvercle",
-        "Couvercle posé sur le seau plein",
-        case_vide="pose du couvercle sur le seau plein pas écrite (tâche 41 bis)",
+        "Couvercle pris à la pile du stockage et posé sur le seau plein (sans appuyer)",
+        etapes=(
+            "remplissage.preparer_le_couvercle",
+            "remplissage.prendre_le_couvercle",
+            "remplissage.poser_le_couvercle",
+            "remplissage.controler_le_couvercle",
+        ),
         obligatoire=True,
+        # Un couvercle posé et pas clipsé ne tient pas sur le seau : pas de pose sans fermeture.
+        besoin_ensuite=("fermeture",),
     ),
     Poste(
         "fermeture",
@@ -132,7 +142,7 @@ ORDRE_SEAU: tuple[Poste, ...] = (
 )
 
 # Postes qui servent le seau du chariot : sans le cœur du lot, ils ne sont pas lancés.
-SUR_LE_CHARIOT = ("spray", "micropore", "fermeture")
+SUR_LE_CHARIOT = ("spray", "micropore", "couvercle", "fermeture")
 
 # L'étape du chef qui commence chaque seau (pour découper le planning seau par seau).
 DEBUT_DU_SEAU = "remplissage.prendre_le_seau"

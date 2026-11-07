@@ -154,6 +154,8 @@ class Tete(Protocol):
 
     def tarer(self) -> None: ...
 
+    def contact_tete(self) -> bool: ...
+
     def vanne(self, ouverte: bool) -> None: ...
 
     def aimants(self, actifs: bool) -> None: ...
@@ -366,6 +368,11 @@ class TeteFluidnc:
         return median(brute for _, brute in list(self._lectures)[-combien:])
 
     # ------------------------------------------------------------ capteurs et sorties
+
+    def contact_tete(self) -> bool:
+        """Le capteur M8 de contact voit-il quelque chose en ce moment ? (Pose du couvercle :
+        il doit retomber au dégagement.)"""
+        return bool(self.signaux.entree(CONTACT))
 
     def tarer(self) -> None:
         """Tête en l'air, rien de tenu : la lecture devient zéro."""

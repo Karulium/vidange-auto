@@ -116,6 +116,11 @@ QUOI_FAIRE_BOCAL = (
     "La tête et la balance ne sont pas d'accord sur le poids du bocal posé : regarder la vidéo "
     "(bocal de travers, posé à côté ?). Corriger, puis acquitter et donner le Go."
 )
+QUOI_FAIRE_COUVERCLE = (
+    "La balance du chariot ne voit pas le poids d'un couvercle de plus : le couvercle n'est pas "
+    "sur le seau. Regarder la vidéo, le poser à la main si besoin, puis acquitter et donner le "
+    "Go : la pesée est refaite."
+)
 QUOI_FAIRE_PURGE = (
     "Le versement dans le seau ouvert attend la fin de la purge de l'enceinte (store refermé) : "
     "attendre qu'elle finisse (page MODE, ENCEINTE), puis acquitter et donner le Go."
@@ -181,6 +186,7 @@ class Remplissage:
         self.reglages = machine.remplissage
         self.formats = machine.griffe.formats
         self.fermeture = machine.fermeture
+        self.couvercle = machine.couvercle
         self.course_a = machine.axes["plateau_a"].course
         self.course_z = machine.axes["plateau_z"].course
         self.durees = machine.durees
@@ -213,6 +219,8 @@ class Remplissage:
         self.pose: Pose | None = None
         self.resultat: Resultat | None = None
         self.derniere_pesee_kg: float | None = None
+        # Pesée du seau plein avant la pose du couvercle (P0, tâche 41 bis).
+        self.poids_avant_couvercle_kg: float | None = None
         self._geste: Geste | None = None
         self._pas: Pas | None = None
         self._rotation = False
@@ -790,6 +798,33 @@ class Remplissage:
             )
             yield from self._a_la_place(reglage.chariot_y, "chariot à la fermeture")
         yield from self._fermer()
+
+    def geste_preparer_couvercle(self, plateau_z: float, y: float) -> Geste:
+        """Avant la pose du couvercle par la préhension (tâche 41 bis, fiche § 1) : barres
+        ouvertes, plateau à H_app, chariot arrêté au y de la pose ; puis la pesée P0 (seau plein,
+        pas encore de couvercle), notée pour le contrôle de l'étape 13."""
+        if self.seau is None:
+            raise ErreurEtape("remplissage : pas de seau sur le plateau")
+        yield from self._barres_ouvertes()
+        yield from self._plateau(plateau_z, "plateau à H_app pour le couvercle")
+        yield from self._a_la_place(y, "chariot à la pose du couvercle")
+        yield from self._peser("pesée P0 avant le couvercle")
+        self.poids_avant_couvercle_kg = self.derniere_pesee_kg
+
+    def geste_controler_couvercle(self, masse_kg: float, tolerance_kg: float) -> Geste:
+        """Étape 13 de la fiche : la balance doit voir P − P0 ≈ la masse d'un couvercle."""
+        p0 = self.poids_avant_couvercle_kg
+        if p0 is None:
+            raise ErreurEtape("remplissage : pas de pesée P0 avant le couvercle", QUOI_FAIRE)
+        yield from self._peser("pesée du couvercle posé")
+        poids = self.derniere_pesee_kg
+        if poids is None or abs((poids - p0) - masse_kg) > tolerance_kg:
+            lu = "pas de pesée" if poids is None else f"{poids - p0:+.3f} kg"
+            raise ErreurEtape(
+                f"remplissage : couvercle pas sur le seau, la balance voit {lu} de plus qu'avant "
+                f"(un couvercle ≈ {masse_kg:.3f} ± {tolerance_kg:.3f} kg)",
+                QUOI_FAIRE_COUVERCLE,
+            )
 
     def geste_ranger_bras(self) -> Geste:
         """Au démarrage (zéro de la montée fait, plateau en bas) : le bras de la fermeture rangé."""

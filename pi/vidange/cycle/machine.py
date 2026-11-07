@@ -2,8 +2,9 @@
 
 Ce qui manque aujourd'hui pour qu'un lot parte sur la machine est dit poste par poste (check-list,
 écran, journal), sans rien inventer :
-- seau vide : les cartes du chariot et de la tête (ChariotFluidnc, TeteFluidnc) seront construites
-  ici avec la lecture du QR du flanc ;
+- seau vide et couvercle : les cartes du chariot et de la tête (ChariotFluidnc, TeteFluidnc) seront
+  construites ici avec la lecture du QR du flanc ; le couvercle (vidange.couvercle, tâche 41 bis)
+  sera construit avec elles, sur la même tête ;
 - QR du flanc : il est lu par la caméra du micropore pendant que le plateau tourne le seau (fil
   Guidage caméra, 07/11/2026) ; cette lecture est dans la vision du micropore (tâche 40 ter), pas
   encore écrite : sans elle, le Remplissage refuse d'orienter l'anse ;
@@ -12,7 +13,7 @@ Ce qui manque aujourd'hui pour qu'un lot parte sur la machine est dit poste par 
   (case vide `nouveau_bocal` du Mycélium) ;
 - micropore : la vision de sa caméra n'est pas écrite (tâche 40 ter) ;
 - stockage : il faut le signal de la boucle du tiroir et des panneaux.
-Les cases vides d'ORDRE_SEAU (griffe, couvercle, lavage) sont dites par le mode lui-même.
+Les cases vides d'ORDRE_SEAU (griffe, lavage) sont dites par le mode lui-même.
 """
 
 from vidange.cycle.mode_seaux import Lot, PiecesRemplissage
@@ -56,7 +57,7 @@ class PiecesMachine:
     def manque(self, poste: str) -> str | None:
         if poste == "fut" and self.poste is None:
             return "poste du fût pas suivi (entrées/sorties pas ouvertes)"
-        if poste == "seau_vide":
+        if poste in ("seau_vide", "couvercle"):
             return CARTES_DU_CHARIOT
         if poste == "qr_du_flanc":
             return QR_DU_FLANC
@@ -73,7 +74,12 @@ class PiecesMachine:
         return None
 
     def remplissage(
-        self, lot: Lot, avec_micropore: bool, avec_fermeture: bool, avec_spray: bool
+        self,
+        lot: Lot,
+        avec_micropore: bool,
+        avec_fermeture: bool,
+        avec_spray: bool,
+        avec_couvercle: bool,
     ) -> PiecesRemplissage:
         # Jamais appelé : les postes « seau_vide » et « qr_du_flanc » manquent toujours. Avec
         # eux, le Spray sera branché au chariot comme dans vidange.cycle.simulation.

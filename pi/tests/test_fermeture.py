@@ -581,6 +581,8 @@ def test_carte_redemarree_pendant_la_fermeture_arret_et_bras_rangé(tmp_path):
 
 def test_format_inconnu_de_la_fermeture_rempli_sans_fermer(reglages):
     remplacer(reglages / "machine.yaml", "    seau_b: {hf_m: 0.251}\n", "")
+    # Le couvercle (tâche 41 bis) n'a de pose que pour les formats de la fermeture.
+    remplacer(reglages / "machine.yaml", "    seau_b: {masse_kg: 0.10}\n", "")
     planning, scenario, pas = jouer(reglages=charger_reglages(reglages))
     assert planning.fini, planning.probleme
     assert scenario.fermeture.fermeture.fermes == ["S0101"]

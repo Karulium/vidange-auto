@@ -1502,7 +1502,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   `plateau_lecture_qr`, pendant un tour avant le serrage des barres ; `docs/decisions.md`, réponses à la PR n° 89). Règles de la fiche `micropore/logiciel/micropore-pour-logiciel.md`
   (§ vision). Tests sur des images fabriquées (OpenCV, comme la tâche 22) ; ce qui demande des photos réelles reste
   un faux (tâche 22 ter).
-- [ ] **41 bis. Pose du couvercle sur le seau plein** — Modèle : Sonnet, effort moyen. Source, recopiée ici le
+- [x] **41 bis. Pose du couvercle sur le seau plein** — Modèle : Sonnet, effort moyen. Source, recopiée ici le
   07/11/2026 : `prehension/logiciel/pose-couvercle-pour-logiciel.md` du projet mécanique (fil Préhension, qui porte ce
   geste). Relire la fiche telle qu'elle est (elle a changé au § 5 le 07/11).
   - Prise à la pile de couvercles du stockage (outil à y 0,83, contact M8, vide −55 kPa, contrôle « un seul couvercle »

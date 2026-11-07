@@ -130,9 +130,9 @@ géométrie. Il faut les vérifier une fois sur chaque format.
 
 ## Ce qui ne peut pas encore s'essayer
 
-- **Le cycle complet** : la pose du couvercle sur le seau par la préhension n'est pas encore un geste du
-  programme (elle viendra avec le solveur) et le programme principal ne branche pas encore le Remplissage
-  (comme pour les tâches 34, 39 et 40). Ici, le couvercle est posé à la main.
+- **Le cycle complet** : la pose du couvercle par la préhension est écrite (tâche 41 bis, essai :
+  `essai-couvercle.md`) ; mais le programme principal ne branche pas encore les cartes du chariot et de la
+  tête sur la vraie machine. Ici, le couvercle est posé à la main.
 - **Le mode couvercles** : le bras reste rangé et ne reçoit aucun ordre pendant tout le mode ; à vérifier au
   premier essai du mode couvercles (`essai-remplissage.md`) : à −40° le bras toucherait le bac du retourneur.
 - **L'arrêt d'urgence** : s'il coupe le 24 V du chariot (donc le bec du servo), le bras se relâche. Au
