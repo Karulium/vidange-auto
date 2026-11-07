@@ -77,10 +77,21 @@ Le chariot de remplissage n'a pas besoin d'être préparé pour cette étape : l
 5. Contrôle balance : `vidange-remplissage --manivelle-en-bas --micropore-rentre --galet-range
    couvercle-controler seau_a`. L'outil prend P0 tout de suite, puis attend 20 s : posez le couvercle **à la main**
    sur le seau pendant ces 20 s. Attendu : « Balance : P − P0 = +0,1… kg » (un couvercle).
-6. Recommencer pour B, C et D (changer le seau et le format). **Format C** : la descente est à 10 mm/s de la
-   face 0,67 à 0,57 : regarder le bord du couvercle C (Ø 0,315) quand il passe à côté de la **tête du micropore
-   escamotée** (côté mur, y ≈ 0,34) : ≥ 2 mm de jeu (fiche : 2,3 mm). S'il touche, **arrêt d'urgence** et le dire
-   dans la PR (question 1).
+6. Recommencer pour B et D (changer le seau et le format) : ils descendent **droit**, outil en (0,925 ; 0,49).
+7. **Format C : descente décalée** (tâche 45 septies, fiche § 5.1 ; **testé sur le vrai matériel : non**). Le
+   recul du servo du micropore est **annulé** : rien à faire sur le micropore, sa tête reste escamotée comme
+   d'habitude. Seau C plein au poste, couvercle C tenu, vitesses divisées par 2 :
+   - l'outil arrive en **(0,925 ; 0,498)**, 8 mm vers l'allée (vérifier avec `vidange-prehension etat`) ;
+   - il descend jusqu'à la face **0,545**. Filmer le côté mur : entre les faces 0,65 et 0,58, le bord du
+     couvercle doit passer à **au moins 8 mm** de la **plaque fixe du micropore** (bord à r 160 de l'axe du
+     seau) et du bout de son rail (Maquette : 10,3 mm à la plaque, 13,5 mm au rail, 12,8 mm au rouleau) ;
+   - à la face 0,545 (tout le couvercle, jupe comprise, sous la plaque du micropore, bas à 0,56), l'outil
+     revient à **y 0,49**, sans changer de hauteur, à 10 mm/s (≈ 0,8 s) ;
+   - puis descente normale : rapide jusqu'à 0,479, lente jusqu'au contact vers 0,439. La jupe doit recouvrir
+     le bord du seau.
+   Moins de 5 mm de jeu, ou si ça touche : **arrêt d'urgence**, le dire dans la PR. Refaire avec un seau C dont
+   l'anse est relevée (erreur 10a) : la tête remonte **avec** le couvercle par le même chemin à l'envers
+   (0,545, retour à y 0,498, puis en haut) ; regarder le même jeu à la remontée.
 
 ## Étape 5 : les erreurs, une par une (seau A)
 

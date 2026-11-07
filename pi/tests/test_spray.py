@@ -294,7 +294,7 @@ def test_un_seau_avec_le_module_du_chef(tmp_path):
     chef = Chef(MACHINE, ReglagesChef(periode_s=0.05, alarme_pause_tout=True), horloge=banc.horloge)
     seau = ("S1293", "seau_b")
     module = module_spray(
-        banc.spray, lambda: seau, griffe_partie=lambda: True, micropore_escamote=lambda: True
+        banc.spray, lambda: seau, zone_libre=lambda: True, micropore_escamote=lambda: True
     )
     chef.lancer(module)
     for _ in range(4000):
@@ -458,7 +458,12 @@ def test_compteur_des_nettoyages(tmp_path):
     for numero in range(2):
         banc.pret()
         module = module_nettoyage_tubes(
-            banc.spray, lambda: True, lambda: True, lambda: "seau_a", nom=f"nettoyage_{numero}"
+            banc.spray,
+            lambda: True,
+            lambda: True,
+            lambda: "seau_a",
+            nom=f"nettoyage_{numero}",
+            zone_libre=lambda: True,
         )
         chef.lancer(module)
         for _ in range(4000):
@@ -680,3 +685,115 @@ def test_branche_au_demarrage(tmp_path):
     assert constats_spray(spray)[0].sujet == "spray"
     assert chef.permission("spray_seau") is None
     banc.materiel.fermer()
+
+
+# ------------------------------------------------------------ zone du bras (fil Spray, 07/11/2026)
+
+
+def test_le_bras_ne_sort_et_ne_rentre_que_zone_libre(tmp_path):
+    banc = Banc(tmp_path)
+    chef = Chef(MACHINE, ReglagesChef(periode_s=0.05, alarme_pause_tout=True), horloge=banc.horloge)
+    seau = ("S1294", "seau_a")
+    zone = {"libre": False}
+    module = module_spray(
+        banc.spray,
+        lambda: seau,
+        zone_libre=lambda: zone["libre"],
+        micropore_escamote=lambda: True,
+    )
+    chef.lancer(module)
+
+    def tourner(fois, jusqu_a=lambda etat: False):
+        for _ in range(fois):
+            banc.horloge.t += 0.05
+            banc.spray.observer()
+            chef.avancer()
+            etat = chef.etat().modules[0]
+            if etat.statut != "en_cours" or jusqu_a(etat):
+                break
+        return etat
+
+    def codes():
+        return [code for code, _, _ in banc.carte.ordres]
+
+    etat = tourner(4000, lambda etat: etat.etape == "sortir_le_bras")
+    # Zone occupée (moins que le délai d'attente de l'entrée, spray_bras_max) : rien ne bouge.
+    etat = tourner(100)
+    assert etat.etape == "sortir_le_bras" and etat.statut == "en_cours"
+    assert "zone du bras du spray libre" in etat.attend
+    assert table.ORDRE_SORTIR not in codes()
+    zone["libre"] = True
+    etat = tourner(4000, lambda etat: etat.etape == "ranger_le_bras")
+    assert table.ORDRE_SPRAY in codes()
+    # Rentrée : la même zone (quelque chose y est entré pendant la dose).
+    zone["libre"] = False
+    etat = tourner(100)
+    assert etat.etape == "ranger_le_bras" and table.ORDRE_RANGER not in codes()
+    zone["libre"] = True
+    etat = tourner(4000)
+    assert etat.statut == "fini", etat
+    assert table.ORDRE_RANGER in codes()
+
+
+def test_zone_du_bras_reglee():
+    zone = SPRAY.bras.zone
+    # EXEMPLE tant que la Maquette ne l'a pas balayée.
+    assert zone.exemple
+    assert (zone.x, zone.y, zone.z_max) == ((0.66, 0.95), (-0.03, 0.24), 0.85)
+
+
+def test_zone_du_bras_verifiee(reglages):
+    remplacer(
+        reglages / "machine.yaml",
+        "zone: {exemple: true, x: [0.66, 0.95], y: [-0.03, 0.24], z_max: 0.85}",
+        "zone: {exemple: true, x: [0.75, 0.95], y: [-0.03, 0.24], z_max: 0.85}",
+    )
+    assert "bras → zone : elle doit contenir l'axe du bras" in erreur_de(reglages)
+
+
+def test_griffe_et_prehension_dans_la_zone():
+    from vidange.griffe.regles import Pose as PoseGriffe
+    from vidange.griffe.regles import ReglesGriffe
+    from vidange.prehension.regles import Objet, ReglesPrehension
+    from vidange.prehension.regles import Pose as PosePrehension
+    from vidange.spray.zone import griffe_dans_la_zone, prehension_dans_la_zone
+
+    zone = SPRAY.bras.zone
+    griffe = ReglesGriffe(MACHINE)
+    # Griffe au-dessus de la zone, axes à 0,95 (bas du godet à 0,747) : dedans ; en butée haute
+    # (bas à 1,087) : dehors, même juste au-dessus.
+    basse = PoseGriffe(x=0.80, y=0.10, z=0.95, a=0, b=0)
+    assert griffe_dans_la_zone(zone, griffe, basse)
+    assert not griffe_dans_la_zone(zone, griffe, basse.avec(z=1.29))
+    # À côté en y : dehors fermé ; godet grand ouvert, la tête s'allonge le long du pont.
+    assert not griffe_dans_la_zone(zone, griffe, basse.avec(y=0.36))
+    assert griffe_dans_la_zone(zone, griffe, basse.avec(y=0.36, b=1.0))
+    prehension = ReglesPrehension(MACHINE)
+    assert MACHINE.prehension is not None
+    seau = Objet.depuis("seau", MACHINE.prehension.objets["seau"])
+    tete = PosePrehension(x=0.80, y=0.10, z=0.90, a=0)
+    # Tête vide au-dessus de 0,85 : dehors ; plus bas : dedans.
+    assert not prehension_dans_la_zone(zone, prehension, tete, None)
+    assert prehension_dans_la_zone(zone, prehension, tete.avec(z=0.80), None)
+    # Ce qu'elle tient compte : un seau pendu en butée haute (≈ 0,83), à y 0,35 (la tête seule
+    # est loin de la zone, le seau de rayon 0,13 y entre).
+    pendu = tete.avec(y=0.35, z=0.83)
+    assert not prehension_dans_la_zone(zone, prehension, pendu, None)
+    assert prehension_dans_la_zone(zone, prehension, pendu, seau)
+
+
+def test_zone_du_bras_position_inconnue_pas_libre():
+    from vidange.spray.zone import ZoneDuBras
+
+    class BrasMuet:
+        def position(self):
+            raise RuntimeError("carte muette")
+
+    class GriffeMuette:
+        bras = BrasMuet()
+        regles = None
+
+    zone = ZoneDuBras(MACHINE, griffe=GriffeMuette())
+    assert not zone.libre()
+    assert "position de la griffe inconnue (carte muette)" in (zone.refus() or "")
+    assert ZoneDuBras(MACHINE).libre()

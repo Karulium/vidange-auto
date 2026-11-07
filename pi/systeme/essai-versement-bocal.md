@@ -23,11 +23,13 @@ filmer.
    `sudo -u vidange /opt/vidange-auto/pi/.venv/bin/vidange-fluidnc` (et de même pour les autres).
 3. Les chiffres à régler sont dans `pi/reglages/machine.yaml`, partie `griffe → versement_bocal`. Ceux de la
    partie elle-même sont **figés** (fiche du 07/11) ; ceux des sous-parties `dose`, `ouverture`, `secousses`,
-   `fin`, `godet`, `bouchage` sont marqués `exemple: true`. Après chaque changement :
+   `fin`, `godet`, `bouchage`, `tete_basse` sont marqués `exemple: true`. Après chaque changement :
    `vidange --verifier` doit dire « Réglages corrects ».
 4. `vidange-entonnoir versement` : le Pi redit ses chiffres (dose, hauteur, ouvertures) et la **liste des
-   bocaux où la griffe ne peut pas verser** avec les règles d'aujourd'hui (voir les questions de la PR).
-   Vérifier que les 3 bocaux de l'essai n'y sont pas.
+   bocaux où la griffe ne peut pas verser** avec les règles d'aujourd'hui. Depuis la tâche 45 septies, elle
+   doit dire « **0** ». Il ajoute la liste des bocaux où la Préhension ne peut pas **poser l'entonnoir** (la
+   griffe, sur le même pont, serait traînée au-dessus de l'agitateur) : aujourd'hui `bocal_0_0`, `bocal_0_1`,
+   `bocal_1_0`, `bocal_2_0` ; sur ceux-là, l'entonnoir se pose **à la main** (question de la PR n° 100).
 
 ## Étape 1 : la position de la vis pour chaque angle du godet
 
@@ -116,7 +118,49 @@ autres postes du mode bocaux sont prêts (l'écran dit « pas lancé : raison »
      griffe ne doit **jamais** reprendre une dose pour ce bocal.
 6. Quand tout est bon : remettre les vitesses, passer à `false` le `exemple` des sous-parties réglées.
 
+## Étape 7 : les bocaux autrefois refusés (tâche 45 septies)
+
+**Testé sur le vrai matériel : non.** Les fils Griffe, Maquette et Préhension ont répondu le 07/11 ; ces trois
+cas n'ont été joués que sur la machine imaginaire. À faire à la console d'abord (sans maïs), puis en lot.
+
+1. **Rangée 1 (y 0,06), godet ouvert.** Mât au-dessus de `bocal_0_5` (x 1,7575 ; y 0,06) : pont à
+   `$J=G53 X1944.5 F600`, puis `$J=G53 Y60 F300`, tête en haut, A = 0. Descendre à `Z1025`, ouvrir à 20°, puis
+   grand ouvert (35°). Regarder **côté mur** (−y) : les joues des coquilles doivent rester à **au moins 10 cm**
+   du mur du conteneur (fiche : 14,5 cm), et le haut de la chape et les goupilles à **au moins 2 cm** des pièces
+   du pont côté mur (chariot X, moteur Y, rail ; fiche : 2,7 cm). Moins : arrêt, refermer, remonter, le dire.
+   Mesurer aussi la vraie course du chariot Y vers le mur : `$J=G53 Y40 F300` doit passer sans toucher (le
+   Portique a dit y ≥ 0,04 le 14/10, **à revérifier**).
+2. **Colonne x 1,2075 (garde du boîtier de la caméra du bocal).** Mât au-dessus de `bocal_2_0` (x 1,2075 ;
+   y 0,2506) : pont `$J=G53 X1394.5 F600`, `$J=G53 Y250.6 F300`, A = 0. Descendre **lentement** (`F150`) à
+   `Z1025`, filmer le côté −x : la raclette doit passer à **au moins 9 mm** du support du servo de la caméra
+   (Maquette : 11,5 mm). Ouvrir à 20°, 35°, refermer, remonter à 1,045 puis en haut : même jeu à chaque hauteur.
+   Même chose au-dessus de `bocal_0_0` (y 0,06). Moins de 5 mm : arrêt, le dire.
+3. **Dernière rangée (y 0,8224), tête de préhension basse.** Rien dans la tête de préhension (aimants coupés,
+   vide à l'air). Pont tel que le mât de la griffe soit au-dessus de `bocal_8_3` (x 1,5375) : `$J=G53 X1724.5
+   F600`, chariot à `Y800`.
+   - Descendre la tête de préhension à la face **0,90** (`vidange-fluidnc` sur la carte de la tête, Z à 900 mm,
+     80 mm/s au plus). Regarder sous elle : au moins **20 cm** au-dessus des bocaux, des capsules et des boîtes à
+     capsules (fiche : 20 à 31 cm).
+   - Puis seulement, chariot à `Y822.4 F300` : rien ne doit toucher la chaîne Z de la préhension ni le plénum
+     du Nettoyage. Descendre la griffe à `Z1025`, ouvrir à 20°, refermer, remonter en haut.
+   - Chariot à `Y800`, **puis seulement** remonter la tête de préhension à 1,10.
+   - Essayer l'interdit : tête de préhension en haut, demander au Pi le chariot à y 0,8224 (pilotage manuel de
+     la page web) : il doit refuser (« chaîne Z de la préhension »).
+4. **En lot** (vitesses divisées par 4, Karulium à l'arrêt d'urgence) : `bocal_0_5`, `bocal_8_3`, `bocal_0_6`
+   (premier entonnoir posé à la main). Pour `bocal_8_3`, regarder l'ordre : la griffe va au-dessus du col à
+   y 0,80, la tête de préhension descend (journal : « tête de préhension basse »), la griffe avance jusqu'au col,
+   verse, remonte, revient à y 0,80, et la tête de préhension remonte (journal : « tête de préhension
+   remontée »). La tête de préhension ne doit **jamais** être basse quand son mât est sous x 1,20.
+5. Essayer le refus : mettre une capsule dans la tête de préhension (aimants) avant le versement de `bocal_8_3` :
+   alarme « tête de préhension basse refusée : elle tient un(e) capsule », la griffe ne passe pas y 0,80.
+6. Quand tout est bon : `tete_basse → exemple: false` (garder 0,90 sauf si un jeu est trop petit).
+7. **Lot de plus de 3 bocaux.** Sur la machine imaginaire, au 4e bocal, la griffe sort parfois du fût tête à
+   180° et le versement s'arrête (« tête à −180°, il faut 0° ») : question de la PR n° 100. Faire les lots de
+   3 bocaux au plus en attendant la réponse.
+
 ## Ce qu'il faut renvoyer à Claude
 
 Les valeurs de B (étape 1), les 3 charges de l'étape 2, la hauteur des dents et le jeu au boîtier (étape 3), ce
-qui reste dans le godet et ce qui a marché (étape 4), le nombre de prises dans la plage (étape 5), les vidéos.
+qui reste dans le godet et ce qui a marché (étape 4), le nombre de prises dans la plage (étape 5), les jeux
+mesurés à l'étape 7 (mur, pièces du pont, support du servo, sous la tête de préhension), la vraie course du
+chariot Y vers le mur, les vidéos.

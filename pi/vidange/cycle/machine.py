@@ -141,6 +141,7 @@ from vidange.remplissage.module import Plan
 from vidange.remplissage.remplissage import Remplissage
 from vidange.spray.spray import PORTE as PORTE_SPRAY
 from vidange.spray.spray import Spray
+from vidange.spray.zone import ZoneDuBras
 from vidange.stockage.simulation import BOUCLE
 from vidange.stockage.stockage import Stockage, VisionBande
 from vidange.vision.inspection import NOM_ECARTS, EcartsAttaches, Regard, VisionInspection
@@ -606,7 +607,8 @@ class GriffeDuLot(Protocol):
     versement_s: float
 
     def partie(self) -> bool:
-        """La griffe est partie du poste chercher sa 1re prise (le bras du spray peut sortir)."""
+        """La griffe est partie du poste (la Préhension peut poser le couvercle ; le bras du
+        spray, lui, regarde sa zone : vidange.spray.zone)."""
         ...
 
 
@@ -942,6 +944,11 @@ class PiecesMachine:
             self.stockage.brancher_griffe(vraie.griffe)
         griffe: GriffeDuLot = vraie if vraie is not None else fausse  # type: ignore[assignment]
         plan = Plan(seaux=list(lot.seaux), versement_s=griffe.versement_s, magasin=self.stockage)
+        # Le bras du spray ne bouge que zone libre : la griffe, la préhension et ce qu'elles
+        # tiennent, là où elles sont (fil Spray, 07/11/2026).
+        zone = ZoneDuBras(
+            machine, griffe=None if vraie is None else vraie.griffe, prehension=prehension
+        )
         return PiecesRemplissage(
             remplissage,
             prehension,
@@ -951,6 +958,7 @@ class PiecesMachine:
             griffe_partie=griffe.partie,
             couvercle=couvercle,
             griffe=vraie,
+            zone_bras_spray=zone.libre,
         )
 
     def porte_spray_ouverte(self) -> bool:
@@ -1032,6 +1040,8 @@ class PiecesMachine:
             self.griffe_des_bocaux(),
             entonnoir,
             fichier=None if self.donnees is None else self.donnees / NOM_VERSEMENT,
+            # Tête de préhension basse pendant les versements de la dernière rangée (07/11).
+            prehension=cartes.prehension,
         )
         return PiecesEntonnoir(entonnoir, cartes.prehension, versement=versement)
 

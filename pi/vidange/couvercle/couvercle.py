@@ -380,39 +380,37 @@ class Couvercle:
         pose = reg.pose
         perte = prehension.reglages.vide.perte_kpa
         zp = self.z_pose(format)
-        yield from self._transport(prehension, pose.x, pose.y)
-        # 9) descente rapide jusqu'à Z_pose + 0,040 (format C : lente de 0,67 à 0,57), 10) lente.
+        # Format C (§ 5.1) : l'outil arrive décalé vers l'allée, descend ainsi jusqu'à la face de
+        # recentrage, revient à l'y de la pose à face constante, puis descend comme les autres.
+        decalee = reg.formats[format].descente_decalee
+        yield from self._transport(prehension, pose.x, pose.y if decalee is None else decalee.y)
+        # 9) descente rapide jusqu'à Z_pose + 0,040, 10) lente.
         etapes: list[tuple[str, float, str | None]] = []
         rapide = zp + pose.rapide_m
-        lente = reg.formats[format].descente_lente_z
-        if lente is not None:
-            etapes.append(("descente rapide vers le seau", lente[0], None))
+        if decalee is not None:
             etapes.append(
-                (
-                    "descente lente (passage près de la tête du micropore)",
-                    lente[1],
-                    "couvercle_pose",
-                )
+                ("descente décalée vers l'allée (couvercle C)", decalee.recentrage_z, None)
             )
         etapes.append(("descente rapide vers le seau", rapide, None))
         etapes.append(("approche lente du seau", zp - pose.sans_contact_m, "couvercle_pose"))
         z_contact: float | None = None
-        for texte, z, vitesse in etapes:
+        for numero, (texte, z, vitesse) in enumerate(etapes):
             assert prehension.pose is not None
-            if prehension.pose.z <= z + 1e-6:
-                continue
-            resultat = yield Pas(
-                texte, {"z": z}, vitesse=vitesse, palper=True, vide_perte_kpa=perte
-            )
-            assert resultat is not None
-            if resultat.arret == "vide":
-                self._perdu(prehension)
-            if resultat.contact:
-                z_contact = resultat.pose.z
-                break
+            if prehension.pose.z > z + 1e-6:
+                resultat = yield Pas(
+                    texte, {"z": z}, vitesse=vitesse, palper=True, vide_perte_kpa=perte
+                )
+                assert resultat is not None
+                if resultat.arret == "vide":
+                    self._perdu(prehension)
+                if resultat.contact:
+                    z_contact = resultat.pose.z
+                    break
+            if decalee is not None and numero == 0:
+                yield from self._vers_y(prehension, pose.y, decalee.vitesse_m_s, "recentrer")
         if z_contact is None:
             # 10b) pas de contact à Z_pose − 0,015 : pas de seau, ou couvercle tombé.
-            yield from self._monter_avec_vide(prehension)
+            yield from self._monter_avec_vide(prehension, format)
             self._photo("couvercle : pas de contact à la pose")
             raise ErreurEtape(
                 f"couvercle : pas de contact jusqu'à {_m(zp - pose.sans_contact_m)} m (attendu à "
@@ -424,7 +422,7 @@ class Couvercle:
         if ecart > pose.fenetre_m + 1e-9:
             # 10a) contact trop tôt : couvercle de travers ou posé sur l'anse. La tête remonte
             # AVEC le couvercle (vide gardé).
-            yield from self._monter_avec_vide(prehension)
+            yield from self._monter_avec_vide(prehension, format)
             self._photo("couvercle mal posé")
             raise ErreurEtape(
                 f"couvercle mal posé : contact à {_m(z_contact)} m, attendu à {_m(zp)} m "
@@ -457,9 +455,41 @@ class Couvercle:
         # 14) la tête remonte et part (la fermeture peut commencer).
         yield from prehension.monter()
 
-    def _monter_avec_vide(self, prehension: Prehension) -> Geste:
+    def _vers_y(self, prehension: Prehension, y: float, vitesse: float, quoi: str) -> Geste:
+        """Format C : l'outil va à y, face constante, à `vitesse` (m/s), le vide surveillé."""
+        assert prehension.pose is not None
+        ecart = abs(y - prehension.pose.y)
+        if ecart <= 1e-6:
+            return
+        resultat = yield Pas(
+            f"{quoi} le couvercle C à y {_m(y)}, face constante",
+            {"y": y},
+            vide_perte_kpa=prehension.reglages.vide.perte_kpa,
+            duree_s=ecart / vitesse,
+        )
+        assert resultat is not None
+        if resultat.arret == "vide":
+            self._perdu(prehension)
+
+    def _monter_avec_vide(self, prehension: Prehension, format: str) -> Geste:
+        """La tête remonte avec le couvercle (erreurs 10a et 10b). Format C, sous la face du début
+        de la descente décalée : par le même chemin, à l'envers (choix de Claude, tâche 45
+        septies : la remontée droite repasserait à 2,3 mm de la plaque du micropore)."""
         perte = prehension.reglages.vide.perte_kpa
-        haut = prehension.regles.hauteur_trajet(prehension.objet, prehension.pose.y)  # type: ignore[union-attr]
+        decalee = self.reglages.formats[format].descente_decalee
+        assert prehension.pose is not None
+        if decalee is not None and prehension.pose.z < decalee.debut_z - 1e-6:
+            if prehension.pose.z < decalee.recentrage_z - 1e-6:
+                resultat = yield Pas(
+                    "remonter avec le couvercle jusqu'au recentrage",
+                    {"z": decalee.recentrage_z},
+                    vide_perte_kpa=perte,
+                )
+                assert resultat is not None
+                if resultat.arret == "vide":
+                    self._perdu(prehension)
+            yield from self._vers_y(prehension, decalee.y, decalee.vitesse_m_s, "décaler")
+        haut = prehension.regles.hauteur_trajet(prehension.objet, prehension.pose.y)
         resultat = yield Pas("remonter avec le couvercle", {"z": haut}, vide_perte_kpa=perte)
         assert resultat is not None
         if resultat.arret == "vide":

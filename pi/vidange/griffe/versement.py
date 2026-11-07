@@ -23,6 +23,13 @@ Le geste, tel que la fiche du fil Griffe le donne (griffe/logiciel/versement-boc
    l'entonnoir vide moins la marge → alerte « entonnoir bouché », bocal « suspect », rien
    d'automatique ; pesée instable (3 essais) → alerte.
 
+Dernière rangée de bocaux, au-delà de la chaîne Z de la préhension (mâts à y > 0,80, même chariot
+que la griffe) : fiche prehension/logiciel/tete-basse-versement-bocaux.md (07/11/2026). La griffe
+va d'abord au-dessus du col à y 0,80 ; la tête de préhension, VIDE et au-dessus du plateau du haut
+(préhension à x ≥ 1,20), descend alors à sa face basse (`tete_basse`) ; la griffe passe ensuite
+y 0,80. Après le versement, la griffe revient à y 0,80 (en butée haute), puis la tête de
+préhension remonte. Sans préhension branchée (`prehension`), ces bocaux sont refusés.
+
 Refait après une alarme (Go de Karulium), le versement d'un bocal commencé continue : tant que le
 godet ne s'est pas ouvert au-dessus du bocal, la griffe recommence par une prise (ce qui reste dans
 le godet retombe au fût) ; une fois ouvert, elle reprend à la pesée, jamais une 2e dose. La phase
@@ -36,17 +43,22 @@ import json
 import math
 import os
 from collections.abc import Callable, Generator
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from vidange.chef import Condition, ErreurEtape
 from vidange.entonnoir.entonnoir import Entonnoir, lisible
 from vidange.griffe.bras import G, Pas, Resultat
 from vidange.griffe.griffe import DoseDonnee, Griffe, Pesee
-from vidange.griffe.regles import Pose
+from vidange.griffe.regles import Contexte, Pose, ReglesGriffe
 from vidange.journal import donner_journal
+from vidange.prehension.tete import Pas as PasPrehension
 from vidange.registre import ErreurRegistre
 from vidange.reglages import VersementBocal
+
+if TYPE_CHECKING:
+    from vidange.prehension.prehension import Prehension
 
 journal = donner_journal("griffe.versement")
 
@@ -84,6 +96,12 @@ QUOI_FAIRE_PAS_FINI = (
     "Regarder la griffe : son godet est peut-être ouvert, avec des grains, au-dessus d'un autre "
     "bocal. Le vider à la main dans l'entonnoir si besoin et vérifier ce bocal, puis acquitter et "
     "donner le Go."
+)
+QUOI_FAIRE_TETE = (
+    "La tête de préhension doit être basse pendant le versement dans la dernière rangée de "
+    "bocaux (chaîne Z), et elle ne peut pas (voir le message : elle tient quelque chose, elle "
+    "bouge, ou elle n'est pas au-dessus du plateau du haut). Regarder la préhension, corriger, "
+    "puis acquitter et donner le Go."
 )
 QUOI_FAIRE_REFUS = (
     "La griffe ne peut pas verser dans ce bocal (règle de position, voir le message). Regarder "
@@ -125,6 +143,32 @@ def _ecrire(fichier: Path | None, etat: EtatVersement) -> None:
         journal.error("Versement : état pas gardé dans %s : %s", fichier, erreur)
 
 
+def face_basse(reglages: VersementBocal, regles: ReglesGriffe, y: float) -> float | None:
+    """La face de la tête de préhension pendant le versement dans un bocal à y : basse au-delà
+    de la chaîne Z (dernière rangée, `tete_basse`) ; None : elle n'a pas à descendre (ou rien
+    n'est réglé pour cette rangée, qui reste refusée)."""
+    tete = reglages.tete_basse
+    y_max = regles.y_max_prehension_haute()
+    if tete is None or y_max is None or y <= y_max + _EGAL:
+        return None
+    return tete.prehension_face_basse_versement
+
+
+def contexte_du_bocal(
+    reglages: VersementBocal, regles: ReglesGriffe, contexte: Contexte, y: float
+) -> Contexte:
+    """Le contexte des règles de la griffe au-dessus d'un col à y : tête de préhension comptée à
+    sa face basse quand elle doit l'être (dernière rangée)."""
+    face = face_basse(reglages, regles, y)
+    return contexte if face is None else replace(contexte, prehension_face_z=face)
+
+
+def _descendre_la_tete(face: float):
+    yield PasPrehension(
+        "tête basse pendant le versement de la griffe (dernière rangée)", {"z": face}, choc=True
+    )
+
+
 def poses_du_bocal(reglages: VersementBocal, x: float, y: float) -> list[Pose]:
     """Les poses de la tête au-dessus d'un col : godet fermé, à chaque ouverture du geste, et
     remontée avant de fermer."""
@@ -144,11 +188,13 @@ class Versement:
         fichier: Path | None = None,
         distance_m: Callable[[], float | None] | None = None,
         noter_dose: Callable[[str, float], object] | None = None,
+        prehension: "Prehension | None" = None,
     ) -> None:
         """`fichier` : où garder la phase (donnees/versement.json ; None : nulle part).
         `distance_m` : le capteur de distance de la tête (VL53L1X, m ; None : pas branché, le
         bouchage n'est pas vérifié). `noter_dose(bocal, kg)` : la dose versée (sinon le registre
-        de la griffe, mesure « dose_bocal »)."""
+        de la griffe, mesure « dose_bocal »). `prehension` : la tête de préhension du même pont,
+        basse pendant les versements dans la dernière rangée (None : ces bocaux refusés)."""
         reglages = griffe.reglages.versement_bocal
         if reglages is None:
             raise ValueError("machine.yaml : pas de partie griffe → versement_bocal")
@@ -158,6 +204,11 @@ class Versement:
         self.fichier = fichier
         self._distance = distance_m
         self._noter_dose = noter_dose
+        self.prehension = prehension
+        # Mâts au-delà de ce y : tête de préhension basse (chaîne Z) ; None : pas de limite.
+        self._y_max = griffe.regles.y_max_prehension_haute()
+        # La tête de préhension a été baissée par le versement (elle remonte après lui).
+        self._tete_baissee = False
         self.etat = _lire(fichier)
         # Doses versées dans ce lot, par bocal (kg).
         self.doses: dict[str, float] = {}
@@ -270,7 +321,12 @@ class Versement:
         """Avant toute prise : la tête peut-elle se tenir au-dessus de ce col à chaque ouverture
         du geste (règles de la griffe : godet ouvert, boîtier de la caméra du bocal...) ?"""
         griffe = self.griffe
-        contexte = griffe.contexte()
+        contexte = contexte_du_bocal(self.reglages, griffe.regles, griffe.contexte(), y)
+        if contexte.prehension_face_z is not None and self.prehension is None:
+            return (
+                "dernière rangée (chaîne Z) : la tête de préhension doit y être basse, et elle "
+                "n'est pas branchée au versement"
+            )
         poses = poses_du_bocal(self.reglages, x, y)
         haut = poses[0].avec(z=griffe.reglages.trajet.z)
         for depart, arrivee in ((haut, poses[0]), *((poses[0], pose) for pose in poses[1:])):
@@ -293,7 +349,14 @@ class Versement:
                 f"la griffe ne peut pas verser dans le bocal {lisible(bocal)} : {refus}",
                 QUOI_FAIRE_REFUS,
             )
+        # Tête de préhension laissée basse (alarme, coupure...) : en haut avant d'aller au fût.
+        yield from self._remonter_la_tete()
         avant = yield from self._prendre_la_dose()
+        if face_basse(reglages, griffe.regles, y) is not None:
+            # Dernière rangée : au-dessus du col à y 0,80, tête de préhension basse, puis le col.
+            assert self._y_max is not None
+            yield from griffe._aller_au_dessus(x, self._y_max, choc=True)
+            yield from self._baisser_la_tete()
         yield from griffe._aller_au_dessus(x, y, choc=True)
         assert griffe.pose is not None
         ecart = math.hypot(griffe.pose.x - x, griffe.pose.y - y)
@@ -384,6 +447,7 @@ class Versement:
                 )
             self._finir(bocal, reste)
             self._changer(EtatVersement(bocal, FAIT, self.etat.avant_kg, self.etat.tare_n))
+            yield from self._remonter_la_tete()
             return
         yield from self._vider(bocal)
 
@@ -430,11 +494,101 @@ class Versement:
         yield Pas("fermer le godet", {"b": 0.0}, vitesse_b=ouverture.vitesse_m_s)
         yield from griffe._monter()
         self._changer(EtatVersement(bocal, FAIT, self.etat.avant_kg, self.etat.tare_n))
+        yield from self._remonter_la_tete()
         if bouche is not None:
             self.entonnoir.noter_suspect(bocal, f"entonnoir bouché sur le bocal {lisible(bocal)}")
             raise ErreurEtape(
                 f"entonnoir bouché, bocal {lisible(bocal)} ({bouche})", QUOI_FAIRE_BOUCHE
             )
+
+    # ------------------------------------------------------------ tête de préhension basse
+
+    def _refus_tete_basse(self, prehension: "Prehension", quoi: str) -> str | None:
+        """La tête de préhension peut-elle descendre (ou remonter) maintenant ? Vide, sans geste
+        en cours, au-dessus du plateau du haut (fiche, conditions 1 et 2)."""
+        tete = self.reglages.tete_basse
+        assert tete is not None
+        if prehension.occupee():
+            return "la préhension a un geste en cours"
+        if prehension.objet is not None:
+            return f"elle tient un(e) {prehension.objet.sorte} : elle ne {quoi} que vide"
+        vide = prehension.tete.vide_kpa()
+        if vide is not None and vide <= prehension.reglages.vide.perte_kpa:
+            return f"vide de {vide:g} kPa sur la ventouse : elle ne {quoi} que vide, à l'air"
+        try:
+            pose = prehension.tete.position()
+        except ErreurEtape as erreur:
+            return f"position de la tête de préhension inconnue : {erreur}"
+        x_min = tete.prehension_x_min_tete_basse
+        if pose.x < x_min - _EGAL:
+            return (
+                f"préhension à x {pose.x:.3f} m : elle ne {quoi} qu'au-dessus du plateau du haut "
+                f"(x ≥ {x_min:g})"
+            )
+        return None
+
+    def _baisser_la_tete(self) -> Geste:
+        """Avant que la griffe passe y 0,80 : la tête de préhension à sa face basse."""
+        tete, prehension = self.reglages.tete_basse, self.prehension
+        assert tete is not None
+        if prehension is None:
+            raise ErreurEtape(
+                "versement : la tête de préhension n'est pas branchée (dernière rangée)",
+                QUOI_FAIRE_TETE,
+            )
+        refus = self._refus_tete_basse(prehension, "descend")
+        if refus is not None:
+            raise ErreurEtape(f"tête de préhension basse refusée : {refus}", QUOI_FAIRE_TETE)
+        face = tete.prehension_face_basse_versement
+        self._tete_baissee = True
+        if prehension.tete.position().z > face + _EGAL:
+            journal.info("Versement : tête de préhension basse (face %.3f m)", face)
+            prehension.lancer(lambda: _descendre_la_tete(face))
+            yield Pas("attendre la tête de préhension basse", jusqu_a=prehension.geste_fini)
+
+    def _tete_a_remonter(self) -> bool:
+        """La tête de préhension est-elle à remonter avant que la griffe roule ? Baissée par le
+        versement, ou laissée plus bas que sa butée haute par la Préhension (au-delà de y 0,80, sa
+        face « en haut » est celle de la chaîne Z : la griffe qui revient à y 0,80 la traînerait
+        tête basse). Occupée, ou tenant un objet : ce n'est pas au versement de la bouger."""
+        prehension = self.prehension
+        if prehension is None or self.reglages.tete_basse is None:
+            return False
+        if self._tete_baissee:
+            return True
+        if prehension.occupee() or prehension.objet is not None:
+            return False
+        try:
+            pose = prehension.tete.position()
+        except ErreurEtape:
+            return False
+        reglages = prehension.reglages
+        return pose.z < reglages.haut_z - reglages.tolerance_m
+
+    def _remonter_la_tete(self) -> Geste:
+        """Après le versement (et avant d'aller au fût) : la griffe en haut et revenue à y 0,80,
+        puis la tête de préhension remonte (si elle est à remonter)."""
+        prehension = self.prehension
+        if prehension is None or not self._tete_a_remonter():
+            return
+        griffe = self.griffe
+        yield from griffe._monter()
+        assert griffe.pose is not None
+        if self._y_max is not None and griffe.pose.y > self._y_max + _EGAL:
+            yield Pas(
+                f"revenir à y {self._y_max:g} (chaîne Z de la préhension)",
+                {"y": self._y_max},
+                choc=True,
+            )
+        refus = self._refus_tete_basse(prehension, "remonte")
+        if refus is not None:
+            raise ErreurEtape(
+                f"remontée de la tête de préhension refusée : {refus}", QUOI_FAIRE_TETE
+            )
+        prehension.lancer(prehension.monter)
+        yield Pas("attendre la tête de préhension en haut", jusqu_a=prehension.geste_fini)
+        self._tete_baissee = False
+        journal.info("Versement : tête de préhension remontée")
 
     def _entonnoir_bouche(self) -> str | None:
         """Ce que voit le capteur de distance de la tête à travers le godet ouvert : None si la

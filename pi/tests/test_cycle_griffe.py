@@ -18,6 +18,7 @@ from vidange.prehension.regles import Pose as PosePrehension
 from vidange.reglages import charger_reglages
 from vidange.remplissage.module import SeauAFaire
 from vidange.simulateur import Simulateur
+from vidange.spray.zone import ZoneDuBras
 
 from .conftest import DOSSIER_PI
 
@@ -71,6 +72,7 @@ class PiecesAvecLaGriffe(PiecesSimulees):
             spray=pieces.spray,
             griffe_partie=self.griffe.partie,
             couvercle=pieces.couvercle,
+            zone_bras_spray=ZoneDuBras(MACHINE, self.griffe.griffe, pieces.prehension).libre,
             griffe=self.griffe,
         )
 
@@ -185,6 +187,8 @@ class FaussePrehension:
         self.tete = FausseTete(pose)
         self.regles = FausseRegles()
         self.occupe = False
+        self.objet = None
+        self.reglages = MACHINE.prehension
         self.verrou_pont = None
         self.verrou_chariot = lambda depart, arrivee: None
         self.verrou_stockage = lambda depart, arrivee: None

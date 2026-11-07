@@ -15,8 +15,9 @@ Ce qui vient de docs/decisions.md et de la tâche, sans rien inventer :
 - le seau tourne pendant le tassement et l'essuyage (Remplissage.tourner_seau) ; une couche vidée
   et tassée (ou le seau fini, essuyé) termine l'étape « verser » du Remplissage, et le Mycélium
   dose ensuite ;
-- « partie » (le bras du spray peut sortir, la Préhension peut poser le couvercle) : le mât de la
-  griffe n'est plus au-dessus du seau du vidage (choix 4) ;
+- « partie » (la Préhension peut poser le couvercle) : le mât de la griffe n'est plus au-dessus du
+  seau du vidage (choix 4). Le bras du spray, lui, ne regarde plus « partie » mais sa zone
+  (vidange.spray.zone, fil Spray du 07/11/2026, tâche 45 septies) ;
 - la Préhension ne bouge le pont que griffe GARÉE : aucun geste en cours, axes en butée haute,
   godet fermé, tête bras le long du pont (« pas de collision si la griffe est en butée haute »,
   réponse du projet mécanique du 29/10/2026).
@@ -97,8 +98,38 @@ def _points(depart_x: float, depart_y: float, arrivee_x: float, arrivee_y: float
 def brancher_pont(griffe: Griffe, prehension: Prehension) -> None:
     """Les deux mâts sont sur le même pont et le même chariot Y : chacun vérifie, à chaque pas qui
     bouge le pont, les règles de l'autre (choix 2 de ce fichier). Position inconnue de l'autre :
-    refusé (on ne bouge pas à l'aveugle)."""
+    refusé (on ne bouge pas à l'aveugle).
+
+    Tête de préhension basse pendant un versement dans la dernière rangée de bocaux (fiche
+    prehension/logiciel/tete-basse-versement-bocaux.md, 07/11/2026 : « le pont peut rouler, ça ne
+    change rien au jeu ») : vide, à sa face basse, elle peut être traînée tête basse, seulement
+    au-dessus du plateau du haut (x ≥ prehension_x_min_tete_basse) ; ses règles de position sont
+    vérifiées le long du trajet."""
     pas = griffe.reglages.pas_verification_m
+    versement = griffe.reglages.versement_bocal
+    tete_basse = None if versement is None else versement.tete_basse
+
+    def basse_du_versement(pose: PosePrehension) -> bool:
+        if tete_basse is None or prehension.objet is not None:
+            return False
+        face = tete_basse.prehension_face_basse_versement
+        return abs(pose.z - face) <= prehension.reglages.tolerance_m + _EGAL
+
+    def refus_basse_trainee(debut: PosePrehension, fin: PosePrehension) -> str | None:
+        assert tete_basse is not None
+        contexte = prehension.contexte()
+        x_min = tete_basse.prehension_x_min_tete_basse
+        for t in _points(debut.x, debut.y, fin.x, fin.y, pas):
+            pose = debut.avec(x=debut.x + (fin.x - debut.x) * t, y=debut.y + (fin.y - debut.y) * t)
+            if pose.x < x_min - _EGAL:
+                return (
+                    f"tête basse (versement dans la dernière rangée) à x {pose.x:.3f} m : elle "
+                    f"ne va qu'au-dessus du plateau du haut (x ≥ {x_min:g})"
+                )
+            refus = prehension.regles.refus_pose(pose, contexte)
+            if refus is not None:
+                return refus
+        return None
 
     def refus_griffe_trainee(depart: PosePrehension, arrivee: PosePrehension) -> str | None:
         dx, dy = arrivee.x - depart.x, arrivee.y - depart.y
@@ -131,7 +162,10 @@ def brancher_pont(griffe: Griffe, prehension: Prehension) -> None:
         except Exception as erreur:
             return f"position de la tête de préhension (même pont) inconnue : {erreur}"
         fin = debut.avec(x=debut.x + dx, y=debut.y + dy)
-        refus = prehension.regles.refus_mouvement(debut, fin, prehension.contexte())
+        if basse_du_versement(debut):
+            refus = refus_basse_trainee(debut, fin)
+        else:
+            refus = prehension.regles.refus_mouvement(debut, fin, prehension.contexte())
         if refus is None:
             refus = prehension.verrou_chariot(debut, fin)
         if refus is None:

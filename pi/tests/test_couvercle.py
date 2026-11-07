@@ -87,7 +87,13 @@ def test_les_hauteurs_de_pose_sont_celles_de_la_fiche():
     vitesses = MACHINE.prehension.vitesses
     assert (vitesses.z, vitesses.couvercle_pile, vitesses.couvercle_pose) == (0.08, 0.02, 0.01)
     assert MACHINE.prehension.vide.prise_kpa == -55 and MACHINE.prehension.vide.perte_kpa == -40
-    assert COUVERCLE.formats["seau_c"].descente_lente_z == (0.67, 0.57)
+    # Format C seulement : descente décalée (fiche § 5.1, Maquette v45.120) ; A, B, D : droite.
+    decalee = COUVERCLE.formats["seau_c"].descente_decalee
+    assert decalee is not None
+    assert (decalee.y, decalee.debut_z, decalee.recentrage_z) == (0.498, 0.70, 0.545)
+    assert decalee.vitesse_m_s == 0.010
+    for format in ("seau_a", "seau_b", "seau_d"):
+        assert COUVERCLE.formats[format].descente_decalee is None
     assert COUVERCLE.tolerance_kg("seau_a") == pytest.approx(0.13 * 0.30)
 
 
@@ -106,10 +112,11 @@ def test_les_hauteurs_de_pose_sont_celles_de_la_fiche():
         ("    couvercle_pose: 0.01", "    couvercle_pose: 0.5", "plus grande que la vitesse"),
         ("    seau_d: {masse_kg: 0.13}\n", "", "le format « seau_d » de la fermeture"),
         (
-            "descente_lente_z: [0.67, 0.57]",
-            "descente_lente_z: [0.67, 0.45]",
-            "seau_c → descente_lente_z",
+            "recentrage_z: 0.545",
+            "recentrage_z: 0.45",
+            "seau_c → descente_decalee : il faut Z_pose + rapide_m < recentrage_z < debut_z",
         ),
+        ("{y: 0.498, debut_z", "{y: 0.49, debut_z", "seau_c → descente_decalee → y : égal"),
     ],
 )
 def test_un_reglage_du_couvercle_faux_empeche_de_demarrer(reglages, ancien, nouveau, message):
@@ -191,17 +198,104 @@ def test_la_deuxieme_prise_part_du_haut_garde_en_memoire():
     assert rapides[1] == pytest.approx(fond + 24 * 0.009 + 0.03)
 
 
-def test_format_c_descente_lente_pres_de_la_tete_du_micropore():
+def reglages_format_c():
     cycle = REGLAGES.simulateur.cycle
     piles = {nom: pile.model_copy(update={"format": "seau_c"}) for nom, pile in cycle.piles.items()}
-    reglages = deux_seaux(format="seau_c", piles=piles)
-    planning, monde, scenario, gestes, _ = jouer(reglages=reglages)
+    return deux_seaux(format="seau_c", piles=piles)
+
+
+def jouer_en_notant_y(regler=lambda monde, tete: None, reglages=None):
+    """Comme jouer(), en notant aussi l'y visé et la durée de chaque pas de la tête."""
+    pas_y = []
+
+    def regler_et_noter(monde, tete):
+        executer = tete.executer
+
+        def note(pas, cible, poids):
+            pas_y.append((pas.texte, cible.y, cible.z, pas.duree_s))
+            executer(pas, cible, poids)
+
+        tete.executer = note
+        regler(monde, tete)
+
+    planning, monde, scenario, gestes, _ = jouer(regler_et_noter, reglages=reglages)
+    return planning, monde, scenario, pas_y
+
+
+def test_format_c_descente_decalee_puis_recentrage():
+    planning, monde, scenario, pas_y = jouer_en_notant_y(reglages=reglages_format_c())
     assert planning.fini, planning.probleme
-    lentes = [(v, z) for t, v, z in gestes if t.startswith("descente lente (passage")]
-    # Face 0,67 → 0,57 à 10 mm/s, pour chacun des 2 seaux.
-    assert lentes == [("couvercle_pose", pytest.approx(0.57))] * 2
-    rapides = [z for t, _, z in gestes if t == "descente rapide vers le seau"]
-    assert rapides[0] == pytest.approx(0.67)
+    assert monde.sur_le_seau == 2
+    textes = [t for t, *_ in pas_y]
+    # Pour chacun des 2 seaux : outil à (0,925 ; 0,498), descente à 0,545, recentrage à y 0,49 à
+    # face constante (8 mm à 10 mm/s : 0,8 s), puis descente normale (Z_pose + 0,040).
+    trajets = [(y, z) for t, y, z, _ in pas_y if t == "trajet du couvercle"]
+    assert [y for y, _ in trajets] == [pytest.approx(0.498)] * 2
+    decalees = [z for t, _, z, _ in pas_y if t == "descente décalée vers l'allée (couvercle C)"]
+    assert decalees == [pytest.approx(0.545)] * 2
+    recentrages = [
+        (y, z, duree) for t, y, z, duree in pas_y if t.startswith("recentrer le couvercle C")
+    ]
+    assert len(recentrages) == 2
+    for y, z, duree in recentrages:
+        assert y == pytest.approx(0.49) and z == pytest.approx(0.545)
+        assert duree == pytest.approx(0.8)
+    i = textes.index("descente décalée vers l'allée (couvercle C)")
+    assert textes[i + 1].startswith("recentrer le couvercle C")
+    assert textes[i + 2] == "descente rapide vers le seau"
+    assert pas_y[i + 2][2] == pytest.approx(0.439 + 0.040)
+    # Plus de descente lente « près de la tête du micropore ».
+    assert not [t for t in textes if t.startswith("descente lente")]
+
+
+def test_formats_a_b_d_descendent_droit():
+    planning, monde, scenario, pas_y = jouer_en_notant_y()
+    assert planning.fini, planning.probleme
+    trajets = [y for t, y, *_ in pas_y if t == "trajet du couvercle"]
+    assert trajets == [pytest.approx(0.49)] * 2
+    assert not [t for t, *_ in pas_y if "couvercle C" in t]
+
+
+def test_format_c_pas_de_seau_la_tete_remonte_par_le_chemin_decale():
+    def regler(monde, tete):
+        monde.pas_de_seau = True
+
+    planning, monde, scenario, pas_y = jouer_en_notant_y(regler, reglages_format_c())
+    assert "pas de seau ou couvercle tombé" in planning.probleme
+    textes = [t for t, *_ in pas_y]
+    i = textes.index("remonter avec le couvercle jusqu'au recentrage")
+    # Remontée à 0,545, retour à y 0,498 face constante, puis en haut (choix de Claude).
+    assert pas_y[i][2] == pytest.approx(0.545)
+    assert textes[i + 1].startswith("décaler le couvercle C à y 0,498")
+    assert pas_y[i + 1][1] == pytest.approx(0.498)
+    assert textes[i + 2] == "remonter avec le couvercle"
+    assert monde.tenus == 1 and monde.sur_le_seau == 0
+
+
+def test_seul_le_recentrage_du_c_bouge_le_pont_tete_basse():
+    from vidange.prehension.regles import Contexte, Pose, ReglesPrehension
+
+    regles = ReglesPrehension(MACHINE)
+    couvercle = Contexte(objet=regles_objet("couvercle"))
+    bas = Pose(x=0.925, y=0.498, z=0.545, a=0.0)
+    assert regles.recentrage_couvercle(bas, bas.avec(y=0.49), couvercle.objet)
+    refus = regles.refus_mouvement(bas, bas.avec(y=0.49), couvercle)
+    assert refus is None or "tête basse refusé" not in refus
+    # Ailleurs ou à une autre face, sans couvercle : la règle « tête en haut » d'avant.
+    for depart, arrivee, contexte in (
+        (bas, bas.avec(y=0.47), couvercle),
+        (bas.avec(z=0.60), bas.avec(z=0.60, y=0.49), couvercle),
+        (bas, bas.avec(y=0.49), Contexte()),
+    ):
+        refus = regles.refus_mouvement(depart, arrivee, contexte)
+        assert refus is not None and "tête basse refusé" in refus
+
+
+def regles_objet(nom):
+    from vidange.prehension.regles import Objet
+
+    assert MACHINE.prehension is not None
+    return Objet.depuis(nom, MACHINE.prehension.objets[nom])
 
 
 # ---------------------------------------------------------------- cas d'erreur de la fiche

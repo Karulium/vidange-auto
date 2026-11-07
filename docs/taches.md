@@ -748,7 +748,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   5. Si un geste ou une règle d'enchaînement manque dans `docs/decisions.md` (ne pas l'inventer) : garder la case
      vide, le dire dans la PR (« Questions pour Karulium »).
   Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
-- [ ] **45 septies. Réponses des fils du 07/11 : bocaux refusés, zone du bras du spray, couvercle C** — Modèle : Opus,
+- [x] **45 septies. Réponses des fils du 07/11 : bocaux refusés, zone du bras du spray, couvercle C** — Modèle : Opus,
   effort moyen. Trois corrections de règles déjà codées, d'après des fiches des modules (lire ces seuls fichiers dans
   `/mnt/project-files/`, montage réseau : ne jamais chercher dans tout le dossier).
   1. **Bocaux refusés par le versement (tâche 43 bis : 29 sur 122)** :

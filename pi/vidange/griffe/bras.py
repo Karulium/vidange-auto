@@ -83,6 +83,9 @@ class Pas:
     # Attente après le mouvement (s), puis pesée (médiane de plusieurs lectures).
     attente_s: float = 0.0
     pesee: bool = False
+    # Pas sans mouvement : attendre que ceci soit vrai (un geste d'un autre module, la tête de
+    # préhension du même pont) ; le délai est celui de l'étape du chef.
+    jusqu_a: Callable[[], bool] | None = None
 
 
 @dataclass(frozen=True)
