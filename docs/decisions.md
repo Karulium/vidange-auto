@@ -2028,3 +2028,9 @@ Code : `pi/vidange/prehension/tete.py` (`DeuxVannes`, `SOUFFLER`, `TeteFluidnc.s
     le lâcher (souffle, vide revenu au-dessus de −5 kPa) ; `--sans-souffler` garde l'objet tenu (essai de la
     reprise, § 4 bis).
 
+- **Réponses à la PR n° 104** (tâche 45 undecies, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Électroaimants des capsules, jet d'air du col et chauffage du lavage sur la carte n° 4 en P4, P5, P6 (EXEMPLE) :
+     gardés là ; question posée à l'Implantation (à ajouter à `implantation/logiciel/sorties-carte-4.md`).
+  2. Durée du souffle `prehension → vide → souffle_s` 0,3 s (EXEMPLE) : réglée à l'essai (étape 2 bis) au plus court
+     qui lâche toujours le seau, le couvercle et l'entonnoir, plus 0,1 s de marge.
+  3. Objet resté collé à la ventouse après deux souffles : alarme, pour tous les objets (gardé).
