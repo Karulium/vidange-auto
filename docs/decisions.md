@@ -1878,3 +1878,14 @@ vrai matériel : non.
   axes 1,265 (bas ≈ 1,065) ; le dépôt a 1,29 (bas du godet 1,077). Sa carte met aussi le mât de `bocal_2_1`
   (1,1415 ; 0,2506) dans le carré « contact » de la caméra du dosage, que la table du dépôt (v45.111) permet en
   butée haute. Rien de changé tant que ce n'est pas tranché.
+- **Réponses à la PR n° 102** (tâche 45 nonies, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Capteur de vide muet ou absent au démarrage : pas de refus du Go ; la check-list dit « attention, vérifier la
+     tête à la main » (gardé).
+  2. Vanne « aspirer » restée ouverte après un plantage du programme : question posée au fil Préhension ; d'ici sa
+     réponse, rien n'est commandé au démarrage (jamais « souffler »).
+  3. et 4. Hauteur de la butée haute (Maquette 1,265, bas ≈ 1,065 ; dépôt 1,29, bas du godet 1,077) et `bocal_2_1`
+     (mât (1,1415 ; 0,2506) dans le carré « contact » de la caméra du dosage sur la carte de la Maquette) : question
+     posée à la Maquette (refaire la carte à 1,29). Mesurer plus bas est prudent pour les contacts : `bocal_0_1`
+     reste permis ; rien n'est changé pour `bocal_2_1` d'ici sa réponse (l'étape 9 de l'essai mesure ce jeu).
+  5. Après l'enlèvement de l'objet à la main, le geste repris part en alarme ou refait sa prise : suffisant pour
+     l'instant.
