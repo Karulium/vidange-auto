@@ -29,6 +29,14 @@ Pesée ou vide muets pendant un pas qui les surveille : arrêt aussi.
 
 La force est tarée tête en l'air (`tarer`) : lecture = poids porté − poussée.
 Le zéro du vide est recalé à chaque démarrage, vanne fermée (`CapteurVide.recaler_zero`).
+
+Les deux électrovannes de la ventouse (fil Préhension, 07/11/2026, tâche 45 undecies), 2/2
+normalement fermées, plus un clapet anti-retour : « aspirer » (`vanne`, l'air vers le venturi) et
+« souffler » (`souffler`, la ventouse remise à l'air). Fermer « aspirer » ne lâche rien (le
+clapet garde le vide) : lâcher = « souffler » un court instant (vidange.prehension.Prehension.
+souffler). Les deux ne sont JAMAIS ouvertes en même temps : ouvrir l'une quand l'autre l'est (ou
+l'a peut-être été : ordre de fermeture refusé par la carte) est refusé (`DeuxVannes`). Ce refus
+protège la machine (l'air), jamais les personnes.
 """
 
 import math
@@ -55,6 +63,7 @@ journal = donner_journal("prehension.tete")
 # Noms des signaux (docs/entrees-sorties.yaml, fluidnc.yaml).
 CONTACT = "contact_tete"
 VANNE = "vanne_vide"
+SOUFFLER = "vanne_souffler"
 AIMANTS = "electroaimants_capsule"
 
 Arret = Literal["vide", "choc", "appui", "appui_max", "traction", "cale"]
@@ -83,8 +92,43 @@ QUOI_FAIRE_PALPAGE = (
 )
 
 
+QUOI_FAIRE_VANNES = (
+    "Le Pi a refusé d'ouvrir une vanne de la ventouse pendant que l'autre était ouverte (jamais "
+    "« aspirer » et « souffler » en même temps). Regarder la carte de la préhension (câble USB, "
+    "alarme) et le journal, puis acquitter et donner le Go : le geste est refait."
+)
+
+
 class ErreurVide(Exception):
     """Capteur de vide muet ou déréglé."""
+
+
+class DeuxVannes:
+    """« aspirer » et « souffler » : jamais ouvertes en même temps.
+
+    `commander(nom, ouverte)` envoie l'ordre (sur la machine : M64/M65 de la carte). Une vanne
+    est comptée ouverte dès qu'on demande de l'ouvrir, et jusqu'à ce que sa fermeture soit
+    acceptée : si l'ordre de fermeture échoue, elle reste comptée ouverte (prudence)."""
+
+    def __init__(self, commander: Callable[[str, bool], None]) -> None:
+        self._commander = commander
+        self.ouvertes: set[str] = set()
+
+    def commander(self, nom: str, ouverte: bool) -> None:
+        if not ouverte:
+            self._commander(nom, False)
+            self.ouvertes.discard(nom)
+            return
+        autre = SOUFFLER if nom == VANNE else VANNE
+        if autre in self.ouvertes:
+            journal.error("Préhension : « %s » pas ouverte, « %s » est ouverte", nom, autre)
+            raise ErreurEtape(
+                f"préhension : refus d'ouvrir « {nom} » : « {autre} » est encore ouverte "
+                "(jamais les deux vannes de la ventouse en même temps)",
+                QUOI_FAIRE_VANNES,
+            )
+        self.ouvertes.add(nom)
+        self._commander(nom, True)
 
 
 @dataclass(frozen=True)
@@ -163,6 +207,8 @@ class Tete(Protocol):
 
     def vanne(self, ouverte: bool) -> None: ...
 
+    def souffler(self, ouverte: bool) -> None: ...
+
     def aimants(self, actifs: bool) -> None: ...
 
     def vide_kpa(self) -> float | None: ...
@@ -183,7 +229,7 @@ class Tete(Protocol):
 
 def signaux_prehension(liaison: Liaison, carte: CarteFluidnc) -> SignauxFluidnc:
     """Les signaux de la tête sur sa carte (erreur claire s'il en manque dans fluidnc.yaml)."""
-    return SignauxFluidnc(liaison, carte, (CONTACT,), (VANNE, AIMANTS))
+    return SignauxFluidnc(liaison, carte, (CONTACT,), (VANNE, SOUFFLER, AIMANTS))
 
 
 class CapteurVide:
@@ -249,6 +295,7 @@ class TeteFluidnc:
         self.signaux = signaux
         self.capteur = force
         self.vide = vide
+        self.vannes = DeuxVannes(signaux.sortie)
         self._horloge = horloge
         self._verrou = threading.Lock()
         self._noms = {"x": "pont_x", "y": "chariot_y", "z": "prehension_z", "a": "prehension_a"}
@@ -287,10 +334,14 @@ class TeteFluidnc:
     # ------------------------------------------------------------ surveillance rapide
 
     def demarrer(self, arret: threading.Event) -> threading.Thread:
-        """Vanne fermée, zéro du vide recalé (ErreurVide s'il est faux), puis la surveillance."""
-        for nom in (VANNE, AIMANTS):
+        """Vannes « aspirer » et « souffler » fermées (jamais ouvertes ici), aimants coupés, zéro
+        du vide recalé (ErreurVide s'il est faux), puis la surveillance."""
+        for nom in (VANNE, SOUFFLER, AIMANTS):
             try:
-                self.signaux.sortie(nom, False)
+                if nom == AIMANTS:
+                    self.signaux.sortie(nom, False)
+                else:
+                    self.vannes.commander(nom, False)
             except ErreurEtape as erreur:
                 journal.warning("Préhension : %s", erreur)
         self.vide.recaler_zero()
@@ -430,7 +481,12 @@ class TeteFluidnc:
         return self.vide.valeur()
 
     def vanne(self, ouverte: bool) -> None:
-        self.signaux.sortie(VANNE, ouverte)
+        """« aspirer » (refus clair si « souffler » est ouverte)."""
+        self.vannes.commander(VANNE, ouverte)
+
+    def souffler(self, ouverte: bool) -> None:
+        """« souffler » (refus clair si « aspirer » est ouverte)."""
+        self.vannes.commander(SOUFFLER, ouverte)
 
     def aimants(self, actifs: bool) -> None:
         self.signaux.sortie(AIMANTS, actifs)

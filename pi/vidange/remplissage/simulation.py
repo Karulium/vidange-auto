@@ -7,8 +7,9 @@ agitateur et un faux porte-bocal.
 
 La fausse balance pèse les seaux posés sur le plateau (tare de leur format, ou le poids d'un
 seau vide) et ce qui y tombe (substrat des versements, grains du mycélium). Un seau est sur le
-plateau quand le plateau touche son fond, ou quand la tête le lâche au-dessus du plateau (vanne
-fermée). Le plateau qui monte au contact s'arrête au fond du seau tenu par la tête (`fond_z`),
+plateau quand le plateau touche son fond, ou quand la tête le lâche au-dessus du plateau
+(« souffler », tâche 45 undecies). Le plateau qui monte au contact s'arrête au fond du seau
+tenu par la tête (`fond_z`),
 ≈ 3 cm plus bas pour deux seaux emboîtés. La barrière est coupée tant que deux seaux emboîtés y
 sont (`double`) : ils sont séparés quand la tête tire le seau du dessus (prise double f), sauf
 `separation_ratee`. Le pousseur qui sort fait partir le seau.
@@ -360,7 +361,7 @@ def remplissage_du_simulateur(
     def versement(seau: SeauAFaire, couche: int) -> None:
         chariot.contenu_kg += machine.griffe.formats[seau.format].dose_kg  # type: ignore[union-attr]
 
-    vanne, executer = prehension.tete.vanne, prehension.tete.executer
+    souffler, executer = prehension.tete.souffler, prehension.tete.executer
 
     def au_dessus() -> bool:
         pose, plateau = prehension.tete.position(), chariot.position()
@@ -369,11 +370,11 @@ def remplissage_du_simulateur(
             and abs(pose.y - plateau.y) < 0.01
         )
 
-    def vanne_simulee(ouverte: bool) -> None:
-        # La tête lâche un seau au-dessus du plateau : il y est posé.
-        if not ouverte and au_dessus() and prehension.objet is not None:
+    def souffler_simule(ouverte: bool) -> None:
+        # La tête lâche un seau au-dessus du plateau (« souffler ») : il y est posé.
+        if ouverte and au_dessus() and prehension.objet is not None:
             chariot.seau_pose = True
-        vanne(ouverte)
+        souffler(ouverte)
 
     def executer_simule(pas: PasTete, cible: PoseTete, poids_porte_n: float) -> None:
         # Prise double f) : la tête tire le seau du dessus, les barres tiennent celui du dessous.
@@ -388,7 +389,7 @@ def remplissage_du_simulateur(
         fond = prehension.tete.position().z - machine.remplissage.face_au_dessus_plateau_m  # type: ignore[union-attr]
         return fond - (simule.double_plus_bas_m if chariot.double else 0.0)
 
-    prehension.tete.vanne = vanne_simulee  # type: ignore[method-assign]
+    prehension.tete.souffler = souffler_simule  # type: ignore[method-assign]
     prehension.tete.executer = executer_simule  # type: ignore[method-assign]
     chariot.fond_z = fond_z
     micropore = None

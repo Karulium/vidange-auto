@@ -26,6 +26,8 @@ MACHINE = REGLAGES.machine
 PORTIQUE = MACHINE.portique
 # Les vraies cartes de fluidnc.yaml, avec une liaison d'essai rapide.
 FLUIDNC = REGLAGES.fluidnc.model_copy(update={"liaison": reglages_essai().liaison})
+# Sortie du frein du Z de la préhension sur la carte n° 4 (P2 depuis la tâche 45 undecies).
+FREIN_TETE = FLUIDNC.cartes["prehension"].sorties["frein_prehension_z"]
 DELAI = 10
 
 
@@ -372,7 +374,11 @@ def test_prise_d_origine_dans_l_ordre_et_pont_d_equerre(banc):
     assert trop_tot == []
     lignes = [ligne for ligne in carte_1.lignes_recues if ligne.startswith(("$H", "$X", "M6"))]
     assert lignes == ["$X", "M64 P0", "$HZ", "$HY", "$HX", "$HB", "$HA"]
-    assert carte_4.sorties[4] is True and carte_1.sorties[0] is True and portique.freins_desserres
+    assert (
+        carte_4.sorties[FREIN_TETE] is True
+        and carte_1.sorties[0] is True
+        and portique.freins_desserres
+    )
     # Le pont est remis d'équerre : chaque moteur s'est arrêté sur son fin de course.
     assert carte_1.travers["X"] == 0
     # La griffe a fini au point de recherche (mât 0,86 ; 0,57 : pont à 0,86 + 0,187), godet
@@ -397,7 +403,7 @@ def test_garage_de_repos_et_photo(banc):
     assert etat.statut == "fini", etat.alarme
     # Garage : pont à 2,925, mâts à 0,46 (centre du chariot à 0,50), freins serrés.
     assert (carte_1.positions["X"], carte_1.positions["Y"]) == (2925, 460)
-    assert carte_1.sorties[0] is False and carte_4.sorties[4] is False
+    assert carte_1.sorties[0] is False and carte_4.sorties[FREIN_TETE] is False
     assert portique.pont_gare("fut_poste", 2.925)
 
 

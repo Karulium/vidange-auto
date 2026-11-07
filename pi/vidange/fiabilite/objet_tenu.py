@@ -150,8 +150,9 @@ class ObjetTenu:
 
 
 # Les vannes de la ventouse (fil Préhension, 07/11/2026), par leur nom dans fluidnc.yaml et
-# docs/entrees-sorties.yaml : « aspirer » (vanne_vide) et « souffler » (vanne_souffler, qui n'est
-# pas encore dans le câblage du dépôt : elle sera fermée elle aussi le jour où elle y sera).
+# docs/entrees-sorties.yaml : « aspirer » (vanne_vide, P0) et « souffler » (vanne_souffler, P1 ;
+# câblée à la tâche 45 undecies, Implantation, sorties-carte-4.md). Mêmes noms que
+# vidange.prehension.tete (VANNE, SOUFFLER).
 VANNES = ("vanne_vide", "vanne_souffler")
 SUJET_VANNES = "vannes de la ventouse"
 QUOI_FAIRE_VANNES = (

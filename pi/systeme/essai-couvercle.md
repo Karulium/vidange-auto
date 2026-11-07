@@ -69,7 +69,10 @@ Le chariot de remplissage n'a pas besoin d'être préparé pour cette étape : l
    - elle s'arrête au-dessus du seau, **outil en (0,925 ; 0,49)** : le couvercle doit arriver **centré** sur le seau ;
    - descente vite jusqu'à `Z_pose + 0,040`, puis **10 mm/s** jusqu'au contact : la jupe du couvercle touche le
      bord du seau. **La tête n'appuie pas** ;
-   - « souffler » un court instant, puis la tête se dégage lentement (20 mm/s, 2 cm) et remonte.
+   - « aspirer » fermée, « souffler » un court instant (`prehension → vide → souffle_s`, tâche 45 undecies :
+     fermer « aspirer » seule ne lâcherait rien), le vide revient au-dessus de −5 kPa, puis la tête se
+     dégage lentement (20 mm/s, 2 cm) et remonte. Si le couvercle remonte collé à la ventouse : le dire
+     (régler `souffle_s`, essai-prehension.md, étape 2 bis).
 3. La commande dit « Couvercle posé sur le seau (sans appuyer) ». **Le couvercle est posé, pas clipsé.**
 4. **Mesurer `Z_pose`** : dans le journal (`journalctl -u vidange` ou la sortie), la ligne « Couvercle : contact à
    la pose à … m (attendu 0,439 m) ». Si l'écart dépasse 8 mm, noter la vraie valeur et la dire dans la PR

@@ -7,8 +7,9 @@ Un faux entonnoir (`MondeEntonnoir`) est posé sur un bocal, tenu par la tête, 
 (tombé, ou hors machine). La vraie Préhension simulée le prend et le pose ; le faux monde répond
 ce que le vrai ferait : le contact de la ventouse à la cote de l'oreille (entonnoir sur le bocal),
 le contact sur le col quand elle le pose (au fond du col si l'axe est à moins de capture_m du
-centre du col, sur le bord du verre un peu plus loin), le vide qui vient quand la vanne s'ouvre
-sur l'oreille.
+centre du col, sur le bord du verre un peu plus loin), le vide qui vient quand « aspirer »
+s'ouvre sur l'oreille, et qui part quand « souffler » s'ouvre (tâche 45 undecies : fermer
+« aspirer » ne lâche rien).
 
 Pannes pour les essais (attributs de MondeEntonnoir) :
 - `ou` : où est vraiment l'entonnoir (un bocal ; « absent » : nulle part, la ventouse ne trouve
@@ -64,13 +65,20 @@ class MondeEntonnoir:
         self.horloge = lambda: 0.0
         tete.contact_physique = self.contact
         tete.apres_perte_de_vide = self.tombe
-        vanne = tete.vanne
+        vanne, souffler = tete.vanne, tete.souffler
 
         def vanne_suivie(ouverte: bool) -> None:
             vanne(ouverte)
-            self._vanne(ouverte)
+            if ouverte:
+                self._aspirer()
+
+        def souffler_suivi(ouverte: bool) -> None:
+            souffler(ouverte)
+            if ouverte:
+                self._souffler()
 
         tete.vanne = vanne_suivie  # type: ignore[method-assign]
+        tete.souffler = souffler_suivi  # type: ignore[method-assign]
 
     # ------------------------------------------------------------ la physique
 
@@ -106,19 +114,20 @@ class MondeEntonnoir:
             return reg.oreille_z
         return reg.oreille_z + HAUTEUR_BORD_M
 
-    def _vanne(self, ouverte: bool) -> None:
+    def _aspirer(self) -> None:
         pose = self.tete.position()
-        if ouverte:
-            if self.ou in self.places and self.tete._vide:
-                bx, by = self.places[self.ou]
-                oreille = (
-                    bx + self.reglages.decalage_oreille_x_m,
-                    by + self.reglages.decalage_oreille_y_m,
-                )
-                if math.dist((pose.x, pose.y), oreille) <= TOLERANCE_OREILLE_M:
-                    self.ou = TENU
-            return
-        if self.ou == TENU:
+        if self.ou in self.places and self.tete._vide:
+            bx, by = self.places[self.ou]
+            oreille = (
+                bx + self.reglages.decalage_oreille_x_m,
+                by + self.reglages.decalage_oreille_y_m,
+            )
+            if math.dist((pose.x, pose.y), oreille) <= TOLERANCE_OREILLE_M:
+                self.ou = TENU
+
+    def _souffler(self) -> None:
+        pose = self.tete.position()
+        if self.ou == TENU and not self.tete._vide:
             nom, distance = self._sous_la_tete(pose.x, pose.y)
             self.ou = nom if nom is not None and distance <= RAYON_VERRE_M else ABSENT
 

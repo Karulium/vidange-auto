@@ -51,7 +51,9 @@ C'est ce qui remplace les chiffres EXEMPLE (hauteurs de la pièce reçue, après
 2. `vidange-prehension entonnoir bocal_0_0 bocal_0_1`. **Rester debout devant, la main sur l'arrêt
    d'urgence.** La tête doit : monter, aller au-dessus de l'oreille, descendre vite puis lentement, toucher
    (le M8 du moyeu s'allume), aspirer, lever de 6 cm, rouler jusqu'au bocal voisin **à cette hauteur**, descendre
-   lentement, toucher le col, souffler, remonter de 3 cm, puis monter en haut.
+   lentement, toucher le col, souffler (« aspirer » fermée puis « souffler » ouverte un court instant,
+   tâche 45 undecies ; testé sur le vrai matériel : non), attendre que le vide revienne au-dessus de
+   −5 kPa, remonter de 3 cm, puis monter en haut. L'entonnoir doit rester posé sur le col.
 3. Le programme écrit « Entonnoir pris : vide … kPa, poids … N » puis « Entonnoir posé sur bocal_0_1 ».
    Noter le vide (≤ −55 kPa attendu) et le poids.
 4. Regarder : l'entonnoir est-il **bien entré dans le col** de `bocal_0_1`, la douille au fond, le cône posé

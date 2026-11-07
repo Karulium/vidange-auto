@@ -13,9 +13,10 @@
 #       Vitesses du Portique (28/10) :
 #       80 mm/s, approche 20 mm/s, 0,5 m/s². Le Pi fait sa prise d'origine (« $HZ ») avec celle du
 #       Z de la griffe, avant Y et X de la carte n° 1 (vidange.portique).
-#       Frein à manque de courant : le Pi le desserre avant de bouger (sortie digital4,
-#       frein_prehension_z), le serre à l'arrêt long. Alarme du pilote de Z sur macro0 (lettre 0
-#       de « Pn: », sans macro) : arrêt et alerte.
+#       Frein à manque de courant : le Pi le desserre avant de bouger (sortie digital2,
+#       frein_prehension_z ; P2 réservée au frein, Implantation 07/11/2026), le serre à l'arrêt
+#       long. Alarme du pilote de Z sur macro0 (lettre 0 de « Pn: », sans macro) : arrêt et
+#       alerte.
 #   A : rotation de la tête, maintien plein (≈ 3 N·m pendant le brossage du lavage et le
 #       vissage, fiche). Visser = sens horaire vu d'en haut = A positif ; aucun axe inversé
 #       (fiche). Origine : origine_rotation_tete, capteur Hall sous la poulie de 60 dents (il voit
@@ -153,12 +154,19 @@ probe:
 control:
   macro0_pin: gpio.34:low
 
-# Sorties (pi/reglages/fluidnc.yaml → sorties). EXEMPLES de broches.
-#   digital0 : vanne_vide ; digital1 : electroaimants_capsule ; digital2 : air_col_lavage ;
-#   digital3 : chauffage_lavage ; digital4 : frein_prehension_z (commandée = desserré).
+# Sorties (pi/reglages/fluidnc.yaml → sorties). EXEMPLES de broches : les vrais numéros viendront
+# du fichier de configuration de la carte achetée (sorties-carte-4.md, Implantation, 07/11/2026).
+#   digital0 : vanne_vide (« aspirer », sortie auxiliaire 24 V n° 1) ;
+#   digital1 : vanne_souffler (« souffler », sortie auxiliaire 24 V n° 2) ;
+#   digital2 : frein_prehension_z (commandée = desserré ; sortie n° 3 ou module de sortie) ;
+#   digital3 : libre ; digital4 : electroaimants_capsule ; digital5 : air_col_lavage ;
+#   digital6 : chauffage_lavage.
+# Les deux électrovannes sont sur le 24 V coupé : fermées à l'arrêt d'urgence. Diode de roue
+# libre sur chaque bobine si la sortie n'en a pas.
 user_outputs:
   digital0_pin: gpio.2
   digital1_pin: gpio.5
-  digital2_pin: gpio.17
-  digital3_pin: gpio.18
-  digital4_pin: gpio.19
+  digital2_pin: gpio.19
+  digital4_pin: gpio.17
+  digital5_pin: gpio.18
+  digital6_pin: gpio.23

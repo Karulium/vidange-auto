@@ -24,7 +24,11 @@ Prendre un objet (seau, couvercle, bocal, entonnoir) :
    redescendre, reposer, reprendre ; après 2 échecs, alerte ;
 5. prise confirmée par le poids (deux seaux emboîtés : reposés, alerte) ; capsule : pas de
    contrôle.
-Lâcher : vanne fermée (électroaimants coupés pour une capsule), puis remontée.
+Lâcher : électroaimants coupés pour une capsule ; à la ventouse (tâche 45 undecies, fil
+Préhension du 07/11/2026 : fermer « aspirer » ne lâche rien, le clapet anti-retour garde le vide),
+« aspirer » fermée, « souffler » ouverte un court instant puis refermée, et le vide doit revenir
+au-dessus de −5 kPa (sinon un nouveau souffle, puis alerte) ; puis remontée. Jamais les deux
+vannes ouvertes en même temps (vidange.prehension.tete.DeuxVannes).
 
 Les brosses du lavage (un pas avec `brosses`) ne tournent que si `verrou_brosses` (donné par
 le Lavage) l'accepte : tête à sa hauteur de travail au-dessus du fût, objet tenu (vide).
@@ -63,6 +67,11 @@ QUOI_FAIRE_VIDE = (
     "La ventouse ne tient pas l'objet (vide trop faible) : regarder la vidéo et la ventouse "
     "(usée, sale, objet mouillé ou fendu ?). L'objet a été reposé. Corriger, puis acquitter et "
     "donner le Go."
+)
+QUOI_FAIRE_COLLE = (
+    "L'objet est resté collé à la ventouse : le vide n'est pas revenu après deux souffles. "
+    "Regarder la vidéo, enlever l'objet à la main ; vérifier la vanne « souffler », son tuyau et "
+    "le capteur de vide, puis acquitter et donner le Go."
 )
 QUOI_FAIRE_POIDS = (
     "Le poids de l'objet pris n'est pas celui attendu (deux seaux emboîtés, objet plein ou "
@@ -202,6 +211,9 @@ class Prehension:
         self._pas: Pas | Attente | None = None
         self._depuis = 0.0
         self._pause_depuis: float | None = None
+        # « souffler » ouverte par un geste (refermée à la fin du souffle, à une alarme, ou au
+        # départ du geste suivant).
+        self._souffle_ouverte = False
 
     # ------------------------------------------------------------ état
 
@@ -315,6 +327,8 @@ class Prehension:
 
     def lancer(self, geste: Callable[[], Geste]) -> None:
         """Action d'une étape : le geste part depuis là où est la tête."""
+        if self._souffle_ouverte:
+            self._fermer_souffle()
         self.pose = self.tete.position()
         self._geste = geste()
         self._pas = None
@@ -454,6 +468,11 @@ class Prehension:
         self._geste = self._pas = None
         self._attente_spray = None
         self.tete.arreter()
+        if self._souffle_ouverte:
+            try:
+                self._fermer_souffle()
+            except ErreurEtape as erreur:
+                journal.warning("Préhension : « souffler » pas refermée : %s", erreur)
         if not self.tete.choc:
             return
         self._photo("choc de la préhension")
@@ -598,13 +617,61 @@ class Prehension:
             QUOI_FAIRE_VIDE,
         )
 
-    def _relacher(self, aimants: bool) -> Geste:
-        """Vanne fermée (électroaimants coupés pour une capsule), le temps que l'objet parte."""
+    def _relacher(self, aimants: bool, quoi: str = "objet") -> Geste:
+        """Électroaimants coupés (capsule, couvercle percé), le temps que l'objet parte ; à la
+        ventouse : le lâcher par « souffler » (`lacher_ventouse`)."""
         if aimants:
             self.tete.aimants(False)
+            yield Pas("relâcher", attente_s=self.reglages.vide.relache_s)
         else:
-            self.tete.vanne(False)
-        yield Pas("relâcher", attente_s=self.reglages.vide.relache_s)
+            yield from self.lacher_ventouse(quoi)
+
+    def _fermer_souffle(self) -> None:
+        self.tete.souffler(False)
+        self._souffle_ouverte = False
+
+    def souffler(self, texte: str = "souffle") -> Geste:
+        """« Souffler » (tâche 45 undecies) : « aspirer » fermée d'abord (jamais les deux vannes
+        ouvertes), « souffler » ouverte prehension → vide → souffle_s, puis refermée."""
+        self.tete.vanne(False)
+        self._souffle_ouverte = True
+        self.tete.souffler(True)
+        yield Pas(texte, attente_s=self.reglages.vide.souffle_s)
+        self._fermer_souffle()
+
+    def lacher_ventouse(self, quoi: str, quoi_faire: str = QUOI_FAIRE_COLLE) -> Geste:
+        """Lâcher ce que tient la ventouse (fil Préhension, 07/11/2026) : souffler, puis attendre
+        que le vide revienne au-dessus de prehension → vide → lache_kpa (au plus
+        delai_lacher_s) ; sinon un nouveau souffle, puis alarme « `quoi` resté collé ». Vaut
+        pour tous les objets à la ventouse (seau, couvercle, entonnoir...)."""
+        vide = self.reglages.vide
+
+        def lache() -> bool:
+            valeur = self.tete.vide_kpa()
+            return valeur is not None and valeur > vide.lache_kpa
+
+        yield from self.souffler()
+        resultat = yield Attente(
+            "vide lâché",
+            lache,
+            vide.delai_lacher_s,
+            "vide pas revenu",
+            quoi_faire,
+            sans_alarme=True,
+        )
+        assert resultat is not None
+        if not resultat.delai_depasse:
+            return
+        journal.warning("Préhension : %s pas lâché(e) au premier souffle, nouveau souffle", quoi)
+        yield from self.souffler("nouveau souffle")
+        yield Attente(
+            "vide lâché (nouveau souffle)",
+            lache,
+            vide.delai_lacher_s,
+            f"{quoi} resté collé à la ventouse (vide au-dessous de {vide.lache_kpa:g} kPa après "
+            "un nouveau souffle)",
+            quoi_faire,
+        )
 
     def _prendre_ici(
         self,
@@ -640,7 +707,7 @@ class Prehension:
             # Redescendre et reposer.
             yield from self._descendre(contact_z, f"reposer le(la) {objet.sorte}")
             self.objet = None
-            yield from self._relacher(aimants=False)
+            yield from self._relacher(aimants=False, quoi=objet.sorte)
             if echecs >= reglages.vide.essais_max:
                 yield from self._monter()
                 raise ErreurEtape(
@@ -696,7 +763,7 @@ class Prehension:
         self.poids_porte_n = poids
         yield from self._descendre(contact_z, f"reposer le(la) {objet.sorte}")
         self.objet, self.poids_porte_n = None, 0.0
-        yield from self._relacher(objet.aimants)
+        yield from self._relacher(objet.aimants, objet.sorte)
         yield from self._monter()
         raise ErreurEtape(f"préhension : {raison} ; objet reposé", QUOI_FAIRE_POIDS)
 
@@ -705,7 +772,7 @@ class Prehension:
         assert objet is not None
         journal.info("Préhension : %s lâché(e)", objet.sorte)
         self.objet, self.poids_porte_n = None, 0.0
-        yield from self._relacher(objet.aimants)
+        yield from self._relacher(objet.aimants, objet.sorte)
         self.tete.acceleration_seau(False)
 
     # ------------------------------------------------------------ pour les autres modules

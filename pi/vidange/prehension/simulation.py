@@ -5,8 +5,10 @@
 
 La tête simulée (`TeteSimulee`) bouge les axes imaginaires (pont_x, chariot_y, prehension_z,
 prehension_a). Une descente au contact s'arrête à la cote attendue (celle que le geste donne,
-5 mm au-dessus du bas de l'approche lente) ; le vide vient quand la vanne s'ouvre au contact ;
-la pesée lit le poids estimé de l'objet tenu.
+5 mm au-dessus du bas de l'approche lente) ; le vide vient quand « aspirer » s'ouvre au contact,
+reste quand elle se ferme (clapet anti-retour) et part quand « souffler » s'ouvre (tâche 45
+undecies) ; jamais les deux vannes ouvertes en même temps (même refus que la vraie tête) ; la
+pesée lit le poids estimé de l'objet tenu.
 
 Pannes pour les essais (attributs de TeteSimulee) :
 - `decalage_contact_m` : le contact vient tant plus haut (+) ou plus bas (−) ; None : rien ;
@@ -22,7 +24,7 @@ Pannes pour les essais (attributs de TeteSimulee) :
 - `contact_local(x, y)` : (concerne, cote) pour un endroit que la physique du couvercle (tâche
   41 bis) connaît : si concerne, la descente au contact n'a que ce contact-là (None : rien) ;
 - `contact_actif()` : ce que voit le M8 en ce moment (dégagement du couvercle) ;
-- `vides_colles` : tant de fois la vanne se ferme sans que le vide parte (objet collé) ;
+- `vides_colles` : tant de fois « souffler » s'ouvre sans que le vide parte (objet collé) ;
 - `cale_apres_deg` : un pas `cale` (vissage du couvercle percé, tâche 19 quater) s'arrête, moteur
   calé, après tant de degrés de rotation (None : il ne cale jamais).
 """
@@ -34,7 +36,15 @@ from vidange.chef import Condition, ErreurEtape
 from vidange.mycelium.regles import PoseAgitateur, ReglesMycelium
 from vidange.prehension.prehension import Prehension
 from vidange.prehension.regles import Objet, Pose
-from vidange.prehension.tete import BROSSES, QUOI_FAIRE_CHOC, Pas, Resultat
+from vidange.prehension.tete import (
+    BROSSES,
+    QUOI_FAIRE_CHOC,
+    SOUFFLER,
+    VANNE,
+    DeuxVannes,
+    Pas,
+    Resultat,
+)
 from vidange.reglages import Machine
 from vidange.simulateur.axes import EtatAxes
 from vidange.simulateur.simulateur import ErreurSimulation, Simulateur
@@ -89,8 +99,9 @@ class TeteSimulee:
         self._arrivees: dict[str, float] = {}
         self._resultat: Resultat | None = None
         self._pas: Pas | None = None
-        self._vanne = False
-        # Le vide tient (vanne ouverte sur un objet, pas perdu pendant une levée).
+        self.vannes = DeuxVannes(self._commander)
+        # Le vide tient (« aspirer » ouverte sur un objet, pas perdu pendant une levée, pas
+        # encore soufflé).
         self._vide = False
         self._aimants = False
         self._choc = False
@@ -109,7 +120,6 @@ class TeteSimulee:
         self.vides_refuses = 0
         self.vides_colles = 0
         self.cale_apres_deg: float | None = None
-        self._colle = False
         # Appelé quand le vide est perdu pendant un pas (l'objet tenu tombe).
         self.apres_perte_de_vide: Callable[[], object] = lambda: None
         # Ce qui a été fait, pour les tests.
@@ -252,26 +262,36 @@ class TeteSimulee:
         return self.contact_actif()
 
     def vanne(self, ouverte: bool) -> None:
-        self._vanne = self._vide = ouverte
+        """« aspirer » : le vide vient à l'ouverture (sauf ventouse sale), reste à la fermeture
+        (clapet anti-retour)."""
+        self.vannes.commander(VANNE, ouverte)
+
+    def souffler(self, ouverte: bool) -> None:
+        """« souffler » : le vide part à l'ouverture (sauf objet collé)."""
+        self.vannes.commander(SOUFFLER, ouverte)
+
+    def _commander(self, nom: str, ouverte: bool) -> None:
+        if nom == VANNE:
+            if ouverte:
+                self._vide = True
+                if self.vides_refuses > 0:
+                    self.vides_refuses -= 1
+                    self._vide = False
+            self.sorties.append(f"vanne {'ouverte' if ouverte else 'fermée'}")
+            return
         if ouverte:
-            self._colle = False
-        if ouverte and self.vides_refuses > 0:
-            self.vides_refuses -= 1
-            self._vide = False
-        if not ouverte:
-            self._colle = self.vides_colles > 0
-            if self._colle:
+            if self.vides_colles > 0:
                 self.vides_colles -= 1
-        self.sorties.append(f"vanne {'ouverte' if ouverte else 'fermée'}")
+            else:
+                self._vide = False
+        self.sorties.append(f"souffler {'ouverte' if ouverte else 'fermée'}")
 
     def aimants(self, actifs: bool) -> None:
         self._aimants = actifs
         self.sorties.append(f"aimants {'actifs' if actifs else 'coupés'}")
 
     def vide_kpa(self) -> float | None:
-        if self._colle:
-            return self._vide_prise
-        return self._vide_prise if self._vanne and self._vide else 0.0
+        return self._vide_prise if self._vide else 0.0
 
     def acceleration_seau(self, reduite: bool, facteur: float = 1.0) -> None:
         # Comme la vraie tête : seuls les changements sont envoyés (et notés ici) ; « (réduite,

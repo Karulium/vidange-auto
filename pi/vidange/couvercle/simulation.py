@@ -4,9 +4,10 @@
 
 Un faux monde (`MondeCouvercle`) répond ce que le vrai ferait à la Préhension simulée : le contact
 M8 sur le haut de la pile (fond du stockage + nombre de couvercles × pas d'empilage), le contact
-sur le seau plein (à Z_pose du format), le vide qui prend un couvercle (ou deux) quand la vanne
-s'ouvre sur la pile, le couvercle qui reste sur le seau quand la vanne se ferme au-dessus, la
-balance du chariot qui le pèse.
+sur le seau plein (à Z_pose du format), le vide qui prend un couvercle (ou deux) quand « aspirer »
+s'ouvre sur la pile, le couvercle qui reste sur le seau quand « souffler » fait partir le vide
+au-dessus (tâche 45 undecies : fermer « aspirer » ne lâche rien), la balance du chariot qui le
+pèse.
 
 Pannes pour les essais (attributs de MondeCouvercle) :
 - `nombre` : couvercles sur la pile (0 : pile vide, aucun contact) ;
@@ -67,11 +68,17 @@ class MondeCouvercle:
         tete.contact_local = self.contact
         tete.contact_actif = self.m8
         tete.apres_perte_de_vide = self.tombe
-        vanne, peser = tete.vanne, tete.peser
+        vanne, souffler, peser = tete.vanne, tete.souffler, tete.peser
 
         def vanne_suivie(ouverte: bool) -> None:
             vanne(ouverte)
-            self._vanne(ouverte)
+            if ouverte:
+                self._aspirer()
+
+        def souffler_suivi(ouverte: bool) -> None:
+            souffler(ouverte)
+            if ouverte:
+                self._souffler()
 
         def peser_suivi() -> float:
             if self.tenus and scenario.prehension.objet is not None:
@@ -81,6 +88,7 @@ class MondeCouvercle:
             return peser()
 
         tete.vanne = vanne_suivie  # type: ignore[method-assign]
+        tete.souffler = souffler_suivi  # type: ignore[method-assign]
         tete.peser = peser_suivi  # type: ignore[method-assign]
 
     # ------------------------------------------------------------ la physique
@@ -122,25 +130,27 @@ class MondeCouvercle:
             return False
         return pose.z <= self._z_pose() + 0.001 and (self.sur_le_seau > 0 or self.tenus > 0)
 
-    def _vanne(self, ouverte: bool) -> None:
+    def _aspirer(self) -> None:
         pose = self.tete.position()
-        if ouverte:
-            if (
-                self._pres(self.pile, pose.x, pose.y)
-                and self.tete._vide
-                and self.tenus == 0
-                and self.nombre > 0
-            ):
-                prises = min(2 if self.colles > 0 else 1, self.nombre)
-                if self.colles > 0:
-                    self.colles -= 1
-                self.nombre -= prises
-                self.tenus = prises
-                self.prises.append(prises)
-            return
+        if (
+            self._pres(self.pile, pose.x, pose.y)
+            and self.tete._vide
+            and self.tenus == 0
+            and self.nombre > 0
+        ):
+            prises = min(2 if self.colles > 0 else 1, self.nombre)
+            if self.colles > 0:
+                self.colles -= 1
+            self.nombre -= prises
+            self.tenus = prises
+            self.prises.append(prises)
+
+    def _souffler(self) -> None:
+        pose = self.tete.position()
         if self.m8_colle > 0 and self.tenus == 0:
             self.m8_colle -= 1
-        if self.tenus == 0:
+        if self.tenus == 0 or self.tete._vide:
+            # Rien de tenu, ou le vide n'est pas parti (objet collé : il reste à la ventouse).
             return
         if self._pres(self.pile, pose.x, pose.y):
             self.nombre += self.tenus

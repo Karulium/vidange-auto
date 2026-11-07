@@ -93,7 +93,7 @@ def test_signaux_du_lavage_sur_une_seule_carte(reglages):
     fluidnc = reglages / "fluidnc.yaml"
     remplacer(fluidnc, '      flotteur_lavage: "2"\n', "")
     remplacer(
-        fluidnc, "      air_col_lavage: 2\n", "      air_col_lavage: 2\n      pompe_lavage: 5\n"
+        fluidnc, "      air_col_lavage: 5\n", "      air_col_lavage: 5\n      pompe_lavage: 3\n"
     )
     message = erreur_de(reglages)
     assert "« flotteur_lavage » (lavage) doit être dans les entrees d'une seule carte" in message

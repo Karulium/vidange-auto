@@ -26,9 +26,11 @@ from vidange.prehension import (
     TeteFluidnc,
     signaux_prehension,
 )
+from vidange.prehension import outil as module_outil
 from vidange.prehension.module import module_prehension
 from vidange.prehension.outil import main as outil
 from vidange.prehension.simulation import prehension_du_simulateur
+from vidange.prehension.tete import SOUFFLER, VANNE, DeuxVannes
 from vidange.reglages import Fluidnc, charger_reglages
 from vidange.simulateur import Simulateur
 from vidange.simulateur.outil import main as simulateur
@@ -72,6 +74,16 @@ def test_reglages_de_la_prehension_du_depot():
     for nom in (*carte.entrees, *carte.sorties):
         assert LISTE.signaux[nom].carte == "fluidnc_prehension", nom
     assert LISTE.signaux["vide_venturi"].module == "prehension"
+
+
+def test_lacher_par_souffler_reglages_du_depot_et_verifies(reglages):
+    # Tâche 45 undecies : souffle ≈ 0,2 à 0,5 s (EXEMPLE), lâché au-dessus de −5 kPa (fil).
+    vide = PREHENSION.vide
+    assert 0.2 <= vide.souffle_s <= 0.5
+    assert vide.lache_kpa == -5
+    remplacer(reglages / "machine.yaml", "    lache_kpa: -5\n", "    lache_kpa: -45\n")
+    message = erreur_de(reglages)
+    assert "prehension → vide : lache_kpa (-45) doit être au-dessus de perte_kpa (-40)" in message
 
 
 def test_conversion_du_capteur_de_vide():
@@ -528,8 +540,14 @@ def test_vide_perdu_une_fois_pendant_la_levee():
 
     planning, prehension, _ = jouer(regler)
     assert planning.fini, planning.probleme
-    # Redescendu, reposé (vanne fermée), repris (vanne ouverte).
-    assert prehension.tete.sorties[:3] == ["vanne ouverte", "vanne fermée", "vanne ouverte"]
+    # Redescendu, reposé (« aspirer » fermée, puis « souffler »), repris (« aspirer » ouverte).
+    assert prehension.tete.sorties[:5] == [
+        "vanne ouverte",
+        "vanne fermée",
+        "souffler ouverte",
+        "souffler fermée",
+        "vanne ouverte",
+    ]
 
 
 def test_vide_perdu_deux_fois_alerte():
@@ -540,7 +558,7 @@ def test_vide_perdu_deux_fois_alerte():
     assert not planning.fini
     assert "vide perdu 2 fois pendant la levée d'un(e) seau" in planning.probleme
     assert etapes(planning) == ["prendre_le_seau"]
-    assert prehension.objet is None and prehension.tete.sorties[-1] == "vanne fermée"
+    assert prehension.objet is None and prehension.tete.sorties[-1] == "souffler fermée"
 
 
 def test_deux_seaux_pris_reposes():
@@ -549,9 +567,102 @@ def test_deux_seaux_pris_reposes():
 
     planning, prehension, simulation = jouer(regler)
     assert "deux seaux emboîtés pris (10.0 N" in planning.probleme
-    assert prehension.objet is None and prehension.tete.sorties[-1] == "vanne fermée"
+    assert prehension.objet is None and prehension.tete.sorties[-1] == "souffler fermée"
     # Reposés, puis la tête est remontée.
     assert simulation.etat_axes.positions["prehension_z"] == pytest.approx(1.10)
+
+
+def etats_des_vannes(sorties: list[str]) -> list[set[str]]:
+    """Les vannes ouvertes après chaque ordre noté par la tête simulée."""
+    ouvertes: set[str] = set()
+    etats = []
+    for sortie in sorties:
+        nom, etat = sortie.split(" ")
+        if nom in ("vanne", "souffler"):
+            (ouvertes.add if etat == "ouverte" else ouvertes.discard)(nom)
+            etats.append(set(ouvertes))
+    return etats
+
+
+def test_lacher_a_la_ventouse_par_souffler_jamais_les_deux_vannes():
+    # Tâche 45 undecies : chaque lâcher à la ventouse = « aspirer » fermée, « souffler » ouverte
+    # puis refermée ; jamais les deux vannes ouvertes en même temps.
+    planning, prehension, _ = jouer()
+    assert planning.fini, planning.probleme
+    sorties = prehension.tete.sorties
+    assert sorties.count("souffler ouverte") >= 2
+    for i, sortie in enumerate(sorties):
+        if sortie == "souffler ouverte":
+            assert sorties[i - 1] == "vanne fermée" and sorties[i + 1] == "souffler fermée"
+    assert all(len(etat) < 2 for etat in etats_des_vannes(sorties))
+    assert prehension.tete.vannes.ouvertes == set()
+
+
+def test_objet_colle_un_nouveau_souffle_suffit():
+    def regler(tete):
+        tete.vides_colles = 1
+
+    planning, prehension, _ = jouer(regler)
+    assert planning.fini, planning.probleme
+    assert prehension.tete.vides_colles == 0
+
+
+def test_objet_colle_apres_deux_souffles_alerte():
+    def regler(tete):
+        tete.vides_colles = 2
+
+    planning, prehension, _ = jouer(regler)
+    assert not planning.fini
+    assert (
+        "resté collé à la ventouse (vide au-dessous de -5 kPa après un nouveau souffle)"
+        in planning.probleme
+    )
+    assert "vanne « souffler »" in planning.probleme
+    assert prehension.tete.vannes.ouvertes == set()
+
+
+def test_alarme_pendant_le_souffle_referme_souffler():
+    with Simulateur(REGLAGES, LISTE, "prehension") as simulation:
+        prehension = prehension_du_simulateur(simulation)
+        prehension.lancer(lambda: prehension.souffler())
+        assert prehension.tete.vannes.ouvertes == {SOUFFLER}
+        assert prehension.tete.sorties[-2:] == ["vanne fermée", "souffler ouverte"]
+        prehension.arreter()
+        assert prehension.tete.vannes.ouvertes == set()
+        assert prehension.tete.sorties[-1] == "souffler fermée"
+
+
+def test_la_tete_simulee_refuse_les_deux_vannes_ouvertes():
+    with Simulateur(REGLAGES, LISTE, "prehension") as simulation:
+        tete = prehension_du_simulateur(simulation).tete
+        tete.vanne(True)
+        with pytest.raises(ErreurEtape, match="jamais les deux vannes de la ventouse"):
+            tete.souffler(True)
+        assert tete.sorties == ["vanne ouverte"]
+
+
+def test_deux_vannes_fermeture_refusee_reste_comptee_ouverte():
+    ordres: list[tuple[str, bool]] = []
+    carte_en_alarme = {"oui": False}
+
+    def commander(nom: str, ouverte: bool) -> None:
+        if carte_en_alarme["oui"]:
+            raise ErreurEtape("carte en alarme")
+        ordres.append((nom, ouverte))
+
+    vannes = DeuxVannes(commander)
+    vannes.commander(SOUFFLER, True)
+    carte_en_alarme["oui"] = True
+    with pytest.raises(ErreurEtape, match="carte en alarme"):
+        vannes.commander(SOUFFLER, False)
+    carte_en_alarme["oui"] = False
+    # « souffler » a peut-être été refermée, peut-être pas : « aspirer » reste refusée.
+    with pytest.raises(ErreurEtape, match="refus d'ouvrir « vanne_vide » : « vanne_souffler »"):
+        vannes.commander(VANNE, True)
+    vannes.commander(SOUFFLER, False)
+    vannes.commander(VANNE, True)
+    assert ordres == [(SOUFFLER, True), (SOUFFLER, False), (VANNE, True)]
+    assert vannes.ouvertes == {VANNE}
 
 
 def test_contact_trop_bas():
@@ -665,8 +776,12 @@ def test_tient_un_objet_et_memoire():
         prehension.objet = SEAU
         prehension.tete.vanne(True)
         assert prehension.tient_un_objet()
+        # Fermer « aspirer » ne lâche rien (clapet anti-retour) ; « souffler » lâche.
         prehension.tete.vanne(False)
+        assert prehension.tient_un_objet()
+        prehension.tete.souffler(True)
         assert not prehension.tient_un_objet()
+        prehension.tete.souffler(False)
         memoire = prehension.memoire()
         autre = prehension_du_simulateur(simulation)
         autre.retrouver(memoire)
@@ -702,7 +817,11 @@ def reglages_cartes() -> Fluidnc:
                 "prehension": {
                     "numero_serie_usb": "A4",
                     "entrees": {"contact_tete": "P"},
-                    "sorties": {"vanne_vide": 0, "electroaimants_capsule": 1},
+                    "sorties": {
+                        "vanne_vide": 0,
+                        "vanne_souffler": 1,
+                        "electroaimants_capsule": 4,
+                    },
                 },
             },
         }
@@ -763,8 +882,9 @@ def attendre(condition, delai: float = DELAI) -> None:
 
 def test_zero_du_vide_recale_au_demarrage():
     with BancTete() as banc:
-        # Vanne fermée au démarrage ; le zéro (0,3 kPa) est retiré des lectures.
-        assert banc.carte.sorties[0] is False
+        # « aspirer » et « souffler » fermées au démarrage ; le zéro (0,3 kPa) est retiré des
+        # lectures.
+        assert banc.carte.sorties[0] is False and banc.carte.sorties[1] is False
         assert banc.tete.vide.zero == pytest.approx(0.3)
         assert banc.tete.vide_kpa() == pytest.approx(0.0)
     capteur = CapteurVide(PREHENSION.vide, lambda: 8.0)
@@ -786,6 +906,48 @@ def test_tete_va_a_une_pose_et_ouvre_la_vanne():
         attendre(lambda: banc.carte.sorties.get(0) is True)
         with pytest.raises(ErreurEtape, match="pont et tête jamais ensemble"):
             banc.tete.executer(Pas("faux", {"x": 1.7, "z": 1.0}), pose, 0.0)
+
+
+def test_tete_jamais_les_deux_vannes_ouvertes_sur_la_carte():
+    # P0 « aspirer », P1 « souffler » (M64/M65) : le Pi refuse d'ouvrir l'une quand l'autre l'est.
+    with BancTete() as banc:
+        tete, sorties = banc.tete, banc.carte.sorties
+        tete.vanne(True)
+        attendre(lambda: sorties.get(0) is True)
+        with pytest.raises(ErreurEtape, match="refus d'ouvrir « vanne_souffler »"):
+            tete.souffler(True)
+        assert "M64 P1" not in banc.carte.lignes_recues
+        tete.vanne(False)
+        tete.souffler(True)
+        attendre(lambda: sorties.get(1) is True)
+        assert sorties.get(0) is False
+        with pytest.raises(ErreurEtape, match="jamais les deux vannes de la ventouse"):
+            tete.vanne(True)
+        tete.souffler(False)
+        attendre(lambda: sorties.get(1) is False)
+        tete.vanne(True)
+        attendre(lambda: sorties.get(0) is True)
+
+
+def test_outil_vide_aspirer_puis_souffler(capsys, monkeypatch):
+    class Temps:
+        maintenant = 0.0
+
+        @classmethod
+        def sleep(cls, duree: float) -> None:
+            cls.maintenant += duree
+
+        @classmethod
+        def monotonic(cls) -> float:
+            return cls.maintenant
+
+    monkeypatch.setattr(module_outil, "time", Temps)
+    assert outil(["--faux", "vide"]) == 0
+    sortie = capsys.readouterr().out
+    assert "« aspirer » ouverte" in sortie and "le clapet garde le vide" in sortie
+    assert "« souffler » 0.3 s : lâché" in sortie
+    assert outil(["--faux", "vide", "--sans-souffler"]) == 0
+    assert "Pas de « souffler » : l'objet reste tenu" in capsys.readouterr().out
 
 
 def test_tete_palpe_le_contact():

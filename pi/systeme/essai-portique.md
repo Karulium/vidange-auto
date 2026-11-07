@@ -21,7 +21,7 @@ chaque mouvement, personne sous les outils.
   (impulsions par tour du pilote acheté : pas par mm = impulsions par tour / 40 en X et Y, / 50,27 en Z) et
   envoyé à la carte (page web → « Mises à jour »). Tant qu'il dit « EXEMPLE », il est refusé. Même chose pour
   les ajouts du Z de la préhension dans `fluidnc/prehension.yaml` (pignon de 16 dents, course 870 mm, frein
-  sur `digital4`, alarme sur `macro0`).
+  sur `digital2`, alarme sur `macro0`).
 - Le programme principal est arrêté (`sudo systemctl stop vidange`) : une seule liaison par carte.
 - Courroies du pont tendues, rien sur les rails, les deux outils **en haut** à la main si possible.
 
@@ -49,7 +49,8 @@ Dans les commandes ci-dessous, `vidange-fluidnc` et `vidange-portique` veulent d
 Toujours à la console de la carte n° 1, après `$X` (déblocage, pas encore d'origine) :
 
 1. Frein du Z de la griffe : `M64 P0` → on entend le frein se desserrer ; `M65 P0` → il serre. Même chose
-   sur la carte n° 4 avec `M64 P4` / `M65 P4`. **Ne jamais desserrer un frein outil en bas sans tenir
+   sur la carte n° 4 avec `M64 P2` / `M65 P2` (P2 depuis la tâche 45 undecies : P0 et P1 sont les vannes
+   de la ventouse). **Ne jamais desserrer un frein outil en bas sans tenir
    l'outil** : il pourrait descendre.
 2. `M64 P0`, puis `$J=G91 Z-10 F600` : le Z de la griffe doit **descendre** de 10 mm. Sinon, inverser son
    sens (`direction_pin: ...:low`). `$J=G91 Z10 F600` pour remonter.
@@ -57,7 +58,7 @@ Toujours à la console de la carte n° 1, après `$X` (déblocage, pas encore d'
 4. `$J=G91 X10 F600` : le pont doit aller **vers le stockage** (x grandit), **les deux côtés ensemble**.
    Si un côté part à l'envers, inverser le sens de ce moteur seul (motor0 = X1, motor1 = X2). Si un seul côté
    bouge : câble ou pilote de l'autre.
-5. Carte n° 4 : `$X`, `M64 P4`, `$J=G91 Z-10 F600` : la face de la préhension descend.
+5. Carte n° 4 : `$X`, `M64 P2`, `$J=G91 Z-10 F600` : la face de la préhension descend.
 
 ## Étape 3 : la prise d'origine dans l'ordre, et l'équerre
 

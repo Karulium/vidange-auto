@@ -106,7 +106,6 @@ def test_les_hauteurs_de_pose_sont_celles_de_la_fiche():
             "l'outil se pose à fermeture → chariot_y − 0.01",
         ),
         ("    x: 0.925\n    y: 0.49", "    x: 0.90\n    y: 0.49", "doit être l'axe du plateau"),
-        ("    lache_kpa: -5\n    souffle_s", "    lache_kpa: -45\n    souffle_s", "lache_kpa"),
         ("    haut_sans_memoire_z: 0.90", "    haut_sans_memoire_z: 1.09", "haut sans mémoire"),
         ("    fenetre_m: 0.008", "    fenetre_m: 0.05", "fenetre_m doit être plus petit"),
         ("    couvercle_pose: 0.01", "    couvercle_pose: 0.5", "plus grande que la vitesse"),
@@ -577,7 +576,15 @@ def test_etape_10b_pas_de_contact_pas_de_seau():
 
 def test_etape_11_vide_qui_ne_revient_pas_deux_souffles_puis_alerte():
     def regler(monde, tete):
-        tete.vides_colles = 5
+        # Le couvercle tenu au-dessus du seau reste collé à chaque « souffler ».
+        souffler = tete.souffler
+
+        def souffler_colle(ouverte):
+            if ouverte and monde.tenus > 0:
+                tete.vides_colles = 1
+            souffler(ouverte)
+
+        tete.souffler = souffler_colle
 
     planning, *_ = jouer(regler)
     assert "étape « poser_le_couvercle »" in planning.probleme
