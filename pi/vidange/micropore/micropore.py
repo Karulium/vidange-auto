@@ -94,7 +94,7 @@ class Reperage:
 
 
 class VisionMicropore(Protocol):
-    """Ce que le micropore demande à sa caméra (vision : case vide, tâche 22 ter)."""
+    """Ce que le micropore demande à sa caméra (vidange.vision.inspection, tâche 40 ter)."""
 
     def commencer_tour(self) -> None:
         """Le plateau va faire un tour : regarder (QR, trous, attaches) pendant le tour."""

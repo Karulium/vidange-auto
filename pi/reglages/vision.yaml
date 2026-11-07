@@ -46,7 +46,9 @@ cameras:
     champ_deg: [102, 67]
     calibration: dosage.json
   micropore:
-    description: Micropore (lit aussi le QR du seau) ; servie par la tâche Micropore
+    # « cam_inspection » du projet mécanique : sur le chariot, à côté de la tête du micropore.
+    description: Micropore (QR du flanc, trous, morceaux posés ; « cam_inspection »)
+    video: micropore
     champ_deg: [70, 55]
   vue_a:
     description: Vue A, vers le haut, place A (2,93 ; 0,22) ; servie par l'inspection après lavage
@@ -154,3 +156,54 @@ plafond:
       travail: attendre
       sorte: attendre
       message: Rien à faire. Nouvelle photo dans 5 minutes.
+
+# Caméra de la tête du micropore (tâche 40 ter ; « cam_inspection » du projet mécanique, fiche
+# micropore-pour-logiciel.md § 1 a, gestes 0 et 11, et fil Guidage caméra du 07/11/2026). Elle lit
+# le QR du flanc pendant que le plateau tourne le seau (Remplissage, avant le serrage des barres),
+# repère les trous au tour de repérage, contrôle chaque morceau posé, et donne l'angle
+# caméra → rouleau. EXEMPLES tant que la caméra n'est pas montée et vue sur de vraies photos
+# (pi/systeme/essai-inspection.md) : passer « exemple » à false ensuite. Rien ici n'est une
+# sécurité. Ce qui demande des photos réelles (attaches de l'anse, morceau bien collé) reste un
+# faux (vidange.vision.inspection.FausseReconnaissanceAttaches), comme la tâche 22 ter.
+inspection:
+  exemple: true
+  camera: micropore
+  geometrie:
+    # Caméra à (ΔX −0,095 ; ΔY −0,153) de l'axe du plateau, soit un azimut de −122° (fiche, figé).
+    decalage_m: [-0.095, -0.153]
+    # Pas de cap : la caméra vise l'axe du plateau (EXEMPLE : à vérifier sur la machine).
+    cap_deg: null
+    # Rouleau côté −y de l'axe du plateau (la tête vient du mur) : EXEMPLE.
+    rouleau_azimut_deg: -90
+    # Rayon du flanc à la hauteur du QR (seau de 10 L, bas du flanc) : EXEMPLE, sans effet tant
+    # que la caméra vise l'axe.
+    rayon_qr_m: 0.12
+  # 1 point de l'image = 0,5 mm sur la paroi : EXEMPLE (trou de Ø 1 cm ≈ 20 points).
+  echelle_mm_par_point: 0.5
+  flanc:
+    pause_s: 0.02
+    lectures_min: 2
+    centre_tolerance_px: 40
+    marge_deg: 10
+    ecart_passage_deg: 60
+    # Écart entre l'angle des attaches de l'anse et celui du QR, pour un seau dont il n'est pas
+    # enregistré (vidange-vision ecart) : EXEMPLE, à mesurer.
+    ecart_attaches_defaut_deg: 0
+  trous:
+    # Trous Ø ≈ 1 cm (fiche : EXEMPLE).
+    diametre_mm: 10
+    tolerance_diametre: 0.4
+    circularite_min: 0.7
+    contraste_min: 40
+    rangee_ecart_y_px: 60
+    suivi_max_px: 250
+    fusion_deg: 10
+    haut_en_haut: true
+  piece:
+    # Morceau de 30 mm × 25 mm (figé, Karulium) ; le reste : EXEMPLES.
+    longueur_mm: 30
+    largeur_mm: 25
+    tolerance_taille: 0.25
+    inclinaison_max_deg: 10
+    contraste_min: 40
+    marge_mm: 2

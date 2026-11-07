@@ -634,3 +634,19 @@ def test_outil_charger_remet_le_compteur(tmp_path):
     assert lancer_outil(donnees, "charger") == 0
     etat = json.loads((donnees / "micropore.json").read_text(encoding="utf-8"))
     assert etat == {"morceaux_restants": MICROPORE.rouleau.morceaux, "alerte_rouleau_faite": False}
+
+
+def test_outil_apprend_l_angle_camera_rouleau_donne_par_la_vision(tmp_path, capsys):
+    """Tâche 40 ter : sans --camera-rouleau, c'est la vision qui donne l'angle (géométrie de
+    vision.yaml → inspection) ; l'option le force."""
+    donnees = tmp_path / "donnees"
+    assert lancer_outil(donnees, "escamote", "40") == 0
+    capsys.readouterr()
+    assert lancer_outil(donnees, "apprendre", "seau_a") == 0
+    assert "donné par la vision : 31.84°" in capsys.readouterr().out
+    appris = FichierAppris(donnees / "micropore-appris.yaml")
+    assert appris.format("seau_a").camera_rouleau_deg == pytest.approx(31.84, abs=0.01)
+    assert lancer_outil(donnees, "apprendre", "seau_b", "--camera-rouleau", "40") == 0
+    assert (
+        FichierAppris(donnees / "micropore-appris.yaml").format("seau_b").camera_rouleau_deg == 40
+    )

@@ -8,6 +8,11 @@ servo de la caméra du dosage.
   vidange-vision qr CAMERA              QR lus : code, centre (points), angle
   vidange-vision aruco CAMERA           repères ArUco vus
   vidange-vision plafond                ce que dirait la caméra du plafond (lave-bocal, règle)
+  vidange-vision flanc [CAMERA]         caméra du micropore : QR du flanc et trous vus (écart au
+                                        centre de l'image, en points)
+  vidange-vision piece [CAMERA] [--y Y] le morceau posé sur le trou au centre de l'image : couvert ?
+  vidange-vision rouleau FORMAT         angle caméra → rouleau que donne la vision pour ce format
+  vidange-vision ecart CODE [DEGRES]    écart attaches de l'anse / QR d'un seau : voir ou noter
   vidange-vision servo bocal|seau|ANGLE caméra du dosage tournée (SANS verrou : voir plus bas)
   ... --image FICHIER                   lire une photo déjà prise au lieu de la caméra
   ... --faux                            images fabriquées au lieu de la caméra (essai de l'outil)
@@ -37,6 +42,13 @@ from vidange.vision import fabrique
 from vidange.vision.aruco import chercher_reperes
 from vidange.vision.calibration import calculer, enregistrer, trouver_damier
 from vidange.vision.dosage import FauxServo, ServoPwm
+from vidange.vision.inspection import (
+    NOM_ECARTS,
+    EcartsAttaches,
+    angle_camera_rouleau,
+    controler_morceau_image,
+    lire_flanc,
+)
 from vidange.vision.photo import ErreurVision, Photographe, photo_depuis_image
 from vidange.vision.plafond import (
     CameraPlafond,
@@ -64,6 +76,14 @@ class SourceFabriquee:
                  (1050, 520), 0),
             ],
         )  # fmt: skip
+        # Le flanc d'un seau (caméra du micropore) : un QR un peu à droite du centre, deux trous,
+        # et un morceau posé sur un troisième trou au centre de l'image.
+        self.flanc = fabrique.scene_flanc(
+            0.0,
+            qr=("S1293", 15.0, 200),
+            trous=[(-30.0, 150), (45.0, 560), (0.0, 360)],
+            pieces=[(0.0, 360, 60, 50, 2)],
+        )
         self.mires = fabrique.vues_de_mire(vision.calibration.colonnes, vision.calibration.lignes)
         self.numero = 0
         self.mire = False
@@ -71,6 +91,8 @@ class SourceFabriquee:
     def derniere(self, nom: str) -> Image:
         self.numero += 1
         image = self.mires[self.numero % len(self.mires)] if self.mire else self.scene
+        if nom == "micropore":
+            image = self.flanc
         jpeg = cv2.imencode(".jpg", image)[1].tobytes()
         return Image(self.numero, time.monotonic(), datetime.now(), jpeg)
 
@@ -195,6 +217,70 @@ def _plafond(options, reglages: Reglages, photographe) -> int:
     return 0
 
 
+def _inspection(reglages: Reglages):
+    inspection = reglages.vision.inspection
+    if inspection is None:
+        raise ErreurVision("vision.yaml n'a pas de partie « inspection » (caméra du micropore)")
+    return inspection
+
+
+def _flanc(options, reglages: Reglages, photographe) -> int:
+    inspection = _inspection(reglages)
+    image = _image(options, photographe, options.camera)
+    qrs, trous = lire_flanc(image, reglages.vision)
+    tolerance = inspection.flanc.centre_tolerance_px
+    for qr in qrs:
+        centre = "AU CENTRE" if abs(qr.x_px) <= tolerance else "tourner le plateau"
+        print(f"QR {qr.code} : {qr.x_px:+.0f} points du centre, à {qr.y_px:.0f} de haut ({centre})")
+    for trou in trous:
+        centre = "AU CENTRE" if abs(trou.x_px) <= tolerance else "tourner le plateau"
+        print(
+            f"trou : {trou.x_px:+.0f} points du centre, à {trou.y_px:.0f} de haut, Ø "
+            f"{trou.diametre_px:.0f} points ({centre})"
+        )
+    print(f"{len(qrs)} QR et {len(trous)} trou(s) vus")
+    return 0
+
+
+def _piece(options, reglages: Reglages, photographe) -> int:
+    inspection = _inspection(reglages)
+    image = _image(options, photographe, options.camera)
+    hauteur, largeur = image.shape[:2]
+    y = hauteur / 2 if options.y is None else options.y
+    verdict = controler_morceau_image(image, (largeur / 2, y), inspection)
+    print("Trou COUVERT" if verdict.couvert else f"Trou PAS couvert : {verdict.raison}")
+    return 0 if verdict.couvert else 1
+
+
+def _rouleau(options, reglages: Reglages) -> int:
+    inspection = _inspection(reglages)
+    micropore = reglages.machine.micropore
+    if micropore is None or options.format not in micropore.formats:
+        formats = ", ".join(micropore.formats) if micropore else "aucun"
+        print(f"format inconnu « {options.format} » (formats : {formats})")
+        return 2
+    for numero, rangee in enumerate(micropore.formats[options.format].rangees, start=1):
+        angle = angle_camera_rouleau(inspection, rangee.rayon_paroi_m)
+        print(f"rangée {numero} (rayon {rangee.rayon_paroi_m * 100:g} cm) : {angle:.1f}°")
+    return 0
+
+
+def _ecart(options, donnees: Path) -> int:
+    ecarts = EcartsAttaches(donnees / NOM_ECARTS)
+    if ecarts.erreur is not None:
+        print(f"Erreur : {ecarts.erreur}")
+        return 1
+    if options.degres is None:
+        for code, ecart in sorted(ecarts.tous().items()):
+            print(f"{code} : {ecart:.1f}°")
+        connu = ecarts.ecart(options.code)
+        print(f"{options.code} : " + ("écart pas enregistré" if connu is None else f"{connu:.1f}°"))
+        return 0
+    ecarts.noter(options.code, options.degres, "karulium")
+    print(f"{options.code} : écart noté, {ecarts.ecart(options.code):.1f}°")
+    return 0
+
+
 def _servo(options, reglages: Reglages) -> int:
     reglage = reglages.machine.camera_dosage
     if reglage is None:
@@ -232,6 +318,20 @@ def lancer() -> None:
     for nom in ("qr", "aruco"):
         commandes.add_parser(nom, help=f"{nom} lus").add_argument("camera")
     commandes.add_parser("plafond", help="ce que dirait la caméra du plafond")
+    commande = commandes.add_parser(
+        "flanc", help="QR du flanc et trous vus par la caméra du micropore"
+    )
+    commande.add_argument("camera", nargs="?", default="micropore")
+    commande = commandes.add_parser(
+        "piece", help="le morceau posé sur le trou au centre est-il couvert ?"
+    )
+    commande.add_argument("camera", nargs="?", default="micropore")
+    commande.add_argument("--y", type=float, help="hauteur du trou dans l'image (points)")
+    commande = commandes.add_parser("rouleau", help="angle caméra → rouleau donné par la vision")
+    commande.add_argument("format")
+    commande = commandes.add_parser("ecart", help="écart attaches de l'anse / QR d'un seau")
+    commande.add_argument("code")
+    commande.add_argument("degres", nargs="?", type=float, help="l'écart à noter (°)")
     commande = commandes.add_parser("servo", help="tourner la caméra du dosage (sans verrou)")
     commande.add_argument("cible", help="bocal, seau ou un angle (°)")
     options = lecteur.parse_args()
@@ -250,6 +350,14 @@ def lancer() -> None:
         return
     if options.commande == "servo":
         sys.exit(_servo(options, reglages))
+    if options.commande == "ecart":
+        sys.exit(_ecart(options, donnees))
+    if options.commande == "rouleau":
+        try:
+            sys.exit(_rouleau(options, reglages))
+        except ErreurVision as erreur:
+            print(f"Erreur : {erreur}", file=sys.stderr)
+            sys.exit(1)
 
     camera = getattr(options, "camera", "plafond")
     source = None
@@ -306,4 +414,8 @@ def _commande(options, reglages: Reglages, photographe, donnees: Path) -> int:
         return 0
     if options.commande == "plafond":
         return _plafond(options, reglages, photographe)
+    if options.commande == "flanc":
+        return _flanc(options, reglages, photographe)
+    if options.commande == "piece":
+        return _piece(options, reglages, photographe)
     raise AssertionError(options.commande)

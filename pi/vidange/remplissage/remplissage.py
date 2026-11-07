@@ -52,10 +52,10 @@ avant de monter au-dessus de 0,515 ou de pousser, plateau sous 0,48 pour travers
 
 Les modules pas encore écrits sont des cases vides, derrière des fonctions simples (valeurs
 prudentes par défaut) : bras du galet (tâche 41), bras du spray (39), caméra (QR du flanc :
-`VisionSeau`, tâche 22 ter). Le Micropore (tâche 40) se branche par `brancher_micropore` : le
-plateau ne monte ni ne descend que tête vue escamotée au ToF (règle 10), et ses gestes se jouent
-au poste et au vidage (vidange.micropore). Sans lui, `micropore_rentre` dit ce qu'on a vu
-(None : pas connu, le plateau ne bouge pas en hauteur).
+`VisionSeau`, vidange.vision.inspection, tâche 40 ter). Le Micropore (tâche 40) se branche par
+`brancher_micropore` : le plateau ne monte ni ne descend que tête vue escamotée au ToF (règle 10),
+et ses gestes se jouent au poste et au vidage (vidange.micropore). Sans lui, `micropore_rentre`
+dit ce qu'on a vu (None : pas connu, le plateau ne bouge pas en hauteur).
 
 Ces verrous ne protègent que la MACHINE : la sécurité des personnes reste câblée.
 """
@@ -135,7 +135,15 @@ _EGAL = 1e-6
 
 
 class VisionSeau(Protocol):
-    """Ce que le Remplissage demande à la caméra (Vision : QR du flanc, tâche 22)."""
+    """Ce que le Remplissage demande à la caméra du micropore (QR du flanc, tâche 40 ter)."""
+
+    def commencer_lecture(self) -> None:
+        """Le plateau va tourner le seau : la caméra regarde pendant ce temps."""
+        ...
+
+    def finir_lecture(self) -> None:
+        """Le plateau a fini (ou le geste est arrêté) : la caméra arrête de regarder."""
+        ...
 
     def lire_seau(self) -> tuple[str, float] | None:
         """QR du seau sur le plateau, et angle des oreilles de son anse (° depuis +x, vue de
@@ -1101,10 +1109,15 @@ class Remplissage:
             yield from self._plateau(
                 self.reglages.plateau_lecture_qr, "plateau à la hauteur de lecture du QR"
             )
-        lu = self.vision.lire_seau()
-        if lu is None:
-            yield Pas("le seau tourne (lecture du QR du flanc)", {"a": self._pose().a + 360})
+        self.vision.commencer_lecture()
+        try:
             lu = self.vision.lire_seau()
+            if lu is None:
+                yield Pas("le seau tourne (lecture du QR du flanc)", {"a": self._pose().a + 360})
+                lu = self.vision.lire_seau()
+        finally:
+            # Aussi quand le geste est arrêté (alarme) : la caméra ne regarde plus.
+            self.vision.finir_lecture()
         if lu is None:
             raise ErreurEtape(
                 "remplissage : QR du flanc du seau pas lu après un tour complet", QUOI_FAIRE_QR

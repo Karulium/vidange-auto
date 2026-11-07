@@ -14,7 +14,7 @@ Un poste n'est pas lancé, et la check-list et l'écran disent pourquoi, quand :
 - son geste n'est pas encore écrit (`case_vide` d'ORDRE_SEAU : griffe, lavage...) ;
 - machine.yaml n'a pas sa partie ;
 - sur la vraie machine, sa partie de machine.yaml est en EXEMPLE (`exemple: true`) ;
-- les pièces disent qu'il manque quelque chose (matériel, vision pas écrite : tâche 40 ter...) ;
+- les pièces disent qu'il manque quelque chose (matériel, vision de la caméra du micropore...) ;
 - un poste dont il a besoin n'est pas prêt.
 Jamais de geste inventé : un poste pas prêt est sauté (il n'est pas remplacé par un faux geste).
 
@@ -70,7 +70,8 @@ PARTIES: dict[str, tuple[str, ...]] = {
     "fut": ("poste_fut",),
     "seau_vide": ("remplissage", "prehension", "griffe"),
     # Le QR du flanc est lu par la caméra du micropore (cam_inspection, fil Guidage caméra) : sa
-    # lecture manque sur la machine (tâche 40 ter) ; dans le simulateur, une fausse caméra.
+    # lecture est dans vidange.vision.inspection (tâche 40 ter) ; dans le simulateur, une fausse
+    # caméra.
     "qr_du_flanc": ("remplissage",),
     "au_poste": ("remplissage",),
     "griffe": ("griffe", "poste_fut"),

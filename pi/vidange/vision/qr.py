@@ -15,7 +15,7 @@ bocal est à cette place).
 
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from typing import Literal
 
@@ -67,17 +67,16 @@ def _gris(image: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
 
 
-def _versions(gris: np.ndarray) -> list[tuple[np.ndarray, float]]:
+def _versions(gris: np.ndarray) -> Iterator[tuple[np.ndarray, float]]:
     """L'image telle quelle, puis des versions qui aident un QR difficile (petite, floue, mal
-    éclairée) : (image, agrandissement)."""
-    versions: list[tuple[np.ndarray, float]] = [(gris, 1.0)]
+    éclairée) : (image, agrandissement). Calculées à la demande."""
+    yield gris, 1.0
     nette = cv2.addWeighted(gris, 1.8, cv2.GaussianBlur(gris, (0, 0), 3), -0.8, 0)
-    versions.append((nette, 1.0))
+    yield nette, 1.0
     _, seuil = cv2.threshold(gris, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    versions.append((seuil, 1.0))
+    yield seuil, 1.0
     if max(gris.shape) < 2000:
-        versions.append((cv2.resize(gris, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC), 2.0))
-    return versions
+        yield cv2.resize(gris, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC), 2.0
 
 
 def _angle_image(coins: np.ndarray) -> float:
@@ -85,14 +84,20 @@ def _angle_image(coins: np.ndarray) -> float:
     return math.degrees(math.atan2(-(y1 - y0), x1 - x0))
 
 
-def lire_codes(image: np.ndarray, reglages: QrVision) -> list[CodeLu]:
+def lire_codes(image: np.ndarray, reglages: QrVision, rapide: bool = False) -> list[CodeLu]:
     """Tous les QR lus dans l'image (un code n'y est qu'une fois). Un QR d'une autre forme que
-    celle des codes du registre est ignoré."""
+    celle des codes du registre est ignoré. `rapide` : une version de l'image où l'on ne voit
+    même pas de QR n'est pas décodée, et on s'arrête à la première version qui a donné des QR
+    (images qui se suivent, pendant qu'un seau tourne : la caméra du micropore)."""
     forme = re.compile(reglages.forme)
     detecteur = cv2.QRCodeDetector()
     trouves: dict[str, CodeLu] = {}
     for version, echelle in _versions(_gris(image)):
+        if rapide and trouves:
+            break
         try:
+            if rapide and not detecteur.detect(version)[0]:
+                continue
             ok, textes, points, _ = detecteur.detectAndDecodeMulti(version)
         except cv2.error:
             continue

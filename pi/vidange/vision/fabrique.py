@@ -6,6 +6,7 @@ mire et les repères (« vidange-vision fabriquer »).
     repere = image_aruco("DICT_4X4_50", 7)
     damier = image_damier(9, 6)                     # 9 × 6 coins intérieurs
     scene = poser(fond(800, 600), [(qr, (200, 300), 30)])   # QR tourné de 30°
+    vue = scene_flanc(40.0, qr=("S1293", 40.0, 360), trous=[(130.0, 300)])   # flanc du seau
 """
 
 import cv2
@@ -103,3 +104,45 @@ def vues_de_mire(
         vue = cv2.warpPerspective(mire, matrice, taille, borderValue=170)
         vues.append(cv2.cvtColor(vue, cv2.COLOR_GRAY2BGR))
     return vues
+
+
+def scene_flanc(
+    angle_plateau: float,
+    qr: tuple[str, float, float] | None = None,
+    qr_inclinaison: float = 0.0,
+    trous: list[tuple[float, float]] | tuple[()] = (),
+    pieces: list[tuple[float, float, float, float, float]] | tuple[()] = (),
+    taille: tuple[int, int] = (1280, 720),
+    points_par_degre: float = 8.0,
+    case_qr: int = 6,
+    trou_px: int = 20,
+    paroi: int = 170,
+    couleur_trou: int = 30,
+    couleur_piece: int = 235,
+) -> np.ndarray:
+    """Le flanc d'un seau vu par la caméra du micropore quand le plateau est à `angle_plateau` (°).
+    Chaque objet est à un angle du plateau ; il passe au centre de l'image quand le plateau est à
+    cet angle, et se décale de `points_par_degre` points par degré d'écart.
+
+    qr      (code, angle du QR sur le plateau, y en points), tourné de `qr_inclinaison` °
+    trous   (angle du trou, y) : disques de `trou_px` points
+    pieces  (angle, y, longueur, largeur, inclinaison en °) : rectangles clairs posés sur la paroi,
+            après les trous (un morceau posé cache le trou)
+    Un objet hors de l'image n'est pas dessiné."""
+    largeur, hauteur = taille
+    scene = fond(largeur, hauteur, paroi)
+
+    def x_de(angle: float) -> float:
+        # Le seau fait un tour de 360° : un objet revient devant la caméra à chaque tour.
+        ecart = (angle - angle_plateau + 180) % 360 - 180
+        return largeur / 2 + points_par_degre * ecart
+
+    for angle, y in trous:
+        cv2.circle(scene, (round(x_de(angle)), round(y)), trou_px // 2, (couleur_trou,) * 3, -1)
+    for angle, y, longueur, largeur_piece, inclinaison in pieces:
+        boite = cv2.boxPoints(((x_de(angle), y), (longueur, largeur_piece), -inclinaison))
+        cv2.fillPoly(scene, [boite.astype(np.int32)], (couleur_piece,) * 3)
+    if qr is not None:
+        code, angle, y = qr
+        scene = poser(scene, [(image_qr(code, case_qr), (x_de(angle), y), qr_inclinaison)])
+    return scene

@@ -281,7 +281,7 @@ def test_photo_de_mesure_apres_la_stabilisation():
     with pytest.raises(ErreurVision, match="pas d'image depuis 3 s"):
         p.mesure("plafond")
     with pytest.raises(ErreurVision, match="sans vidéo"):
-        p.mesure("micropore")
+        p.mesure("vue_a")
 
 
 def test_photo_trop_vieille_refusee():

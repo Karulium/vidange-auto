@@ -17,7 +17,9 @@ Ce qui n'est pas dans le lot simulé, et pourquoi, est dit par `mode.en_texte()`
 Le couvercle (tâche 41 bis) est pris sur une pile imaginaire (simulateur.yaml → cycle → couvercles)
 par la vraie Préhension simulée, posé sur le seau plein, pesé par la fausse balance, puis clipsé
 par la vraie fermeture.
-La lecture du QR du flanc est une fausse caméra (la vraie est la tâche 40 ter).
+La lecture du QR du flanc est une fausse caméra, pour que le lot reste rapide ; la vraie
+(vidange.vision.inspection, tâche 40 ter) est essayée sur des images fabriquées par
+tests/test_inspection.py, branchée au même Remplissage.
 
 Tâche 45 bis, même méthode (`vidange-simulateur cycle --lot bocaux|lavage_bocaux|nuit|tout`) :
 - lot de bocaux (`jouer_bocaux`) : le vrai `module_entonnoir` sur la Préhension simulée, un faux
