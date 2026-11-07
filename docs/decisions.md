@@ -1806,3 +1806,13 @@ prehension.py`, `pi/vidange/couvercle/couvercle.py`, `pi/vidange/cycle/` (machin
   bocal, figée d'après la mesure, qui doit couvrir la pose finale et le chemin d'approche ; elle ne vaut qu'en
   butée haute, godet fermé, bras le long du pont. Le démarrage refuse une exception dont la zone ne contient pas le
   vrai mât pour ce bocal (`Machine.mat_griffe_entonnoir`), ou qui contient celui d'un autre bocal.
+- **Réponses à la PR n° 101** (tâche 45 octies, 07/11/2026, niveau 1, tranché par Claude) :
+  1. `bocal_2_0` : la mesure de la Maquette mettait le mât de la griffe à x bocal − 0,316 (tête de préhension au-dessus
+     du bocal), alors que la tête est à x bocal + 0,140 pour tenir l'oreille de l'entonnoir : le vrai mât est à
+     (1,0315 ; 0,2506). Remesure demandée à la Maquette (en butée haute, avec le chemin d'approche, rectangle
+     « libre ») ; d'ici là, `exceptions_butee_haute` reste vide et Karulium pose l'entonnoir à la main.
+  2. Verrou de la zone du spray aussi pendant la dose (bras sorti et immobile) : oui (c'est déjà le cas : le verrou
+     tient tant que le bras n'est pas vu rangé et arrêté).
+  3. Coupure avec le couvercle C tenu sous la face 0,545 : question posée au fil Préhension (la ventouse garde-t-elle
+     le couvercle sans courant ?). D'ici sa réponse, ligne de la check-list de reprise : enlever le couvercle à la main
+     avant le Go s'il est encore tenu.
