@@ -17,7 +17,8 @@ et Guidage caméra à la PR n° 89) :
                  aller-retour de la griffe (bras sorti, dose, le seau tourne ≈ 200°, bras rangé)
     micropore    rangées du haut sur le seau vide au poste, après le spray ; la rangée du fond
                  au vidage, quand le seau pèse assez (micropore → fond_poids_min_kg)
-    griffe       une couche de substrat versée par la griffe, le seau tourne
+    griffe       une couche de substrat versée par la griffe (prises dans le fût, vidage, tassement,
+                 le seau tourne), le seau l'attend au vidage (tâche 45 sexies)
     mycelium     une dose de semence sur la couche (griffe puis mycélium, à chaque couche)
     couvercle    couvercle pris à la pile du stockage et posé sur le seau plein (tâche 41 bis) :
                  chariot à y 0,50 plateau à H_app, pesée P0, prise, pose sans appuyer, balance
@@ -88,13 +89,8 @@ ORDRE_SEAU: tuple[Poste, ...] = (
     ),
     Poste(
         "griffe",
-        "Couche de substrat versée par la griffe, le seau tourne",
+        "Couche de substrat versée par la griffe (le seau l'attend au vidage), le seau tourne",
         etapes=("remplissage.ramener_au_vidage", "remplissage.verser"),
-        case_vide=(
-            "enchaînement de la griffe avec la préhension (même pont) et avec le seau du chariot "
-            "pas écrit (solveur, tâche 23) ; dans le simulateur, chaque versement est une "
-            "rotation du seau"
-        ),
         obligatoire=True,
     ),
     Poste(
@@ -183,12 +179,6 @@ ORDRE_BOCAUX: tuple[Poste, ...] = (
     Poste(
         "versement",
         "Versement de la griffe dans le bocal où est l'entonnoir (étape « verser » de l'entonnoir)",
-        case_vide=(
-            "geste écrit (vidange.griffe.versement, tâche 43 bis) mais pas branché : "
-            "enchaînement de la griffe avec la préhension (même pont) pas écrit (solveur, tâche "
-            "23) ; dans le simulateur, chaque versement dure le temps réglé (simulateur.yaml, "
-            "entonnoir → verse_s)"
-        ),
         obligatoire=True,
     ),
     Poste(

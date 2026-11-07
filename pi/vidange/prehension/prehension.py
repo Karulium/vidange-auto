@@ -172,6 +172,10 @@ class Prehension:
         # Verrous des trajets au-dessus du Stockage (Stockage.refus_prehension, tâche 35) pour
         # chaque pas : raison du refus, ou None. Sans stockage : rien.
         self.verrou_stockage: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
+        # Verrou du pont partagé (vidange.cycle.griffe_du_lot, tâche 45 sexies) : un pas qui
+        # bouge le pont ou le chariot Y traîne aussi le mât de la griffe (même chariot) ; ses
+        # règles de position à elle sont vérifiées. Sans griffe branchée : rien.
+        self.verrou_pont: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
         # Ce que tient la tête, son poids pesé (N), et le vide de la dernière prise (kPa).
         self.objet: Objet | None = None
         self.poids_porte_n = 0.0
@@ -241,7 +245,9 @@ class Prehension:
         refus = self.regles.refus_mouvement(depart, cible, self.contexte())
         if refus is None:
             refus = self.verrou_chariot(depart, cible)
-        return refus if refus is not None else self.verrou_stockage(depart, cible)
+        if refus is None:
+            refus = self.verrou_stockage(depart, cible)
+        return refus if refus is not None else self.verrou_pont(depart, cible)
 
     def memoire(self) -> dict:
         """Ce que tient la tête, à noter dans le carnet du chef (reprise après coupure)."""
@@ -311,6 +317,8 @@ class Prehension:
             refus = self.verrou_chariot(self.pose, cible)
         if refus is None:
             refus = self.verrou_stockage(self.pose, cible)
+        if refus is None:
+            refus = self.verrou_pont(self.pose, cible)
         if refus is None and pas.brosses:
             refus = self.verrou_brosses(self.pose)
         if refus is not None:
@@ -442,6 +450,17 @@ class Prehension:
             if self.pose.y < sortie - _EGAL:
                 yield Pas("sortie du couloir du porte-bocal", {"y": sortie}, choc=True)
         haut = self.regles.hauteur_trajet(self.objet, self.pose.y, y)
+        isolation = self.reglages.isolation_fut_x_max
+        if (
+            self.pose.z > haut + _EGAL
+            and self.pose.x < isolation - _EGAL
+            and x >= isolation - _EGAL
+            and not self._panneau_rabattu()
+        ):
+            # La tête a été traînée au-dessus de l'isolation du fût par le pont (la griffe est au
+            # fût, même chariot, tâche 45 sexies) : elle en sort d'abord, face en haut (règle 2),
+            # avant de descendre à la hauteur du trajet.
+            yield Pas("sortir de l'isolation du fût, face en haut", {"x": isolation}, choc=True)
         if self.pose.z > haut + _EGAL:
             # Seau tenu : plus bas au-dessus des piles que côté opérateur (règle 3) ; chaîne Z :
             # plus bas au-delà de y 0,80.

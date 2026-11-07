@@ -22,7 +22,7 @@ encore (et le programme le dit à chaque refus) :
 
 | Ce qui manque | Poste qui le dit |
 |---|---|
-| L'enchaînement de la griffe avec la préhension et le seau du chariot (tâche 23) | griffe, versement |
+| Les cartes de la griffe (bras sur la carte du portique, pesée de la griffe) : la griffe est construite et enchaînée depuis la tâche 45 sexies, mais sans ses cartes ou en EXEMPLE elle ne part pas (`pi/systeme/essai-griffe-du-lot.md`) | griffe, versement |
 | La lecture du QR d'un bocal de semence par la caméra de la tête de la griffe | mycelium |
 | L'erreur du codeur de la rotation de la tête (calage du moteur, carte n° 4) | mycelium |
 | La lecture de la photo du plafond (bande du haut, entonnoir, bocaux sales) | stockage, entonnoir, lavage_bocaux |

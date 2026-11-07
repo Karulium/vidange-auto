@@ -327,6 +327,9 @@ durees:
   remplissage_geste_max: 300
   # Le dosage d'une couche, mené par le Mycélium (bocal neuf, trajets, agitation). EXEMPLE.
   remplissage_dosage_max: 1200
+  # Une couche de substrat versée par la vraie griffe (tâche 45 sexies) : plusieurs prises dans
+  # le fût, vidages, tassement (et essuyage à la dernière). Le seau attend au vidage. EXEMPLE.
+  remplissage_couche_griffe_max: 1800
   # Nettoyage, scénarios du simulateur (gestes de Karulium) : store ouvert ou fermé (course,
   # rebond, 2 s de stabilité), purge (au plus alerte_s, plus de marge), une phase de la nuit
   # UV-ozone (au plus t_max_retour, plus de marge). EXEMPLE.

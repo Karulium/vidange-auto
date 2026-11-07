@@ -13,7 +13,9 @@ Ce qui n'est pas dans le lot simulé, et pourquoi, est dit par `mode.en_texte()`
 - le fût est déjà au poste et prêt (l'échange se joue à part : `vidange-simulateur poste_fut`) ;
 - la griffe : chaque versement est une rotation du seau (étape « verser » du remplissage), et
   elle est vue « partie du poste » dès que le seau vide y arrive (le bras du spray peut sortir) ;
-- les cases vides d'ORDRE_SEAU (griffe, lavage).
+- les cases vides d'ORDRE_SEAU (lavage).
+La vraie griffe (vidange.cycle.griffe_du_lot, tâche 45 sexies) est essayée à part sur cette même
+machine imaginaire (tests/test_cycle_griffe.py) : elle rendrait le lot simulé bien plus long.
 Le couvercle (tâche 41 bis) est pris sur une pile imaginaire (simulateur.yaml → cycle → couvercles)
 par la vraie Préhension simulée, posé sur le seau plein, pesé par la fausse balance, puis clipsé
 par la vraie fermeture.
@@ -112,6 +114,16 @@ class PiecesSimulees:
         from vidange.micropore.simulation import micropore_possible
 
         reglages = self.simulateur.reglages
+        if poste == "griffe":
+            return (
+                "jouée en faux dans le lot simulé : chaque versement est une rotation du seau "
+                "(la vraie griffe est essayée à part)"
+            )
+        if poste == "versement":
+            return (
+                "joué en faux dans le lot simulé : chaque versement dure le temps réglé "
+                "(simulateur.yaml, entonnoir → verse_s)"
+            )
         if poste == "fut":
             return (
                 "le fût du lot simulé est déjà au poste et prêt (échange joué à part : "

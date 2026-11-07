@@ -410,6 +410,29 @@ scenarios:
         attente_s: 360
         capteur: boucle_stockage
         actionne: true
+  # Lot du mode seaux avec la VRAIE griffe (tâche 45 sexies, tests/test_cycle_griffe.py) : comme
+  # « cycle », plus le fût plein au poste (panneau en production, 93,4 kg pesés) et le « Prêt » de
+  # Karulium 5 s après le début : la griffe vide le fût dans les seaux du lot.
+  cycle_griffe:
+    capteurs_actionnes: [plateau_fut_en_place, boucle_stockage, reed_panneau_poste_fut]
+    evenements:
+      - attente_s: 0
+        pesee: pesee_fut
+        kg: 93.4
+      - attente_s: 5
+        capteur: bouton_pret_fut
+        actionne: true
+      - attente_s: 6
+        capteur: bouton_pret_fut
+        actionne: false
+      - apres: remplissage.vider_le_tiroir
+        attente_s: 60
+        capteur: boucle_stockage
+        actionne: false
+      - apres: remplissage.vider_le_tiroir
+        attente_s: 360
+        capteur: boucle_stockage
+        actionne: true
   # Nettoyage (tâche 38). Store ouvert au départ, porte du spray fermée, panneau long du poste du fût
   # levé (contact fermé, la position normale ; ce n'est pas une condition de la nuit : la fuite part
   # panneau rabattu, contact ouvert, pour le montrer).

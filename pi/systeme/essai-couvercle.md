@@ -105,7 +105,7 @@ Le chariot de remplissage n'a pas besoin d'être préparé pour cette étape : l
 
 ## Ce qui ne peut pas encore s'essayer
 
-- **Le cycle complet** : il manque encore la griffe (tâche 23), les cartes du chariot et de la tête branchées au
+- **Le cycle complet** : il manque encore les cartes de la griffe (enchaînée au lot depuis la tâche 45 sexies), les cartes du chariot et de la tête branchées au
   programme principal (la lecture du QR du flanc est écrite : tâche 40 ter). Ici, le chariot et la tête se commandent avec
   leurs outils.
 - **Les impulsions du venturi pendant le trajet** (fiche, étape 7 : « nouvelle impulsion si le vide passe

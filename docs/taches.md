@@ -733,6 +733,21 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   main ce que contient le stockage (bocaux de semence par variété et par place, capsules et couvercles percés dans les
   boîtes, piles de seaux vides par format, couvercles), avec le Go de Karulium avant d'écrire ; le lot (tâche 45
   quater, `refus_taille_lot`) lit ces nombres. Journal de chaque correction. Tests et procédure courte.
+- [x] **45 sexies. Programme principal : construire la griffe et l'enchaîner (seaux et bocaux)** — Modèle : Opus,
+  effort moyen. Le solveur (tâche 23) ne l'a pas fait : il ne fait que l'ordre de priorité. Aujourd'hui
+  `Sources.griffe` et `Sources.versement_bocal` restent à None sur la vraie machine (`pi/vidange/cycle/machine.py`,
+  textes `GRIFFE_DU_LOT` et `VERSEMENT_BOCAL`).
+  1. Construire la griffe sur ses vraies cartes au démarrage (bras FluidNC, pesée RS485 de la griffe, poste du
+     fût), comme les autres pièces : absente = « pas lancé : raison », jamais d'arrêt du démarrage.
+  2. Enchaînement du mode seaux avec ce qui existe déjà : `seau_pret` (Remplissage : seau au poste, couche de
+     mycélium d'avant versée), `pont_libre` (la Préhension n'a pas besoin du pont : les deux mâts sont sur le même
+     chariot), la permission « verser » du Remplissage, `GriffeDuLot.partie()` et `versement_s`. Les zones et les
+     règles du Portique (pont, mâts, garde du boîtier de la caméra du bocal) restent celles du chef.
+  3. Mode bocaux : brancher `vidange.griffe.versement` (tâche 43 bis) comme `Sources.versement_bocal`.
+  4. Corriger les textes qui renvoient à tort à la tâche 23 pour ces deux points.
+  5. Si un geste ou une règle d'enchaînement manque dans `docs/decisions.md` (ne pas l'inventer) : garder la case
+     vide, le dire dans la PR (« Questions pour Karulium »).
+  Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
 - [x] **23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi** — Modèle : Opus, effort
   moyen. Base : `pi/vidange/simulateur/solveur.py` (place prête), `simulateur/planning.py`, `chef/zones.py`,
   decisions « La fiabilité d'abord ». Bibliothèque : `ortools` (CP-SAT, gratuite, roues pour le Pi 5 en

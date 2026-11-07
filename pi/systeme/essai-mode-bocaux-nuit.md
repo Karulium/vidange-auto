@@ -9,8 +9,8 @@ vraie machine**. C'est voulu. Le programme le dit, poste par poste, avec la rais
 
 - réglages d'EXEMPLE (`exemple: true` dans `pi/reglages/machine.yaml`) : interdits sur la vraie machine,
   y compris la partie `nettoyage` pour la nuit ;
-- lot de bocaux : le versement de la griffe n'est pas écrit (tâche 23) ; la Préhension et la lecture de la
-  photo du plafond ne sont pas branchées au programme principal ;
+- lot de bocaux : le versement de la griffe est construit sur la griffe des cartes (tâche 45 sexies), il lui
+  faut ses cartes (bras, pesée) ; la lecture de la photo du plafond n'est pas branchée au programme principal ;
 - lavage des bocaux : le Lavage n'est pas branché, la liste des bocaux sales (caméra du plafond) n'est pas
   écrite.
 

@@ -85,7 +85,7 @@ def test_l_ordre_des_bocaux_et_de_la_nuit_est_ecrit_a_un_seul_endroit():
     assert [poste.nom for poste in ORDRE_NUIT] == ["enceinte", "ozone", "purge"]
     # Le versement de la griffe est une case vide : jamais lancé, ni sur la machine ni en faux.
     vides = {poste.nom for poste in ORDRE_BOCAUX if poste.case_vide}
-    assert vides == {"versement"}
+    assert vides == set()
     # La nuit : seuls l'enceinte et l'ozone la bloquent.
     assert {poste.nom for poste in ORDRE_NUIT if poste.coeur} == {"enceinte", "ozone"}
 
@@ -131,7 +131,7 @@ def test_avec_le_faux_materiel_les_postes_des_bocaux_et_de_la_nuit_sont_prets(
         mode = ModeBocaux(reglages_depot, PiecesSimulees(simulateur_), simulateur_.chef)
     assert mode.postes_lances == ["entonnoir", "lavage_bocaux"]
     assert mode.refus_lot() is None and mode.refus_lavage() is None
-    assert "tâche 23" in mode.etats["versement"].raison
+    assert "joué en faux" in mode.etats["versement"].raison
     assert "vidange-simulateur poste_fut" in mode.etats["fut"].raison
     assert mode.texte_ecran() == ("Lot de bocaux : prêt", "")
 
@@ -494,6 +494,7 @@ def test_au_demarrage_la_check_list_dit_ce_qui_manque(reglages, entrees_sorties,
     assert "Nuit UV-ozone, ozone : prêt" in journal
     assert "nuit UV-ozone, enceinte" not in journal  # prête : rien à signaler
     assert f"Mode bocaux, entonnoir : pas lancé : {PHOTO_DU_PLAFOND}" in journal
-    assert "Mode bocaux, versement : pas lancé : geste pas encore écrit" in journal
+    # La griffe est construite sur le faux matériel (tâche 45 sexies) : le versement est prêt.
+    assert "Mode bocaux, versement : prêt" in journal
     assert f"[attention] mode bocaux, lavage_bocaux : pas lancé : {BOCAUX_SALES}" in journal
     assert "[attention] mode bocaux : aucun lot de bocaux ne peut partir" in journal

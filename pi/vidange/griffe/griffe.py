@@ -201,6 +201,10 @@ class Griffe:
         # Verrou du chariot de remplissage (Remplissage.brancher_griffe, règle 14 : en mode
         # couvercles, la tête ne tourne que chariot à y ≥ 0,515). Sans remplissage : rien.
         self.verrou_chariot: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
+        # Verrou du pont partagé (vidange.cycle.griffe_du_lot, tâche 45 sexies) : un pas qui
+        # bouge le pont ou le chariot Y traîne aussi la tête de préhension (même chariot) ; ses
+        # règles à elle sont vérifiées. Sans préhension branchée : rien.
+        self.verrou_pont: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
 
     # ------------------------------------------------------------ état
 
@@ -214,6 +218,10 @@ class Griffe:
             camera_dosage_pivote=self._camera_dosage_pivote(),
             prehension_face_z=self._prehension_face_z(),
         )
+
+    def occupee(self) -> bool:
+        """Un geste est en cours (pont partagé avec la préhension, tâche 45 sexies)."""
+        return self._geste is not None
 
     def tete_tourne(self) -> bool:
         """Un pas en cours fait tourner la tête (règle 14 du chariot de remplissage)."""
@@ -277,6 +285,8 @@ class Griffe:
             refus = self.verrou_stockage(self.pose, cible)
         if refus is None:
             refus = self.verrou_chariot(self.pose, cible)
+        if refus is None:
+            refus = self.verrou_pont(self.pose, cible)
         if refus is not None:
             raise ErreurEtape(f"griffe, « {pas.texte} » refusé : {refus}", QUOI_FAIRE)
         journal.debug("Griffe : %s", pas.texte)

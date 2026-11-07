@@ -17,8 +17,8 @@ Un lot de bocaux tourne en mode « production », laver les bocaux en mode « la
 demande `Lavage.refus_mode`). Un seul lot à la fois : pas de lot de bocaux pendant un lot de seaux.
 
 Ce qui n'est pas lancé, et pourquoi (écran, check-list, journal) :
-- le versement de la griffe dans le bocal : sa case est vide (enchaînement avec la préhension,
-  tâche 23) ; sur la vraie machine un lot de bocaux ne part donc pas ;
+- le versement de la griffe dans le bocal (vidange.griffe.versement, branché à la tâche 45
+  sexies) : griffe pas construite, ou ses réglages en EXEMPLE sur la vraie machine ;
 - sur la vraie machine, la Préhension, la lecture de la photo du plafond (entonnoir sur le bocal)
   et le Lavage ne sont pas encore construits ici (voir vidange.cycle.machine) ;
 - une partie de machine.yaml absente, ou en EXEMPLE sur la vraie machine.
@@ -41,7 +41,7 @@ from vidange.cycle.postes import (
     refus_lancement,
 )
 from vidange.entonnoir.entonnoir import Entonnoir
-from vidange.entonnoir.module import module_entonnoir
+from vidange.entonnoir.module import VersementDuBocal, module_entonnoir
 from vidange.fiabilite.constats import Constat
 from vidange.journal import donner_journal
 from vidange.lavage.bocaux import LavageBocaux
@@ -88,12 +88,14 @@ class LotBocaux:
 @dataclass
 class PiecesEntonnoir:
     """Ce que les pièces construisent pour un lot de bocaux : l'entonnoir, la Préhension, et le
-    versement de la griffe (case vide sur la machine ; un faux dans le simulateur)."""
+    versement de la griffe : le vrai (`versement`, vidange.griffe.versement, sur la machine) ou
+    un faux (`verser`, `versement_fini` : simulateur, essais)."""
 
     entonnoir: Entonnoir
     prehension: Prehension
     verser: Callable[[str], object] = lambda bocal: None
     versement_fini: Callable[[], bool] = lambda: True
+    versement: "VersementDuBocal | None" = None
 
 
 @dataclass
@@ -231,6 +233,7 @@ class ModeBocaux:
             list(lot.bocaux),
             verser=pieces.verser,
             versement_fini=pieces.versement_fini,
+            versement=pieces.versement,
             # Le venturi de la tête prend l'entonnoir : attente de la mise en pression (tâche 42).
             air=self.chef.condition_permission("air"),
         )
