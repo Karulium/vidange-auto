@@ -6,6 +6,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from vidange import entete_spray
 from vidange.api.app import Services, creer_app
 from vidange.chef import Chef
 from vidange.demarrage import constats_spray, preparer_spray
@@ -14,7 +15,7 @@ from vidange.materiel import ErreurMateriel, FausseFabrique, Materiel
 from vidange.materiel import carte_spray as table
 from vidange.materiel.modbus import ClientModbus
 from vidange.registre import Registre
-from vidange.reglages import ReglagesChef, charger_reglages
+from vidange.reglages import ReglagesChef, charger_reglages, courants_tmc2209
 from vidange.remplissage.regles import Contexte, Pose, ReglesRemplissage
 from vidange.simulateur import Simulateur
 from vidange.spray import ErreurSpray, Spray, module_nettoyage_tubes, module_spray
@@ -536,6 +537,89 @@ def test_balances_du_spray_dans_pesees(reglages):
     assert "balances_spray" in erreur_de(reglages)
 
 
+# ------------------------------------------------------------ programme de la carte (tâche 39 bis)
+
+
+def test_reglages_copies_dans_le_programme_de_la_carte(tmp_path):
+    entete_spray.ecrire(DOSSIER_PI / "reglages", LISTE_CHEMIN, tmp_path)
+    texte = (tmp_path / "reglages_spray.h").read_text(encoding="utf-8")
+    # L'adresse et la vitesse viennent de entrees-sorties.yaml (carte_spray, rs485_spray).
+    assert "#define REGLAGE_ADRESSE 1\n" in texte
+    assert "#define REGLAGE_VITESSE_BAUDS 115200" in texte
+    assert "#define REGLAGE_EXEMPLE 1" in texte
+    assert "#define REGLAGE_BROCHES_POMPES_PAS {4, 5, 6, 7}" in texte
+    assert "#define REGLAGE_BROCHE_POMPES_SENS -1" in texte
+    assert "#define REGLAGE_BROCHE_BRAS_RANGE 42" in texte
+    # Le bras : 110° = 1100 dixièmes ; 200 pas × 16 micro-pas = 3200 pas par tour ; 90 °/s.
+    assert "#define REGLAGE_BRAS_COURSE_DIXIEMES 1100" in texte
+    assert "#define REGLAGE_BRAS_PAS_PAR_TOUR 3200" in texte
+    assert "#define REGLAGE_BRAS_VITESSE_PAS_S 800" in texte
+    assert "#define REGLAGE_BRAS_TEMPS_MAX_MS 3000" in texte
+    # 1,2 A avec 0,11 Ω : IRUN 20 (≈ 1,16 A), maintien à 50 % : IHOLD 9.
+    assert "#define REGLAGE_PILOTE_VSENSE 0" in texte
+    assert "#define REGLAGE_PILOTE_IRUN 20" in texte
+    assert "#define REGLAGE_PILOTE_IHOLD 9" in texte
+    assert "#define REGLAGE_SILENCE_MAX_MS 2000" in texte
+    assert "#define REGLAGE_CHASSE_MS 4500" in texte
+    assert "#define REGLAGE_BALANCES_BRUT_PAR_KG {400000.0f, 400000.0f, 400000.0f, 400000.0f}" in (
+        texte
+    )
+    assert "#define REGLAGE_BALANCES_INSTABLE_DIXIEMES 30" in texte
+    # Rien n'est réécrit si rien ne change (le programme n'est pas refait pour rien).
+    avant = (tmp_path / "reglages_spray.h").stat().st_mtime_ns
+    entete_spray.ecrire(DOSSIER_PI / "reglages", LISTE_CHEMIN, tmp_path)
+    assert (tmp_path / "reglages_spray.h").stat().st_mtime_ns == avant
+
+
+def test_fabrication_de_la_carte_arretee_par_des_reglages_faux(reglages, tmp_path, capsys):
+    remplacer(reglages / "machine.yaml", "      bras_sens: 14", "      bras_sens: 13")
+    remplacer(reglages / "machine.yaml", "      rs485_rx: 18", "      rs485_rx: 19")
+    sortie = tmp_path / "genere"
+    assert entete_spray.main([str(reglages), str(LISTE_CHEMIN), str(sortie)]) == 1
+    erreur = capsys.readouterr().err
+    assert "la broche 13 est prise deux fois (bras_pas et bras_sens)" in erreur
+    assert "rs485_rx (19) : broche de l'ESP32-S3 réservée (USB)" in erreur
+    assert not (sortie / "reglages_spray.h").exists()
+    assert entete_spray.main([]) == 2
+
+
+def test_fabrication_de_la_carte_sans_carte_du_spray(entrees_sorties, tmp_path, capsys):
+    remplacer(entrees_sorties, "    appareil: carte_spray\n", "")
+    assert entete_spray.main([str(DOSSIER_PI / "reglages"), str(entrees_sorties), str(tmp_path)])
+    assert "appareil: carte_spray" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("ancien", "nouveau", "message"),
+    [
+        ("pompes_pas: [4, 5, 6, 7]", "pompes_pas: [4, 5, 6, 4]", "prise deux fois"),
+        ("hx711_sck: [38, 39, 40, 41]", "hx711_sck: [38, 39, 40, 30]", "(mémoire flash)"),
+        ("      micro_pas: 16", "      micro_pas: 12", "le TMC2209 ne sait faire que"),
+        ("      rapport: 1  ", "      rapport: 1.0001  ", "nombre entier de pas"),
+        ("vitesse_pas_s: 1600", "vitesse_pas_s: 12000", "plus que ce que fait le générateur"),
+        ("temps_max_s: 3  ", "temps_max_s: 1.5  ", "pas le temps de faire toute sa course"),
+        ("resistance_mesure_ohm: 0.11", "resistance_mesure_ohm: 0.5", "ne peut pas le donner"),
+        ("    chien_de_garde_ms: 1000", "    chien_de_garde_ms: 3000", "chien_de_garde_ms"),
+        ("sans_mesure_ms: 100\n      instable", "sans_mesure_ms: 30\n      instable", "3 fois"),
+    ],
+)
+def test_reglages_de_la_carte_verifies(reglages, ancien, nouveau, message):
+    remplacer(reglages / "machine.yaml", ancien, nouveau)
+    assert message in erreur_de(reglages)
+
+
+def test_courant_du_pilote_du_bras():
+    assert SPRAY.carte is not None
+    moteur = SPRAY.carte.moteur_bras
+    assert courants_tmc2209(1.2, moteur) == (0, 20, 9)
+    # Petit courant : la petite échelle (VSENSE 1), plus fine. (CS + 1) / 32 × 0,18 / 0,13 / √2.
+    vsense, irun, _ = courants_tmc2209(0.5, moteur)
+    assert vsense == 1 and irun == 15
+    assert (irun + 1) / 32 * 0.180 / 0.13 / 2**0.5 <= 0.5
+    with pytest.raises(ValueError):
+        courants_tmc2209(3.0, moteur)
+
+
 def test_outil_avec_la_fausse_carte(capsys):
     assert outil(["--faux", "etat", "--secondes", "1"]) == 0
     assert "bras" in capsys.readouterr().out
@@ -545,6 +629,9 @@ def test_outil_avec_la_fausse_carte(capsys):
     assert "Fait." in capsys.readouterr().out
     assert outil(["--faux", "zero", "1"]) == 0
     assert "zero_brut" in capsys.readouterr().out
+    # --angle : le bras sort d'abord, dans la même commande (une carte neuve n'a pas d'origine).
+    assert outil(["--faux", "dose", "1", "10", "--angle", "64.3", "--etabli"]) == 1
+    assert "prise d'origine du bras pas faite" in capsys.readouterr().out
 
 
 def test_simulateur_a_une_fausse_carte_du_spray():

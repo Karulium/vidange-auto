@@ -148,6 +148,94 @@ static void trame_abimee_puis_silence(void) {
     VERIFIER(m.trames_abimees == 1);
 }
 
+// Une écriture (fonction 16) : rend sa longueur.
+static size_t ecriture(uint8_t *trame, uint8_t adresse, uint16_t premier, const uint16_t *valeurs,
+                       uint16_t nombre) {
+    trame[0] = adresse;
+    trame[1] = 16;
+    trame[2] = (uint8_t)(premier >> 8);
+    trame[3] = (uint8_t)premier;
+    trame[4] = (uint8_t)(nombre >> 8);
+    trame[5] = (uint8_t)nombre;
+    trame[6] = (uint8_t)(2 * nombre);
+    for (uint16_t i = 0; i < nombre; i++) {
+        trame[7 + 2 * i] = (uint8_t)(valeurs[i] >> 8);
+        trame[8 + 2 * i] = (uint8_t)valeurs[i];
+    }
+    size_t n = 7 + 2 * (size_t)nombre;
+    uint16_t crc = modbus_crc(trame, n);
+    trame[n] = (uint8_t)crc;
+    trame[n + 1] = (uint8_t)(crc >> 8);
+    return n + 2;
+}
+
+static void ecriture_des_registres(void) {
+    modbus_t m;
+    modbus_init(&m, 1);
+    uint8_t q[MODBUS_TRAME_MAX], r[MODBUS_REPONSE_MAX];
+    const uint16_t valeurs[4] = {6, 60, 30, 0x1234};
+    size_t n = ecriture(q, 1, 101, valeurs, 4);
+    VERIFIER(n == 17);
+    // Pas avant le dernier octet.
+    VERIFIER(recevoir(&m, q, n - 1) == 0);
+    VERIFIER(recevoir(&m, q + n - 1, 1) == 1);
+    VERIFIER(modbus_fonction(&m) == 16);
+    uint16_t premier = 0, lues[8] = {0};
+    VERIFIER(modbus_lire_ecriture(&m, &premier, lues, 8) == 4);
+    VERIFIER(premier == 101 && lues[0] == 6 && lues[1] == 60 && lues[3] == 0x1234);
+    VERIFIER(modbus_lire_ecriture(&m, &premier, lues, 3) == 0);
+    // L'accusé : adresse, fonction, premier registre, nombre, contrôle.
+    VERIFIER(modbus_repondre_ecriture(&m, 0, r) == 8);
+    VERIFIER(r[0] == 1 && r[1] == 16 && r[2] == 0 && r[3] == 101 && r[4] == 0 && r[5] == 4);
+    uint16_t crc = modbus_crc(r, 6);
+    VERIFIER(r[6] == (uint8_t)crc && r[7] == (uint8_t)(crc >> 8));
+    VERIFIER(modbus_repondre_ecriture(&m, MODBUS_REGISTRE_INCONNU, r) == 5 && r[1] == 0x90);
+    // Une carte de pesée ne sait pas écrire : exception 1.
+    VERIFIER(modbus_repondre(&m, table, 8, r) == 5 && r[1] == 0x90 && r[2] == 1);
+    // Nombre d'octets qui ne va pas avec le nombre de registres : mal faite.
+    q[6] = 6;
+    n = 7 + 6;
+    uint16_t c = modbus_crc(q, n);
+    q[n] = (uint8_t)c;
+    q[n + 1] = (uint8_t)(c >> 8);
+    heure_us += 2000;
+    VERIFIER(recevoir(&m, q, n + 2) == 1);
+    VERIFIER(modbus_lire_ecriture(&m, &premier, lues, 8) == 0);
+    VERIFIER(m.trames_abimees == 0);
+}
+
+static void ecriture_abimee(void) {
+    modbus_t m;
+    modbus_init(&m, 1);
+    uint8_t q[MODBUS_TRAME_MAX], q1[8];
+    const uint16_t valeurs[2] = {1, 2};
+    size_t n = ecriture(q, 1, 100, valeurs, 2);
+    q[8] ^= 0x01;
+    VERIFIER(recevoir(&m, q, n) == 0);
+    VERIFIER(m.trames_abimees == 1);
+    heure_us += 2000;
+    question(q1, 1, 4, 0, 8);
+    VERIFIER(recevoir(&m, q1, 8) == 1);
+}
+
+static void ignore_les_ecritures_aux_autres(void) {
+    // Le Pi écrit à la carte 2, elle accuse réception (8 octets), puis le Pi interroge la
+    // carte 1 sans attendre.
+    modbus_t carte1, carte2;
+    modbus_init(&carte1, 1);
+    modbus_init(&carte2, 2);
+    uint8_t q2[MODBUS_TRAME_MAX], q1[8], r2[MODBUS_REPONSE_MAX];
+    const uint16_t valeurs[5] = {1, 2, 3, 4, 5};
+    size_t n = ecriture(q2, 2, 100, valeurs, 5);
+    question(q1, 1, 4, 0, 8);
+    VERIFIER(recevoir(&carte1, q2, n) == 0);
+    VERIFIER(recevoir(&carte2, q2, n) == 1);
+    size_t taille = modbus_repondre_ecriture(&carte2, 0, r2);
+    VERIFIER(recevoir(&carte1, r2, taille) == 0);
+    VERIFIER(recevoir(&carte1, q1, 8) == 1);
+    VERIFIER(carte1.trames_abimees == 0);
+}
+
 void essais_modbus(void) {
     printf("Modbus\n");
     LANCER(crc_connu);
@@ -157,4 +245,7 @@ void essais_modbus(void) {
     LANCER(carte_absente);
     LANCER(message_a_tous);
     LANCER(trame_abimee_puis_silence);
+    LANCER(ecriture_des_registres);
+    LANCER(ecriture_abimee);
+    LANCER(ignore_les_ecritures_aux_autres);
 }
