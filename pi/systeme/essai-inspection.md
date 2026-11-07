@@ -68,10 +68,14 @@ bas du flanc**, un feutre, un réglet, un morceau de micropore.
    `inspection → trous → diametre_mm` (le vrai diamètre) ou `tolerance_diametre`.
 3. Une tache qui n'est pas un trou (vis, reflet) ne doit pas être comptée ; un vrai trou ne doit pas manquer.
    Sinon régler `trous → contraste_min` (écart de gris avec la paroi) et `circularite_min`.
-4. Les rangées : `rangee_ecart_y_px` est l'écart (en points, dans l'image) au-dessus duquel deux trous sont de
-   deux rangées. Si l'image est à l'envers (rangée du haut en bas de l'image), mettre `haut_en_haut: false`.
-5. Dire si la caméra voit **les deux rangées à la fois** quand le plateau est à sa hauteur du poste, ou une
-   seule (question 3 de la PR).
+4. Une seule rangée par image : la caméra est fixe, à `objectif_z_m` (0,600, EXEMPLE), à environ 5 cm de la
+   paroi, et ne voit qu'à ±3,5 cm (±2,5 cm utiles, `vue_utile_m`). Le Micropore fait donc **un tour de repérage
+   par rangée**, plateau à `objectif_z_m` − hauteur de la rangée, juste avant de poser cette rangée (rangée du
+   haut : au poste, seau vide ; rangée du fond : au vidage, une fois le poids minimum atteint). Mettre à la
+   main le plateau à cette hauteur (`vidange-remplissage`) et vérifier que la rangée est au milieu de l'image
+   et que ses trous restent dans l'image ; sinon corriger `objectif_z_m` ou la hauteur de rangée.
+5. `trous → suivi_max_y_px` : écart de hauteur (en points) toléré pour qu'un même trou soit suivi d'une image
+   à l'autre. À régler si un trou est compté deux fois ou perdu.
 
 ## Étape 5 : l'écart attaches de l'anse / QR (par seau)
 

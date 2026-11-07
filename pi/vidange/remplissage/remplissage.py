@@ -1105,6 +1105,9 @@ class Remplissage:
             raise ErreurEtape("remplissage : pas de seau sur le plateau")
         if self.vision is None:
             raise ErreurEtape("remplissage : pas de caméra pour le QR du flanc", QUOI_FAIRE_QR)
+        lecture_y = self.reglages.lecture_qr_y
+        if lecture_y is not None and not self.regles.a(self._pose().y, lecture_y):
+            yield from self._a_la_place(lecture_y, "chariot à la position de lecture du QR")
         if self.reglages.plateau_lecture_qr is not None:
             yield from self._plateau(
                 self.reglages.plateau_lecture_qr, "plateau à la hauteur de lecture du QR"

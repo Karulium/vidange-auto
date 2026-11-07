@@ -283,26 +283,26 @@ def test_sans_reconnaissance_des_attaches_c_est_le_reglage_qui_sert():
 # ------------------------------------------------------------------ les trous
 
 
-RANGEES = lambda: [0.19, 0.07]  # noqa: E731  (rangée du haut d'abord, comme machine.yaml)
 HAUT = [20, 110, 200, 290]
 FOND = [65, 155, 245, 335]
 
 
-def trous_du_seau(plateau, haut=HAUT, fond=FOND, y_haut=200, y_fond=520):
+def trous_du_seau(plateau, trous=HAUT, y=200):
+    """Une seule rangée de trous dans l'image (la caméra fixe n'en voit qu'une à la fois)."""
+
     def fabriquer():
-        trous = [(a, y_haut) for a in haut] + [(a, y_fond) for a in fond]
-        return fabrique.scene_flanc(plateau.a, qr=(CODE, 160, 360), trous=trous)
+        return fabrique.scene_flanc(plateau.a, qr=(CODE, 160, 360), trous=[(a, y) for a in trous])
 
     return fabriquer
 
 
-def repere(haut=HAUT, fond=FOND, fin=360, **options):
+def repere(trous=HAUT, rangee=0, fin=360, y=200, **options):
     plateau = Plateau()
-    fabriquer = trous_du_seau(plateau, haut, fond)
-    vue = vision(plateau, fabriquer, rangees=RANGEES, **options)
+    fabriquer = trous_du_seau(plateau, trous, y)
+    vue = vision(plateau, fabriquer, **options)
     vue.commencer_tour = lambda: None  # le tour est joué image par image, sans fil
     tour(vue, plateau, fabriquer, 0, fin)
-    return vue.finir_tour(), vue
+    return vue.finir_tour(rangee), vue
 
 
 def assert_angles(lus, attendus, ecart=1.0):
@@ -314,49 +314,44 @@ def assert_angles(lus, attendus, ecart=1.0):
 def test_les_trous_et_le_qr_sont_repares_au_tour():
     reperage, _ = repere()
     assert reperage is not None and reperage.code == CODE
+    assert list(reperage.trous) == [0]
     assert_angles(reperage.trous[0], HAUT)
-    assert_angles(reperage.trous[1], FOND)
     assert reperage.diametre_bord_m is None and reperage.attaches_deg == []
 
 
-def test_un_trou_cache_est_un_trou_en_moins():
-    reperage, _ = repere(haut=[20, 110, 290])
-    assert_angles(reperage.trous[0], [20, 110, 290])
+def test_chaque_tour_rend_les_trous_de_sa_rangee():
+    reperage, _ = repere(FOND, rangee=1)
+    assert list(reperage.trous) == [1]
     assert_angles(reperage.trous[1], FOND)
+
+
+def test_le_plateau_du_reperage_est_la_lentille_moins_la_hauteur_de_la_rangee():
+    vue = vision(Plateau(), lambda: fabrique.fond(1280, 720))
+    for hauteur in (0.19, 0.07):
+        assert vue.plateau_z_repere(hauteur) == GEOMETRIE.objectif_z_m - hauteur
+
+
+def test_un_trou_cache_est_un_trou_en_moins():
+    reperage, _ = repere([20, 110, 290])
+    assert_angles(reperage.trous[0], [20, 110, 290])
 
 
 def test_un_tour_plus_long_que_360_ne_compte_pas_un_trou_deux_fois():
     reperage, _ = repere(fin=420)
     assert_angles(reperage.trous[0], HAUT)
-    assert_angles(reperage.trous[1], FOND)
 
 
 def test_une_rangee_pas_vue_laisse_sa_liste_vide():
-    reperage, _ = repere(fond=[])
-    assert_angles(reperage.trous[0], HAUT)
-    assert reperage.trous[1] == []
-
-
-def test_image_a_l_envers_les_rangees_changent_de_place():
-    plateau = Plateau()
-    fabriquer = trous_du_seau(plateau)
-    renverse = INSPECTION.model_copy(
-        update={"trous": INSPECTION.trous.model_copy(update={"haut_en_haut": False})}
-    )
-    reglages = REGLAGES.vision.model_copy(update={"inspection": renverse})
-    vue = VisionInspection(reglages, FauxRegard(fabriquer), plateau, rangees=RANGEES)
-    tour(vue, plateau, fabriquer)
-    reperage = vue.finir_tour()
-    assert_angles(reperage.trous[0], FOND)
-    assert_angles(reperage.trous[1], HAUT)
+    reperage, _ = repere([])
+    assert reperage is not None and reperage.trous[0] == []
 
 
 def test_rien_de_lisible_au_tour_de_reperage():
     plateau = Plateau()
     fabriquer = lambda: fabrique.fond(1280, 720)  # noqa: E731
-    vue = vision(plateau, fabriquer, rangees=RANGEES)
+    vue = vision(plateau, fabriquer)
     tour(vue, plateau, fabriquer)
-    assert vue.finir_tour() is None
+    assert vue.finir_tour(0) is None
 
 
 def test_une_tache_qui_n_est_pas_un_trou_est_ignoree():
@@ -377,17 +372,14 @@ def test_le_fil_de_la_camera_regarde_pendant_que_le_plateau_tourne():
             plateau.a = min(360, plateau.a + PAS)
             return super().derniere(nom)
 
-    vue = VisionInspection(
-        REGLAGES.vision, RegardQuiTourne(fabriquer_images), plateau, rangees=RANGEES
-    )
+    vue = VisionInspection(REGLAGES.vision, RegardQuiTourne(fabriquer_images), plateau)
     vue.commencer_tour()
     fin = time.monotonic() + 30
     while plateau.a < 360 and time.monotonic() < fin:
         time.sleep(0.01)
-    reperage = vue.finir_tour()
+    reperage = vue.finir_tour(0)
     assert reperage is not None and reperage.code == CODE
     assert_angles(reperage.trous[0], HAUT)
-    assert_angles(reperage.trous[1], FOND)
     # Arrêté : plus d'image regardée.
     vu = vue.regard.numero
     time.sleep(0.1)
@@ -440,20 +432,20 @@ def test_trou_hors_de_l_image():
 
 
 def test_controle_par_la_vision_utilise_la_hauteur_de_la_rangee_reperee():
-    reperage, vue = repere()
+    reperage, vue = repere(FOND, rangee=1, y=520)
     assert reperage is not None
     plateau = Plateau(155)
 
     def avec_morceau():
         return fabrique.scene_flanc(
             plateau.a,
-            trous=[(a, 200) for a in HAUT] + [(155, 520)],
+            trous=[(a, 520) for a in FOND],
             pieces=[(155, 520, 60, 50, 0)],
         )
 
     vue.regard.fabriquer = avec_morceau
     assert vue.controler_morceau(1, 155) is True
-    # Le contrôle de la rangée du haut regarde à y 200 : là, pas de morceau.
+    # Une rangée pas repérée : le centre de l'image, là, pas de morceau.
     assert vue.controler_morceau(0, 155) is False
     assert vue.dernier_verdict is not None and not vue.dernier_verdict.couvert
     vue.regard.en_panne = True

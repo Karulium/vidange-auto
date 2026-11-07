@@ -1676,6 +1676,12 @@ class Remplissage(Modele):
     # seau vide à la pose, avant le serrage des barres (fil Guidage caméra, 07/11/2026). None :
     # le plateau reste où la pose l'a laissé (valeur à venir du fil Micropore).
     plateau_lecture_qr: float | None = None
+    # Où se fait la lecture (m, y du chariot) ; None : à la pose (pose_y). Jamais au poste (règle
+    # C2 : 3 formats sur 4 y toucheraient le bord limite) : là où rien n'est au-dessus du seau.
+    # `lecture_qr_bord_max_z` : limite du bord du seau à cette position (obligatoire avec
+    # plateau_lecture_qr) ; vérifié au démarrage : plateau_lecture_qr + hauteur du seau.
+    lecture_qr_y: float | None = None
+    lecture_qr_bord_max_z: float | None = None
     # La face de la tête de préhension touche le fond intérieur du seau à tant au-dessus du
     # plateau (pose du seau vide).
     face_au_dessus_plateau_m: float = Field(ge=0)
@@ -4045,6 +4051,29 @@ class Machine(Modele):
         dans("inspection → plateau_z", "plateau_z", r.inspection.plateau_z)
         if r.plateau_lecture_qr is not None:
             dans("plateau_lecture_qr", "plateau_z", r.plateau_lecture_qr)
+            lecture_y = r.pose_y if r.lecture_qr_y is None else r.lecture_qr_y
+            dans("lecture_qr_y", "remplissage_y", lecture_y)
+            limite = r.lecture_qr_bord_max_z
+            if limite is None:
+                erreurs.append(
+                    "remplissage → lecture_qr_bord_max_z : il manque (limite du bord du seau à "
+                    "la position de lecture du QR, avec plateau_lecture_qr)"
+                )
+            else:
+                if lecture_y < r.dosage_y:
+                    # Au poste (règle C2), le bord du seau reste ≤ poste_bord_max_z toujours.
+                    limite = min(limite, r.verrous.poste_bord_max_z)
+                for nom, seau in self.griffe.formats.items():
+                    if seau.hauteur is None:
+                        continue
+                    bord = r.plateau_lecture_qr + seau.hauteur
+                    if bord > limite + 1e-9:
+                        erreurs.append(
+                            f"remplissage → plateau_lecture_qr : {r.plateau_lecture_qr:g} + "
+                            f"hauteur du seau {nom} ({seau.hauteur:g}) = {bord:.4f} dépasse la "
+                            f"limite de hauteur du bord ({limite:g}) à la position de lecture "
+                            f"y {lecture_y:g}"
+                        )
         dans("pousseur_rentre_m", "pousseur", r.pousseur_rentre_m)
         dans("barres → ouvertes_m", "barres", r.barres.ouvertes_m)
         approche = r.pose_seau.barres_approche_hw_m
@@ -6394,6 +6423,16 @@ class GeometrieInspection(Modele):
     rouleau_azimut_deg: float = Field(ge=-180, le=180)
     # Rayon du flanc à la hauteur du QR (m) : sert seulement si la caméra ne vise pas l'axe.
     rayon_qr_m: float = Field(gt=0)
+    # La caméra est fixe sur la plaque (elle ne recule pas avec l'escamotage) : centre de son
+    # objectif à cette hauteur (m, fil Micropore du 07/11/2026). Elle ne voit qu'UNE rangée de
+    # trous par image (rangées écartées de 10 à 17 cm) : ±3,5 cm en hauteur, dont `vue_utile_m`
+    # (±2,5 cm) utiles. Le plateau se met à « objectif_z_m − hauteur de la rangée » (tour de
+    # repérage de la rangée) ; la pose se fait à « ruban_z − hauteur » (9 mm plus bas).
+    objectif_z_m: float = Field(gt=0)
+    vue_utile_m: float = Field(gt=0)
+    # Hauteur du centre de l'étiquette QR au-dessus du fond du seau (m), la même sur tous les
+    # formats (consigne : 14 cm, entre deux trous) : plateau_lecture_qr = objectif − cette hauteur.
+    etiquette_hauteur_m: float = Field(gt=0)
 
     @model_validator(mode="after")
     def _verifier(self) -> "GeometrieInspection":
@@ -6432,14 +6471,12 @@ class TrousInspection(Modele):
     circularite_min: float = Field(gt=0, le=1)
     # Écart de gris (0 à 255) avec la paroi pour qu'une tache compte.
     contraste_min: float = Field(gt=0, le=255)
-    # Deux trous dont les hauteurs dans l'image diffèrent de plus que ça sont de deux rangées.
-    rangee_ecart_y_px: float = Field(gt=0)
+    # Un trou suivi d'une image à l'autre ne change pas de hauteur de plus (points).
+    suivi_max_y_px: float = Field(gt=0)
     # Un trou suivi d'une image à l'autre ne bouge pas de plus (points).
     suivi_max_px: float = Field(gt=0)
     # Deux trous vus à moins de tant de degrés sont le même (début et fin du tour).
     fusion_deg: float = Field(gt=0)
-    # La rangée du haut du seau est en haut de l'image (caméra à l'endroit).
-    haut_en_haut: bool = True
 
 
 class PieceInspection(Modele):
@@ -6781,6 +6818,24 @@ def _verifier_micropore_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
             f"machine.yaml, micropore → camera : « {micropore.camera} » absente de vision.yaml "
             "(cameras)"
         )
+    if vision.inspection is not None:
+        geometrie = vision.inspection.geometrie
+        ecart = geometrie.objectif_z_m - micropore.ruban_z
+        if abs(ecart) > geometrie.vue_utile_m + 1e-9:
+            erreurs.append(
+                f"vision.yaml, inspection → geometrie → objectif_z_m ({geometrie.objectif_z_m:g}) "
+                f"est à {abs(ecart) * 100:.1f} cm de micropore → ruban_z ({micropore.ruban_z:g}) : "
+                f"la rangée sort de la zone utile de la caméra ({geometrie.vue_utile_m * 100:g} cm)"
+            )
+        remplissage = machine.remplissage
+        if remplissage is not None and remplissage.plateau_lecture_qr is not None:
+            voulu = geometrie.objectif_z_m - geometrie.etiquette_hauteur_m
+            if abs(remplissage.plateau_lecture_qr - voulu) > 1e-6:
+                erreurs.append(
+                    "machine.yaml, remplissage → plateau_lecture_qr "
+                    f"({remplissage.plateau_lecture_qr:g})"
+                    f" doit valoir objectif_z_m − etiquette_hauteur_m de vision.yaml ({voulu:g})"
+                )
     if vision.inspection is not None and vision.inspection.camera != micropore.camera:
         erreurs.append(
             f"vision.yaml, inspection → camera : « {vision.inspection.camera} », machine.yaml dit "

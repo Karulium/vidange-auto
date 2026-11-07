@@ -1386,9 +1386,25 @@ non). Source : `micropore/logiciel/micropore-pour-logiciel.md` (§ 1 a, gestes 0
      reconnaissance des attaches par la caméra viendra avec les photos réelles (tâche 22 ter).
   2. Visée de la caméra (axe du plateau) et rouleau à −90° : supposés ; mesurés à la main une fois par format à
      l'essai (essai-micropore.md, étape 7), forcés avec `--camera-rouleau` si l'écart dépasse 2°.
-  3. La caméra voit-elle les deux rangées de trous à la hauteur du poste ? Demandé au fil Micropore (07/11) ; en
-     attendant, une rangée non vue donne l'alerte « 0 trou vu sur 4 ».
+  3. La caméra voit-elle les deux rangées de trous à la hauteur du poste ? Non : réponse du fil Micropore (07/11),
+     une seule rangée par image (voir le point 7).
   4. Lumières de la caméra : petite tâche à part quand les ordres de la carte de lumières seront écrits (Guidage
      caméra).
   5. Pas de jugement « bien collé » (plis, bulles) pour l'instant ; à revoir après les premières photos réelles.
   6. Pas de mesure du diamètre du bord à la caméra : le format vient de `machine.yaml`.
+  7. Réponses du fil Micropore (07/11), appliquées sur la même branche :
+     - **Une seule rangée de trous par image.** Caméra fixe sur le plateau, objectif à z 0,600, à environ 5 cm de
+       la paroi, voit ±3,5 cm (±2,5 cm utiles), rangées à 10–17 cm l'une de l'autre. Donc **un tour de repérage
+       par rangée**, plateau à « 0,600 − hauteur de la rangée », juste avant de poser cette rangée à la même
+       station (rangée du haut : au poste, seau vide ; rangée du fond : une fois le poids minimum atteint). Le
+       z de l'objectif et les autres chiffres sont dans `vision.yaml → inspection → geometrie` (EXEMPLE). La
+       reconnaissance de « deux rangées dans une image » est supprimée.
+     - **QR du flanc** : `plateau_lecture_qr` = 0,600 − hauteur du centre de l'étiquette (14 cm du fond pour
+       tous les formats) = 0,46 (EXEMPLE). **Pas lu au poste** (règle C2 : bord ≤ 0,68 ; trois formats sur
+       quatre la touchent). Lu avant le poste, là où rien n'est au-dessus du seau : le cycle le lisait déjà à
+       y 0,50 (pose du seau) ; aucune règle de positions n'y limite la hauteur, la limite du fil Micropore
+       (0,75 − hauteur) est dans `lecture_qr_bord_max_z` (le bord le plus haut : 0,46 + 0,265 = 0,725). Gardé :
+       `lecture_qr_y: 0.50` (réglage ; peut être mis à la position de vidage).
+     - **Contrôle au démarrage** : `plateau_lecture_qr` + hauteur du seau (chaque format) ≤ limite de hauteur
+       de la position de lecture (0,68 si c'est le poste, sinon `lecture_qr_bord_max_z`) ; erreur claire sinon.
+       Aussi : `plateau_lecture_qr` = `objectif_z_m` − `etiquette_hauteur_m`.

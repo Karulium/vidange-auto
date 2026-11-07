@@ -1,12 +1,13 @@
 """La caméra de la tête du micropore (tâche 40 ter ; `cam_inspection` du projet mécanique).
 
-    vision = VisionInspection(reglages.vision, photographe, angle_plateau, rangees, ecarts)
+    vision = VisionInspection(reglages.vision, photographe, angle_plateau, ecarts)
 
 Elle sert deux modules, par les mêmes images :
 - le Remplissage (`VisionSeau`) : QR du flanc lu PENDANT que le plateau tourne le seau, avant le
   serrage des barres ; on en tire l'angle des oreilles de l'anse (`lire_seau`) ;
-- le Micropore (`VisionMicropore`) : au tour de repérage, le QR et la position des trous
-  (`finir_tour`) ; puis le contrôle de chaque morceau posé (`controler_morceau`).
+- le Micropore (`VisionMicropore`) : à chaque tour de repérage (un par rangée : la caméra est fixe
+  et ne voit qu'une rangée à la fois), la position des trous de la rangée (`finir_tour`) ;
+  puis le contrôle de chaque morceau posé (`controler_morceau`).
 
 Comment l'angle est trouvé (fiche du micropore, geste 0 : « le QR sert de repère d'angle ») : le
 plateau tourne, la caméra est fixe. À chaque image on note l'angle du plateau et où est le QR (ou
@@ -392,19 +393,16 @@ class VisionInspection:
         reglages: ReglagesVision,
         regard: Regard,
         angle_plateau: Callable[[], float | None],
-        rangees: Callable[[], list[float]] = lambda: [],
         ecarts: EcartsAttaches | None = None,
         attaches: ReconnaissanceAttaches | None = None,
     ) -> None:
         """`angle_plateau` : l'angle du plateau du chariot (°, continu : un tour de plus fait
-        +360) ; None : pas lu. `rangees` : la hauteur de chaque rangée de trous du seau sur le
-        plateau (machine.yaml → micropore → formats), dans l'ordre du réglage."""
+        +360) ; None : pas lu. Une rangée de trous par tour (`finir_tour(rangee)`)."""
         assert reglages.inspection is not None
         self.reglages = reglages
         self.inspection = reglages.inspection
         self.regard = regard
         self.angle_plateau = angle_plateau
-        self.rangees = rangees
         self.ecarts = ecarts or EcartsAttaches()
         self.attaches = attaches or FausseReconnaissanceAttaches()
         self._verrou = threading.Lock()
@@ -413,7 +411,7 @@ class VisionInspection:
         self._arret = threading.Event()
         self._fil: threading.Thread | None = None
         # Hauteur dans l'image (points) de chaque rangée vue au dernier tour de repérage.
-        self._y_rangees: dict[int, float] = {}
+        self._y_rangees: dict[int, float | None] = {}
         self.dernier_verdict: VerdictMorceau | None = None
 
     # ------------------------------------------------------------ les images du tour
@@ -589,14 +587,21 @@ class VisionInspection:
         """Le plateau va faire un tour : regarder (QR, trous, attaches) pendant le tour."""
         self._recommencer()
 
-    def finir_tour(self) -> Reperage | None:
-        """Le tour est fini : ce qui a été vu (None : rien de lisible)."""
+    def plateau_z_repere(self, hauteur_rangee_m: float) -> float:
+        """Plateau pour que la rangée de trous à cette hauteur sur le seau soit devant l'objectif
+        (fixe, une seule rangée par image)."""
+        return self.inspection.geometrie.objectif_z_m - hauteur_rangee_m
+
+    def finir_tour(self, rangee: int) -> Reperage | None:
+        """Le tour devant la rangée n° `rangee` est fini : ce qui a été vu (None : rien de
+        lisible). Tous les trous vus sont de cette rangée."""
         self._arreter_le_fil()
         echantillons = self._echantillons_vus()
         qr = self._centre_qr(echantillons)
         code = None if qr is None else qr[0]
-        trous = self._trous_par_rangee(echantillons)
-        if code is None and not any(trous.values()):
+        angles, self._y_rangees[rangee] = self._trous_du_tour(echantillons)
+        trous = {rangee: angles}
+        if code is None and not angles:
             return None
         attaches = [] if qr is None else [round(a, 2) for a in self.attaches.trouvees()]
         if qr is not None and attaches:
@@ -617,7 +622,7 @@ class VisionInspection:
                         continue
                     _, x, y = piste.points[-1]
                     dx, dy = abs(trou.x_px - x), abs(trou.y_px - y)
-                    if dx <= reglage.suivi_max_px and dy <= reglage.rangee_ecart_y_px / 2:
+                    if dx <= reglage.suivi_max_px and dy <= reglage.suivi_max_y_px:
                         if ecart is None or dx < ecart:
                             meilleure, ecart = numero, dx
                 if meilleure is None:
@@ -628,9 +633,9 @@ class VisionInspection:
                 pistes[meilleure].derniere = rang
         return pistes
 
-    def _trous_par_rangee(self, echantillons: list[Echantillon]) -> dict[int, list[float]]:
+    def _trous_du_tour(self, echantillons: list[Echantillon]) -> tuple[list[float], float | None]:
         """Pour chaque trou suivi sur au moins deux images : l'angle du plateau où il passe au
-        centre de l'image ; les rangées sont reconnues à la hauteur des trous dans l'image."""
+        centre de l'image ; et la hauteur moyenne des trous dans l'image (points)."""
         reglage = self.inspection
         trouves: list[tuple[float, float]] = []  # (y moyen, angle au centre)
         for piste in self._pistes(echantillons):
@@ -652,36 +657,12 @@ class VisionInspection:
         # Un même trou vu au début et à la fin du tour : gardé une fois.
         uniques: list[tuple[float, float]] = []
         for y, centre in sorted(trouves, key=lambda t: t[1]):
-            if any(
-                abs(_normaliser(centre - c)) < reglage.trous.fusion_deg
-                and abs(y - y0) < reglage.trous.rangee_ecart_y_px
-                for y0, c in uniques
-            ):
+            if any(abs(_normaliser(centre - c)) < reglage.trous.fusion_deg for _, c in uniques):
                 continue
             uniques.append((y, centre))
-        # Rangées de l'image, de la plus haute à la plus basse.
-        lignes: list[list[tuple[float, float]]] = []
-        for y, centre in sorted(uniques):
-            if lignes and y - lignes[-1][-1][0] <= reglage.trous.rangee_ecart_y_px:
-                lignes[-1].append((y, centre))
-            else:
-                lignes.append([(y, centre)])
-        if not reglage.trous.haut_en_haut:
-            lignes.reverse()
-        hauteurs = self.rangees()
-        du_haut = sorted(range(len(hauteurs)), key=lambda rang: hauteurs[rang], reverse=True)
-        if len(lignes) > len(du_haut):
-            journal.warning(
-                "%d rangées de trous vues, %d attendues pour ce format : les autres sont ignorées",
-                len(lignes),
-                len(du_haut),
-            )
-        trous: dict[int, list[float]] = {rang: [] for rang in range(len(hauteurs))}
-        self._y_rangees = {}
-        for ligne, rang in zip(lignes, du_haut, strict=False):
-            trous[rang] = sorted(centre for _, centre in ligne)
-            self._y_rangees[rang] = sum(y for y, _ in ligne) / len(ligne)
-        return trous
+        if not uniques:
+            return [], None
+        return sorted(c for _, c in uniques), sum(y for y, _ in uniques) / len(uniques)
 
     def controler_morceau(self, rangee: int, angle_deg: float) -> bool | None:
         """Le morceau posé sur ce trou est devant la caméra : True couvert, False découvert, de
@@ -692,7 +673,8 @@ class VisionInspection:
             journal.warning("Contrôle du morceau : %s", erreur)
             return None
         hauteur, largeur = image.shape[:2]
-        centre = (largeur / 2, self._y_rangees.get(rangee, hauteur / 2))
+        y = self._y_rangees.get(rangee)
+        centre = (largeur / 2, hauteur / 2 if y is None else y)
         verdict = controler_morceau_image(image, centre, self.inspection)
         self.dernier_verdict = verdict
         journal.info(

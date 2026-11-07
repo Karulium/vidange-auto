@@ -119,15 +119,12 @@ class PiecesMachine:
     def vision_inspection(
         self,
         angle_plateau: Callable[[], float | None],
-        rangees: Callable[[], list[float]],
     ) -> VisionInspection:
-        """La vision du micropore, avec l'angle du plateau et les rangées de trous du seau sur le
-        plateau (donnés par la carte du chariot, quand elle sera branchée)."""
+        """La vision du micropore, avec l'angle du plateau (donné par la carte du chariot, quand
+        elle sera branchée)."""
         assert self.vision is not None and self.regard is not None
         fichier = None if self.donnees is None else self.donnees / NOM_ECARTS
-        return VisionInspection(
-            self.vision, self.regard, angle_plateau, rangees, EcartsAttaches(fichier)
-        )
+        return VisionInspection(self.vision, self.regard, angle_plateau, EcartsAttaches(fichier))
 
     def manque(self, poste: str) -> str | None:
         if poste == "fut" and self.poste is None:

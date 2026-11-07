@@ -178,6 +178,13 @@ inspection:
     # Rayon du flanc à la hauteur du QR (seau de 10 L, bas du flanc) : EXEMPLE, sans effet tant
     # que la caméra vise l'axe.
     rayon_qr_m: 0.12
+    # Fil Micropore du 07/11/2026 : caméra fixe sur la plaque, centre de l'objectif à z 0,600,
+    # ±3,5 cm vus dont ±2,5 cm utiles ; une seule rangée de trous par image. Plateau de chaque
+    # tour de repérage : 0,600 − hauteur de la rangée. Étiquette QR collée à 14 cm du fond sur
+    # tous les formats (entre deux trous) : plateau de lecture = 0,600 − 0,14 = 0,46.
+    objectif_z_m: 0.600
+    vue_utile_m: 0.025
+    etiquette_hauteur_m: 0.14
   # 1 point de l'image = 0,5 mm sur la paroi : EXEMPLE (trou de Ø 1 cm ≈ 20 points).
   echelle_mm_par_point: 0.5
   flanc:
@@ -195,10 +202,9 @@ inspection:
     tolerance_diametre: 0.4
     circularite_min: 0.7
     contraste_min: 40
-    rangee_ecart_y_px: 60
+    suivi_max_y_px: 30
     suivi_max_px: 250
     fusion_deg: 10
-    haut_en_haut: true
   piece:
     # Morceau de 30 mm × 25 mm (figé, Karulium) ; le reste : EXEMPLES.
     longueur_mm: 30
