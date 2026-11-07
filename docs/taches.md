@@ -773,6 +773,20 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      y 0,49 à face constante 0,545 à 10 mm/s, puis descente droite jusqu'au contact. A, B et D descendent droit. Le
      recul du servo du micropore pour le couvercle C est **annulé** : l'enlever s'il est codé.
   Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
+- [ ] **45 octies. Tête de la griffe à 0° en mode bocaux, verrou de la zone du spray, remontée du couvercle C** —
+  Modèle : Opus, effort moyen. Suite de la 45 septies (PR n° 100) :
+  1. **Défaut** : sur la machine imaginaire, un lot de 4 bocaux ou plus s'arrête au 4ᵉ bocal (« tête à −180°, il faut
+     0° ») : la griffe ressort parfois du fût tête tournée (vient de la tâche 43 bis). Chaque prise du mode bocaux
+     finit tête à 0°, dans le fût, avant la sortie. Rendre aux tests de lot leur taille normale (plus de limite à 3).
+  2. **Verrou de la zone du bras du spray** pendant qu'il bouge : tant que le bras sort ou rentre, ni la griffe, ni la
+     préhension, ni ce qu'elles tiennent, ni l'outil traîné par le pont (enveloppe en butée haute et charge) n'entrent
+     dans `spray → bras → zone` (EXEMPLE). Par les zones du chef si c'est possible.
+  3. **Couvercle C** (fil Préhension, 07/11/2026, § 5.1 de `prehension/logiciel/pose-couvercle-pour-logiciel.md`) :
+     **toute** remontée avec le couvercle encore tenu (erreurs 10a, 10b, ou n'importe quel arrêt avant le lâcher)
+     refait le chemin à l'envers : montée droite à 10 mm/s jusqu'à la face 0,545, décalage à y 0,498 à face
+     constante, puis montée en haut. Après le lâcher, la tête seule remonte tout droit. Vérifier et compléter ce que
+     la 45 septies a fait (elle couvre 10a et 10b).
+  Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
 - [x] **23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi** — Modèle : Opus, effort
   moyen. Base : `pi/vidange/simulateur/solveur.py` (place prête), `simulateur/planning.py`, `chef/zones.py`,
   decisions « La fiabilité d'abord ». Bibliothèque : `ortools` (CP-SAT, gratuite, roues pour le Pi 5 en

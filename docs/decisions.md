@@ -1752,6 +1752,7 @@ la PR n° 99 », point 4). Code : `pi/vidange/griffe/` (règles, versement), `pi
      fût) ; d'ici là, lots de 3 bocaux au plus.
   3. Verrou de la zone du bras du spray pendant qu'il bouge (griffe et préhension n'y entrent pas) : fait dans la
      tâche 45 octies, sans attendre la Maquette (seuls les chiffres de la zone sont EXEMPLE).
-  4. Remontée du couvercle C avec la tête : chemin décalé à l'envers (gardé) ; question posée au fil Préhension.
+  4. Remontée du couvercle C avec la tête : chemin décalé à l'envers, confirmé par le fil Préhension (07/11/2026) pour
+     toute remontée avec le couvercle encore tenu ; après le lâcher, la tête seule remonte tout droit (tâche 45 octies).
   5. Décalage du mât de la griffe (dépôt −0,187, fiches de la Maquette et de la Préhension 0,175) : signalé à la
      Maquette.
