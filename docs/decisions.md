@@ -1380,3 +1380,15 @@ non). Source : `micropore/logiciel/micropore-pour-logiciel.md` (§ 1 a, gestes 0
   2. Les lumières de la caméra (carte du fil Guidage caméra, éteintes après 2 s sans ordre) ne sont pas commandées ici.
   3. L'angle du plateau est celui que lit la carte du chariot au moment où l'image est regardée ; le retard de
      l'image n'est pas corrigé (à mesurer à l'essai).
+- **Vision du micropore, réponses à la PR n° 92** (tâche 40 ter, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Écart attaches de l'anse / QR : une seule valeur dans les réglages (`ecart_attaches_defaut_deg`) tant que les
+     QR sont collés de la même façon sur tous les seaux ; sinon `vidange-vision ecart` seau par seau. La
+     reconnaissance des attaches par la caméra viendra avec les photos réelles (tâche 22 ter).
+  2. Visée de la caméra (axe du plateau) et rouleau à −90° : supposés ; mesurés à la main une fois par format à
+     l'essai (essai-micropore.md, étape 7), forcés avec `--camera-rouleau` si l'écart dépasse 2°.
+  3. La caméra voit-elle les deux rangées de trous à la hauteur du poste ? Demandé au fil Micropore (07/11) ; en
+     attendant, une rangée non vue donne l'alerte « 0 trou vu sur 4 ».
+  4. Lumières de la caméra : petite tâche à part quand les ordres de la carte de lumières seront écrits (Guidage
+     caméra).
+  5. Pas de jugement « bien collé » (plis, bulles) pour l'instant ; à revoir après les premières photos réelles.
+  6. Pas de mesure du diamètre du bord à la caméra : le format vient de `machine.yaml`.

@@ -707,6 +707,13 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   la raison ; reprise après coupure au milieu d'un seau (carnet) ; lot complet simulé sans alarme.
 - [x] **45 bis. Programme principal : mode bocaux et nuit UV-ozone** — Modèle : Sonnet. À faire après la 45 :
   même branchement pour `module_entonnoir`, `module_lavage_bocaux` et la nuit UV-ozone.
+- [ ] **45 ter. Programme principal : construire les vraies cartes du chariot et de la tête** — Modèle : Opus,
+  effort moyen. Dans `pi/vidange/cycle/machine.py` (`PiecesMachine`), construire depuis `docs/entrees-sorties.yaml`
+  et les réglages : carte du plateau du chariot (RP2040-Zero, pesée, PCA9685, ToF), tête de la Préhension, Lavage,
+  cartes FluidNC, spray ; c'est ce qui bloque encore les postes « qr_du_flanc », « micropore », « couvercle »,
+  « fermeture », « entonnoir » et « lavage » sur la vraie machine (PR 89 à 92). Chaque pièce absente ou en EXEMPLE ⇒
+  poste « pas lancé : raison ». Pas de geste nouveau. Tests avec le faux matériel branché par le même chemin que le
+  vrai ; procédure d'essai « démarrer la vraie machine et lire la check-list ».
 - [ ] 23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi
 
 ## Partie 3 : fonctions en plus, voir `docs/fonctionnalites.md`
