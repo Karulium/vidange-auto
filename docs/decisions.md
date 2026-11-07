@@ -1543,6 +1543,9 @@ exemples (hauteur du bocal, angles, 360° au plus, essai à 120° puis tous les 
      d'ici sa réponse, 18 au plus sans pause (code : `refus_taille_lot`, un seul endroit).
   2. Saisie de l'inventaire du stockage (bocaux de semence, boîtes, piles de seaux) depuis la page web : tâche 45
      quinquies.
+     Faite (PR de la tâche 45 quinquies) : la page propose la correction (avant → après), un second bouton « Confirmer
+     (Go) » de la page l'écrit (pas l'écran de l'armoire : des nombres corrigés ne font bouger aucune machine) ;
+     refusée pendant un lot ; journal avant/après ; `refus_taille_lot` lit l'inventaire corrigé.
   3. Variété dans le formulaire du lot : gardée.
   4. Stockage bloqué sur la vraie machine tant que la photo de la bande du haut n'est pas lue (tâche 22 ter) : gardé.
   5. Vanne de la tête coupée au premier départ du lot (machine à vide, mesure du vide recalée) : gardé.
