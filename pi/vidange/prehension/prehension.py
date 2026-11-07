@@ -176,6 +176,12 @@ class Prehension:
         # bouge le pont ou le chariot Y traîne aussi le mât de la griffe (même chariot) ; ses
         # règles de position à elle sont vérifiées. Sans griffe branchée : rien.
         self.verrou_pont: Callable[[Pose, Pose], str | None] = lambda depart, arrivee: None
+        # Points de passage de la tête (sans l'arrivée) d'un trajet du pont de `depart` vers
+        # (x, y) : le mât de la griffe traîné entre dans la zone d'une exception de sa table en
+        # butée haute ou en sort par son chemin (tâche 45 nonies). Sans griffe branchée : aucun.
+        self.chemin_pont: Callable[[Pose, float, float], list[tuple[float, float]]] = (
+            lambda depart, x, y: []
+        )
         # Verrou de la zone du bras du spray (vidange.spray.zone, tâche 45 octies) : tant que le
         # bras n'est pas vu rangé, un pas qui entrerait dans sa zone ATTEND (raison, ou None), au
         # plus attente_spray_max_s, puis alarme. Sans spray : rien.
@@ -517,6 +523,9 @@ class Prehension:
             # Seau tenu : plus bas au-dessus des piles que côté opérateur (règle 3) ; chaîne Z :
             # plus bas au-delà de y 0,80.
             yield Pas("descendre à la hauteur du trajet", {"z": haut})
+        for px, py in self.chemin_pont(self.pose, x, y):
+            # Griffe traînée : chemin d'une exception de sa table en butée haute (45 nonies).
+            yield Pas("trajet, chemin de la griffe traînée", {"x": px, "y": py}, choc=True)
         yield Pas("trajet", {"x": x, "y": y}, choc=True)
 
     def _sortie_porte_bocal(self) -> float:

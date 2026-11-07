@@ -79,6 +79,7 @@ from vidange.fiabilite import (
     ChienDeGarde,
     FinPrecedente,
     Marche,
+    ObjetTenu,
     Onduleur,
     Sante,
     Sondes,
@@ -145,6 +146,8 @@ NOM_SPRAY = "spray.json"
 NOM_AIR = "air.json"
 # Le compte-tours de la tête de préhension (docs/entrees-sorties.yaml).
 SIGNAL_COMPTE_TOURS = "compte_tours_tete"
+# Le capteur de vide de la ventouse de la préhension (reprise avec un objet tenu, tâche 45 nonies).
+SIGNAL_VIDE = "vide_venturi"
 
 journal = donner_journal("demarrage")
 
@@ -373,6 +376,39 @@ def preparer_nettoyage(
     chef.conditions_generales.append(nettoyage.condition_store)
     mode.refus_supplementaires.append(nettoyage.refus_changement_mode)
     return nettoyage
+
+
+def preparer_objet_tenu(
+    reglages: Reglages,
+    materiel: Materiel | None,
+    liste: EntreesSorties,
+    vraie_machine: bool,
+) -> ObjetTenu | None:
+    """La reprise avec un objet encore tenu à la ventouse (tâche 45 nonies) : le capteur de vide
+    de la préhension, lu sans rien commander. None : pas de préhension dans machine.yaml."""
+    prehension = reglages.machine.prehension
+    if prehension is None:
+        return None
+    periode = reglages.programme.fiabilite.objet_tenu.periode_s
+    signal = liste.signaux.get(SIGNAL_VIDE)
+    absent = None
+    if materiel is None:
+        absent = "entrées/sorties pas ouvertes : capteur de vide pas lu"
+    elif signal is None or SIGNAL_VIDE not in materiel.branchements:
+        absent = f"capteur de vide « {SIGNAL_VIDE} » absent de docs/entrees-sorties.yaml"
+    elif vraie_machine and any(
+        ligne is not None and ligne.exemple for ligne in (signal, liste.cartes.get(signal.carte))
+    ):
+        absent = f"capteur de vide « {SIGNAL_VIDE} » en EXEMPLE dans docs/entrees-sorties.yaml"
+    if absent is not None:
+        journal.warning("Reprise : %s ; vérifier la tête de préhension à la main.", absent)
+        return ObjetTenu(prehension.vide, None, periode, absent=absent)
+    assert materiel is not None
+    return ObjetTenu(prehension.vide, lambda: materiel.mesurer(SIGNAL_VIDE), periode)
+
+
+def constats_objet_tenu(objet_tenu: ObjetTenu | None) -> list[Constat]:
+    return [] if objet_tenu is None else objet_tenu.constats()
 
 
 def preparer_air(
@@ -736,6 +772,14 @@ def principal(
     # Les angles gardés (rotations de la griffe et de la tête) : un seul fichier, un seul gardien.
     angles = AnglesGardes(dossier_donnees / NOM_ANGLES)
     vraie_machine = raccords.fabrique is None
+    # Reprise après une coupure (tâche 45 nonies) : AVANT tout mouvement, la ventouse tient-elle
+    # encore quelque chose ? Tant que oui, aucun Go (rien n'est commandé : jamais de « souffler »).
+    objet_tenu = preparer_objet_tenu(
+        reglages, materiel if erreur_materiel is None else None, entrees_sorties, vraie_machine
+    )
+    if objet_tenu is not None:
+        objet_tenu.regarder()
+        chef.empecher_go(objet_tenu.refus_go)
     # Les cartes du chariot et de la tête (tâche 45 ter) : construites si elles sont là (présence
     # regardée maintenant, une fois), sinon chaque poste qui en a besoin dit pourquoi.
     cartes = construire_cartes(
@@ -937,9 +981,12 @@ def principal(
             fils += spray.demarrer(arret)
         if air is not None:
             fils += air.demarrer(arret)
+        if objet_tenu is not None:
+            fils.append(objet_tenu.demarrer(arret))
         checklist = CheckList(
             {
                 "réglages": lambda: constats_reglages(reglages, entrees_sorties),
+                "objet tenu": lambda: constats_objet_tenu(objet_tenu),
                 "entrées/sorties": lambda: constats_materiel(
                     materiel if erreur_materiel is None else None,
                     erreur_materiel,

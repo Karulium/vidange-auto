@@ -28,8 +28,9 @@ filmer.
 4. `vidange-entonnoir versement` : le Pi redit ses chiffres (dose, hauteur, ouvertures) et la **liste des
    bocaux où la griffe ne peut pas verser** avec les règles d'aujourd'hui. Depuis la tâche 45 septies, elle
    doit dire « **0** ». Il ajoute la liste des bocaux où la Préhension ne peut pas **poser l'entonnoir** (la
-   griffe, sur le même pont, serait traînée au-dessus de l'agitateur) : aujourd'hui `bocal_0_0`, `bocal_0_1`,
-   `bocal_1_0`, `bocal_2_0` ; sur ceux-là, l'entonnoir se pose **à la main** (question de la PR n° 100).
+   griffe, sur le même pont, serait traînée au-dessus de l'agitateur) : depuis la tâche 45 nonies, `bocal_0_0`,
+   `bocal_1_0`, `bocal_2_0` ; sur ceux-là, l'entonnoir se pose **à la main**. `bocal_0_1` est dans la liste
+   « Bocaux posés par la machine grâce au chemin d'une exception : 1 » (étape 9).
 
 ## Étape 1 : la position de la vis pour chaque angle du godet
 
@@ -175,9 +176,39 @@ le fût »). Si la tête ne peut pas tourner là où elle est, elle va d'abord a
    (raclette côté −x). Le lot doit aller au bout sans « tête à −180° ».
 3. Regarder le temps : le demi-tour dans le fût ajoute quelques secondes à certaines prises. Le dire s'il gêne.
 
+## Étape 9 : l'entonnoir posé par la machine sur `bocal_0_1` (tâche 45 nonies)
+
+**Testé sur le vrai matériel : non.** La Maquette a remesuré le 07/11 (v45.121) : pour poser l'entonnoir sur
+`bocal_0_1`, la tête de préhension tient l'oreille à x bocal + 0,140, donc le mât de la griffe (même pont, en
+butée haute, godet fermé, tête à 0°) est à **(1,1415 ; 0,06)**, au-dessus du couloir du bas, libre à plus de
+1 cm. Il n'y arrive que par un chemin : **descendre en y à x 1,22** (jamais à travers le carré de la caméra du
+dosage, x 0,98-1,21, y 0,17-0,31), **puis aller en −x à y 0,06**. Le Pi le fait seul (journal : « trajet,
+chemin de la griffe traînée »), à l'aller comme au retour, et la griffe sort de ce couloir de la même façon.
+
+1. `vidange-entonnoir versement` : « Bocaux où la Préhension ne peut pas poser l'entonnoir … : 3 »
+   (`bocal_0_0`, `bocal_1_0`, `bocal_2_0`), puis « Bocaux posés par la machine grâce au chemin d'une
+   exception : 1 », ligne `bocal_0_1`.
+2. Console d'abord, moteurs sous tension, vitesses divisées par 4, Karulium à l'arrêt d'urgence : griffe en
+   butée haute, godet fermé, tête à 0°. Amener le pont pour que le mât de la griffe soit à x 1,22, y 0,35
+   (R1), puis en y seulement jusqu'à y 0,06, puis en x seulement jusqu'à 1,1415. À chaque arrêt, regarder et
+   mesurer **au réglet** le jeu entre le bas de la griffe et : la plaque du chariot de l'agitateur (SK12, tige
+   Ø 12), les écrous M6 et la pièce en V du porte-bocal, le couvercle du boîtier de la caméra du dosage. Il doit
+   rester **plus de 1 cm** partout. Si moins : arrêter, noter l'endroit, le dire à Claude.
+3. Même essai en lot de 3 bocaux dans cet ordre : entonnoir posé à la main sur `bocal_0_2`, puis la machine
+   le pose sur `bocal_0_1`, la griffe y verse, puis la machine le reprend et le pose sur `bocal_1_1`. Le lot
+   choisit lui-même l'ordre (serpentin) : pour cet essai, Claude donne la commande qui force l'ordre.
+   Regarder la griffe à chaque trajet : toujours en x **ou** en y près de l'agitateur, jamais en diagonale.
+4. Sur `bocal_0_0`, `bocal_1_0` ou `bocal_2_0`, l'entonnoir se pose encore **à la main** : le Pi s'arrête
+   en alarme « le mât de la griffe, traîné par le pont, irait là » plutôt que d'y aller.
+5. Mesurer aussi la hauteur du bas de la griffe en butée haute (la Maquette dit axes 1,265, bas ≈ 1,065 ; le
+   dépôt 1,29, bas du godet 1,077), et le jeu au couvercle du boîtier de la caméra du dosage avec le mât à
+   (1,1415 ; 0,2506), c'est-à-dire l'entonnoir posé sur `bocal_2_1` (question à Karulium dans la PR).
+6. Si une mesure de l'étape 2 dit autre chose que la Maquette, ne pas changer `machine.yaml` soi-même : les
+   chiffres de `griffe → y_min_mat → exceptions_butee_haute` sont ceux de la mesure (figés).
+
 ## Ce qu'il faut renvoyer à Claude
 
 Les valeurs de B (étape 1), les 3 charges de l'étape 2, la hauteur des dents et le jeu au boîtier (étape 3), ce
 qui reste dans le godet et ce qui a marché (étape 4), le nombre de prises dans la plage (étape 5), les jeux
 mesurés à l'étape 7 (mur, pièces du pont, support du servo, sous la tête de préhension), la vraie course du
-chariot Y vers le mur, les vidéos.
+chariot Y vers le mur, les jeux mesurés à l'étape 9 (chemin de `bocal_0_1`), les vidéos.

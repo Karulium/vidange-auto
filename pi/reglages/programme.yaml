@@ -46,6 +46,11 @@ fiabilite:
   # Bilan écrit à chaque alarme (dossier donnees/bilans) : nombre de lignes du journal recopiées.
   bilan:
     lignes_journal: 50
+  # Reprise avec un objet encore tenu à la ventouse (tâche 45 nonies, seuil : machine.yaml →
+  # prehension → vide → tenu_au_demarrage_kpa) : le capteur de vide est relu tous les (s) jusqu'à
+  # ce que l'objet soit enlevé à la main ; ensuite, plus jamais pendant cette marche.
+  objet_tenu:
+    periode_s: 1
 
 # API du Pi et page web locale (téléphone, PC), protégées par la clé « cle_api » du fichier de secrets.
 # Sans clé, l'API ne démarre pas (la machine, elle, tourne quand même).

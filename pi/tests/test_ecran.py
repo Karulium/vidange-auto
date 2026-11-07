@@ -128,6 +128,30 @@ def test_go_demande_une_confirmation(b):
     assert "essai.deux" in b.banc.appels
 
 
+def test_objet_encore_tenu_pas_de_go(b):
+    # Tâche 45 nonies : au redémarrage, la ventouse tient encore un objet (vide plus bas que
+    # −20 kPa) ; tant que c'est le cas, l'écran le dit et le GO ne fait rien.
+    raison = ["objet encore tenu à la ventouse (vide -50 kPa) : l'enlever à la main"]
+    b.chef.empecher_go(lambda: raison[0])
+    b.jusqu_au_go()
+    assert b.texte("b_bandeau") == "OBJET ENCORE TENU : PAS DE GO"
+    assert b.nextion.couleur("b_bandeau") == fond("alarme")
+    assert (
+        b.texte("t_info") == "Objet encore tenu à la ventouse (vide -50 kPa) : l'enlever à la main."
+    )
+    assert b.nextion.couleur("b_go") == fond("inactif")
+    b.appuyer("b_go")
+    assert b.nextion.page == "etat"
+    assert b.texte("t_info").startswith("Go impossible : objet encore tenu à la ventouse")
+    assert etat_de(b.chef).attend == "Go de Karulium"
+    # Objet enlevé à la main : le GO revient.
+    raison[0] = None
+    b.horloge.t += REGLAGES.message_s + 1
+    b.tour()
+    assert b.texte("b_bandeau") == "ATTEND LE GO"
+    assert b.nextion.couleur("b_go") == fond("go")
+
+
 def test_une_question_sans_reponse_est_abandonnee(b):
     b.jusqu_au_go()
     b.appuyer("b_go")

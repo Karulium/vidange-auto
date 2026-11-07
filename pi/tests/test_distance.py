@@ -161,6 +161,14 @@ def test_pas_de_mode_a_distance_pendant_un_geste(b):
     assert b.actions() == ["refus"]
 
 
+def test_pas_de_mode_a_distance_avec_un_objet_encore_tenu(b):
+    # Tâche 45 nonies : au redémarrage, objet encore tenu à la ventouse : aucun mouvement.
+    b.chef.empecher_go(lambda: "objet encore tenu à la ventouse (vide -50 kPa)")
+    with pytest.raises(ErreurDistance, match="objet encore tenu à la ventouse"):
+        b.pilote.activer(QUI)
+    assert not b.pilote.actif
+
+
 def test_pas_de_mode_a_distance_sans_voyant(b):
     pilote = PiloteDistance(
         reglages(), machine(), {"portique": b.liaison}, b.chef, None, b.images, horloge=b.horloge

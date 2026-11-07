@@ -359,6 +359,8 @@ function bandeau(etat) {
     b.className = "bleu"; b.textContent = "MISE À JOUR en cours (machine en pause)";
   } else if (etat.distance) {
     b.className = "bleu"; b.textContent = "PILOTAGE À DISTANCE en cours (machine en pause)";
+  } else if (etat.go_empeche) {
+    b.className = "rouge"; b.textContent = "OBJET ENCORE TENU : " + etat.go_empeche + " (pas de Go avant)";
   } else if (etat.alarmes_ouvertes.length || etat.modules.some((m) => m.statut === "alarme")) {
     b.className = "rouge"; b.textContent = "ALARME : voir ci-dessous quoi faire";
   } else if (etat.en_pause) {
@@ -380,7 +382,8 @@ function afficherEtat(etat) {
   $("bouton-pause").hidden = etat.en_pause;
   $("bouton-reprendre").hidden = !etat.en_pause;
 
-  remplir("gos", ...etat.attendent_go.map((module) =>
+  // Objet encore tenu à la ventouse au redémarrage (tâche 45 nonies) : pas de bouton GO.
+  remplir("gos", ...(etat.go_empeche ? [] : etat.attendent_go).map((module) =>
     el("button", {
       classe: "gros vert",
       surclick: () => {

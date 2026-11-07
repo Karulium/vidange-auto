@@ -140,10 +140,17 @@ def _griffe_trainee(machine: Machine, regles) -> list[str]:
             refus.append(
                 f"  {nom:10} ({_m(x)} ; {_m(y)}) : mât de la griffe à {_m(pose.x)} : {raison}"
             )
+    chemins = [
+        f"  {e.bocal:10} zone du mât x {_m(e.x[0])}-{_m(e.x[1])}, y {_m(e.y[0])}-{_m(e.y[1])} : "
+        f"on y entre et on en sort en x, par x {_m(e.entree_x)} ({e.source})"
+        for e in griffe.y_min_mat.exceptions_butee_haute
+    ]
     return [
         "Bocaux où la Préhension ne peut pas poser l'entonnoir (la griffe, même pont, en butée "
         f"haute, serait traînée là ; pose finale seulement) : {len(refus)}",
         *refus,
+        f"Bocaux posés par la machine grâce au chemin d'une exception : {len(chemins)}",
+        *chemins,
     ]
 
 

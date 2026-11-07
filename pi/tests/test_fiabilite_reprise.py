@@ -186,3 +186,156 @@ def test_bilan_d_une_alarme_puis_acquittement(machine, tmp_path):
     finally:
         pi.eteindre()
         registre.fermer()
+
+
+# ------------------------------------- objet encore tenu à la ventouse (tâche 45 nonies)
+
+VIDE = REGLAGES.machine.prehension.vide
+PERIODE = REGLAGES.programme.fiabilite.objet_tenu.periode_s
+
+
+class Capteur:
+    """Un faux capteur de vide : rend `valeur` (kPa) à chaque lecture, ou lève `erreur`."""
+
+    def __init__(self, valeur=0.0, erreur=None):
+        self.valeur, self.erreur, self.lectures = valeur, erreur, 0
+
+    def __call__(self):
+        if self.erreur is not None:
+            raise self.erreur
+        self.lectures += 1
+        return self.valeur
+
+
+def test_reglages_de_l_objet_tenu():
+    # Chiffre du fil Préhension (07/11/2026) : −20 kPa, entre la perte (−40) et le zéro (± 5).
+    assert VIDE.tenu_au_demarrage_kpa == -20
+    assert VIDE.perte_kpa <= VIDE.tenu_au_demarrage_kpa < -VIDE.zero_ecart_max_kpa
+    assert PERIODE == 1
+
+
+def test_seuil_de_l_objet_tenu_verifie_au_demarrage(reglages):
+    from .test_reglages import erreur_de, remplacer
+
+    remplacer(
+        reglages / "machine.yaml",
+        "    tenu_au_demarrage_kpa: -20",
+        "    tenu_au_demarrage_kpa: -45",
+    )
+    assert "tenu_au_demarrage_kpa (-45) doit être au-dessus de perte_kpa (-40)" in erreur_de(
+        reglages
+    )
+    remplacer(
+        reglages / "machine.yaml", "    tenu_au_demarrage_kpa: -45", "    tenu_au_demarrage_kpa: -3"
+    )
+    assert "doit être plus bas que −zero_ecart_max_kpa (-5)" in erreur_de(reglages)
+
+
+def test_objet_encore_tenu_puis_enleve_a_la_main():
+    from vidange.fiabilite import ObjetTenu
+
+    lire = Capteur(-51.0)
+    objet = ObjetTenu(VIDE, lire, PERIODE)
+    objet.regarder()
+    # Une mesure = la moyenne de zero_lectures lectures brutes (le zéro n'est pas recalé).
+    assert lire.lectures == VIDE.zero_lectures
+    assert objet.tenu
+    assert objet.refus_go() == (
+        "objet encore tenu à la ventouse (vide -51 kPa) : l'enlever à la main"
+    )
+    (constat,) = objet.constats()
+    assert constat.niveau == "bloquant" and "enlever à la main l'objet" in constat.quoi_faire
+    # Pas encore enlevé : toujours pas de Go.
+    objet._tour()
+    assert objet.tenu
+    # Karulium décolle un bord : le vide remonte, le Go revient.
+    lire.valeur = -2.0
+    objet._tour()
+    assert not objet.tenu and objet.libere and objet.refus_go() is None
+    assert objet.constats()[0].niveau == "ok"
+    # Ensuite, plus jamais lu pendant cette marche : la ventouse tient des objets en travail.
+    lire.valeur = -55.0
+    avant = lire.lectures
+    objet._tour()
+    objet.regarder()
+    assert lire.lectures == avant and objet.refus_go() is None
+
+
+def test_rien_de_tenu_au_redemarrage():
+    from vidange.fiabilite import ObjetTenu
+
+    objet = ObjetTenu(VIDE, Capteur(-1.5), PERIODE)
+    objet.regarder()
+    assert objet.refus_go() is None and objet.libere
+    assert objet.constats()[0].niveau == "ok"
+
+
+def test_capteur_de_vide_illisible_ou_absent():
+    from vidange.fiabilite import ObjetTenu
+
+    objet = ObjetTenu(VIDE, Capteur(erreur=OSError("ADS1115 muet")), PERIODE)
+    objet.regarder()
+    # Le Pi ne sait pas : il n'attend pas, mais la check-list le dit.
+    assert objet.refus_go() is None
+    (constat,) = objet.constats()
+    assert constat.niveau == "attention" and "illisible (ADS1115 muet)" in constat.texte
+    assert "vérifier la tête de préhension" in constat.quoi_faire
+    absent = ObjetTenu(VIDE, None, PERIODE, absent="capteur absent")
+    absent.regarder()
+    assert absent.refus_go() is None and absent.constats()[0].texte == "capteur absent"
+
+
+def test_le_chef_refuse_tout_go_tant_qu_un_objet_est_tenu(machine):
+    from vidange.chef import ErreurChef
+    from vidange.fiabilite import ObjetTenu
+    from vidange.quoi_faire import COUPURE_COURANT, PLANTAGE
+
+    # La check-list de reprise le dit (fil Préhension, 07/11/2026).
+    ligne = "vérifier la tête et le seau : enlever à la main l'objet tenu ou tombé avant le Go"
+    assert ligne in COUPURE_COURANT and ligne in PLANTAGE
+
+    # Après une coupure, un seau encore tenu à la ventouse (clapet anti-retour).
+    machine.fabrique.regler("vide_venturi", -50)
+    pi = machine.allumer_le_pi()
+    objet = ObjetTenu(VIDE, lambda: pi.materiel.mesurer("vide_venturi"), PERIODE)
+    objet.regarder()
+    pi.chef.empecher_go(objet.refus_go)
+    pi.chef.lancer(pi.lieu_sur)
+    pi.chef.demarrer()
+    try:
+        attendre(lambda: pi.chef.etat().attendent_go == ["lieu_sur"])
+        assert pi.chef.etat().go_empeche.startswith("objet encore tenu à la ventouse")
+        with pytest.raises(ErreurChef, match="Go refusé : objet encore tenu à la ventouse"):
+            pi.chef.donner_go("lieu_sur")
+        # Aucun mouvement, aucune prise d'origine : la machine attend.
+        assert "$H" not in machine.faux.lignes_recues
+        assert pi.chef.etat().attendent_go == ["lieu_sur"]
+        # Objet enlevé à la main : au tour suivant, le Go est accepté.
+        machine.fabrique.regler("vide_venturi", 0)
+        objet._tour()
+        assert pi.chef.etat().go_empeche == ""
+        pi.chef.donner_go("lieu_sur")
+        attendre(lambda: pi.module("lieu_sur").statut == "fini")
+        assert "$H" in machine.faux.lignes_recues
+    finally:
+        pi.eteindre()
+
+
+def test_objet_tenu_au_demarrage_du_programme(tmp_path):
+    from vidange.demarrage import preparer_objet_tenu
+
+    fabrique = FausseFabrique(LISTE)
+    materiel = Materiel(LISTE, fabrique)
+    try:
+        fabrique.regler("vide_venturi", -48)
+        objet = preparer_objet_tenu(REGLAGES, materiel, LISTE, vraie_machine=False)
+        objet.regarder()
+        assert objet.tenu
+        # Sur la vraie machine, une ligne d'EXEMPLE n'est jamais lue (sa conversion est fausse).
+        vraie = preparer_objet_tenu(REGLAGES, materiel, LISTE, vraie_machine=True)
+        vraie.regarder()
+        assert vraie.refus_go() is None and "EXEMPLE" in vraie.constats()[0].texte
+    finally:
+        materiel.fermer()
+    sans = preparer_objet_tenu(REGLAGES, None, LISTE, vraie_machine=False)
+    assert "entrées/sorties pas ouvertes" in sans.constats()[0].texte

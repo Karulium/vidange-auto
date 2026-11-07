@@ -1816,3 +1816,76 @@ prehension.py`, `pi/vidange/couvercle/couvercle.py`, `pi/vidange/cycle/` (machin
   3. Coupure avec le couvercle C tenu sous la face 0,545 : question posée au fil Préhension (la ventouse garde-t-elle
      le couvercle sans courant ?). D'ici sa réponse, ligne de la check-list de reprise : enlever le couvercle à la main
      avant le Go s'il est encore tenu.
+
+## Reprise avec un objet tenu, bocal_0_1 posé par la machine (tâche 45 nonies, 07/11/2026)
+
+Code : `pi/vidange/fiabilite/objet_tenu.py`, `pi/vidange/chef/chef.py` (`empecher_go`), `pi/vidange/demarrage.py`,
+`pi/vidange/ecran/ecran.py`, page web, `pi/vidange/quoi_faire.py` ; `pi/vidange/griffe/regles.py`
+(`passages_exception`), `pi/vidange/griffe/griffe.py` (`_chemin`), `pi/vidange/cycle/griffe_du_lot.py`
+(`chemin_pont`), `pi/vidange/prehension/prehension.py`, `pi/vidange/entonnoir/` ; réglages `machine.yaml`,
+`programme.yaml` ; essais : `essai-fiabilite.md` (§ 4 bis), `essai-versement-bocal.md` (étape 9). Testé sur le
+vrai matériel : non.
+
+- **Réponse du fil Préhension (07/11/2026), objet tenu à la ventouse à la coupure** : les électrovannes
+  « aspirer » et « souffler » sont normalement fermées et un clapet anti-retour garde le vide ; l'objet reste
+  d'abord tenu puis peut tomber au bout d'un temps inconnu (sous la face 0,545, un couvercle C tomberait de travers
+  sur le seau). Vaut pour tout objet à la ventouse (seau, couvercle, Pétri) ; un objet aux électroaimants (capsule,
+  bocal par son couvercle percé) tombe tout de suite. Donc :
+  1. check-list de reprise (« quoi faire » des alarmes de coupure et de plantage) : « vérifier la tête et le seau :
+     enlever à la main l'objet tenu ou tombé avant le Go » (remplace la ligne provisoire de la PR n° 101, point 3) ;
+  2. au redémarrage, **avant tout mouvement**, le Pi lit le capteur de vide : plus bas que
+     `prehension → vide → tenu_au_demarrage_kpa` (**−20 kPa**, chiffre du fil, figé) = objet encore tenu →
+     l'écran et la page disent « objet encore tenu », et **aucun Go** n'est accepté tant que c'est le cas ;
+  3. **jamais** de « souffler » automatique au redémarrage (rien n'est commandé : la vanne n'est pas touchée).
+- **Choix de Claude (objet tenu)** :
+  - Lecture **brute** (moyenne de `zero_lectures` lectures) : le zéro du capteur n'est recalé qu'au départ d'un
+    lot, et il est à ± `zero_ecart_max_kpa` de 0. Vérifié au démarrage : `perte_kpa` ≤ seuil < −`zero_ecart_max_kpa`
+    (un vide qui tient encore l'objet ne passe pas ; un zéro décalé ne bloque pas le Go).
+  - Le chef refuse **tout** Go (`Chef.empecher_go`, raison dans `EtatChef.go_empeche`) : retour en lieu sûr,
+    reprise du cycle, lot (`Lancement.refus_go`) ; le pilotage à distance aussi (c'est un mouvement).
+  - Relu tous les `fiabilite → objet_tenu → periode_s` (1 s) jusqu'à ce que le vide remonte au-dessus du seuil ;
+    ensuite plus jamais pendant cette marche (la ventouse tient des objets en travail : ce n'est plus une reprise).
+  - Vérifié à **chaque** démarrage (coupure, plantage, arrêt propre en plein geste) : sans danger quand rien n'est
+    tenu.
+  - Capteur absent, en EXEMPLE sur la vraie machine, entrées/sorties fermées ou illisible : pas d'attente (le Pi ne
+    sait pas), mais la check-list le dit en « attention » (« vérifier la tête à la main ») — question à Karulium.
+  - Objet tenu : point **bloquant** de la check-list. Écran : bandeau « OBJET ENCORE TENU : PAS DE GO », GO éteint.
+  - Cette attente protège la machine et le seau, jamais les personnes (sécurité câblée).
+- **Réponse de la Maquette (07/11/2026, remesure v45.121, `griffe/logiciel/griffe-entrainee-entonnoir-maquette.md`
+  et `carte-griffe-butee-haute-bocaux.txt`)** : mât de la griffe = x bocal − 0,176 (la ventouse tient l'oreille à
+  x bocal + 0,140), même y, griffe en butée haute (axes 1,265, point bas ≈ 1,065), godet fermé, tête à A = 0.
+  `bocal_0_0` (1,0315 ; 0,06) contact ; `bocal_0_1` (1,1415 ; 0,06) **libre** ; `bocal_1_0` (1,0865 ; 0,1553) moins
+  de 1 cm ; `bocal_2_0` (1,0315 ; 0,2506) contact (couvercle du boîtier de la caméra du dosage). Rectangles libres
+  (x 0,79-1,30, y 0,04-0,40) : R1 y ≥ 0,32 ; R2 x ≥ 1,22 ; R3 x ≥ 1,10 et y ≤ 0,10 ; R4 x 0,79-0,97 et y 0,22-0,40.
+  Interdit : x 0,79-1,09 pour y ≤ 0,16 ; x 0,98-1,21 pour y 0,17-0,31 (caméra du dosage). Chemin pour `bocal_0_1` :
+  arriver par R1 ou R2, descendre en y dans R2 jusqu'à y ≤ 0,10, puis en −x dans R3. Pose à la main pour
+  `bocal_0_0`, `bocal_1_0`, `bocal_2_0`.
+- **Choix de Claude (bocal_0_1)** :
+  - `griffe → y_min_mat → exceptions_butee_haute` : une entrée `bocal_0_1`, zone **R3** (x 1,10-1,30, y 0,04-0,10 ;
+    la table n'y compte pas, en butée haute, godet fermé, bras le long du pont), `entree_x: 1.22` (bord de R2),
+    `libres` R1 à R4 (pour vérifier le chemin), source v45.121. Seule R3 lève la table : R1 et R2 sont déjà permis
+    par elle, et R4 n'est pas sur le chemin (mesuré en mode bocaux : on ne l'ouvre pas à tout).
+  - Le chemin : tout trajet du pont qui entre dans la zone ou en sort, là où la table seule refuserait le mât
+    (`exception_requise`), passe par (1,22 ; y du départ), puis (1,22 ; y de l'arrivée) : en x seulement dans la
+    zone, en y seulement à x 1,22. Pour la Préhension (pont traîné : `chemin_pont`, posé par `brancher_pont`), pour
+    l'entonnoir tenu (`_transport`) et pour la griffe elle-même (sa sortie vers le fût, puis son trajet habituel).
+  - Démarrage : la règle « aucun autre bocal dans la zone » devient « aucun autre bocal **que la table refuse** » :
+    R3 contient le mât de `bocal_0_2` (1,2515 ; 0,06), déjà permis. Et : `entree_x` dans la zone, la ligne x =
+    `entree_x` sur la hauteur de la zone dans un rectangle libre (R2).
+  - `vidange-entonnoir versement` : 3 bocaux posés à la main (`bocal_0_0`, `bocal_1_0`, `bocal_2_0`), 1 posé par
+    la machine grâce au chemin (`bocal_0_1`).
+- **Écarts vus dans la remesure (questions à Karulium, PR de la 45 nonies)** : la Maquette met la butée haute à
+  axes 1,265 (bas ≈ 1,065) ; le dépôt a 1,29 (bas du godet 1,077). Sa carte met aussi le mât de `bocal_2_1`
+  (1,1415 ; 0,2506) dans le carré « contact » de la caméra du dosage, que la table du dépôt (v45.111) permet en
+  butée haute. Rien de changé tant que ce n'est pas tranché.
+- **Réponses à la PR n° 102** (tâche 45 nonies, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Capteur de vide muet ou absent au démarrage : pas de refus du Go ; la check-list dit « attention, vérifier la
+     tête à la main » (gardé).
+  2. Vanne « aspirer » restée ouverte après un plantage du programme : question posée au fil Préhension ; d'ici sa
+     réponse, rien n'est commandé au démarrage (jamais « souffler »).
+  3. et 4. Hauteur de la butée haute (Maquette 1,265, bas ≈ 1,065 ; dépôt 1,29, bas du godet 1,077) et `bocal_2_1`
+     (mât (1,1415 ; 0,2506) dans le carré « contact » de la caméra du dosage sur la carte de la Maquette) : question
+     posée à la Maquette (refaire la carte à 1,29). Mesurer plus bas est prudent pour les contacts : `bocal_0_1`
+     reste permis ; rien n'est changé pour `bocal_2_1` d'ici sa réponse (l'étape 9 de l'essai mesure ce jeu).
+  5. Après l'enlèvement de l'objet à la main, le geste repris part en alarme ou refait sa prise : suffisant pour
+     l'instant.

@@ -174,7 +174,25 @@ def brancher_pont(griffe: Griffe, prehension: Prehension) -> None:
             return f"la tête de préhension, traînée par le pont : {refus}"
         return None
 
+    def chemin_griffe_trainee(
+        depart: PosePrehension, x: float, y: float
+    ) -> list[tuple[float, float]]:
+        """Points de passage de la tête pour que le mât de la griffe traîné suive le chemin d'une
+        exception de sa table en butée haute (tâche 45 nonies). Griffe introuvable : aucun (le
+        verrou du pont refuse alors le pas)."""
+        try:
+            debut = griffe.bras.position()
+        except Exception:
+            return []
+        dx, dy = x - depart.x, y - depart.y
+        passages = griffe.regles.passages_exception(debut.x, debut.y, debut.x + dx, debut.y + dy)
+        return [
+            (round(depart.x + px - debut.x, 6), round(depart.y + py - debut.y, 6))
+            for px, py in passages
+        ]
+
     prehension.verrou_pont = refus_griffe_trainee
+    prehension.chemin_pont = chemin_griffe_trainee
     griffe.verrou_pont = refus_tete_trainee
 
 

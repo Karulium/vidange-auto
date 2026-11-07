@@ -55,6 +55,35 @@ l'installation.
 - [ ] `ls /var/lib/vidange` montre toujours `etat-cycle.json` et `registre.sqlite` ;
       `vidange-registre etat` lit la base sans erreur.
 
+## 4 bis. Reprise avec un objet encore tenu à la ventouse (tâche 45 nonies)
+
+**Testé sur le vrai matériel : non.** Les tests automatiques n'utilisent qu'un faux capteur de vide. Il faut
+le vrai capteur de vide branché (`vide_venturi` sans `exemple` dans `docs/entrees-sorties.yaml`) et l'air
+comprimé. Fil Préhension (07/11) : sans courant, les électrovannes « aspirer » et « souffler » restent
+fermées et le clapet anti-retour garde le vide ; l'objet tenu à la ventouse reste d'abord tenu, puis peut
+tomber. Ce test ne protège que la machine et le seau : **la sécurité des personnes reste câblée**.
+
+- [ ] Programme arrêté (`sudo systemctl stop vidange`), moteurs hors tension. Tenir à la main un **seau
+      vide** (ou un couvercle) contre la ventouse et lancer `vidange-prehension vide` (vanne ouverte 5 s, puis
+      refermée ; voir `essai-prehension.md`). Le seau reste tenu après la fermeture de la vanne. Noter
+      combien de temps il tient (chronomètre) : c'est le temps inconnu du fil Préhension.
+- [ ] Pendant qu'il est tenu, `sudo systemctl start vidange`. Le journal dit « Reprise : objet encore tenu
+      à la ventouse (vide … kPa, plus bas que -20) : pas de Go tant qu'il n'est pas enlevé à la main ».
+- [ ] L'écran de l'armoire dit « OBJET ENCORE TENU : PAS DE GO », la ligne du bas « Objet encore tenu à la
+      ventouse (vide … kPa) : l'enlever à la main. » ; le bouton GO est éteint, un appui dit « Go
+      impossible : … ». La page web dit la même chose en haut, sans bouton GO. La check-list (page web) a un
+      point **bloquant** « objet tenu à la ventouse ».
+- [ ] **Rien n'a bougé, rien n'a soufflé** (écouter : pas de souffle à la ventouse ; aucune prise d'origine).
+- [ ] Enlever le seau à la main (décoller un bord). Dans la seconde (`fiabilite → objet_tenu → periode_s`), le
+      journal dit « la ventouse ne tient plus rien … : Go permis », l'écran revient à « ATTEND LE GO ».
+- [ ] Recommencer avec le seau tenu, puis couper l'alimentation de toute l'armoire 10 s (pas seulement le
+      Pi). Au retour : même chose. L'alarme « alimentation » dit quoi faire, avec la ligne « vérifier la tête
+      et le seau : enlever à la main l'objet tenu ou tombé avant le Go ».
+- [ ] Avec une **capsule** aux électroaimants : à la coupure, elle doit tomber tout de suite (fil
+      Préhension). Le dire si elle reste.
+- [ ] Débrancher le capteur de vide, redémarrer : pas d'attente, mais la check-list dit « capteur de vide
+      illisible … » en « attention », avec « vérifier la tête de préhension et le seau ».
+
 ## 5. Santé du Pi
 
 - [ ] Comparer avec le Pi lui-même : `vcgencmd measure_temp` (température) et `vcgencmd get_throttled`

@@ -663,78 +663,177 @@ def test_outil_versement(capsys):
     assert "Bocaux où la griffe ne peut pas verser : 0" in sortie
     assert "Garde du boîtier de la caméra du bocal : mât à y 0,21-0,29 → x ≥ 1,205" in sortie
     assert "tête de préhension vide à la face 0,9 m, préhension à x ≥ 1,2" in sortie
-    # Autre limite (pont partagé, tâche 45 sexies, question à Karulium) : la Préhension ne pose
-    # pas l'entonnoir sur 4 bocaux, la griffe traînée irait au-dessus de l'agitateur.
-    assert "ne peut pas poser l'entonnoir" in sortie and "pose finale seulement) : 4" in sortie
-    assert "bocal_2_0  (1,2075 ; 0,2506) : mât de la griffe à 1,0315" in sortie
+    # Pont partagé (tâche 45 sexies) : la griffe traînée irait au-dessus de l'agitateur pour 3
+    # bocaux, posés à la main ; bocal_0_1 est posé par la machine, par le chemin de la Maquette
+    # (tâche 45 nonies).
+    assert "ne peut pas poser l'entonnoir" in sortie and "pose finale seulement) : 3" in sortie
+    for bocal in ("bocal_0_0", "bocal_1_0", "bocal_2_0"):
+        assert f"  {bocal}  (" in sortie
+    assert "  bocal_0_1  (" not in sortie
+    assert "Bocaux posés par la machine grâce au chemin d'une exception : 1" in sortie
+    chemin = "bocal_0_1  zone du mât x 1,1-1,3, y 0,04-0,1 : on y entre et on en sort en x"
+    assert f"{chemin}, par x 1,22" in sortie
 
 
-# ------------------------------------------------ pose de l'entonnoir, griffe traînée (45 octies)
+# ---------------------------- pose de l'entonnoir, griffe traînée (tâches 45 octies et 45 nonies)
 
-EXCEPTION_VIDE = "    exceptions_butee_haute: []"
-
-
-def exception(bocal, x, y):
-    return (
-        f'    exceptions_butee_haute:\n      - {{bocal: {bocal}, x: {x}, y: {y}, source: "essai"}}'
-    )
+LIGNE_BOCAL = "      - bocal: bocal_0_1"
+ZONE = "        x: [1.10, 1.30]\n        y: [0.04, 0.10]\n"
+ENTREE = "        entree_x: 1.22\n"
+R2 = "          - {x: [1.22, 1.30], y: [0.04, 0.40]}   # R2\n"
+R3 = "          - {x: [1.10, 1.30], y: [0.04, 0.10]}   # R3\n"
 
 
-def test_pas_d_exception_a_la_table_en_butee_haute_dans_le_depot():
-    # La mesure de la Maquette du 07/11 (v45.120) a été faite le mât à x bocal − 0,316 : pour
-    # bocal_2_0, 0,8915 ; mais la ventouse tient l'oreille (x bocal + 0,140) et le mât de la
-    # griffe y est à 1,0315. Aucune exception tant que la bonne place n'est pas mesurée.
-    assert GRIFFE.y_min_mat.exceptions_butee_haute == []
+def zone(x, y):
+    return f"        x: {x}\n        y: {y}\n"
+
+
+def test_exception_de_bocal_0_1_dans_le_depot():
+    # Remesure de la Maquette du 07/11 (v45.121) : figée, chemin par x 1,22.
+    (exception,) = GRIFFE.y_min_mat.exceptions_butee_haute
+    assert exception.bocal == "bocal_0_1"
+    assert (exception.x, exception.y, exception.entree_x) == ((1.10, 1.30), (0.04, 0.10), 1.22)
+    assert [(r.x, r.y) for r in exception.libres] == [
+        ((0.79, 1.30), (0.32, 0.40)),
+        ((1.22, 1.30), (0.04, 0.40)),
+        ((1.10, 1.30), (0.04, 0.10)),
+        ((0.79, 0.97), (0.22, 0.40)),
+    ]
+    assert "v45.121" in exception.source
+    # Mât de la griffe = x bocal + 0,140 − 0,316 (la ventouse tient l'oreille).
+    assert MACHINE.mat_griffe_entonnoir(1.3175, 0.06) == (1.1415, 0.06)
     assert MACHINE.mat_griffe_entonnoir(1.2075, 0.2506) == (1.0315, 0.2506)
 
 
 def test_exception_a_la_mauvaise_place_refusee_au_demarrage(reglages):
-    # La pose mesurée par la Maquette (0,8915 ; 0,2506) ne contient pas le vrai mât.
-    remplacer(
-        reglages / "machine.yaml",
-        EXCEPTION_VIDE,
-        exception("bocal_2_0", "[0.885, 0.898]", "[0.245, 0.256]"),
-    )
+    # Une zone qui ne contient pas le vrai mât (1,1415 ; 0,06).
+    remplacer(reglages / "machine.yaml", ZONE, zone("[1.15, 1.30]", "[0.04, 0.10]"))
     message = erreur_de(reglages)
-    assert "exceptions_butee_haute → bocal_2_0 : la zone (x 0.885-0.898" in message
-    assert "(1.0315 ; 0.2506) : la mesure n'est pas à la bonne place" in message
+    assert "exceptions_butee_haute → bocal_0_1 : la zone (x 1.15-1.3" in message
+    assert "(1.1415 ; 0.06) : la mesure n'est pas à la bonne place" in message
 
 
 def test_exception_qui_couvre_un_autre_bocal_refusee_au_demarrage(reglages):
-    # bocal_2_0 (mât 1,0315 ; 0,2506) et bocal_1_0 (1,0865 ; 0,1553) dans la même zone : non.
-    remplacer(
-        reglages / "machine.yaml",
-        EXCEPTION_VIDE,
-        exception("bocal_2_0", "[1.00, 1.10]", "[0.15, 0.26]"),
-    )
-    assert "la zone contient aussi le mât pour le bocal « bocal_1_0 »" in erreur_de(reglages)
+    # bocal_0_1 (mât 1,1415 ; 0,06) et bocal_0_0 (1,0315 ; 0,06, refusé par la table) : non.
+    remplacer(reglages / "machine.yaml", ZONE, zone("[1.00, 1.30]", "[0.04, 0.10]"))
+    assert "la zone contient aussi le mât pour le bocal « bocal_0_0 »" in erreur_de(reglages)
+
+
+def test_exception_qui_contient_un_bocal_deja_permis_acceptee():
+    # La zone R3 contient le mât de bocal_0_2 (1,2515 ; 0,06), que la table permet déjà : la
+    # zone ne lui donne rien de plus.
+    assert MACHINE.mat_griffe_entonnoir(1.4275, 0.06) == (1.2515, 0.06)
+    assert not GRIFFE.y_min_mat.refuse_en_butee_haute(1.2515, 0.06)
+    assert GRIFFE.y_min_mat.refuse_en_butee_haute(1.1415, 0.06)
+    assert GRIFFE.y_min_mat.exception_requise(1.2515, 0.06) is None
+    assert GRIFFE.y_min_mat.exception_requise(1.1415, 0.06).bocal == "bocal_0_1"
 
 
 def test_exception_d_un_bocal_inconnu_refusee_au_demarrage(reglages):
-    remplacer(
-        reglages / "machine.yaml",
-        EXCEPTION_VIDE,
-        exception("bocal_9_9", "[1.00, 1.06]", "[0.24, 0.30]"),
-    )
+    remplacer(reglages / "machine.yaml", LIGNE_BOCAL, "      - bocal: bocal_9_9")
     assert "exceptions_butee_haute → bocal_9_9 : bocal inconnu du stockage" in erreur_de(reglages)
 
 
-def test_exception_a_la_bonne_place_pour_un_seul_bocal(reglages):
-    from vidange.reglages import charger_reglages
+def test_entree_du_chemin_hors_de_la_zone_refusee_au_demarrage(reglages):
+    remplacer(reglages / "machine.yaml", ENTREE, "        entree_x: 1.05\n")
+    assert "entree_x (1.05) hors de la zone (x 1.1-1.3)" in erreur_de(reglages)
 
-    remplacer(
-        reglages / "machine.yaml",
-        EXCEPTION_VIDE,
-        exception("bocal_2_0", "[1.00, 1.06]", "[0.24, 0.30]"),
-    )
-    machine = charger_reglages(reglages).machine
-    regles = ReglesGriffe(machine)
-    haut = Pose(x=1.0315, y=0.2506, z=machine.griffe.trajet.z, a=0, b=0)
-    assert regles.exception_butee_haute(haut) == "bocal_2_0"
-    assert regles.refus_pose(haut, Contexte()) is None
-    # La règle d'avant partout ailleurs : sous la butée haute, godet ouvert, tête tournée, ou
-    # un autre bocal (bocal_0_0, même x, y 0,06).
-    assert REGLES.refus_pose(haut, Contexte()) is not None
-    assert regles.refus_pose(haut.avec(z=1.15), Contexte()) is not None
-    assert regles.refus_pose(haut.avec(b=0.5), Contexte()) is not None
-    assert regles.refus_pose(haut.avec(y=0.06), Contexte()) is not None
+
+def test_chemin_hors_des_rectangles_libres_refuse_au_demarrage(reglages):
+    # Sans R2 ni R3, la ligne x = 1,22 n'est dans aucun rectangle libre de la mesure.
+    remplacer(reglages / "machine.yaml", R2, "")
+    remplacer(reglages / "machine.yaml", R3, "")
+    message = erreur_de(reglages)
+    assert "la ligne x = 1.22 (y 0.04-0.1) n'est dans aucun rectangle libre" in message
+
+
+def test_rectangle_libre_mal_ecrit_refuse_au_demarrage(reglages):
+    remplacer(reglages / "machine.yaml", R2, "          - {x: [1.30, 1.22], y: [0.04, 0.40]}\n")
+    assert "bocal_0_1 → libres n° 2 : x et y du plus petit au plus grand" in erreur_de(reglages)
+
+
+def test_exception_seulement_en_butee_haute_godet_ferme_bras_le_long_du_pont():
+    haut = Pose(x=1.1415, y=0.06, z=GRIFFE.trajet.z, a=0, b=0)
+    assert REGLES.exception_butee_haute(haut) == "bocal_0_1"
+    assert REGLES.refus_pose(haut, Contexte()) is None
+    # La règle d'avant partout ailleurs : sous la butée haute, godet ouvert, au-dessus de la zone
+    # (y 0,105), ou un autre bocal (bocal_0_0, mât 1,0315).
+    assert REGLES.refus_pose(haut.avec(z=1.15), Contexte()) is not None
+    assert REGLES.refus_pose(haut.avec(b=0.5), Contexte()) is not None
+    assert REGLES.refus_pose(haut.avec(y=0.105), Contexte()) is not None
+    assert REGLES.refus_pose(haut.avec(x=1.0315), Contexte()) is not None
+
+
+def test_chemin_de_la_maquette_pour_entrer_et_sortir():
+    # Arrivée par R1 (y ≥ 0,32) : en x jusqu'à 1,22, en y jusqu'à 0,06 (R2), puis en −x (R3).
+    assert REGLES.passages_exception(1.00, 0.35, 1.1415, 0.06) == [(1.22, 0.35), (1.22, 0.06)]
+    # Arrivée par R2 : d'abord en x jusqu'à 1,22.
+    assert REGLES.passages_exception(1.30, 0.25, 1.1415, 0.06) == [(1.22, 0.25), (1.22, 0.06)]
+    # Sortie : la même chose à l'envers.
+    assert REGLES.passages_exception(1.1415, 0.06, 1.0865, 0.3459) == [(1.22, 0.06), (1.22, 0.3459)]
+    # Même y, ou déjà à x 1,22 : un point de moins.
+    assert REGLES.passages_exception(1.1415, 0.06, 1.2515, 0.06) == [(1.22, 0.06)]
+    assert REGLES.passages_exception(1.22, 0.30, 1.1415, 0.06) == [(1.22, 0.06)]
+    # Aucune des deux places n'a besoin de l'exception : pas de chemin.
+    assert REGLES.passages_exception(1.30, 0.35, 1.2515, 0.06) == []
+    # Chaque point du chemin et chaque pas entre eux, dans les règles de la griffe (butée haute).
+    z = GRIFFE.trajet.z
+    points = [(1.00, 0.35), (1.22, 0.35), (1.22, 0.06), (1.1415, 0.06)]
+    for (x0, y0), (x1, y1) in zip(points, points[1:], strict=False):
+        depart, arrivee = Pose(x=x0, y=y0, z=z, a=0, b=0), Pose(x=x1, y=y1, z=z, a=0, b=0)
+        assert REGLES.refus_mouvement(depart, arrivee, Contexte()) is None
+    # Le pas tout droit, lui, est refusé (il passerait au-dessus de l'agitateur).
+    depart, arrivee = Pose(x=1.00, y=0.35, z=z, a=0, b=0), Pose(x=1.1415, y=0.06, z=z, a=0, b=0)
+    assert REGLES.refus_mouvement(depart, arrivee, Contexte()) is not None
+
+
+def test_la_griffe_sort_de_la_zone_par_le_chemin():
+    # Griffe traînée à la pose de l'entonnoir sur bocal_0_1, puis elle va au fût : d'abord en +x
+    # jusqu'à 1,22, puis son trajet habituel (y ≥ 0,36, puis en x).
+    with Simulateur(reglages_simules(), LISTE, "vidange_fut") as simulation:
+        griffe = griffe_du_simulateur(simulation)
+        z = GRIFFE.trajet.z
+        depart = Pose(x=1.1415, y=0.06, z=z, a=0, b=0)
+        centre_x, centre_y = MACHINE.poste_fut.centre_fut
+        points = griffe._chemin(depart, centre_x, centre_y)
+        assert points[0] == (1.22, 0.06)
+        assert points[1] == (1.22, max(GRIFFE.trajet.mat_y_min, centre_y))
+        assert points[-1] == (centre_x, centre_y)
+        # Et l'inverse : vers la zone, par x 1,22, en dernier en −x.
+        retour = griffe._chemin(Pose(x=centre_x, y=centre_y, z=z, a=0, b=0), 1.1415, 0.06)
+        assert retour[-2:] == [(1.22, 0.06), (1.1415, 0.06)]
+        chemin = [(depart.x, depart.y), *points]
+        for (x0, y0), (x1, y1) in zip(chemin, chemin[1:], strict=False):
+            debut, fin = depart.avec(x=x0, y=y0), depart.avec(x=x1, y=y1)
+            assert griffe.regles.refus_mouvement(debut, fin, Contexte()) is None, (x1, y1)
+
+
+def test_lot_qui_pose_l_entonnoir_sur_bocal_0_1():
+    # Entonnoir posé à la main sur bocal_0_2, puis la Préhension le pose sur bocal_0_1 (griffe
+    # traînée par le chemin de la Maquette), la griffe y verse (elle sort de la zone par x 1,22),
+    # puis la Préhension le reprend et le pose sur bocal_1_1.
+    ordre = ["bocal_0_2", "bocal_0_1", "bocal_1_1"]
+    mats = []
+
+    def preparer(scenario, versement):
+        scenario.entonnoir.ordre_de_remplissage = lambda bocaux: list(bocaux)
+        griffe = versement.griffe
+        executer = scenario.prehension.tete.executer
+
+        def noter(pas, cible, poids):
+            mats.append((pas.texte, griffe.bras.position()))
+            executer(pas, cible, poids)
+
+        scenario.prehension.tete.executer = noter
+
+    planning, versement, griffe, pas_tete = lot_avec_la_tete_de_prehension(ordre, preparer)
+    assert planning.fini, planning.probleme
+    assert set(versement.doses) == set(ordre)
+    chemins = [texte for texte, _, _ in pas_tete if "chemin de la griffe traînée" in texte]
+    # Transport vers bocal_0_1 depuis bocal_0_2 (même y : x 1,22 seulement), reprise sur bocal_0_1
+    # (tête vide, x 1,22), transport vers bocal_1_1 (sortie : x 1,22, puis y 0,1553).
+    assert len(chemins) == 4
+    # Le mât de la griffe n'est passé au-dessus de l'agitateur qu'à la pose (zone R3).
+    for texte, mat in mats:
+        if REGLES.en_butee_haute(mat.z) and GRIFFE.y_min_mat.refuse_en_butee_haute(mat.x, mat.y):
+            assert REGLES.exception_butee_haute(mat) == "bocal_0_1", (texte, mat)
