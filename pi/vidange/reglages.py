@@ -5984,6 +5984,31 @@ class ReglagesVision(Modele):
         return self
 
 
+# ----------------------------------------------------------------- air.yaml
+
+
+class ReglagesAir(Modele):
+    """air.yaml : le compresseur, seule sortie du module Air comprimé (tâche 42)."""
+
+    exemple: bool = False
+    # Attente après la fermeture du relais avant un geste qui consomme de l'air (s).
+    attente_mise_en_pression_s: float = Field(ge=0)
+    # Rappel de vider le bidon de purge, en jours.
+    rappel_bidon_jours: int = Field(ge=1)
+    # Tous les combien le Pi regarde s'il doit commander le relais (s).
+    periode_s: float = Field(gt=0, le=60)
+
+    @model_validator(mode="after")
+    def _verifier_ensemble(self) -> "ReglagesAir":
+        if self.periode_s * 10 > self.attente_mise_en_pression_s > 0:
+            raise ValueError(
+                f"periode_s ({self.periode_s:g} s) est trop grande devant "
+                f"attente_mise_en_pression_s ({self.attente_mise_en_pression_s:g} s) : "
+                "l'attente serait imprécise"
+            )
+        return self
+
+
 # --------------------------------------------------------------- l'ensemble
 
 
@@ -5995,6 +6020,7 @@ class Reglages(Modele):
     accelerometre: ReglagesAccelerometre
     pesees: ReglagesPesees
     vision: ReglagesVision
+    air: ReglagesAir
 
 
 # Nom du fichier → (nom dans Reglages, modèle). Ajouter ici chaque nouveau fichier.
@@ -6006,6 +6032,7 @@ FICHIERS: dict[str, tuple[str, type[Modele]]] = {
     "accelerometre.yaml": ("accelerometre", ReglagesAccelerometre),
     "pesees.yaml": ("pesees", ReglagesPesees),
     "vision.yaml": ("vision", ReglagesVision),
+    "air.yaml": ("air", ReglagesAir),
 }
 
 

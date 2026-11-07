@@ -33,6 +33,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from vidange import __version__
+from vidange.air import Air
 from vidange.cameras import Cameras, ErreurCamera
 from vidange.chef import Chef, ErreurChef
 from vidange.distance import ErreurDistance, PiloteDistance
@@ -72,6 +73,8 @@ class Services:
     nettoyage: Nettoyage | None = None
     # Spray : carte n° 5, flacons, bras (None : pas de spray).
     spray: Spray | None = None
+    # Air comprimé : compresseur, mise en pression, bidon de purge (None : pas d'air).
+    air: Air | None = None
 
 
 class Tenir(BaseModel):
@@ -184,6 +187,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             "nettoyage": None
             if services.nettoyage is None
             else services.nettoyage.etat().en_dict(),
+            "air": None if services.air is None else services.air.etat().en_dict(),
         }
 
     @app.get("/api/checklist", dependencies=protege)
@@ -274,6 +278,24 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             raise HTTPException(404, f"ordre inconnu « {ordre} » ({', '.join(ordres)})")
         ordres[ordre]()
         return nettoyage.etat().en_dict()
+
+    # ------------------------------------------------------------ air
+
+    def l_air() -> Air:
+        if services.air is None:
+            raise HTTPException(404, "pas d'air comprimé (relais_compresseur absent de la liste)")
+        return services.air
+
+    @app.get("/api/air", dependencies=protege)
+    def air_etat() -> dict[str, Any]:
+        return l_air().etat().en_dict()
+
+    @app.post("/api/air/bidon_vide", dependencies=protege)
+    def air_bidon_vide(requete: Request) -> dict[str, Any]:
+        """L'opérateur a vidé le bidon de purge : le rappel repart de zéro."""
+        air = l_air()
+        air.bidon_vide(_qui(requete))
+        return air.etat().en_dict()
 
     # ------------------------------------------------------------ spray
 

@@ -43,6 +43,7 @@ from vidange.accelerometre.chargeur import ChargeurAccelerometre
 from vidange.accelerometre.liaison import SIGNAL as SIGNAL_ACCELEROMETRE
 from vidange.accelerometre.liaison import LiaisonAccelerometre, PortAccelerometre
 from vidange.accelerometre.liaison import ouvrir_port as ouvrir_port_accelerometre
+from vidange.air import Air
 from vidange.angles_gardes import AnglesGardes
 from vidange.api import ServeurApi, Services, constats_api, creer_app
 from vidange.cameras import Cameras, Flux
@@ -119,6 +120,7 @@ NOM_ANGLES = "angles.json"
 # La nuit UV-ozone en cours (reprise après une coupure de courant).
 NOM_NETTOYAGE = "nettoyage.json"
 NOM_SPRAY = "spray.json"
+NOM_AIR = "air.json"
 # Le compte-tours de la tête de préhension (docs/entrees-sorties.yaml).
 SIGNAL_COMPTE_TOURS = "compte_tours_tete"
 
@@ -337,6 +339,33 @@ def preparer_nettoyage(
     chef.conditions_generales.append(nettoyage.condition_store)
     mode.refus_supplementaires.append(nettoyage.refus_changement_mode)
     return nettoyage
+
+
+def preparer_air(
+    reglages: Reglages,
+    materiel: Materiel | None,
+    dossier_donnees: Path,
+    chef: Chef,
+    nettoyage: Nettoyage | None,
+) -> Air | None:
+    """L'Air comprimé : le relais du compresseur (fermé sauf nuit UV-ozone), l'attente de mise en
+    pression avant les gestes qui consomment de l'air, le rappel du bidon de purge."""
+    if materiel is None or "relais_compresseur" not in materiel.branchements:
+        return None
+    air = Air(
+        reglages.air,
+        materiel,
+        dossier_donnees / NOM_AIR,
+        air_permis=(lambda: True) if nettoyage is None else (lambda: nettoyage.air_permis),
+    )
+    chef.interdire(air.refus_geste)
+    return air
+
+
+def constats_air(air: Air | None) -> list[Constat]:
+    if air is None:
+        return [Constat("air comprimé", "attention", "Air pas lancé (relais absent de la liste ?)")]
+    return air.constats()
 
 
 def preparer_spray(
@@ -560,6 +589,12 @@ def principal(
             "mire, repères ; les régler aux essais (pi/systeme/essai-vision.md), puis passer "
             "« exemple » à false."
         )
+    if reglages.air.exemple:
+        journal.warning(
+            "air.yaml contient des valeurs d'EXEMPLE (exemple: true) : attente de mise en "
+            "pression et rappel du bidon ; les mesurer à l'essai (pi/systeme/essai-air.md), "
+            "puis passer « exemple » à false."
+        )
     exemples = entrees_sorties.exemples()
     if exemples:
         journal.warning(
@@ -700,6 +735,9 @@ def principal(
     spray = preparer_spray(
         reglages, materiel if erreur_materiel is None else None, dossier_donnees, registre, chef
     )
+    air = preparer_air(
+        reglages, materiel if erreur_materiel is None else None, dossier_donnees, chef, nettoyage
+    )
     liaison_ecran = preparer_ecran(reglages, entrees_sorties, raccords.ecran)
     # L'écran s'arrête en premier, comme l'API : plus d'ordre pendant l'arrêt.
     arret_ecran = threading.Event()
@@ -739,6 +777,8 @@ def principal(
             fils += nettoyage.demarrer(arret)
         if spray is not None:
             fils += spray.demarrer(arret)
+        if air is not None:
+            fils += air.demarrer(arret)
         checklist = CheckList(
             {
                 "réglages": lambda: constats_reglages(reglages, entrees_sorties),
@@ -760,6 +800,7 @@ def principal(
                 "pesées": lambda: constats_pesees(pesees),
                 "enceinte": lambda: constats_nettoyage(nettoyage),
                 "spray": lambda: constats_spray(spray),
+                "air": lambda: constats_air(air),
             }
         )
         serveur = preparer_api(
@@ -776,6 +817,7 @@ def principal(
                 poste=poste,
                 nettoyage=nettoyage,
                 spray=spray,
+                air=air,
             ),
         )
         if serveur is not None:

@@ -1055,3 +1055,23 @@ non (procédure `spray/essai-materiel.md`, puis `pi/systeme/essai-spray.md`).
      plateau ≤ 0,26 (c) était déjà faite. Pour info : le bras balaie un disque de rayon ≈ 0,15 autour de son axe
      (repère du chariot x 0,09 ; y 0,293), à z 0,51-0,55 ; à Y 0,50 rien de fixe dans cette zone (calcul du
      Remplissage sur la géométrie B1, pas un balayage de la Maquette) : à vérifier à la main à l'essai.
+
+## Air comprimé (tâche 42, 07/11/2026)
+
+Source : fiche `air/logiciel/air-comprime-pour-logiciel.md` du projet mécanique (module gelé le 28/10/2026).
+Réglages : `pi/reglages/air.yaml` (tout en EXEMPLE : attente de mise en pression 240 s, rappel du bidon 7 jours) ;
+code : `pi/vidange/air/`.
+
+- **Un seul signal du Pi : `relais_compresseur`.** Fermé = compresseur autorisé (son pressostat décide ensuite).
+  Le Pi le ferme quand `Nettoyage.air_permis` est vrai (pas de nuit UV-ozone) et l'ouvre sinon. La coupure de
+  sécurité (arrêt d'urgence, ozone, purge) est câblée. Les pressions (4,5 bar, 0,5 bar, 8 bar) sont réglées à la
+  main : le Pi ne les connaît pas.
+- **Pas de capteur de pression de ligne.** Après chaque fermeture du relais (démarrage, fin de nuit UV-ozone), le
+  Pi attend `attente_mise_en_pression_s` avant les gestes qui consomment de l'air : geste protégé `air` du chef
+  (`Chef.permission("air")`) et `spray_seau`. Un manque d'air se voit chez les consommateurs : le « quoi faire » de
+  la Préhension (vide perdu ou capteur muet) dit maintenant aussi « vérifier l'air ».
+- **Rappel du bidon de purge** : dans la check-list (attention) et `GET /api/air` ; « bidon vidé »
+  (`POST /api/air/bidon_vide`) remet le compte à zéro ; la date est gardée dans `donnees/air.json`.
+- Choix de la tâche 42 (tranchés par Claude) : l'attente recommence après chaque coupure du compresseur, même
+  courte ; pas de « fin de journée » automatique (le Pi ne connaît pas l'heure de fin) ; le Pi n'ouvre pas le
+  relais sur un manque d'air.

@@ -68,6 +68,8 @@ GESTES_PROTEGES = {
     "versement_seau_ouvert": "versement dans un seau ouvert",
     # Tâche 39 : spray de culture dans le seau ouvert (vidange.spray).
     "spray_seau": "spray de culture dans un seau ouvert",
+    # Tâche 42 : tout geste qui consomme de l'air comprimé (vidange.air : mise en pression).
+    "air": "geste qui consomme de l'air comprimé",
 }
 
 

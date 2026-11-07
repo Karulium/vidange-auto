@@ -1476,7 +1476,7 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
 - [ ] **41 bis. Pose du couvercle sur le seau plein** — Modèle : Sonnet, effort moyen. À écrire d'abord : demander au
   fil du module qui fait ce geste (Préhension ou Remplissage) un fichier `<module>/logiciel/...-pour-logiciel.md`.
   Ne pas inventer le geste. Avant le premier cycle complet (`docs/decisions.md`, PR n° 86, point 3).
-- [ ] **42. Air comprimé** — Modèle : Sonnet, effort bas. Source, recopiée ici le 06/11/2026 :
+- [x] **42. Air comprimé** — Modèle : Sonnet, effort bas. Source, recopiée ici le 06/11/2026 :
   `air/logiciel/air-comprime-pour-logiciel.md` du projet mécanique (module gelé le 28/10).
   - Un seul signal du Pi : `relais_compresseur`, une sortie relais vers un contacteur. Il est ouvert pendant l'ozone
     et la purge ; la coupure de sécurité est câblée.
