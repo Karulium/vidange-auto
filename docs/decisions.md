@@ -1671,8 +1671,11 @@ Choix tranchés par Claude (PR de la tâche 23), en attendant les réponses de K
      solveur quand les vrais temps seront mesurés.
   2. Seau commencé quand le fût se vide : alarme, le seau est fini à la main (gardé) ; question posée à Karulium
      (07/11) : le finir avec le fût suivant ?
-  3. Vérification des zones de la griffe traînée par le pont, même en butée haute : gardée ; question posée au fil
-     Portique.
+  3. Vérification des zones de l'outil traîné par le pont, même en butée haute : gardée, confirmée par le fil Portique
+     (07/11/2026, `portique/logiciel/bras-traine.md`) : « butée haute = aucune collision » ne vaut que pour les pièces
+     du portique ; l'outil traîné garde ses zones avec son enveloppe en butée haute (points bas ≈ 1,065 griffe,
+     ≈ 1,10 préhension) et sa charge (seau pendu à la préhension ≈ 0,83), et ses propres règles (préhension traînée
+     en haut : mât à y ≤ 0,80). Le refus de la préhension au-dessus du porte-bocal est juste.
   4. « Griffe partie du poste » ne suffit pas (fil Spray, 07/11/2026) : le bras du spray ne sort et ne rentre que si
      aucune partie de la tête de la griffe, de la préhension ou de ce qu'elles tiennent n'est dans la zone
      **x 0,66-0,95, y −0,03-0,24, z < 0,85** (EXEMPLE, à vérifier par un balayage de la Maquette). C'est la zone qui
