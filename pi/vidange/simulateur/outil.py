@@ -23,6 +23,11 @@
                                                machine ; dit d'abord ce qui est prêt, ce qui ne
                                                l'est pas et pourquoi, puis vérifie que chaque seau
                                                suit l'ordre du cycle (vidange.cycle.ordre)
+  vidange-simulateur cycle --lot bocaux        un lot de bocaux avec l'entonnoir (même code que la
+                                               machine, tâche 45 bis)
+  vidange-simulateur cycle --lot lavage_bocaux bocaux et capsules lavés au lave-bocal
+  vidange-simulateur cycle --lot nuit          une nuit UV-ozone complète (poste « nuit » prêt)
+  vidange-simulateur cycle --lot tout          les quatre, l'un après l'autre
 
 Les durées se règlent dans reglages/simulateur.yaml (vitesses des axes, délai du Go, capteurs).
 Tourne sur n'importe quel PC, sans la machine. Code de sortie 0 si le cycle va au bout, 1 sinon.
@@ -36,7 +41,7 @@ from pathlib import Path
 
 from vidange.chef import ErreurChef, Module
 from vidange.chef.exemple import module_exemple
-from vidange.cycle.simulation import jouer_cycle
+from vidange.cycle.simulation import jouer_bocaux, jouer_cycle, jouer_lavage_bocaux, jouer_nuit
 from vidange.demarrage import DOSSIER_PI, _chemin
 from vidange.entonnoir.simulation import entonnoir_du_simulateur
 from vidange.entrees_sorties import charger_entrees_sorties
@@ -110,6 +115,14 @@ GROUPES: dict[str, Callable[[Simulateur], list[Module]]] = {
 }
 # Le lot du mode seaux (tâche 45) : joué seul, par vidange.cycle.simulation.
 CYCLE = "cycle"
+# Ce que « cycle » peut jouer (--lot) : nom → (scénario de simulateur.yaml, fonction qui le joue).
+# Chacun est préparé par le MÊME code que le programme de la machine (vidange.cycle).
+LOTS = {
+    "seaux": ("cycle", jouer_cycle),
+    "bocaux": ("entonnoir", jouer_bocaux),
+    "lavage_bocaux": ("lavage_bocaux", jouer_lavage_bocaux),
+    "nuit": ("nuit_uv_ozone", jouer_nuit),
+}
 # Scénario de simulateur.yaml joué par défaut avec un module (sinon : le haut du fichier).
 SCENARIOS = {
     CYCLE: "cycle",
@@ -182,6 +195,12 @@ def main(arguments: list[str] | None = None) -> int:
     )
     lecteur.add_argument("--json", help="écrit aussi le planning dans ce fichier JSON")
     lecteur.add_argument(
+        "--lot",
+        choices=[*LOTS, "tout"],
+        default="seaux",
+        help="avec « cycle » : seaux (défaut), bocaux, lavage_bocaux, nuit, ou tout",
+    )
+    lecteur.add_argument(
         "--scenario", help="scénario de simulateur.yaml (défaut : celui du module, s'il en a un)"
     )
     options = lecteur.parse_args(arguments)
@@ -214,7 +233,15 @@ def main(arguments: list[str] | None = None) -> int:
         )
         reglages = reglages.model_copy(update={"simulateur": simulateur_reglages})
     if CYCLE in noms:
-        return _jouer_cycle(reglages, liste, scenario, options.json)
+        lots = list(LOTS) if options.lot == "tout" else [options.lot]
+        scenario = options.scenario
+        if scenario is not None and len(lots) > 1:
+            lecteur.error("--scenario ne va pas avec --lot tout")
+        codes = [
+            _jouer_cycle(reglages, liste, scenario, options.json, lot, len(lots) > 1)
+            for lot in lots
+        ]
+        return max(codes)
     try:
         with Simulateur(reglages, liste, scenario) as simulateur:
             modules: list[Module] = []
@@ -234,19 +261,25 @@ def main(arguments: list[str] | None = None) -> int:
     return 0 if planning.fini else 1
 
 
-def _jouer_cycle(reglages, liste, scenario: str | None, chemin_json: str | None) -> int:
+def _jouer_cycle(
+    reglages, liste, scenario: str | None, chemin_json: str | None, lot: str, titre: bool
+) -> int:
+    scenario_du_lot, jouer = LOTS[lot]
     try:
-        with Simulateur(reglages, liste, scenario) as simulateur:
-            mode, planning, problemes = jouer_cycle(simulateur)
+        with Simulateur(reglages, liste, scenario or scenario_du_lot) as simulateur:
+            mode, planning, problemes = jouer(simulateur)
     except (ErreurSimulation, ErreurChef) as erreur:
         print(f"Simulation impossible : {erreur}", file=sys.stderr)
         return 2
+    if titre:
+        print(f"===== {lot} =====")
     print(mode.en_texte())
     print()
     print(planning.en_texte())
     for probleme in problemes:
         print(f"Ordre du cycle pas suivi : {probleme}")
     if chemin_json:
+        # Avec « tout », le fichier garde le dernier lot joué (un fichier par lot : sans « tout »).
         Path(chemin_json).write_text(
             json.dumps(planning.en_dict(), ensure_ascii=False, indent=1), encoding="utf-8"
         )

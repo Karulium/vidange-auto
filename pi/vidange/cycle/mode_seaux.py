@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from vidange.chef import Chef, ErreurChef, Etape, Module
 from vidange.cycle.ordre import ORDRE_SEAU, SUR_LE_CHARIOT, Poste
+from vidange.cycle.postes import EtatPoste, etat_du_poste, refus_lancement
 from vidange.fiabilite.constats import Constat
 from vidange.journal import donner_journal
 from vidange.mycelium.module import module_mycelium
@@ -141,17 +142,6 @@ class Pieces(Protocol):
     ) -> PiecesRemplissage: ...
 
 
-@dataclass(frozen=True)
-class EtatPoste:
-    poste: Poste
-    pret: bool
-    # Pourquoi il n'est pas lancé (vide s'il est prêt).
-    raison: str = ""
-
-    def en_texte(self) -> str:
-        return "prêt" if self.pret else f"pas lancé : {self.raison}"
-
-
 @dataclass
 class _LotEnCours:
     lot: Lot
@@ -160,10 +150,20 @@ class _LotEnCours:
 
 
 class ModeSeaux:
-    def __init__(self, reglages: Reglages, pieces: Pieces, chef: Chef) -> None:
+    def __init__(
+        self,
+        reglages: Reglages,
+        pieces: Pieces,
+        chef: Chef,
+        mode_actuel: Callable[[], str] | None = None,
+    ) -> None:
+        """`mode_actuel` : le mode de la machine (ModeMachine.actuel) ; un lot de seaux ne part
+        qu'en mode « production », et jamais pendant un autre lot (tâche 45 bis). None : pas
+        vérifié (simulateur)."""
         self.reglages = reglages
         self.pieces = pieces
         self.chef = chef
+        self.mode_actuel = mode_actuel
         self.etats: dict[str, EtatPoste] = {}
         for poste in ORDRE_SEAU:
             self.etats[poste.nom] = self._verifier(poste)
@@ -189,32 +189,7 @@ class ModeSeaux:
             journal.info("Mode seaux, %s : %s", etat.poste.nom, etat.en_texte())
 
     def _verifier(self, poste: Poste) -> EtatPoste:
-        if poste.case_vide is not None:
-            return EtatPoste(poste, False, f"geste pas encore écrit : {poste.case_vide}")
-        machine = self.reglages.machine
-        for partie in PARTIES.get(poste.nom, ()):
-            if getattr(machine, partie) is None:
-                return EtatPoste(poste, False, f"machine.yaml n'a pas de partie « {partie} »")
-        if self.pieces.vraie_machine:
-            exemples = [
-                partie
-                for partie in PARTIES.get(poste.nom, ())
-                if getattr(getattr(machine, partie), "exemple", False)
-            ]
-            if machine.exemple or exemples:
-                ou = ", ".join(exemples) if exemples else "le haut du fichier"
-                return EtatPoste(
-                    poste,
-                    False,
-                    f"valeurs d'EXEMPLE dans machine.yaml ({ou}) : interdit sur la vraie machine",
-                )
-        manque = self.pieces.manque(poste.nom)
-        if manque is not None:
-            return EtatPoste(poste, False, manque)
-        for besoin in poste.besoin:
-            if not self.etats[besoin].pret:
-                return EtatPoste(poste, False, f"attend « {besoin} » (pas prêt)")
-        return EtatPoste(poste, True)
+        return etat_du_poste(poste, self.reglages, self.pieces, PARTIES, self.etats)
 
     # ------------------------------------------------------------ ce qu'on dit
 
@@ -318,6 +293,9 @@ class ModeSeaux:
     def lancer_lot(self, lot: Lot) -> list[str]:
         """Donne les modules du lot au chef (règle 6 : un lot est proposé puis lancé après le Go
         de Karulium : c'est à celui qui appelle de l'avoir eu)."""
+        refus = refus_lancement(self.chef, self.mode_actuel, "production", "lot de seaux refusé")
+        if refus is not None:
+            raise ErreurChef(refus)
         modules = self.modules_du_lot(lot)
         for module in modules:
             self.chef.lancer(module)

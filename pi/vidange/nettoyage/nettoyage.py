@@ -309,6 +309,11 @@ class Nettoyage:
         self._messages: deque[str] = deque(maxlen=10)
         # Appelés à chaque message (le simulateur les met dans son planning).
         self.ecouteurs: list[Callable[[str], object]] = []
+        # Autres raisons de ne pas lancer la nuit : refus() → raison, ou None (le programme
+        # principal : poste « nuit UV-ozone » pas prêt, réglages d'EXEMPLE sur la vraie machine).
+        # Elles ne touchent jamais une nuit déjà partie : elle va au bout, ou reprend après une
+        # coupure (générateur coupé).
+        self.refus_nuit_en_plus: list[Callable[[], str | None]] = []
         self._porte_spray_ouverte = False
         self._debut = horloge()
         self.nuit = _Nuit()
@@ -678,6 +683,10 @@ class Nettoyage:
         with self._verrou:
             if self._mode() != "uv_ozone":
                 return "mode « UV-ozone » pas choisi"
+            for refus in self.refus_nuit_en_plus:
+                raison = refus()
+                if raison is not None:
+                    return raison
             if self._cycle_tourne():
                 return "pas pendant un cycle"
             if self.nuit.phase in NUIT_ACTIVE:

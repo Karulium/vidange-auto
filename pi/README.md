@@ -40,7 +40,7 @@ Pas encore de vrai module de la machine.
 | `vidange/registre/montees.py` | Tables de la base et leurs montées de version |
 | `vidange/registre/sauvegarde.py` | Copie de secours quotidienne de la base |
 | `vidange/registre/outil.py` | Commande `vidange-registre` (état de la base, copie à la main) |
-| `vidange/cycle/` | **Programme principal du mode seaux** (tâche 45) : l'ordre du cycle d'un seau (`ordre.py`, un seul endroit), les postes prêts ou pourquoi pas (check-list, écran), le lot donné au chef, sa reprise après une coupure |
+| `vidange/cycle/` | **Programme principal** (tâches 45 et 45 bis) : mode seaux (l'ordre du cycle d'un seau, `ordre.py`, un seul endroit), mode bocaux (lot avec l'entonnoir, lavage des bocaux) et nuit UV-ozone ; les postes prêts ou pourquoi pas (check-list, écran), le lot donné au chef, sa reprise après une coupure |
 | `vidange/simulateur/` | Simulateur de cycle : le vrai chef sur une machine imaginaire, planning et temps total ; commande `vidange-simulateur` |
 | `vidange/envois/` | File d'envoi : cycles vers le logiciel de culture, copies vers la maison ; commande `vidange-envois` |
 | `vidange/quoi_faire.py` | **Catalogue des « quoi faire »** de chaque alarme (cartes FluidNC, câble, capteur muet...) |

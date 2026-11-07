@@ -9,10 +9,11 @@
    tout (code de sortie 3). Lance la copie de secours quotidienne.
 5. Ouvre les entrées/sorties et les liaisons avec les cartes FluidNC. Du matériel qui manque
    n'arrête pas le programme : la check-list le signale et refuse la production.
-6. Met en route le chef d'orchestre : prépare le mode seaux (vidange.cycle : chaque poste du cycle
-   d'un seau est prêt, ou la check-list et l'écran disent pourquoi pas), reprend le cycle noté dans
-   le carnet (après une coupure, le lot de seaux en cours compris), et propose le retour en lieu
-   sûr (il attend le Go de Karulium).
+6. Met en route le chef d'orchestre : prépare le mode seaux, le mode bocaux et la nuit UV-ozone
+   (vidange.cycle : chaque poste est prêt, ou la check-list et l'écran disent pourquoi pas),
+   reprend le cycle noté dans le carnet (après une coupure, le lot de seaux ou de bocaux en cours
+   compris ; une nuit UV-ozone reprend générateur coupé, jamais relancé seul), et propose le
+   retour en lieu sûr (il attend le Go de Karulium).
 7. Lance la surveillance : santé du Pi, onduleur, chien de garde (et dit à systemd « prêt »),
    bilan de chaque alarme. Écrit la check-list de démarrage au journal.
    Lance l'API et la page web, si le fichier de secrets donne une clé (sinon la machine
@@ -50,7 +51,7 @@ from vidange.angles_gardes import AnglesGardes
 from vidange.api import ServeurApi, Services, constats_api, creer_app
 from vidange.cameras import Cameras, Flux
 from vidange.chef import Carnet, Chef, ErreurChef, Module
-from vidange.cycle import ModeSeaux
+from vidange.cycle import ModeBocaux, ModeNuit, ModeSeaux
 from vidange.cycle.machine import PiecesMachine
 from vidange.distance import PiloteDistance
 from vidange.ecran import SIGNAL as SIGNAL_ECRAN
@@ -236,17 +237,22 @@ def preparer_chef(
     lieu_sur: Module | None,
     mode_seaux: ModeSeaux | None = None,
     carnet: Carnet | None = None,
+    mode_bocaux: ModeBocaux | None = None,
 ) -> tuple[list[str], str | None]:
     """Reprend le cycle du carnet ; propose le retour en lieu sûr (exclusif, attend le Go).
 
     Rend les modules repris et l'erreur de reprise (carnet qui ne correspond pas au programme).
     Le programme connaît « lieu_sur » et les modules du lot de seaux noté dans le carnet (mode
-    seaux, reconstruits avec la mémoire du lot : seau en cours, couche).
+    seaux, reconstruits avec la mémoire du lot : seau en cours, couche) et du lot de bocaux (mode
+    bocaux : bocal où est l'entonnoir, bocaux restants et versés). La nuit UV-ozone n'est pas un
+    module du chef : le Nettoyage la reprend seul (générateur coupé, jamais relancé).
     """
     modules = [module for module in (lieu_sur,) if module is not None]
     try:
         if mode_seaux is not None and carnet is not None:
             modules += mode_seaux.modules_a_reprendre(carnet.lire())
+        if mode_bocaux is not None and carnet is not None:
+            modules += mode_bocaux.modules_a_reprendre(carnet.lire())
         repris = chef.reprendre_cycle(modules)
     except ErreurChef as erreur:
         journal.error("Reprise du cycle impossible : %s", erreur)
@@ -687,8 +693,9 @@ def principal(
     spray = preparer_spray(
         reglages, materiel if erreur_materiel is None else None, dossier_donnees, registre, chef
     )
+    mode = ModeMachine(dossier_donnees / NOM_MODE, chef, registre)
     # Le mode seaux : chaque poste du cycle d'un seau, prêt ou pourquoi pas (vrai matériel :
-    # réglages d'EXEMPLE interdits).
+    # réglages d'EXEMPLE interdits). Un lot de seaux ne part qu'en mode « production ».
     mode_seaux = ModeSeaux(
         reglages,
         PiecesMachine(
@@ -698,6 +705,7 @@ def principal(
             spray=spray,
         ),
         chef,
+        mode_actuel=lambda: mode.actuel,
     )
     sante = Sante(dossier_donnees, fiabilite.sante, registre, sauvegarde.copies, raccords.sondes)
     bilans = Bilans(
@@ -763,7 +771,6 @@ def principal(
     arret_bilans = threading.Event()
     fil_bilans = bilans.demarrer(arret_bilans)
     serveur: ServeurApi | None = None
-    mode = ModeMachine(dossier_donnees / NOM_MODE, chef, registre)
     nettoyage = preparer_nettoyage(
         reglages,
         materiel if erreur_materiel is None else None,
@@ -775,6 +782,17 @@ def principal(
     air = preparer_air(
         reglages, materiel if erreur_materiel is None else None, dossier_donnees, chef, nettoyage
     )
+    # Mode bocaux et nuit UV-ozone (tâche 45 bis) : mêmes pièces, même règle « prêt, ou pas lancé
+    # et pourquoi ». La nuit refuse de partir si son poste n'est pas prêt (Nettoyage.refus_nuit).
+    pieces_bocaux = PiecesMachine(
+        poste,
+        materiel if erreur_materiel is None else None,
+        vraie_machine=raccords.fabrique is None,
+        spray=spray,
+        nettoyage=nettoyage,
+    )
+    mode_bocaux = ModeBocaux(reglages, pieces_bocaux, chef, mode_actuel=lambda: mode.actuel)
+    mode_nuit = ModeNuit(reglages, pieces_bocaux, nettoyage)
     liaison_ecran = preparer_ecran(reglages, entrees_sorties, raccords.ecran)
     # L'écran s'arrête en premier, comme l'API : plus d'ordre pendant l'arrêt.
     arret_ecran = threading.Event()
@@ -797,6 +815,7 @@ def principal(
             ),
             mode_seaux,
             carnet,
+            mode_bocaux,
         )
         chef.demarrer()
         cameras.demarrer()
@@ -841,6 +860,8 @@ def principal(
                 "spray": lambda: constats_spray(spray),
                 "air": lambda: constats_air(air),
                 "mode seaux": mode_seaux.constats,
+                "mode bocaux": mode_bocaux.constats,
+                "nuit UV-ozone": mode_nuit.constats,
             }
         )
         serveur = preparer_api(
@@ -874,6 +895,8 @@ def principal(
                 poste=poste,
                 nettoyage=nettoyage,
                 mode_seaux=mode_seaux,
+                mode_bocaux=mode_bocaux,
+                mode_nuit=mode_nuit,
             )
             fil_ecran = ecran.demarrer(arret_ecran)
         gardien.pret()
