@@ -717,9 +717,14 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 - [ ] **19 quater. Bocal neuf de semence pour le Mycélium** — Modèle : Sonnet, effort moyen. Le geste
   `nouveau_bocal` (prise d'un bocal de semence au stockage, ouverture de la capsule, pose sur le porte-bocal /
   l'agitateur) n'existe que dans le simulateur ; c'est lui qui bloque le cœur d'un lot sur la vraie machine (PR 93).
-  À écrire d'abord : demander au fil qui porte ce geste (Mycélium ou Préhension) un fichier
-  `<module>/logiciel/bocal-neuf-pour-logiciel.md`. Ne pas inventer le geste. Construire aussi le Mycélium
-  (agitateur, porte-bocal) dans `cycle/machine.py`.
+  Source, recopiée ici le 07/11/2026 : `prehension/logiciel/bocal-neuf-pour-logiciel.md` (fil Préhension, 20 étapes) :
+  dévissage de la capsule sur la place du bocal au stockage (aimants, appui 80 N, sens trigo, contrôle au palier
+  pesé) ; capsule dans la boîte (2,52 ; 0,53), couvercle percé pris dans la boîte (2,52 ; 0,80) ; vissage au calage du
+  moteur ; couloir côté allée, méplats à ± 3° ; pose au M8 à `contact_capsule_bocal` ; mors à Ø 98, lâcher, remontée
+  de 5 mm, puis serrage. Le Pi recopie l'identité du bocal AVANT le dévissage (le QR est sur la capsule). § 4.1
+  ouvert (bocal qui tourne sur la tôle nue : tapis silicone, couple d'ouverture à mesurer) : l'étape 5a couvre
+  l'échec. Ne pas inventer le geste. Construire aussi le Mycélium (agitateur, porte-bocal) dans `cycle/machine.py`
+  et brancher `nouveau_bocal` dans le cycle. Tests : les cas d'erreur de la fiche et le lot simulé sans alarme.
 - [ ] **45 quater. Programme principal : le lot complet sur les vraies cartes** — Modèle : Opus, effort moyen. Après
   la 19 quater. Écrire `PiecesMachine.remplissage`, `entonnoir` et `lavage_bocaux` (PR 93), lancer les boucles de
   fond des pièces (balance, vide, battement des servos) avec le lot, et le bouton « Lot de seaux » / « Lot de
