@@ -1418,7 +1418,8 @@ signaux:
     module: nettoyage
   relais_compresseur:
     exemple: true
-    # Module Air comprimé (pas figé) : le Pi le coupe pendant la nuit UV-ozone.
+    # Module Air (tâche 42, vidange.air) : fermé = compresseur autorisé ; le Pi l'ouvre pendant la
+    # nuit UV-ozone. La coupure de sécurité (arrêt d'urgence, ozone, purge) est câblée en dur.
     description: Compresseur (commandé = alimenté)
     carte: relais_2
     broche: K6

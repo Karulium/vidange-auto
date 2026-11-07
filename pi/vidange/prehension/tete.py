@@ -69,7 +69,9 @@ QUOI_FAIRE_PESEE = (
 )
 QUOI_FAIRE_VIDE = (
     "Le capteur de vide de la ventouse ne répond plus, ou son zéro est faux (vanne qui fuit ?). "
-    "Vérifier le capteur, son câble vers l'ADS1115 et la vanne du venturi, puis redémarrer."
+    "Vérifier le capteur, son câble vers l'ADS1115 et la vanne du venturi, puis redémarrer. "
+    "Vérifier aussi l'air : compresseur sous tension, vanne d'isolement du bloc ouverte, "
+    "soufflette en cours (elle vide la cuve) ?"
 )
 QUOI_FAIRE_PALPAGE = (
     "La carte de la préhension est restée en pause pendant une descente au contact. Sur place : "

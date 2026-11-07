@@ -1,0 +1,24 @@
+# Air comprimé (tâche 42) : le réseau d'air est passif (compresseur MB50 hors enceinte, bloc de
+# traitement et détendeurs réglés à la main, vannes manuelles). Le Pi n'a qu'une sortie :
+# `relais_compresseur` (docs/entrees-sorties.yaml). Source : air/logiciel/air-comprime-pour-logiciel.md.
+# Les pressions (4,5 bar de la conduite, 0,5 bar de la chasse du spray, 8 bar du pressostat) sont
+# réglées à la main sur le matériel : le Pi ne les connaît pas et ne les pilote pas.
+#
+# ATTENTION : les deux durées ci-dessous sont des EXEMPLES, à mesurer au premier essai
+# (pi/systeme/essai-air.md). Quand elles seront vraies, passer « exemple » à false.
+# La coupure de sécurité du compresseur (arrêt d'urgence, ozone, purge) est câblée : le relais
+# du Pi n'est que la commande normale.
+
+exemple: true
+
+# Après la fermeture du relais, le Pi attend ce temps (s) avant le premier geste qui consomme de
+# l'air (le MB50 remplit sa cuve de 0 à 8 bar en 3 à 4 min depuis vide : exemple). Il n'y a pas de
+# capteur de pression sur la ligne. Le même temps est attendu après chaque coupure du compresseur
+# (nuit UV-ozone, redémarrage du Pi).
+attente_mise_en_pression_s: 240
+
+# Rappel « vider le bidon de purge » (flotteurs du bloc, bidon de 2 L au sol), tous les N jours.
+rappel_bidon_jours: 7
+
+# Tous les combien (s) le Pi regarde s'il doit fermer ou ouvrir le relais.
+periode_s: 1
