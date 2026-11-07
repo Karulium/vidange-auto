@@ -1075,3 +1075,14 @@ code : `pi/vidange/air/`.
 - Choix de la tâche 42 (tranchés par Claude) : l'attente recommence après chaque coupure du compresseur, même
   courte ; pas de « fin de journée » automatique (le Pi ne connaît pas l'heure de fin) ; le Pi n'ouvre pas le
   relais sur un manque d'air.
+
+### Air comprimé, réponses à la PR n° 87 (07/11/2026, niveau 1, tranché par Claude)
+
+1. La Préhension (venturi) et le Lavage (jet d'air du col) attendent aussi la mise en pression : `module_prehension`
+   et `module_lavage` prennent une condition `air` (sur la machine : `chef.condition_permission("air")`), ajoutée
+   à l'entrée des étapes qui prennent un objet par le venturi (« prendre_* », « reprendre_au_porte_bocal ») et au
+   jet d'air (« laver_le_seau »).
+2. Oui : nouvelle attente (`attente_mise_en_pression_s`) après une nuit UV-ozone, comme après toute coupure du
+   compresseur (test : `test_apres_la_nuit_uv_ozone_le_compresseur_est_referme`).
+3. Non : pas de rappel de fin de journée.
+

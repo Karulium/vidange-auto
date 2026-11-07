@@ -7,12 +7,18 @@ from fastapi.testclient import TestClient
 
 from vidange.air import Air
 from vidange.api.app import Services, creer_app
+from vidange.chef import Condition
 from vidange.chef.chef import GESTES_PROTEGES
 from vidange.demarrage import constats_air, preparer_air
 from vidange.entrees_sorties import charger_entrees_sorties
+from vidange.lavage.module import module_lavage
+from vidange.lavage.simulation import lavage_du_simulateur
 from vidange.materiel import FausseFabrique, Materiel
+from vidange.prehension.module import module_prehension
+from vidange.prehension.simulation import prehension_du_simulateur
 from vidange.registre import Registre
 from vidange.reglages import ReglagesAir, charger_reglages
+from vidange.simulateur import Simulateur
 
 from .conftest import DOSSIER_PI
 from .test_api import CLE, LOCAL, reglages_api
@@ -134,7 +140,8 @@ def test_apres_la_nuit_uv_ozone_le_compresseur_est_referme(tmp_path):
         assert b.n.air_permis
         air.avancer()
         assert b.commande("relais_compresseur") and air.etat().compresseur
-        assert air.etat().reste_s > 0
+        assert air.etat().reste_s == AIR.attente_mise_en_pression_s
+        assert not air.etat().en_pression
     finally:
         b.registre.fermer()
 
@@ -245,3 +252,52 @@ def test_api_sans_air(tmp_path):
         assert client.get("/api/etat").json()["air"] is None
     finally:
         registre.fermer()
+
+
+# ---------------------------------------------- la Préhension et le Lavage attendent l'air
+
+ATTEND_AIR = Condition("air en pression", lambda: True)
+
+
+def avec_air(module) -> set[str]:
+    return {etape.nom for etape in module.etapes if ATTEND_AIR in etape.entree}
+
+
+def test_la_prehension_attend_l_air_pour_prendre_par_le_venturi():
+    with Simulateur(REGLAGES, charger_entrees_sorties(LISTE), "prehension") as simulation:
+        prehension = prehension_du_simulateur(simulation)
+        places = REGLAGES.simulateur.prehension
+        module = module_prehension(prehension, places, ATTEND_AIR)
+        assert avec_air(module) == {
+            "prendre_le_seau",
+            "prendre_le_couvercle",
+            "prendre_le_bocal",
+            "reprendre_au_porte_bocal",
+            "prendre_la_capsule",
+        }
+        # Sans la condition, rien ne change (le module reste utilisable seul).
+        assert avec_air(module_prehension(prehension, places)) == set()
+        # Avec l'air, le cycle de la Préhension se rejoue en entier.
+        planning = simulation.jouer([module])
+        assert planning.lignes
+
+
+def test_le_lavage_attend_l_air_pour_le_jet_et_la_prise_du_seau():
+    with Simulateur(REGLAGES, charger_entrees_sorties(LISTE), "lavage") as simulation:
+        lavage = lavage_du_simulateur(simulation)
+        seaux = REGLAGES.simulateur.lavage.seaux
+        module = module_lavage(lavage, seaux, ATTEND_AIR)
+        assert avec_air(module) == {"prendre_le_seau", "laver_le_seau"}
+        assert avec_air(module_lavage(lavage, seaux)) == set()
+        planning = simulation.jouer([module])
+        assert planning.lignes
+
+
+def test_la_condition_du_chef_suit_la_mise_en_pression(a):
+    chef = nouveau_chef(Horloge())
+    chef.interdire(a.air.refus_geste)
+    condition = chef.condition_permission("air")
+    a.air.avancer()
+    assert not condition.test()
+    a.avancer(AIR.attente_mise_en_pression_s)
+    assert condition.test()

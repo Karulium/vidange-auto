@@ -103,29 +103,43 @@ def _surveillances(lavage: Lavage, *autres: Condition) -> tuple[Condition, ...]:
     )
 
 
-def _fabrique_geste(lavage: Lavage, mode: Condition):
+def _fabrique_geste(lavage: Lavage, mode: Condition, air: Condition | None = None):
     prehension = lavage.prehension
     fin = Condition("geste du lavage fini", prehension.geste_fini)
 
-    def geste(nom: str, fabrique, delai: str, quoi_faire: str = QUOI_FAIRE, ensuite=None) -> Etape:
+    def geste(
+        nom: str,
+        fabrique,
+        delai: str,
+        quoi_faire: str = QUOI_FAIRE,
+        ensuite=None,
+        avec_air: bool = False,
+    ) -> Etape:
+        entree = (prehension.tete.pretes, mode)
+        if avec_air and air is not None:
+            entree = (*entree, air)
         return Etape(
             nom,
             quoi_faire,
             action=lambda: prehension.lancer(fabrique),
             fin=fin,
             delai_max=delai,
-            entree=(prehension.tete.pretes, mode),
+            entree=entree,
             ensuite=ensuite,
         )
 
     return geste
 
 
-def module_lavage(lavage: Lavage, seaux: Sequence[SeauLavageSimule]) -> Module:
+def module_lavage(
+    lavage: Lavage, seaux: Sequence[SeauLavageSimule], air: Condition | None = None
+) -> Module:
+    """`air` : condition d'entrée du jet d'air et de la prise du seau par le venturi (sur la
+    machine : `chef.condition_permission("air")`, la mise en pression du module Air)."""
     prehension = lavage.prehension
     serie = _Serie(lavage, seaux)
     mode = Condition("mode « lavage » choisi, panneau du poste du fût rabattu", lavage.mode_permis)
-    geste = _fabrique_geste(lavage, mode)
+    geste = _fabrique_geste(lavage, mode, air)
 
     return Module(
         nom="lavage",
@@ -142,8 +156,14 @@ def module_lavage(lavage: Lavage, seaux: Sequence[SeauLavageSimule]) -> Module:
                 ),
                 PREHENSION,
                 QUOI_FAIRE_PREHENSION,
+                avec_air=True,
             ),
-            geste("laver_le_seau", lambda: lavage.geste_laver_seau(serie.seau.format), GESTE),
+            geste(
+                "laver_le_seau",
+                lambda: lavage.geste_laver_seau(serie.seau.format),
+                GESTE,
+                avec_air=True,
+            ),
             geste(
                 "poser_le_seau",
                 lambda: prehension.geste_poser(serie.seau.x, serie.seau.y, serie.seau.contact_z),

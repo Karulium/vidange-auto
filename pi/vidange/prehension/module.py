@@ -23,24 +23,29 @@ from vidange.reglages import PlaceSimulee, PrehensionSimulee
 DELAI = "prehension_geste_max"
 
 
-def module_prehension(prehension: Prehension, places: PrehensionSimulee) -> Module:
+def module_prehension(
+    prehension: Prehension, places: PrehensionSimulee, air: Condition | None = None
+) -> Module:
+    """`air` : condition d'entrée des gestes qui prennent un objet par le venturi (sur la machine :
+    `chef.condition_permission("air")`, l'attente de mise en pression du module Air)."""
     fin = Condition("geste de la préhension fini", prehension.geste_fini)
     tete = prehension.tete
 
-    def geste(nom: str, fabrique) -> Etape:
+    def geste(nom: str, fabrique, avec_air: bool = False) -> Etape:
         return Etape(
             nom,
             QUOI_FAIRE,
             action=lambda: prehension.lancer(fabrique),
             fin=fin,
             delai_max=DELAI,
-            entree=(tete.pretes,),
+            entree=(tete.pretes, air) if avec_air and air is not None else (tete.pretes,),
         )
 
     def prendre(nom: str, objet: str, place: PlaceSimulee, format: str | None = None) -> Etape:
         return geste(
             nom,
             lambda: prehension.geste_prendre(objet, place.x, place.y, place.contact_z, format),
+            avec_air=True,
         )
 
     def poser(nom: str, place: PlaceSimulee) -> Etape:
@@ -56,7 +61,7 @@ def module_prehension(prehension: Prehension, places: PrehensionSimulee) -> Modu
             poser("poser_le_couvercle", places.couvercle_pose),
             prendre("prendre_le_bocal", "bocal", places.bocal),
             geste("poser_au_porte_bocal", prehension.geste_poser_bocal),
-            geste("reprendre_au_porte_bocal", prehension.geste_reprendre_bocal),
+            geste("reprendre_au_porte_bocal", prehension.geste_reprendre_bocal, avec_air=True),
             poser("reposer_le_bocal", places.bocal),
             prendre("prendre_la_capsule", "capsule", places.capsule),
             geste(
