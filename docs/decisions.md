@@ -998,3 +998,18 @@ non (procédure `spray/essai-materiel.md`, puis `pi/systeme/essai-spray.md`).
      « différent », pas « +1 ».
   À savoir : la carte du plateau est une RP2040-Zero (Guidage caméra, 06/11) ; son voyant n'est pas GP25 (Pico) :
   mettre `voyant: null` (ou la broche de sa LED) pour cette carte à la mise en service.
+- **Micropore côté Pi, réponses à la PR n° 85** (tâche 40, 07/11/2026, niveau 1, tranché par Claude) :
+  1. La rangée du bas se pose à la position de vidage (y 0,42), quand le seau contient 4 kg de substrat (1,5 kg pour
+     le format B) : gardé (EXEMPLE, à revoir à l'essai).
+  2. Moteur d'avance du ruban : lettre X de la carte n° 3 (`mycelium_lavage`) ; à confirmer au câblage (Implantation).
+  3. Attaches de l'anse : vues mais pas évitées, galet à 2 mm de la paroi pendant la rotation. À vérifier sur un vrai
+     seau à l'essai ; si elles dépassent de plus de 2 mm, la tête est rentrée à chaque rotation (petite tâche à part).
+  4. Seau de format inconnu ou pas appris : rempli sans micropore, avec une alerte (le cycle continue) : gardé.
+  5. « Pas de contact » si le ToF baisse de plus de 3 mm entre l'approche et l'appui : gardé (EXEMPLE), revu à l'essai.
+  6. Durée simulée ≈ 37 s au poste et ≈ 30 s pour la rangée du bas (15 s estimées par la mécanique) : accepté, mesuré
+     à l'essai ; la cadence sera recalculée avec la vraie mesure.
+  7. Le 6 V des servos suit l'arrêt d'urgence (câblé, demandé à l'Implantation) ; le logiciel ne suppose rien : il
+     relit le ToF avant tout mouvement du plateau.
+  8. Contact appris une fois par format (pas par rangée) : gardé, vérifié à l'essai.
+  À faire plus tard : vision de la caméra du micropore (QR, trous, contrôle de chaque pièce), branchement dans le
+  programme principal, bouton « rouleau » à l'écran et dans l'API.
