@@ -63,6 +63,7 @@ from vidange.remplissage.remplissage import Remplissage
 from vidange.simulateur.planning import Planning
 from vidange.simulateur.simulateur import ErreurSimulation, Simulateur
 from vidange.spray.spray import Spray
+from vidange.spray.zone import ZoneDuBras
 from vidange.stockage.simulation import BOUCLE
 from vidange.stockage.stockage import Stockage
 
@@ -224,6 +225,10 @@ class PiecesSimulees:
             # Pas de griffe sur la machine imaginaire : elle n'est jamais au poste.
             griffe_partie=lambda: True,
             couvercle=couvercle,
+            # La zone du bras du spray : la préhension simulée seulement (pas de griffe).
+            zone_bras_spray=ZoneDuBras(
+                simulateur.reglages.machine, prehension=scenario.prehension
+            ).libre,
         )
 
     def entonnoir(self, lot: LotBocaux) -> PiecesEntonnoir:

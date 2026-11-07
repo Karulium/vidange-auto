@@ -73,9 +73,10 @@ def _hauteurs(machine: Machine) -> list[str]:
 
 def _versement(machine: Machine) -> list[str]:
     """Le versement de la griffe (griffe → versement_bocal) : ses chiffres, et les bocaux où les
-    règles de la griffe refusent de verser (tête de préhension comptée en haut)."""
+    règles de la griffe refusent de verser (tête de préhension comptée en haut, sauf dans la
+    dernière rangée, où elle est comptée basse quand `tete_basse` est réglée)."""
     from vidange.griffe.regles import Contexte, ReglesGriffe
-    from vidange.griffe.versement import poses_du_bocal
+    from vidange.griffe.versement import contexte_du_bocal, poses_du_bocal
 
     griffe = machine.griffe
     reg = None if griffe is None else griffe.versement_bocal
@@ -94,11 +95,19 @@ def _versement(machine: Machine) -> list[str]:
         f"Garde du boîtier de la caméra du bocal : mât à y {_m(reg.garde_camera_bocal.mat_y[0])}"
         f"-{_m(reg.garde_camera_bocal.mat_y[1])} → x ≥ {_m(reg.garde_camera_bocal.mat_x_min)}",
     ]
+    if reg.tete_basse is not None:
+        tete = reg.tete_basse
+        lignes.append(
+            "Dernière rangée (chaîne Z) : tête de préhension vide à la face "
+            f"{_m(tete.prehension_face_basse_versement)} m, préhension à x ≥ "
+            f"{_m(tete.prehension_x_min_tete_basse)}"
+        )
     if reg.exemples():
         lignes.append("EXEMPLE (à régler à l'essai) : " + ", ".join(reg.exemples()))
-    regles, contexte = ReglesGriffe(machine), Contexte()
+    regles = ReglesGriffe(machine)
     refus = []
     for nom, (x, y) in places.places_bocaux(machine).items():
+        contexte = contexte_du_bocal(reg, regles, Contexte(), y)
         poses = poses_du_bocal(reg, x, y)
         haut = poses[0].avec(z=griffe.trajet.z)
         for depart, arrivee in ((haut, poses[0]), *((poses[0], pose) for pose in poses[1:])):
@@ -107,7 +116,38 @@ def _versement(machine: Machine) -> list[str]:
                 refus.append(f"  {nom:10} ({_m(x)} ; {_m(y)}) : {raison}")
                 break
     lignes.append(f"Bocaux où la griffe ne peut pas verser : {len(refus)}")
-    return lignes + refus
+    return lignes + refus + _griffe_trainee(machine, regles)
+
+
+def _griffe_trainee(machine: Machine, regles) -> list[str]:
+    """Les bocaux où la Préhension ne peut pas poser l'entonnoir (tenu par son oreille) parce
+    que la griffe, sur le même pont et en butée haute, serait traînée là où ses règles
+    l'interdisent (tâche 45 sexies). Pose finale seulement : le trajet n'est pas regardé."""
+    from vidange.griffe.regles import Contexte, Pose
+    from vidange.griffe.versement import contexte_du_bocal
+
+    griffe, entonnoir, prehension = machine.griffe, machine.entonnoir, machine.prehension
+    if griffe is None or entonnoir is None or prehension is None:
+        return []
+    assert griffe.versement_bocal is not None
+    ecart = prehension.decalage_mat_x - griffe.decalage_mat_x
+    refus = []
+    for nom, (x, y) in places.places_bocaux(machine).items():
+        mat_y = y + entonnoir.decalage_oreille_y_m
+        pose = Pose(
+            x=x + entonnoir.decalage_oreille_x_m - ecart, y=mat_y, z=griffe.trajet.z, a=0, b=0
+        )
+        contexte = contexte_du_bocal(griffe.versement_bocal, regles, Contexte(), mat_y)
+        raison = regles.refus_pose(pose, contexte)
+        if raison is not None:
+            refus.append(
+                f"  {nom:10} ({_m(x)} ; {_m(y)}) : mât de la griffe à {_m(pose.x)} : {raison}"
+            )
+    return [
+        "Bocaux où la Préhension ne peut pas poser l'entonnoir (la griffe, même pont, en butée "
+        f"haute, serait traînée là ; pose finale seulement) : {len(refus)}",
+        *refus,
+    ]
 
 
 def main(arguments: list[str] | None = None) -> int:

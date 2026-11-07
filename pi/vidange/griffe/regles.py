@@ -207,6 +207,10 @@ class ReglesGriffe:
             return refus
         if classe:
             debut, fin = g.mat_y_grand_ouvert
+            libre = g.godet_ouvert_sans_y_min
+            if libre is not None and libre[0] - _EGAL <= pose.x <= libre[1] + _EGAL:
+                # Au-dessus du stockage : pas de y minimum propre à la griffe (fil Griffe, 07/11).
+                debut = self.courses["chariot_y"][0]
             if not debut - _EGAL <= pose.y <= fin + _EGAL:
                 return (
                     f"godet ouvert avec le mât à y {_m(pose.y)} m : permis de y {_m(debut)} "
@@ -325,6 +329,12 @@ class ReglesGriffe:
             " (position inconnue : comptée en haut)" if contexte.prehension_face_z is None else ""
         )
         return f"{refus}{inconnue}"
+
+    def y_max_prehension_haute(self) -> float | None:
+        """Mâts (même chariot) au-delà de ce y : la tête de préhension ne peut pas être en haut
+        (chaîne Z, portique → chaine_prehension → mat_y_max) ; None : pas de limite."""
+        chaine = None if self.portique is None else self.portique.chaine_prehension
+        return None if chaine is None else chaine.mat_y_max
 
     def au_point_demi_tour(self, pose: Pose) -> bool:
         """La tête est-elle au point des demi-tours (mât, axes, godet fermé) ?"""

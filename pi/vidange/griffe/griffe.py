@@ -300,6 +300,8 @@ class Griffe:
             pas = self._pas
             assert pas is not None and self.pose is not None
             if not pas.cibles:
+                if pas.jusqu_a is not None and not pas.jusqu_a():
+                    return False
                 if self._horloge() - self._depuis < pas.attente_s:
                     return False
                 resultat = Resultat(pose=self.pose)

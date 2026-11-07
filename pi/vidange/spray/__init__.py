@@ -2,12 +2,14 @@
 
 from vidange.spray.module import module_nettoyage_tubes, module_spray
 from vidange.spray.spray import DoseSeau, ErreurSpray, ResultatSpray, Spray
+from vidange.spray.zone import ZoneDuBras
 
 __all__ = [
     "DoseSeau",
     "ErreurSpray",
     "ResultatSpray",
     "Spray",
+    "ZoneDuBras",
     "module_nettoyage_tubes",
     "module_spray",
 ]

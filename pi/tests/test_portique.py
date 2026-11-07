@@ -172,10 +172,12 @@ def test_courses_de_la_griffe():
     pose = PoseGriffe(x=1.5, y=0.83, z=1.0, a=0, b=0)
     assert regles.refus_pose(pose, contexte) is None
     assert "hors de la course" in regles.refus_pose(pose.avec(y=0.84), contexte)
-    # Godet fermé : mât ≥ 0,056 ; godet ouvert : ≥ 0,11.
+    # Godet fermé : mât ≥ 0,056 ; godet ouvert : ≥ 0,11, sauf au-dessus du stockage (mât à x
+    # 1,10-2,70, fil Griffe du 07/11 : la course seulement).
     assert regles.refus_pose(pose.avec(y=0.056), contexte) is None
     assert "il faut y ≥ 0,056" in regles.refus_pose(pose.avec(y=0.05), contexte)
-    assert "godet ouvert" in regles.refus_pose(pose.avec(y=0.10, b=1), contexte)
+    assert regles.refus_pose(pose.avec(y=0.10, b=1), contexte) is None
+    assert "godet ouvert" in regles.refus_pose(pose.avec(x=2.72, y=0.10, b=1), contexte)
     # Préhension en haut (ou inconnue, comptée en haut) : mâts à y ≤ 0,80.
     assert "chaîne Z" in regles.refus_pose(pose, ContexteGriffe())
     assert regles.refus_pose(pose.avec(y=0.80), ContexteGriffe()) is None

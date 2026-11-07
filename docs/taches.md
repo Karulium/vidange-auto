@@ -748,6 +748,31 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   5. Si un geste ou une règle d'enchaînement manque dans `docs/decisions.md` (ne pas l'inventer) : garder la case
      vide, le dire dans la PR (« Questions pour Karulium »).
   Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
+- [x] **45 septies. Réponses des fils du 07/11 : bocaux refusés, zone du bras du spray, couvercle C** — Modèle : Opus,
+  effort moyen. Trois corrections de règles déjà codées, d'après des fiches des modules (lire ces seuls fichiers dans
+  `/mnt/project-files/`, montage réseau : ne jamais chercher dans tout le dossier).
+  1. **Bocaux refusés par le versement (tâche 43 bis : 29 sur 122)** :
+     - Griffe (`griffe/logiciel/reponses-07-11.md`) : aucune limite en y au-dessus des bocaux, ni à 20° ni à 35° ;
+       la rangée 1 (y 0,06) passe (le « y ≥ 0,11 » était trop prudent). Seules limites : la course Y du portique
+       (mât y ≥ 0,04, à vérifier dans les réglages du portique) et la garde du boîtier de la caméra du bocal.
+     - Maquette (`griffe/logiciel/garde-camera-bocal-maquette.md`, maquette v45.120) : la bande de garde s'arrête à
+       mât x 1,205 ; `bocal_0_0` et `bocal_2_0` (x 1,2075) sont permis. Garder la ligne « 1,15 – 1,204 » de la table
+       « y minimum du mât », sans l'élargir d'1 cm.
+     - Préhension (`prehension/logiciel/tete-basse-versement-bocaux.md`) : pour la dernière rangée (y 0,8224), tête de
+       préhension basse pendant ces versements : face 0,90 (au plus 0,942), tête vide, descend seulement si la
+       préhension est à x ≥ 1,20, descend avant que la griffe passe y 0,80 et remonte après son retour. Noms proposés :
+       `prehension_face_basse_versement`, `prehension_x_min_tete_basse`, `griffe_y_max_tete_haute`.
+     Résultat attendu : `vidange-entonnoir versement` ne refuse plus aucun des 122 bocaux pour ces raisons.
+  2. **Zone du bras du spray** (fil Spray, 07/11/2026, EXEMPLE tant que la Maquette ne l'a pas balayée) : le bras ne
+     sort et ne rentre que si aucune partie de la tête de la griffe, de la préhension ou de ce qu'elles tiennent n'est
+     dans **x 0,66-0,95, y −0,03-0,24, z < 0,85**. C'est la zone qui fait foi, pas l'événement « griffe partie »
+     (`GriffeDuLot.partie()`, tâche 45 sexies) ; outil traîné par le pont compris (enveloppe en butée haute et charge,
+     voir decisions « La griffe dans les lots, réponses à la PR n° 99 », point 3).
+  3. **Couvercle C** (`prehension/logiciel/pose-couvercle-pour-logiciel.md` § 5.1, jeux ≥ 10,3 mm contrôlés par la
+     Maquette v45.120) : pour le format C seulement, outil en (0,925 ; 0,498) de la face 0,70 à 0,545, recentrage à
+     y 0,49 à face constante 0,545 à 10 mm/s, puis descente droite jusqu'au contact. A, B et D descendent droit. Le
+     recul du servo du micropore pour le couvercle C est **annulé** : l'enlever s'il est codé.
+  Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
 - [x] **23. Solveur d'ordonnancement (OR-Tools) et vérification d'un programme avant envoi** — Modèle : Opus, effort
   moyen. Base : `pi/vidange/simulateur/solveur.py` (place prête), `simulateur/planning.py`, `chef/zones.py`,
   decisions « La fiabilité d'abord ». Bibliothèque : `ortools` (CP-SAT, gratuite, roues pour le Pi 5 en

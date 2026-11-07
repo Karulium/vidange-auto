@@ -162,9 +162,10 @@ class Lot:
 class PiecesRemplissage:
     """Ce que les pièces construisent pour un lot : le chariot, la tête, le mycélium et le plan
     (avec le Stockage dans `plan.magasin`) ; le spray (None : pas de spray), branché au chariot,
-    ce qui dit que la griffe est partie du poste chercher sa 1re prise, et le couvercle (None :
-    pas de pose du couvercle). `griffe` : la vraie griffe (tâche 45 sexies) ; None : chaque
-    versement est une rotation du seau de `plan.versement_s` (simulateur, essais)."""
+    et la zone de son bras libre ; ce qui dit que la griffe est partie du poste (pose du
+    couvercle), et le couvercle (None : pas de pose du couvercle). `griffe` : la vraie griffe
+    (tâche 45 sexies) ; None : chaque versement est une rotation du seau de `plan.versement_s`
+    (simulateur, essais)."""
 
     remplissage: Remplissage
     prehension: Prehension
@@ -173,6 +174,8 @@ class PiecesRemplissage:
     spray: "Spray | None" = None
     griffe_partie: Callable[[], bool] = lambda: False
     couvercle: "Couvercle | None" = None
+    # Zone du bras du spray libre (vidange.spray.zone ; prudent par défaut : le bras ne bouge pas).
+    zone_bras_spray: Callable[[], bool] = lambda: False
     griffe: "GriffeDuSeau | None" = None
 
 
@@ -353,6 +356,7 @@ class ModeSeaux:
             griffe_partie=pieces.griffe_partie,
             couvercle=pieces.couvercle,
             griffe=griffe,
+            zone_bras_spray=pieces.zone_bras_spray,
         )
         en_cours = _LotEnCours(lot, pieces)
         # Le bocal neuf est un geste de la Préhension : même pont que la griffe.

@@ -145,6 +145,7 @@ def module_remplissage(
     spray: "Spray | None" = None,
     griffe_partie: Callable[[], bool] = lambda: False,
     couvercle: "Couvercle | None" = None,
+    zone_bras_spray: Callable[[], bool] = lambda: False,
     griffe: CouchesDeLaGriffe | None = None,
 ) -> Module:
     """`air` : condition d'entrée de la prise d'un seau par le venturi (sur la machine :
@@ -152,13 +153,15 @@ def module_remplissage(
 
     `seau_vide_au_poste` (mode seaux, tâche 45, fils Spray et Micropore du 07/11/2026) : après le
     centrage, le seau VIDE va au poste ; le `spray` (s'il est donné) y dose, une fois par seau,
-    pendant le 1er aller-retour de la griffe (`griffe_partie`), puis le micropore pose ses
+    pendant le 1er aller-retour de la griffe ; son bras ne sort et ne rentre que zone du bras
+    libre (`zone_bras_spray` : aucune partie de la griffe, de la préhension ou de ce qu'elles
+    tiennent dedans, fil Spray du 07/11/2026, vidange.spray.zone), puis le micropore pose ses
     rangées du haut ; ensuite seulement la 1re couche. La rangée du fond reste au vidage, quand
     le seau pèse assez (micropore → fond_poids_min_kg).
 
     `couvercle` (tâche 41 bis) : après la dernière couche, la préhension pose un couvercle sur le
     seau plein avant la fermeture ; la pose attend le bras de fermeture rangé et la griffe
-    partie.
+    partie (`griffe_partie`).
 
     `griffe` (tâche 45 sexies) : la vraie griffe. L'étape « verser » ne fait plus tourner le seau
     pendant `plan.versement_s` : elle dit à la griffe quelle couche le seau attend, puis attend
@@ -497,7 +500,7 @@ def module_remplissage(
             au_poste += etapes_du_spray(
                 spray,
                 seau_au_poste,
-                griffe_partie,
+                zone_bras_spray,
                 lambda: remplissage.contexte().micropore_escamote,
             )
         if remplissage.micropore_branche:

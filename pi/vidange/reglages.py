@@ -556,6 +556,20 @@ class GardeCameraBocal(Modele):
     mat_x_min: float
 
 
+class TeteBasseVersement(Modele):
+    """Tête de préhension basse pendant les versements dans la dernière rangée de bocaux (fiche
+    prehension/logiciel/tete-basse-versement-bocaux.md, 07/11/2026) : au-delà de la chaîne Z
+    (mâts à y > portique → chaine_prehension → mat_y_max), la tête de préhension, vide, descend
+    à `prehension_face_basse_versement` (proposé 0,90, au plus 0,942) avant que la griffe y
+    aille, seulement préhension à x ≥ `prehension_x_min_tete_basse` (figé), et remonte après le
+    retour de la griffe. La limite en y de la griffe (« griffe_y_max_tete_haute » de la fiche)
+    est celle de la chaîne Z du Portique : elle n'est pas recopiée ici."""
+
+    exemple: bool = False
+    prehension_face_basse_versement: float = Field(gt=0)
+    prehension_x_min_tete_basse: float
+
+
 class PeseeVersement(Modele):
     """Pesée de la griffe pendant un versement : seulement à l'arrêt, après `attente_s`, moyenne
     sur `moyenne_s` (fiche, figé)."""
@@ -684,6 +698,8 @@ class VersementBocal(Modele):
     fin: FinVersement
     godet: GodetVersement
     bouchage: BouchageVersement
+    # Dernière rangée de bocaux, au-delà de la chaîne Z (None : ces bocaux restent refusés).
+    tete_basse: TeteBasseVersement | None = None
 
     @model_validator(mode="after")
     def _verifier(self) -> "VersementBocal":
@@ -720,10 +736,9 @@ class VersementBocal(Modele):
 
     def exemples(self) -> list[str]:
         """Les sous-parties encore en EXEMPLE (proposées ou à mesurer)."""
+        noms = ["dose", "ouverture", "secousses", "fin", "godet", "bouchage", "tete_basse"]
         return [
-            nom
-            for nom in ("dose", "ouverture", "secousses", "fin", "godet", "bouchage")
-            if getattr(self, nom).exemple
+            nom for nom in noms if getattr(self, nom) is not None and getattr(self, nom).exemple
         ]
 
 
@@ -779,6 +794,10 @@ class Griffe(Modele):
     # mat_y_min_ferme (None : le début de la course).
     mat_y_grand_ouvert: Intervalle
     mat_y_min_ferme: float | None = None
+    # Bande de x du mât (au-dessus du stockage) où le godet ouvert n'a pas le y minimum de
+    # mat_y_grand_ouvert (fil Griffe, 07/11/2026 : ce n'était qu'un cylindre prudent autour du
+    # mât) ; restent la course de chariot_y et les autres règles. None : partout.
+    godet_ouvert_sans_y_min: Intervalle | None = None
     trajet: TrajetGriffe
     y_min_mat: YMinMatGriffe
     ouverture_fut: OuvertureFutGriffe
@@ -860,6 +879,9 @@ class Griffe(Modele):
                     f"{nom} : mât à x {x:g}, il faut x ≥ trajet → mat_x_min_pour_y "
                     f"({self.trajet.mat_x_min_pour_y:g}) pour y aller en y"
                 )
+        bande = self.godet_ouvert_sans_y_min
+        if bande is not None and bande[0] >= bande[1]:
+            erreurs.append("godet_ouvert_sans_y_min : x du plus petit au plus grand")
         for nom, bandes in (
             ("butee_haute", self.y_min_mat.butee_haute),
             ("sous_butee", self.y_min_mat.sous_butee),
@@ -2503,6 +2525,24 @@ class Nettoyage(Modele):
         return self
 
 
+class ZoneBrasSpray(Modele):
+    """Zone du bras du spray (fil Spray, 07/11/2026) : le bras ne sort et ne rentre que si
+    aucune partie de la tête de la griffe, de la préhension ou de ce qu'elles tiennent n'est
+    dans x × y plus bas que z_max (repère du portique, m). EXEMPLE tant que la Maquette ne l'a
+    pas balayée."""
+
+    exemple: bool = False
+    x: Intervalle
+    y: Intervalle
+    z_max: float
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "ZoneBrasSpray":
+        if self.x[0] >= self.x[1] or self.y[0] >= self.y[1]:
+            raise ValueError("bras → zone : x et y du plus petit au plus grand")
+        return self
+
+
 class BrasSpray(Modele):
     """Bras de la buse du spray (fiche v5.8) : 0° = rangé (capteur), butée logicielle."""
 
@@ -2517,6 +2557,16 @@ class BrasSpray(Modele):
     # Temps maximum pour sortir, ranger ou prendre l'origine (la carte s'arrête et le dit).
     temps_max_s: float = Field(gt=0)
     courant_a: float = Field(gt=0)
+    # Zone où rien ne doit être quand le bras sort ou rentre.
+    zone: ZoneBrasSpray
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "BrasSpray":
+        x, y = self.axe_xy
+        zone = self.zone
+        if not (zone.x[0] <= x <= zone.x[1] and zone.y[0] <= y <= zone.y[1]):
+            raise ValueError("bras → zone : elle doit contenir l'axe du bras (axe_xy)")
+        return self
 
 
 class DoseSpray(Modele):
@@ -3384,12 +3434,23 @@ class PoseCouvercle(Modele):
     m8_retombe_m: float = Field(gt=0)
 
 
+class DescenteDecaleeCouvercle(Modele):
+    """Descente décalée (fiche de la pose du couvercle, § 5.1 ; Maquette v45.120, 07/11/2026,
+    jeux ≥ 10,3 mm) : de la face `debut_z` à `recentrage_z`, l'outil est à y `y` (décalé vers
+    l'allée, loin de la plaque fixe du micropore) ; à `recentrage_z`, il revient à l'y de la pose,
+    face constante, à `vitesse_m_s` ; puis la descente normale jusqu'au contact."""
+
+    y: float
+    debut_z: float
+    recentrage_z: float
+    vitesse_m_s: float = Field(gt=0)
+
+
 class FormatCouvercle(Modele):
     # Masse d'un couvercle de ce format (kg) : À PESER sur les vrais couvercles.
     masse_kg: float = Field(gt=0)
-    # Format C (fiche, § 5 point 1) : descente à la vitesse de la pose entre ces deux faces (m),
-    # en attendant la réponse du Micropore (passage à 2,3 mm de sa tête escamotée).
-    descente_lente_z: tuple[float, float] | None = None
+    # Format C seulement (Ø 0,315) : descente décalée ; None : descente droite (A, B, D).
+    descente_decalee: DescenteDecaleeCouvercle | None = None
 
 
 class Couvercle(Modele):
@@ -4005,6 +4066,37 @@ class Machine(Modele):
                 erreurs.append(
                     f"griffe → versement_bocal : le mât n'atteint pas le bocal « {nom} »"
                 )
+            erreurs += self._verifier_tete_basse(nom, x, y)
+        return erreurs
+
+    def _verifier_tete_basse(self, nom: str, x: float, y: float) -> list[str]:
+        """Bocal au-delà de la chaîne Z (dernière rangée) : la tête de préhension basse pendant
+        le versement doit y être permise (face au plus à la face permise par la chaîne, dans sa
+        course ; préhension au-dessus du plateau du haut, à x ≥ prehension_x_min_tete_basse)."""
+        griffe, portique, prehension = self.griffe, self.portique, self.prehension
+        assert griffe is not None and griffe.versement_bocal is not None
+        tete_basse = griffe.versement_bocal.tete_basse
+        if tete_basse is None or portique is None or prehension is None:
+            return []
+        bas, haut = self.axes["prehension_z"].course
+        maximum = portique.face_max_chaine(y, bas)
+        if maximum is None:
+            return []
+        erreurs = []
+        face = tete_basse.prehension_face_basse_versement
+        cle = "griffe → versement_bocal → tete_basse"
+        if not bas <= face <= min(maximum, haut) + 1e-9:
+            erreurs.append(
+                f"{cle} → prehension_face_basse_versement ({face:g}) : pour le bocal « {nom} » "
+                f"(y {y:g}), il faut une face de {bas:g} à {min(maximum, haut):g} m (chaîne Z)"
+            )
+        x_prehension = x - griffe.decalage_mat_x + prehension.decalage_mat_x
+        if x_prehension < tete_basse.prehension_x_min_tete_basse - 1e-9:
+            erreurs.append(
+                f"{cle} : pour le bocal « {nom} », la préhension serait à x {x_prehension:.3f} m, "
+                f"sous prehension_x_min_tete_basse ({tete_basse.prehension_x_min_tete_basse:g}) "
+                "où sa tête ne descend pas"
+            )
         return erreurs
 
     def _verifier_mycelium(self) -> list[str]:
@@ -4987,12 +5079,18 @@ class Machine(Modele):
                 )
             if zp + pose.rapide_m > haut:
                 erreurs.append(f"couvercle → formats → {nom} : Z_pose {zp:g} m trop haut")
-            lente = reglage.descente_lente_z
-            if lente is not None and not (zp + pose.rapide_m < lente[1] < lente[0] <= haut):
-                erreurs.append(
-                    f"couvercle → formats → {nom} → descente_lente_z : il faut "
-                    f"Z_pose + rapide_m < fin < début ≤ {haut:g} m"
-                )
+            decalee = reglage.descente_decalee
+            if decalee is not None:
+                cle = f"couvercle → formats → {nom} → descente_decalee"
+                if not zp + pose.rapide_m < decalee.recentrage_z < decalee.debut_z <= haut:
+                    erreurs.append(
+                        f"{cle} : il faut Z_pose + rapide_m < recentrage_z < debut_z ≤ {haut:g} m"
+                    )
+                if abs(decalee.y - pose.y) < 1e-6:
+                    erreurs.append(f"{cle} → y : égal à pose → y, ce n'est pas un décalage")
+                y_debut, y_fin = self.axes["chariot_y"].course
+                if not y_debut <= decalee.y <= y_fin:
+                    erreurs.append(f"{cle} → y : hors de la course de chariot_y")
         for nom in self.fermeture.formats:
             if nom not in couvercle.formats:
                 erreurs.append(

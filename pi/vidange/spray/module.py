@@ -6,18 +6,19 @@ Un seau (a), au poste (y 0,135), pendant l'aller-retour de la griffe :
                         (bras vers « rangé » jusqu'au capteur : 0°)
     preparer_la_dose    seau au poste, format connu : emplacement, dose, réserve du flacon ;
                         agitateurs avant la dose (agitateurs → avant_dose_s)
-    sortir_le_bras      griffe partie, tête du micropore escamotée, permission du chef (pas de
-                        purge), règle 6 (plateau ≤ min(0,50 ; 0,68 − h), barres à plus de 0,50
-                        d'entraxe) : le bras pivote à l'angle du format
+    sortir_le_bras      zone du bras libre (griffe, préhension et ce qu'elles tiennent : fil
+                        Spray, 07/11/2026), tête du micropore escamotée, permission du chef (pas
+                        de purge), règle 6 (plateau ≤ min(0,50 ; 0,68 − h), barres à plus de
+                        0,50 d'entraxe) : le bras pivote à l'angle du format
     pulveriser          air, dose jusqu'au poids perdu, chasse ; le seau tourne (≈ 200°)
-    ranger_le_bras      « ranger » ; attendu jusqu'à ce que la carte voie le bras rangé (un seul
-                        nouvel essai automatique)
+    ranger_le_bras      zone du bras libre ; « ranger » ; attendu jusqu'à ce que la carte voie
+                        le bras rangé (un seul nouvel essai automatique)
     noter               registre du seau : emplacement, dose, poids perdu, amorce, durée
 
 Nettoyage des tubes (b), en fin de journée, un seau vide au poste :
 
     attendre            fin de la production, ozone arrêté, seau vide au poste
-    sortir_le_bras      mêmes règles que pour un seau
+    sortir_le_bras      mêmes règles que pour un seau (zone du bras libre comprise)
     nettoyer            alcool par la petite pompe, chasse de séchage
     ranger_le_bras      comme pour un seau ; le seau (avec l'alcool) part comme un seau sale
     compter             nettoyages depuis le dernier plein d'alcool (alerte avant qu'il soit vide)
@@ -40,11 +41,22 @@ NETTOYAGE = "spray_nettoyage_max"
 PREPARATION = "spray_preparation_max"
 
 
+def condition_zone(zone_libre: Callable[[], bool]) -> Condition:
+    return Condition(
+        "zone du bras du spray libre (aucune partie de la griffe, de la préhension ou de ce "
+        "qu'elles tiennent)",
+        zone_libre,
+    )
+
+
 def _etapes_du_bras(
     spray: Spray,
     format: Callable[[], str | None],
     entree: tuple[Condition, ...],
+    zone_libre: Callable[[], bool],
 ) -> tuple[Etape, Etape]:
+    """« sortir » et « ranger » : le bras ne bouge que zone libre (fil Spray, 07/11/2026)."""
+    zone = condition_zone(zone_libre)
     sortir = Etape(
         "sortir_le_bras",
         QUOI_FAIRE,
@@ -52,6 +64,7 @@ def _etapes_du_bras(
         fin=Condition("bras du spray sorti à l'angle du format", spray.bras_sorti),
         delai_max=BRAS,
         entree=(
+            zone,
             *entree,
             Condition(
                 "bras du spray : carte prête, bras rangé, porte fermée, pas de purge, plateau "
@@ -66,6 +79,7 @@ def _etapes_du_bras(
         action=spray.ranger,
         fin=Condition("bras du spray vu rangé par la carte", spray.bras_range),
         delai_max=BRAS,
+        entree=(zone,),
     )
     return sortir, ranger
 
@@ -80,13 +94,14 @@ def _origine_si_besoin(spray: Spray) -> None:
 def module_spray(
     spray: Spray,
     seau_au_poste: Callable[[], tuple[str | None, str] | None],
-    griffe_partie: Callable[[], bool] = lambda: False,
+    zone_libre: Callable[[], bool] = lambda: False,
     micropore_escamote: Callable[[], bool | None] = lambda: None,
     nom: str = "spray",
 ) -> Module:
     """Un seau. `seau_au_poste()` : (code du seau, format) quand le seau est au poste, QR lu
-    (sinon None). `griffe_partie`, `micropore_escamote` : cases vides des modules voisins
-    (valeurs prudentes par défaut : le bras ne sort pas)."""
+    (sinon None). `zone_libre` : aucune partie de la griffe, de la préhension ou de ce qu'elles
+    tiennent dans la zone du bras (vidange.spray.zone) ; `micropore_escamote` : case vide du
+    module voisin (valeurs prudentes par défaut : le bras ne sort pas)."""
     choisi: dict[str, tuple[str | None, str]] = {}
 
     def preparer() -> None:
@@ -102,10 +117,8 @@ def module_spray(
     sortir, ranger = _etapes_du_bras(
         spray,
         lambda: choisi["seau"][1] if "seau" in choisi else None,
-        (
-            Condition("griffe partie du poste", griffe_partie),
-            Condition("tête du micropore escamotée", lambda: micropore_escamote() is True),
-        ),
+        (Condition("tête du micropore escamotée", lambda: micropore_escamote() is True),),
+        zone_libre,
     )
     return Module(
         nom,
@@ -151,13 +164,13 @@ def module_spray(
 def etapes_du_spray(
     spray: Spray,
     seau_au_poste: Callable[[], tuple[str | None, str] | None],
-    griffe_partie: Callable[[], bool],
+    zone_libre: Callable[[], bool],
     micropore_escamote: Callable[[], bool | None],
     prefixe: str = "spray_",
 ) -> tuple[Etape, ...]:
     """Les étapes du module « spray », nommées `prefixe` + nom, pour les mettre dans un autre
     module (le remplissage du mode seaux : une fois par seau, seau vide au poste, tâche 45)."""
-    module = module_spray(spray, seau_au_poste, griffe_partie, micropore_escamote)
+    module = module_spray(spray, seau_au_poste, zone_libre, micropore_escamote)
 
     def renommee(etape: Etape) -> Etape:
         ensuite = etape.ensuite
@@ -179,10 +192,11 @@ def module_nettoyage_tubes(
     ozone_arrete: Callable[[], bool],
     seau_vide_au_poste: Callable[[], str | None],
     nom: str = "nettoyage_tubes",
+    zone_libre: Callable[[], bool] = lambda: False,
 ) -> Module:
     """Le nettoyage des tubes (b). `seau_vide_au_poste()` : le format du seau vide au poste,
-    ou None."""
-    sortir, ranger = _etapes_du_bras(spray, seau_vide_au_poste, ())
+    ou None. `zone_libre` : comme pour un seau (prudent par défaut : le bras ne sort pas)."""
+    sortir, ranger = _etapes_du_bras(spray, seau_vide_au_poste, (), zone_libre)
     return Module(
         nom,
         (

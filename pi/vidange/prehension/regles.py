@@ -127,6 +127,7 @@ class ReglesPrehension:
         self.poste = machine.poste_fut
         self.portique = machine.portique
         self.entonnoir = machine.entonnoir
+        self.couvercle = machine.couvercle
         self.camera_bocal = machine.griffe.camera_bocal
         self.courses = {
             "pont": machine.axes["pont_x"].course,
@@ -395,7 +396,11 @@ class ReglesPrehension:
         if bouge_xy and bouge_tete:
             return "pont et tête ensemble refusés : d'abord la tête en haut, puis le pont"
         objet = contexte.objet
-        if bouge_xy and not self.en_haut(depart, objet, arrivee.y):
+        if (
+            bouge_xy
+            and not self.en_haut(depart, objet, arrivee.y)
+            and not self.recentrage_couvercle(depart, arrivee, objet)
+        ):
             hauteur = self.hauteur_trajet(objet, depart.y, arrivee.y)
             return (
                 f"déplacement du pont tête basse refusé : face à {_m(depart.z)} m, elle doit "
@@ -451,6 +456,28 @@ class ReglesPrehension:
             if refus is not None:
                 return refus
         return None
+
+    def recentrage_couvercle(self, depart: Pose, arrivee: Pose, objet: Objet | None) -> bool:
+        """Le seul pas du pont permis tête basse avec un couvercle : le recentrage de la descente
+        décalée du format C (couvercle → formats → descente_decalee), en y seulement, à la face
+        du recentrage, au-dessus du seau (x de la pose, y entre la pose et le décalage)."""
+        couvercle = self.couvercle
+        if couvercle is None or objet is None or objet.sorte != "couvercle":
+            return False
+        pose, tolerance = couvercle.pose, self.reglages.tolerance_m + _EGAL
+        for format in couvercle.formats.values():
+            decalee = format.descente_decalee
+            if decalee is None:
+                continue
+            bas, haut = sorted((decalee.y, pose.y))
+            if all(
+                abs(point.z - decalee.recentrage_z) <= tolerance
+                and abs(point.x - pose.x) <= tolerance
+                and bas - tolerance <= point.y <= haut + tolerance
+                for point in (depart, arrivee)
+            ):
+                return True
+        return False
 
     def refus_descente_porte_bocal(self, contexte: Contexte) -> str | None:
         """Descendre sur le bocal du porte-bocal : manivelle en bas, caméra du dosage à 0°, mors

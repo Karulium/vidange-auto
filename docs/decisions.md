@@ -1682,3 +1682,76 @@ Choix tranchés par Claude (PR de la tâche 23), en attendant les réponses de K
      fait foi, pas le moment. À coder dans une tâche suivante (45 septies) ; d'ici là, sur la vraie machine, aucun
      lot ne part (réglages de la griffe en EXEMPLE).
   5. Délai d'une couche `durees → remplissage_couche_griffe_max` : 30 min (EXEMPLE) pour les premiers essais.
+
+## Réponses des fils du 07/11 : bocaux, zone du bras du spray, couvercle C (tâche 45 septies, 07/11/2026)
+
+Sources (recopiées) : `griffe/logiciel/reponses-07-11.md`, `griffe/logiciel/garde-camera-bocal-maquette.md`
+(Maquette v45.120), `prehension/logiciel/tete-basse-versement-bocaux.md`, `prehension/logiciel/
+pose-couvercle-pour-logiciel.md` § 5.1, fil Spray (07/11, déjà recopié dans « La griffe dans les lots, réponses à
+la PR n° 99 », point 4). Code : `pi/vidange/griffe/` (règles, versement), `pi/vidange/spray/zone.py`,
+`pi/vidange/couvercle/couvercle.py` ; réglages `machine.yaml` ; essais : `essai-versement-bocal.md` (étape 7),
+`essai-spray.md` (étape 10), `essai-couvercle.md` (étape 4, point 7). Testé sur le vrai matériel : non.
+
+- **Godet ouvert au-dessus des bocaux (fil Griffe)** : aucune limite en y propre à la griffe, ni à 20° ni à 35° ;
+  la rangée 1 (mât y 0,06) passe. Le « y ≥ 0,11 » n'était qu'un cylindre prudent de rayon 0,174 autour du mât.
+  Tête à A = 0, mât en y 0,06 : à 35°, les joues des coquilles vont à y −0,105 (z 0,83-0,94), 14,5 cm du mur du
+  conteneur (y −0,25) ; haut de la chape et goupilles à y −0,028 (z 1,10-1,19), 2,7 cm des pièces du pont côté mur
+  (y ≤ −0,055, jamais sous z 1,118). Seules limites : la course du chariot Y (mât y ≥ 0,04, Portique 14/10, **à
+  revérifier** depuis les rails HGR15) et la garde du boîtier de la caméra du bocal. Réglage :
+  `griffe → godet_ouvert_sans_y_min: [1.10, 2.70]` (mât au-dessus du stockage, comme la fiche) ; ailleurs, le
+  0,11 reste (aucun versement godet ouvert sous y 0,11 hors du stockage).
+- **Garde du boîtier de la caméra du bocal (Maquette v45.120)** : la bande s'arrête à **mât x 1,205** (avant :
+  1,207) : 9 mm de jeu à 1,205, 11,5 mm pour la colonne x 1,2075, de la butée haute au versement, godet fermé ou
+  ouvert (le plus proche : le support du servo de la caméra, x 1,085). Valable tête à A = 0 seulement. La ligne
+  « 1,15 – 1,20 » de la table « y minimum du mât » (sous la butée haute) devient **1,15 – 1,204**, sans
+  l'élargir d'1 cm : `bocal_0_0` et `bocal_2_0` sont permis.
+- **Dernière rangée (y 0,8224), tête de préhension basse (fil Préhension)** : oui, avec 3 conditions : 1) la tête
+  de préhension ne porte rien (aimants coupés, vide à l'air) ; 2) elle ne descend et ne remonte qu'au-dessus du
+  plateau du haut, **préhension à x ≥ 1,20** (figé) ; ailleurs elle reste à 1,10 ; 3) elle descend à la face
+  **0,90** (au plus 0,942 ; 0,90 proposé, EXEMPLE) **avant** que le mât de la griffe passe y 0,80, et remonte
+  **après** son retour à y ≤ 0,80. Pendant ce temps le pont peut rouler en x (30 cm au-dessus des capsules).
+  Vitesses du Portique (Z 80 mm/s). Réglages : `griffe → versement_bocal → tete_basse`
+  (`prehension_face_basse_versement`, `prehension_x_min_tete_basse`) ; « griffe_y_max_tete_haute » (0,80) est
+  `portique → chaine_prehension → mat_y_max`, pas recopié. Vérifié au démarrage pour chaque bocal de la rangée.
+- **Choix de Claude pour la tête basse (tâche 45 septies)** : c'est le versement qui commande la tête de
+  préhension (même pont) : la griffe, avec sa dose, va au-dessus du col à y 0,80, la tête descend, puis la griffe
+  avance jusqu'au col ; après le versement, la griffe revient à y 0,80 en butée haute, puis la tête remonte. Avant
+  d'aller au fût, le versement remonte aussi une tête de préhension laissée plus bas que 1,10 (la Préhension,
+  au-delà de y 0,80, s'arrête à 0,942). Tête qui tient un objet, qui bouge, ou sous x 1,20 : alarme, rien ne bouge.
+  Traînée par le pont, la tête basse du versement n'a que ses règles de position (et x ≥ 1,20) ; toute autre tête
+  basse garde la règle « tête en haut avant de bouger le pont ».
+- Résultat : `vidange-entonnoir versement` ne refuse plus **aucun** des 122 bocaux (29 avant). Il dit aussi les
+  bocaux où la Préhension ne peut pas **poser l'entonnoir** parce que la griffe, traînée en butée haute, irait
+  au-dessus de l'agitateur (table « y minimum du mât » en butée haute) : `bocal_0_0`, `bocal_0_1`, `bocal_1_0`,
+  `bocal_2_0` (question à Karulium, PR de la tâche 45 septies).
+- **Zone du bras du spray (fil Spray)** : le bras ne sort **et ne rentre** que si aucune partie de la tête de la
+  griffe, de la préhension ou de ce qu'elles tiennent n'est dans **x 0,66-0,95, y −0,03-0,24, z < 0,85**
+  (`spray → bras → zone`, EXEMPLE tant que la Maquette ne l'a pas balayée). C'est la zone qui fait foi :
+  « griffe partie » (`GriffeDuLot.partie()`) ne sert plus au spray (il reste pour la pose du couvercle). Code :
+  `vidange.spray.zone.ZoneDuBras`, condition d'entrée de « sortir le bras » et de « ranger le bras » (seau et
+  nettoyage des tubes). Chaque outil est regardé là où il est (traîné ou non) : griffe = son encombrement depuis
+  le bas du godet ; préhension = la tête (face) et l'objet tenu (bas = face − ce qui pend, axe décalé pour
+  l'entonnoir). Position inconnue : pas libre. Pas fait : un verrou qui empêcherait la griffe ou la préhension
+  d'entrer dans la zone **pendant** que le bras bouge (question à Karulium).
+- **Couvercle C (fiche de la pose, § 5.1 ; Maquette v45.120 : au moins 10,3 mm partout)** : ce qui limitait (2,3 mm)
+  est la plaque FIXE du micropore (bord à r 160 de l'axe du seau) et le bout de son rail (r 164), pas sa tête
+  mobile. **Le recul du servo du micropore est annulé** (le oui de Karulium du 07/11 13:44 est sans objet ; il
+  n'avait pas été codé, rien à enlever). Format C seulement : outil en **(0,925 ; 0,498)** de la face 0,70 à
+  **0,545**, puis retour à **y 0,49** à face constante à **10 mm/s**, puis descente normale jusqu'au contact
+  (plaque 10,3 mm, rouleau 12,8, rail 13,5, côté allée rien à moins de 4,8 cm ; au recentrage et ensuite :
+  15,2 mm). A, B et D descendent droit. Réglage : `couvercle → formats → seau_c → descente_decalee` (remplace la
+  descente lente 0,67 → 0,57). Le seul pas du pont permis tête basse avec un couvercle est ce recentrage (règles
+  de la préhension).
+- **Choix de Claude pour le couvercle C (tâche 45 septies)** : la tête qui remonte **avec** le couvercle C (erreurs
+  10a et 10b) refait le même chemin à l'envers (face 0,545, retour à y 0,498, puis en haut) : la remontée droite
+  repasserait à 2,3 mm de la plaque du micropore (question à Karulium).
+- **Réponses à la PR n° 100** (tâche 45 septies, 07/11/2026, niveau 1, tranché par Claude) :
+  1. Entonnoir sur `bocal_0_0`, `bocal_0_1`, `bocal_1_0`, `bocal_2_0` (griffe traînée au-dessus de l'agitateur) :
+     question posée à la Maquette ; d'ici sa réponse, Karulium y pose l'entonnoir à la main.
+  2. Tête à −180° au 4ᵉ bocal : corrigé par la tâche 45 octies (chaque prise du mode bocaux finit tête à 0°, dans le
+     fût) ; d'ici là, lots de 3 bocaux au plus.
+  3. Verrou de la zone du bras du spray pendant qu'il bouge (griffe et préhension n'y entrent pas) : fait dans la
+     tâche 45 octies, sans attendre la Maquette (seuls les chiffres de la zone sont EXEMPLE).
+  4. Remontée du couvercle C avec la tête : chemin décalé à l'envers (gardé) ; question posée au fil Préhension.
+  5. Décalage du mât de la griffe (dépôt −0,187, fiches de la Maquette et de la Préhension 0,175) : signalé à la
+     Maquette.

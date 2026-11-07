@@ -107,6 +107,26 @@ Pour chaque emplacement N (1 à 4) :
 2. Changer une cartouche : ouvrir la porte de la boîte, retirer le flacon 1, en remettre un plus lourd d'au
    moins 50 g. Attendu : alerte « Nouvelle cartouche à l'emplacement 1 ? ».
 
+## Étape 10 : la zone du bras (tâche 45 septies)
+
+**Testé sur le vrai matériel : non.** Fil Spray du 07/11/2026 : le bras ne sort et ne rentre que si **aucune
+partie** de la tête de la griffe, de la tête de préhension ou de ce qu'elles tiennent n'est dans la zone
+**x 0,66 à 0,95, y −0,03 à 0,24, plus bas que z 0,85** (`machine.yaml → spray → bras → zone`, EXEMPLE tant que
+la Maquette ne l'a pas balayée). Le Pi le vérifie avant « sortir » **et** avant « ranger » ; l'outil
+`vidange-spray`, lui, ne le vérifie pas : c'est vous qui regardez.
+
+1. Avant tout : demander à la Maquette (projet mécanique) de balayer la zone (le bras de 0° à 110°, avec la
+   buse) et de confirmer ou corriger les 5 chiffres. Les recopier dans `spray → bras → zone`, `vidange --verifier`.
+2. À la main, bras rangé, mettre du ruban de couleur au sol pour voir la zone (x 0,66 à 0,95 ; y −0,03 à 0,24).
+   Sortir le bras à l'angle du seau A puis du seau C (`sortir 64.3 --etabli`, puis `sortir 59.4 --etabli`) : la
+   buse et le bras doivent rester dans le rectangle, et aucune pièce fixe à moins de 1 cm.
+3. Avec le programme principal, dans un lot de 1 seau A (vitesses de la griffe et de la préhension divisées par
+   4) : pendant le spray, regarder la page web. Si la tête de préhension tient un seau pendu au-dessus de la
+   zone (seau en butée haute, bas à ≈ 0,83), l'écran doit dire « attend : zone du bras du spray libre » et le
+   bras ne bouge pas. Même chose si la griffe est descendue au-dessus de la zone.
+4. Si l'attente dure plus que `durees → spray_bras_max` (10 s) : alarme, normal ; acquitter, Go quand la zone
+   est libre.
+
 ## À la fin
 
 - Écrire dans la PR (ou dire à Claude) : les valeurs recopiées, les temps mesurés, le débit, tout ce qui a

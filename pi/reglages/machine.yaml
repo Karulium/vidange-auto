@@ -448,6 +448,12 @@ griffe:
   # 0,83 : le « 0,884 » de la fiche ne limite plus rien) et mât ≥ 0,056.
   mat_y_grand_ouvert: [0.11, 0.83]
   mat_y_min_ferme: 0.056
+  # Au-dessus du stockage (mât à x 1,10 à 2,70), le godet ouvert n'a PAS le y minimum 0,11 (fil
+  # Griffe, 07/11/2026, reponses-07-11.md : ni à 20° ni à 35° ; ce n'était qu'un cylindre prudent
+  # de rayon 0,174 autour du mât). Vers le mur, à 35° : 14,5 cm de jeu au mur du conteneur, 2,7 cm
+  # aux pièces du pont. Restent la course de chariot_y (mât ≥ 0,04, Portique 14/10, à revérifier)
+  # et la garde du boîtier de la caméra du bocal.
+  godet_ouvert_sans_y_min: [1.10, 2.70]
   # Trajet fût ↔ poste de remplissage, jamais en diagonale (fiche) : d'abord en x, mât à
   # y ≥ 0,36, puis en y seulement une fois le mât à x ≥ 0,86 ; retour dans l'ordre inverse.
   # Hauteur des trajets : butée haute des axes (bas du godet à 1,077, au-dessus de l'ouverture
@@ -476,7 +482,9 @@ griffe:
     sous_butee:
       - {x: [0.77, 0.99], y_min: [0.325, 0.335, 0.37]}
       - {x: [0.98, 1.15], y_min: [0.395, 0.42, 0.455]}   # caméra du dosage
-      - {x: [1.14, 1.21], y_min: [0.30, 0.30, 0.30]}
+      # Ligne « 1,15 – 1,20 » de la v45.111 gardée à 1,15 – 1,204, sans l'élargir d'1 cm
+      # (Maquette v45.120, 07/11 : sinon elle interdit à tort la colonne de bocaux x 1,2075).
+      - {x: [1.15, 1.204], y_min: [0.30, 0.30, 0.30]}
       - {x: [1.20, 1.22], y_min: [0.0, 0.015, 0.055]}
   # Mât à x < 0,78 et axes de 1,11 à la butée haute : la tête passe dans l'ouverture du poste du
   # fût ; permis seulement le mât à au plus 0,16 / 0,135 / 0,105 de l'axe du fût (godet fermé / à
@@ -736,9 +744,11 @@ griffe:
     axes_z_permis: [1.02, 1.07]
     ouverture_deg: 20
     # Garde au boîtier de la caméra du bocal (x 0,997-1,091, y 0,22-0,28) : mât à y 0,21-0,29
-    # (rangée j = 2, y 0,2506) → mât à x ≥ 1,207 (raclette à mât − 0,111 ; 5 mm de marge).
-    # Vérifiée à chaque pose de la griffe (règles), et au démarrage pour chaque bocal.
-    garde_camera_bocal: {mat_y: [0.21, 0.29], mat_x_min: 1.207}
+    # (rangée j = 2, y 0,2506) → mât à x ≥ 1,205 (Maquette v45.120, 07/11 : la bande s'arrête à
+    # 1,205, 9 mm de jeu au support du servo de la caméra ; 11,5 mm pour la colonne x 1,2075 ;
+    # c'était 1,207 avant). Vérifiée à chaque pose de la griffe (règles), et au démarrage pour
+    # chaque bocal.
+    garde_camera_bocal: {mat_y: [0.21, 0.29], mat_x_min: 1.205}
     # Pesée de la griffe : seulement à l'arrêt, après 0,3 s, moyenne sur 0,5 s (bruit ≈ ±3 g).
     pesee: {attente_s: 0.3, moyenne_s: 0.5}
     # PROPOSÉ : 290 à 310 g (Karulium n'a pas donné de chiffre) ; hors plage, la prise est
@@ -787,6 +797,18 @@ griffe:
       exemple: true
       distance_vide_m: 0.40
       marge_m: 0.02
+    # Dernière rangée (y 0,8224, au-delà de la chaîne Z : mâts à y > 0,80, portique →
+    # chaine_prehension) : la tête de préhension, VIDE, descend à la face 0,90 (au plus 0,942,
+    # PROPOSÉ : 4 cm de marge) AVANT que le mât de la griffe passe y 0,80, et ne remonte qu'APRÈS
+    # son retour à y ≤ 0,80. Elle ne descend et ne remonte qu'au-dessus du plateau du haut :
+    # préhension à x ≥ 1,20 (FIGÉ : bord du plateau 1,155 + rayon de tête et marge). Fiche
+    # prehension/logiciel/tete-basse-versement-bocaux.md (07/11/2026) ; la limite 0,80 de la
+    # griffe (« griffe_y_max_tete_haute ») est celle de la chaîne Z, pas recopiée. Vérifié au
+    # démarrage pour chaque bocal de la rangée.
+    tete_basse:
+      exemple: true
+      prehension_face_basse_versement: 0.90
+      prehension_x_min_tete_basse: 1.20
 
 # Mycélium (dosage), module validé le 24/10/2026 (option B : tout le module relevé de 12 mm),
 # agitateur FIXE depuis le 01/11/2026 (fiche Mycélium v10, docs/decisions.md « Agitateur du
@@ -1796,6 +1818,12 @@ spray:
     vitesse_deg_s: 90               # EXEMPLE (moteur sans codeur : rester lent)
     temps_max_s: 3                  # EXEMPLE : pour sortir, ranger ou prendre l'origine
     courant_a: 1.2                  # pilote TMC2209 en UART (figé)
+    # Le bras ne sort et ne rentre que si AUCUNE partie de la tête de la griffe, de la préhension
+    # ou de ce qu'elles tiennent n'est dans x 0,66-0,95, y −0,03-0,24, plus bas que z 0,85 (fil
+    # Spray, 07/11/2026). C'est la zone qui fait foi, pas « griffe partie » ; outil traîné par le
+    # pont compris (en butée haute, avec sa charge). EXEMPLE tant que la Maquette ne l'a pas
+    # balayée.
+    zone: {exemple: true, x: [0.66, 0.95], y: [-0.03, 0.24], z_max: 0.85}
   dose:
     # ≈ 10 ml pour 10 L (Karulium 25/09) ; en g, densité ≈ 1 : proportionnelle au volume du seau
     # (A 10,8 L, B 5 L, C 10 L, D 10 L). EXEMPLES (à régler aux essais).
@@ -2140,12 +2168,18 @@ couvercle:
     degagement_m: 0.02
     m8_retombe_m: 0.005
   # Masses À PESER sur les vrais couvercles (EXEMPLES : ≈ 1,25 N pour le A, comme prehension →
-  # objets). Format C : descente lente de la face 0,67 à 0,57 (fiche, § 5 point 1) ; le couvercle B
-  # n'a pas encore de diamètre mesuré (à mesurer).
+  # objets) ; le couvercle B n'a pas encore de diamètre mesuré (à mesurer).
+  # Format C (Ø 0,315) seulement : descente décalée (fiche § 5.1, choix de la Préhension du 07/11,
+  # contrôlé par la Maquette v45.120 : au moins 10,3 mm partout). De la face 0,70 à 0,545, outil
+  # en (0,925 ; 0,498), 8 mm vers l'allée ; à 0,545, retour à y 0,49 à face constante, 10 mm/s ;
+  # puis descente normale jusqu'au contact. A, B et D descendent droit. Le recul du servo du
+  # micropore pour le C est ANNULÉ (il ne servait à rien : c'est la plaque fixe qui limite).
   formats:
     seau_a: {masse_kg: 0.13}
     seau_b: {masse_kg: 0.10}
-    seau_c: {masse_kg: 0.16, descente_lente_z: [0.67, 0.57]}
+    seau_c:
+      masse_kg: 0.16
+      descente_decalee: {y: 0.498, debut_z: 0.70, recentrage_z: 0.545, vitesse_m_s: 0.010}
     seau_d: {masse_kg: 0.13}
 
 # Bocal neuf de semence (tâche 19 quater ; fiche de la Préhension `bocal-neuf-pour-logiciel.md`, 07/11/2026) :
