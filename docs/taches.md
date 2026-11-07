@@ -807,7 +807,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      `griffe → y_min_mat → exceptions_butee_haute` (tâche 45 octies) avec ces rectangles et ce chemin ; bocal_0_0,
      bocal_1_0 et bocal_2_0 restent posés à la main (contact ou moins de 1 cm).
   Procédure d'essai sur le vrai matériel ; « testé sur le vrai matériel : non ».
-- [ ] **45 decies. Vannes de la préhension fermées au démarrage, carte de la griffe en butée haute à 1,29** — Modèle :
+- [x] **45 decies. Vannes de la préhension fermées au démarrage, carte de la griffe en butée haute à 1,29** — Modèle :
   Opus, effort moyen. Réponses des fils du 07/11/2026 (à recopier dans `docs/decisions.md`) :
   1. **Vannes au démarrage** (fil Préhension) : après un plantage du Pi, « aspirer » peut rester ouverte (rien de
      matériel ne la coupe ; pas dangereux : venturi qui souffle, objet tenu). Au démarrage, fermer **les deux** vannes

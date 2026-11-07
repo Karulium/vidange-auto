@@ -339,3 +339,88 @@ def test_objet_tenu_au_demarrage_du_programme(tmp_path):
         materiel.fermer()
     sans = preparer_objet_tenu(REGLAGES, None, LISTE, vraie_machine=False)
     assert "entrées/sorties pas ouvertes" in sans.constats()[0].texte
+
+
+# ------------------------------- vannes de la ventouse fermées au démarrage (tâche 45 decies)
+
+FLUIDNC = REGLAGES.fluidnc.model_copy(update={"liaison": reglages_essai().liaison})
+VANNE = FLUIDNC.cartes["prehension"].sorties["vanne_vide"]
+
+
+def vannes_sur(faux, fluidnc=FLUIDNC, presence=lambda nom: None, vraie_machine=False):
+    from vidange.fiabilite import VannesAuDemarrage
+
+    liaison = Liaison("prehension", fluidnc, ouvrir=faux.ouvrir)
+    vannes = VannesAuDemarrage(
+        fluidnc, {"prehension": liaison}, LISTE, presence, vraie_machine, attente_s=DELAI
+    )
+    return liaison, vannes
+
+
+def test_attente_des_vannes_dans_les_reglages():
+    assert REGLAGES.programme.fiabilite.objet_tenu.attente_vannes_s == 5
+
+
+def test_aspirer_restee_ouverte_apres_un_plantage_est_fermee_jamais_ouverte():
+    faux = FauxFluidnc()
+    # Le Pi a planté vanne « aspirer » ouverte : la carte la garde ouverte.
+    faux.sorties[VANNE] = True
+    liaison, vannes = vannes_sur(faux)
+    liaison.demarrer()
+    try:
+        vannes.fermer()
+    finally:
+        liaison.arreter()
+    assert faux.sorties[VANNE] is False
+    assert f"M65 P{VANNE}" in faux.lignes_recues
+    # Rien d'autre : jamais d'ouverture (« souffler » ou autre), jamais de mouvement.
+    assert not [ligne for ligne in faux.lignes_recues if ligne.startswith(("M64", "M62", "$"))]
+    assert faux.prises_origine == [] and all(v == 0 for v in faux.positions.values())
+    (constat,) = vannes.constats()
+    assert constat.niveau == "ok" and constat.texte == "fermées au démarrage (vanne_vide)"
+    # Une seule fois.
+    avant = list(faux.lignes_recues)
+    vannes.fermer()
+    assert faux.lignes_recues == avant
+
+
+def test_souffler_fermee_aussi_le_jour_ou_elle_est_cablee():
+    carte = FLUIDNC.cartes["prehension"]
+    libre = min(set(range(8)) - set(carte.sorties.values()))
+    avec = carte.model_copy(update={"sorties": {**carte.sorties, "vanne_souffler": libre}})
+    fluidnc = FLUIDNC.model_copy(update={"cartes": {**FLUIDNC.cartes, "prehension": avec}})
+    faux = FauxFluidnc()
+    liaison, vannes = vannes_sur(faux, fluidnc)
+    liaison.demarrer()
+    try:
+        vannes.fermer()
+    finally:
+        liaison.arreter()
+    assert vannes.fermees == ["vanne_vide", "vanne_souffler"]
+    assert faux.sorties == {VANNE: False, libre: False}
+    assert not [ligne for ligne in faux.lignes_recues if ligne.startswith(("M64", "M62"))]
+
+
+def test_vannes_pas_fermees_la_check_list_le_dit():
+    # Carte en alarme : FluidNC refuse l'ordre ; le Pi ne la débloque pas ($X), il le dit.
+    faux = FauxFluidnc(en_alarme_au_depart=True)
+    liaison, vannes = vannes_sur(faux)
+    liaison.demarrer()
+    try:
+        vannes.fermer()
+    finally:
+        liaison.arreter()
+    assert "$X" not in faux.lignes_recues and vannes.fermees == []
+    (constat,) = vannes.constats()
+    assert constat.niveau == "attention" and "vanne_vide pas fermée" in constat.texte
+    assert "ne jamais ouvrir « souffler »" in constat.quoi_faire
+    # Carte absente : rien n'est envoyé, rien n'attend.
+    faux = FauxFluidnc()
+    _, absente = vannes_sur(faux, presence=lambda nom: f"carte FluidNC « {nom} » pas branchée")
+    absente.fermer()
+    assert faux.lignes_recues == []
+    assert "pas branchée" in absente.constats()[0].texte
+    # Vraie machine, câblage en EXEMPLE : jamais d'ordre d'après lui.
+    _, exemple = vannes_sur(faux, vraie_machine=True)
+    exemple.fermer()
+    assert faux.lignes_recues == [] and "EXEMPLE" in exemple.constats()[0].texte

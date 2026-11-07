@@ -663,51 +663,89 @@ def test_outil_versement(capsys):
     assert "Bocaux où la griffe ne peut pas verser : 0" in sortie
     assert "Garde du boîtier de la caméra du bocal : mât à y 0,21-0,29 → x ≥ 1,205" in sortie
     assert "tête de préhension vide à la face 0,9 m, préhension à x ≥ 1,2" in sortie
-    # Pont partagé (tâche 45 sexies) : la griffe traînée irait au-dessus de l'agitateur pour 3
-    # bocaux, posés à la main ; bocal_0_1 est posé par la machine, par le chemin de la Maquette
-    # (tâche 45 nonies).
-    assert "ne peut pas poser l'entonnoir" in sortie and "pose finale seulement) : 3" in sortie
-    for bocal in ("bocal_0_0", "bocal_1_0", "bocal_2_0"):
-        assert f"  {bocal}  (" in sortie
-    assert "  bocal_0_1  (" not in sortie
-    assert "Bocaux posés par la machine grâce au chemin d'une exception : 1" in sortie
-    chemin = "bocal_0_1  zone du mât x 1,1-1,3, y 0,04-0,1 : on y entre et on en sort en x"
-    assert f"{chemin}, par x 1,22" in sortie
+    # Pont partagé (tâche 45 sexies) : la griffe traînée irait au-dessus de l'agitateur. Carte de
+    # la Maquette refaite à la vraie butée haute, axes 1,29 (tâche 45 decies) : seul bocal_0_0 est
+    # posé à la main ; bocal_0_1, bocal_1_0 et bocal_2_0 par le chemin, bocal_2_1 par la table.
+    assert "ne peut pas poser l'entonnoir" in sortie and "pose finale seulement) : 1" in sortie
+    assert "  bocal_0_0  (1,2075 ; 0,06) : mât de la griffe à 1,0315" in sortie
+    for bocal in ("bocal_0_1", "bocal_1_0", "bocal_2_0", "bocal_2_1"):
+        assert f"  {bocal}  (" not in sortie
+    assert "Bocaux posés par la machine grâce au chemin d'une exception : 3" in sortie
+    for bocal, zone_du_mat in (
+        ("bocal_0_1", "x 1,09-1,3, y 0,04-0,11"),
+        ("bocal_1_0", "x 1,08-1,3, y 0,12-0,2"),
+        ("bocal_2_0", "x 1,02-1,3, y 0,21-0,29"),
+    ):
+        chemin = f"{bocal}  zone du mât {zone_du_mat} : on y entre et on en sort en x"
+        assert f"{chemin}, par x 1,22" in sortie
 
 
-# ---------------------------- pose de l'entonnoir, griffe traînée (tâches 45 octies et 45 nonies)
+# ------------------- pose de l'entonnoir, griffe traînée (tâches 45 octies, 45 nonies, 45 decies)
 
 LIGNE_BOCAL = "      - bocal: bocal_0_1"
-ZONE = "        x: [1.10, 1.30]\n        y: [0.04, 0.10]\n"
+ZONE = "        x: [1.09, 1.30]\n        y: [0.04, 0.11]\n"
 ENTREE = "        entree_x: 1.22\n"
-R2 = "          - {x: [1.22, 1.30], y: [0.04, 0.40]}   # R2\n"
-R3 = "          - {x: [1.10, 1.30], y: [0.04, 0.10]}   # R3\n"
+DESSUS = "          - {x: [0.78, 1.30], y: [0.12, 0.40]}   # au-dessus du chariot de l'agitateur\n"
+DROITE = "          - {x: [1.09, 1.30], y: [0.04, 0.40]}   # à droite du chariot de l'agitateur\n"
+# Les mâts de la griffe pour la pose de l'entonnoir (x bocal + 0,140 − 0,316, même y).
+MATS = {
+    "bocal_0_0": (1.0315, 0.06),
+    "bocal_0_1": (1.1415, 0.06),
+    "bocal_1_0": (1.0865, 0.1553),
+    "bocal_2_0": (1.0315, 0.2506),
+    "bocal_2_1": (1.1415, 0.2506),
+}
 
 
 def zone(x, y):
     return f"        x: {x}\n        y: {y}\n"
 
 
-def test_exception_de_bocal_0_1_dans_le_depot():
-    # Remesure de la Maquette du 07/11 (v45.121) : figée, chemin par x 1,22.
-    (exception,) = GRIFFE.y_min_mat.exceptions_butee_haute
-    assert exception.bocal == "bocal_0_1"
-    assert (exception.x, exception.y, exception.entree_x) == ((1.10, 1.30), (0.04, 0.10), 1.22)
-    assert [(r.x, r.y) for r in exception.libres] == [
-        ((0.79, 1.30), (0.32, 0.40)),
-        ((1.22, 1.30), (0.04, 0.40)),
-        ((1.10, 1.30), (0.04, 0.10)),
-        ((0.79, 0.97), (0.22, 0.40)),
+def interdit(x, y):
+    """Le seul rectangle interdit de la carte à 1,29 (chariot de l'agitateur), compté jusqu'à
+    x 1,08 (« moins de 1 cm ») : x ≤ 1,08 et y ≤ 0,11."""
+    return x <= 1.08 + 1e-9 and y <= 0.11 + 1e-9
+
+
+def test_exceptions_de_la_carte_a_1_29_dans_le_depot():
+    # Carte refaite par la Maquette le 07/11 17 h, axes 1,29 (v45.121) : figée, chemin par x 1,22.
+    exceptions = GRIFFE.y_min_mat.exceptions_butee_haute
+    assert [e.bocal for e in exceptions] == ["bocal_0_1", "bocal_1_0", "bocal_2_0"]
+    assert [(e.x, e.y) for e in exceptions] == [
+        ((1.09, 1.30), (0.04, 0.11)),
+        ((1.08, 1.30), (0.12, 0.20)),
+        ((1.02, 1.30), (0.21, 0.29)),
     ]
-    assert "v45.121" in exception.source
+    for exception in exceptions:
+        assert exception.entree_x == 1.22 and "axes 1,29" in exception.source
+        assert [(r.x, r.y) for r in exception.libres] == [
+            ((0.78, 1.30), (0.12, 0.40)),
+            ((1.09, 1.30), (0.04, 0.40)),
+        ]
+        # Aucune zone ne touche le rectangle interdit.
+        (x0, x1), (y0, y1) = exception.x, exception.y
+        assert not any(interdit(x, y) for x in (x0, x1) for y in (y0, y1))
     # Mât de la griffe = x bocal + 0,140 − 0,316 (la ventouse tient l'oreille).
-    assert MACHINE.mat_griffe_entonnoir(1.3175, 0.06) == (1.1415, 0.06)
-    assert MACHINE.mat_griffe_entonnoir(1.2075, 0.2506) == (1.0315, 0.2506)
+    for bocal, mat in MATS.items():
+        x, y = {
+            "bocal_0_0": (1.2075, 0.06),
+            "bocal_0_1": (1.3175, 0.06),
+            "bocal_1_0": (1.2625, 0.1553),
+            "bocal_2_0": (1.2075, 0.2506),
+            "bocal_2_1": (1.3175, 0.2506),
+        }[bocal]
+        assert MACHINE.mat_griffe_entonnoir(x, y) == mat
+    # bocal_0_0 (contact) : refusé, et dans aucune zone ; bocal_2_1 : la table le permet déjà.
+    assert GRIFFE.y_min_mat.refuse_en_butee_haute(*MATS["bocal_0_0"])
+    assert GRIFFE.y_min_mat.exception_requise(*MATS["bocal_0_0"]) is None
+    assert not GRIFFE.y_min_mat.refuse_en_butee_haute(*MATS["bocal_2_1"])
+    for bocal in ("bocal_0_1", "bocal_1_0", "bocal_2_0"):
+        assert GRIFFE.y_min_mat.exception_requise(*MATS[bocal]).bocal == bocal
 
 
 def test_exception_a_la_mauvaise_place_refusee_au_demarrage(reglages):
     # Une zone qui ne contient pas le vrai mât (1,1415 ; 0,06).
-    remplacer(reglages / "machine.yaml", ZONE, zone("[1.15, 1.30]", "[0.04, 0.10]"))
+    remplacer(reglages / "machine.yaml", ZONE, zone("[1.15, 1.30]", "[0.04, 0.11]"))
     message = erreur_de(reglages)
     assert "exceptions_butee_haute → bocal_0_1 : la zone (x 1.15-1.3" in message
     assert "(1.1415 ; 0.06) : la mesure n'est pas à la bonne place" in message
@@ -715,18 +753,28 @@ def test_exception_a_la_mauvaise_place_refusee_au_demarrage(reglages):
 
 def test_exception_qui_couvre_un_autre_bocal_refusee_au_demarrage(reglages):
     # bocal_0_1 (mât 1,1415 ; 0,06) et bocal_0_0 (1,0315 ; 0,06, refusé par la table) : non.
-    remplacer(reglages / "machine.yaml", ZONE, zone("[1.00, 1.30]", "[0.04, 0.10]"))
+    remplacer(reglages / "machine.yaml", ZONE, zone("[1.00, 1.30]", "[0.04, 0.11]"))
     assert "la zone contient aussi le mât pour le bocal « bocal_0_0 »" in erreur_de(reglages)
 
 
+def test_exception_hors_des_rectangles_libres_refusee_au_demarrage(reglages):
+    # Tâche 45 decies : la table n'y compte pas, la zone doit être libre dans la mesure. Une
+    # zone qui déborde sur le rectangle interdit (x 1,05) : refusée.
+    remplacer(reglages / "machine.yaml", ZONE, zone("[1.05, 1.30]", "[0.10, 0.11]"))
+    message = erreur_de(reglages)
+    assert (
+        "bocal_0_1 : la zone (x 1.05-1.3, y 0.1-0.11) n'est dans aucun rectangle libre" in message
+    )
+
+
 def test_exception_qui_contient_un_bocal_deja_permis_acceptee():
-    # La zone R3 contient le mât de bocal_0_2 (1,2515 ; 0,06), que la table permet déjà : la
-    # zone ne lui donne rien de plus.
+    # La zone de bocal_0_1 contient le mât de bocal_0_2 (1,2515 ; 0,06), et celle de bocal_2_0
+    # celui de bocal_2_1 (1,1415 ; 0,2506), que la table permet déjà : rien de plus pour eux.
     assert MACHINE.mat_griffe_entonnoir(1.4275, 0.06) == (1.2515, 0.06)
-    assert not GRIFFE.y_min_mat.refuse_en_butee_haute(1.2515, 0.06)
+    for mat in ((1.2515, 0.06), MATS["bocal_2_1"]):
+        assert not GRIFFE.y_min_mat.refuse_en_butee_haute(*mat)
+        assert GRIFFE.y_min_mat.exception_requise(*mat) is None
     assert GRIFFE.y_min_mat.refuse_en_butee_haute(1.1415, 0.06)
-    assert GRIFFE.y_min_mat.exception_requise(1.2515, 0.06) is None
-    assert GRIFFE.y_min_mat.exception_requise(1.1415, 0.06).bocal == "bocal_0_1"
 
 
 def test_exception_d_un_bocal_inconnu_refusee_au_demarrage(reglages):
@@ -736,19 +784,26 @@ def test_exception_d_un_bocal_inconnu_refusee_au_demarrage(reglages):
 
 def test_entree_du_chemin_hors_de_la_zone_refusee_au_demarrage(reglages):
     remplacer(reglages / "machine.yaml", ENTREE, "        entree_x: 1.05\n")
-    assert "entree_x (1.05) hors de la zone (x 1.1-1.3)" in erreur_de(reglages)
+    assert "entree_x (1.05) hors de la zone (x 1.09-1.3)" in erreur_de(reglages)
+
+
+def test_deux_entrees_differentes_refusees_au_demarrage(reglages):
+    # D'une zone à l'autre (bocal_0_1 vers bocal_1_0), le trajet irait de x 1,25 à x 1,22 en
+    # changeant de y : en diagonale. Une seule entrée pour toutes les zones.
+    remplacer(reglages / "machine.yaml", ENTREE, "        entree_x: 1.25\n")
+    assert "un seul entree_x pour toutes les zones (vu : 1.22, 1.25)" in erreur_de(reglages)
 
 
 def test_chemin_hors_des_rectangles_libres_refuse_au_demarrage(reglages):
-    # Sans R2 ni R3, la ligne x = 1,22 n'est dans aucun rectangle libre de la mesure.
-    remplacer(reglages / "machine.yaml", R2, "")
-    remplacer(reglages / "machine.yaml", R3, "")
+    # Sans le rectangle de droite, la ligne x = 1,22 (et la zone) ne sont dans aucun rectangle
+    # libre de la mesure.
+    remplacer(reglages / "machine.yaml", DROITE, "")
     message = erreur_de(reglages)
-    assert "la ligne x = 1.22 (y 0.04-0.1) n'est dans aucun rectangle libre" in message
+    assert "la ligne x = 1.22 (y 0.04-0.11) n'est dans aucun rectangle libre" in message
 
 
 def test_rectangle_libre_mal_ecrit_refuse_au_demarrage(reglages):
-    remplacer(reglages / "machine.yaml", R2, "          - {x: [1.30, 1.22], y: [0.04, 0.40]}\n")
+    remplacer(reglages / "machine.yaml", DROITE, "          - {x: [1.30, 1.09], y: [0.04, 0.40]}\n")
     assert "bocal_0_1 → libres n° 2 : x et y du plus petit au plus grand" in erreur_de(reglages)
 
 
@@ -756,11 +811,11 @@ def test_exception_seulement_en_butee_haute_godet_ferme_bras_le_long_du_pont():
     haut = Pose(x=1.1415, y=0.06, z=GRIFFE.trajet.z, a=0, b=0)
     assert REGLES.exception_butee_haute(haut) == "bocal_0_1"
     assert REGLES.refus_pose(haut, Contexte()) is None
-    # La règle d'avant partout ailleurs : sous la butée haute, godet ouvert, au-dessus de la zone
-    # (y 0,105), ou un autre bocal (bocal_0_0, mât 1,0315).
+    # La règle d'avant partout ailleurs : sous la butée haute, godet ouvert, entre deux zones
+    # (x 1,10, y 0,115 : la table y veut y ≥ 0,215), ou un autre bocal (bocal_0_0, mât 1,0315).
     assert REGLES.refus_pose(haut.avec(z=1.15), Contexte()) is not None
     assert REGLES.refus_pose(haut.avec(b=0.5), Contexte()) is not None
-    assert REGLES.refus_pose(haut.avec(y=0.105), Contexte()) is not None
+    assert REGLES.refus_pose(haut.avec(x=1.10, y=0.115), Contexte()) is not None
     assert REGLES.refus_pose(haut.avec(x=1.0315), Contexte()) is not None
 
 
@@ -837,3 +892,38 @@ def test_lot_qui_pose_l_entonnoir_sur_bocal_0_1():
     for texte, mat in mats:
         if REGLES.en_butee_haute(mat.z) and GRIFFE.y_min_mat.refuse_en_butee_haute(mat.x, mat.y):
             assert REGLES.exception_butee_haute(mat) == "bocal_0_1", (texte, mat)
+
+
+def test_lot_qui_pose_l_entonnoir_sur_les_bocaux_de_la_carte_a_1_29():
+    # Tâche 45 decies : entonnoir posé à la main sur bocal_2_1, puis la Préhension le pose sur
+    # bocal_2_0, bocal_1_0, bocal_0_1 (griffe traînée par le chemin, x 1,22), puis bocal_0_2.
+    ordre = ["bocal_2_1", "bocal_2_0", "bocal_1_0", "bocal_0_1", "bocal_0_2"]
+    mats = []
+
+    def preparer(scenario, versement):
+        scenario.entonnoir.ordre_de_remplissage = lambda bocaux: list(bocaux)
+        griffe = versement.griffe
+        executer = scenario.prehension.tete.executer
+
+        def noter(pas, cible, poids):
+            mats.append((pas.texte, griffe.bras.position()))
+            executer(pas, cible, poids)
+
+        scenario.prehension.tete.executer = noter
+
+    planning, versement, griffe, pas_tete = lot_avec_la_tete_de_prehension(ordre, preparer)
+    assert planning.fini, planning.probleme
+    assert set(versement.doses) == set(ordre)
+    assert [texte for texte, _, _ in pas_tete if "chemin de la griffe traînée" in texte]
+    zones = {e.bocal for e in GRIFFE.y_min_mat.exceptions_butee_haute}
+    vus = set()
+    for texte, mat in mats:
+        if not REGLES.en_butee_haute(mat.z):
+            continue
+        # Jamais au-dessus du chariot de l'agitateur (seul rectangle interdit de la carte).
+        assert not (mat.x >= 0.78 and interdit(mat.x, mat.y)), (texte, mat)
+        if GRIFFE.y_min_mat.refuse_en_butee_haute(mat.x, mat.y):
+            bocal = REGLES.exception_butee_haute(mat)
+            assert bocal in zones, (texte, mat)
+            vus.add(bocal)
+    assert vus == {"bocal_2_0", "bocal_1_0", "bocal_0_1"}

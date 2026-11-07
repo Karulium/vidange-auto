@@ -120,8 +120,9 @@ def test_agitateur_y_min_du_mat():
     assert refus(camera.avec(z=1.29)) is None
     # Grand ouvert : 0,365 en butée haute.
     assert "il faut y ≥ 0,365 m" in refus(bas.avec(y=0.34, b=1.0))
-    # Les bandes se chevauchent : la plus stricte compte (x 1,115 : 0,215 et 0,11).
-    assert "il faut y ≥ 0,215 m" in refus(Pose(x=1.115, y=0.20, z=1.29, a=0, b=0))
+    # Les bandes se chevauchent : la plus stricte compte (x 1,115 : 0,215 et 0,11). Mât à y 0,205,
+    # entre deux zones des exceptions de la pose de l'entonnoir (tâche 45 decies).
+    assert "il faut y ≥ 0,215 m" in refus(Pose(x=1.115, y=0.205, z=1.29, a=0, b=0))
     # Tête tournée, godet fermé : 0,295 + (0,139 − 0,111).
     tournee = Pose(x=0.80, y=0.34, z=1.0, a=90, b=0)  # sous la butée : 0,325 + 0,028
     assert "il faut y ≥ 0,353 m" in refus(tournee)
