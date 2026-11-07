@@ -11,7 +11,7 @@ vidange.cycle.machine) et au simulateur (`vidange-simulateur cycle`, pièces de
 vidange.cycle.simulation). Seules les pièces changent : ce qui touche le matériel.
 
 Un poste n'est pas lancé, et la check-list et l'écran disent pourquoi, quand :
-- son geste n'est pas encore écrit (`case_vide` d'ORDRE_SEAU : pose du couvercle, tâche 41 bis...) ;
+- son geste n'est pas encore écrit (`case_vide` d'ORDRE_SEAU : griffe, lavage...) ;
 - machine.yaml n'a pas sa partie ;
 - sur la vraie machine, sa partie de machine.yaml est en EXEMPLE (`exemple: true`) ;
 - les pièces disent qu'il manque quelque chose (matériel, vision pas écrite : tâche 40 ter...) ;
@@ -47,6 +47,7 @@ from vidange.remplissage.module import Plan, SeauAFaire, module_remplissage
 from vidange.remplissage.remplissage import Remplissage, SeauPlateau
 
 if TYPE_CHECKING:
+    from vidange.couvercle.couvercle import Couvercle
     from vidange.spray.spray import Spray
 
 journal = donner_journal("mode_seaux")
@@ -75,6 +76,7 @@ PARTIES: dict[str, tuple[str, ...]] = {
     "mycelium": ("mycelium", "porte_bocal"),
     "spray": ("spray",),
     "micropore": ("micropore",),
+    "couvercle": ("couvercle", "prehension", "stockage", "fermeture", "remplissage"),
     "fermeture": ("fermeture",),
     "stockage": ("stockage",),
     "lavage": ("lavage",),
@@ -107,7 +109,8 @@ class Lot:
 class PiecesRemplissage:
     """Ce que les pièces construisent pour un lot : le chariot, la tête, le mycélium et le plan
     (avec le Stockage dans `plan.magasin`) ; le spray (None : pas de spray), branché au chariot,
-    et ce qui dit que la griffe est partie du poste chercher sa 1re prise."""
+    ce qui dit que la griffe est partie du poste chercher sa 1re prise, et le couvercle (None :
+    pas de pose du couvercle)."""
 
     remplissage: Remplissage
     prehension: Prehension
@@ -115,6 +118,7 @@ class PiecesRemplissage:
     plan: Plan
     spray: "Spray | None" = None
     griffe_partie: Callable[[], bool] = lambda: False
+    couvercle: "Couvercle | None" = None
 
 
 class Pieces(Protocol):
@@ -128,7 +132,12 @@ class Pieces(Protocol):
         ...
 
     def remplissage(
-        self, lot: Lot, avec_micropore: bool, avec_fermeture: bool, avec_spray: bool
+        self,
+        lot: Lot,
+        avec_micropore: bool,
+        avec_fermeture: bool,
+        avec_spray: bool,
+        avec_couvercle: bool,
     ) -> PiecesRemplissage: ...
 
 
@@ -165,6 +174,12 @@ class ModeSeaux:
             if self.etats[nom].pret and absents:
                 raison = f"attend « {absents[0]} » (pas prêt)"
                 self.etats[nom] = EtatPoste(self.etats[nom].poste, False, raison)
+        # Un couvercle posé et pas clipsé ne tient pas : pas de couvercle sans fermeture.
+        for poste in ORDRE_SEAU:
+            for besoin in poste.besoin_ensuite:
+                if self.etats[poste.nom].pret and not self.etats[besoin].pret:
+                    raison = f"attend « {besoin} » (pas prêt)"
+                    self.etats[poste.nom] = EtatPoste(poste, False, raison)
         # Un poste qui sert le seau du chariot n'a pas de sens sans le cœur.
         for nom in SUR_LE_CHARIOT:
             if self.etats[nom].pret and absents:
@@ -268,7 +283,11 @@ class ModeSeaux:
         if refus is not None:
             raise ErreurChef(f"lot de seaux impossible : {refus}")
         pieces = self.pieces.remplissage(
-            lot, self.pret("micropore"), self.pret("fermeture"), self.pret("spray")
+            lot,
+            self.pret("micropore"),
+            self.pret("fermeture"),
+            self.pret("spray"),
+            self.pret("couvercle"),
         )
         plan = pieces.plan
         plan.fin_de_lot = lot.fin_de_lot
@@ -286,6 +305,7 @@ class ModeSeaux:
             seau_vide_au_poste=True,
             spray=pieces.spray,
             griffe_partie=pieces.griffe_partie,
+            couvercle=pieces.couvercle,
         )
         en_cours = _LotEnCours(lot, pieces)
         en_cours.modules = [

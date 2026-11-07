@@ -19,6 +19,9 @@ Pannes pour les essais (attributs de TeteSimulee) :
 - `contact_physique(x, y)` : si donné, la cote où la face touche quelque chose sous (x ; y) (None :
   rien) ; remplace `decalage_contact_m` (l'Entonnoir y met sa physique) ;
 - `vides_refuses` : tant de fois la vanne s'ouvre sans que le vide vienne (ventouse sale) ;
+- `contact_local(x, y)` : (concerne, cote) pour un endroit que la physique du couvercle (tâche
+  41 bis) connaît : si concerne, la descente au contact n'a que ce contact-là (None : rien) ;
+- `contact_actif()` : ce que voit le M8 en ce moment (dégagement du couvercle) ;
 - `vides_colles` : tant de fois la vanne se ferme sans que le vide parte (objet collé).
 """
 
@@ -99,6 +102,8 @@ class TeteSimulee:
         self.appui_vissage_n = 80.0
         self.traction_n = 0.0
         self.contact_physique: Callable[[float, float], float | None] | None = None
+        self.contact_local: Callable[[float, float], tuple[bool, float | None]] | None = None
+        self.contact_actif: Callable[[], bool] = lambda: False
         self.vides_refuses = 0
         self.vides_colles = 0
         self._colle = False
@@ -139,7 +144,12 @@ class TeteSimulee:
         depart = self.position()
         contact, arret = False, None
         appui = appui_max = None
-        if pas.palper and self.contact_physique is not None:
+        local = None if self.contact_local is None else self.contact_local(depart.x, depart.y)
+        if pas.palper and local is not None and local[0]:
+            sous = local[1]
+            if sous is not None and cible.z < sous <= depart.z:
+                cible, contact = cible.avec(z=sous), True
+        elif pas.palper and self.contact_physique is not None:
             sous = self.contact_physique(depart.x, depart.y)
             if sous is not None and cible.z < sous <= depart.z:
                 cible, contact = cible.avec(z=sous), True
@@ -221,6 +231,9 @@ class TeteSimulee:
 
     def tarer(self) -> None:
         pass
+
+    def contact_tete(self) -> bool:
+        return self.contact_actif()
 
     def vanne(self, ouverte: bool) -> None:
         self._vanne = self._vide = ouverte

@@ -13,12 +13,16 @@ Ce qui n'est pas dans le lot simulé, et pourquoi, est dit par `mode.en_texte()`
 - le fût est déjà au poste et prêt (l'échange se joue à part : `vidange-simulateur poste_fut`) ;
 - la griffe : chaque versement est une rotation du seau (étape « verser » du remplissage), et
   elle est vue « partie du poste » dès que le seau vide y arrive (le bras du spray peut sortir) ;
-- les cases vides d'ORDRE_SEAU (couvercle, et donc la fermeture ; lavage).
+- les cases vides d'ORDRE_SEAU (griffe, lavage).
+Le couvercle (tâche 41 bis) est pris sur une pile imaginaire (simulateur.yaml → cycle → couvercles)
+par la vraie Préhension simulée, posé sur le seau plein, pesé par la fausse balance, puis clipsé
+par la vraie fermeture.
 La lecture du QR du flanc est une fausse caméra (la vraie est la tâche 40 ter).
 """
 
 from typing import TYPE_CHECKING
 
+from vidange.couvercle.simulation import MondeCouvercle, couvercle_du_simulateur
 from vidange.cycle.mode_seaux import Lot, ModeSeaux, PiecesRemplissage
 from vidange.cycle.ordre import verifier_ordre
 from vidange.reglages import CycleSimule, SeauRemplissageSimule
@@ -49,6 +53,7 @@ class PiecesSimulees:
         # Les dernières pièces construites (essais : regarder le micropore, le spray).
         self.scenario: ScenarioRemplissage | None = None
         self.spray: Spray | None = None
+        self.monde_couvercle: MondeCouvercle | None = None
 
     def manque(self, poste: str) -> str | None:
         from vidange.fermeture.simulation import fermeture_possible
@@ -70,6 +75,9 @@ class PiecesSimulees:
             return "simulateur.yaml ou pesees.yaml (i2c) n'a pas de micropore"
         if poste == "fermeture" and not fermeture_possible(self.simulateur):
             return "simulateur.yaml ou pesees.yaml (i2c) n'a pas de fermeture"
+        cycle = reglages.simulateur.cycle
+        if poste == "couvercle" and (cycle is None or not cycle.couvercles):
+            return "simulateur.yaml, cycle : pas de pile de couvercles (couvercles)"
         spray = reglages.machine.spray
         if poste == "spray" and (
             spray is None or spray.signal not in self.simulateur.fabrique.branchements
@@ -78,7 +86,12 @@ class PiecesSimulees:
         return None
 
     def remplissage(
-        self, lot: Lot, avec_micropore: bool, avec_fermeture: bool, avec_spray: bool
+        self,
+        lot: Lot,
+        avec_micropore: bool,
+        avec_fermeture: bool,
+        avec_spray: bool,
+        avec_couvercle: bool,
     ) -> PiecesRemplissage:
         from vidange.remplissage.simulation import remplissage_du_simulateur
 
@@ -114,6 +127,11 @@ class PiecesSimulees:
         scenario.plan.magasin = stockage
         if avec_spray:
             spray = self._spray(scenario.remplissage)
+        couvercle = None
+        if avec_couvercle:
+            couvercle, self.monde_couvercle = couvercle_du_simulateur(
+                simulateur, scenario, stockage, cycle.couvercles, cycle.pas_couvercles_m
+            )
         self.scenario = scenario
         return PiecesRemplissage(
             scenario.remplissage,
@@ -123,6 +141,7 @@ class PiecesSimulees:
             spray=spray,
             # Pas de griffe sur la machine imaginaire : elle n'est jamais au poste.
             griffe_partie=lambda: True,
+            couvercle=couvercle,
         )
 
     def _spray(self, remplissage: Remplissage) -> Spray:

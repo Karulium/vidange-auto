@@ -85,12 +85,17 @@ def test_un_seul_endroit_dit_l_ordre_du_cycle_d_un_seau():
     ]
     # Les gestes pas encore écrits restent des cases vides : jamais lancés.
     vides = {poste.nom for poste in ORDRE_SEAU if poste.case_vide}
-    assert vides == {"griffe", "couvercle", "lavage"}
+    assert vides == {"griffe", "lavage"}
     # Sur la vraie machine, pas de lot sans spray ni micropore (question 3 de la PR n° 89 en
     # attente), ni sans couvercle et fermeture.
     obligatoires = {poste.nom for poste in ORDRE_SEAU if poste.obligatoire}
     assert {"spray", "micropore", "couvercle", "fermeture"} <= obligatoires
-    assert "41 bis" in next(p for p in ORDRE_SEAU if p.nom == "couvercle").case_vide
+    # Le couvercle (tâche 41 bis) est posé avant d'être clipsé, la fermeture vient juste après.
+    couvercle = next(p for p in ORDRE_SEAU if p.nom == "couvercle")
+    assert (
+        couvercle.case_vide is None and couvercle.etapes[0] == "remplissage.preparer_le_couvercle"
+    )
+    assert "fermeture" in couvercle.besoin_ensuite
 
 
 def test_les_etapes_d_ordre_seau_existent_dans_les_modules(reglages_depot, liste):
@@ -177,11 +182,12 @@ def test_avec_le_faux_materiel_les_modules_attendus_sont_prets(reglages_depot, l
         "spray",
         "micropore",
         "mycelium",
+        "couvercle",
+        "fermeture",
         "stockage",
     ]
     assert mode.refus_lot() is None
     assert "tâche 23" in mode.etats["griffe"].raison
-    assert mode.etats["fermeture"].en_texte() == "pas lancé : attend « couvercle » (pas prêt)"
     assert "vidange-simulateur poste_fut" in mode.etats["fut"].raison
 
 
@@ -282,7 +288,7 @@ def test_au_demarrage_la_check_list_dit_ce_qui_manque(reglages, entrees_sorties,
     assert f"Mode seaux, seau_vide : pas lancé : {CARTES_DU_CHARIOT}" in journal
     assert f"Mode seaux, qr_du_flanc : pas lancé : {QR_DU_FLANC}" in journal
     assert f"[attention] mode seaux, micropore : pas lancé : {VISION_MICROPORE}" in journal
-    assert "[attention] mode seaux, couvercle : pas lancé : geste pas encore écrit" in journal
+    assert f"[attention] mode seaux, couvercle : pas lancé : {CARTES_DU_CHARIOT}" in journal
     assert "[bloquant] mode seaux : aucun lot de seaux ne peut partir" in journal
 
 
@@ -378,8 +384,8 @@ def test_cycle_se_joue_seul():
 
 def test_reprise_apres_une_coupure_au_milieu_d_un_seau(reglages_depot, liste, tmp_path):
     carnet = Carnet(tmp_path / "etat-cycle.json")
-    # Coupure de courant au bout de 1600 s simulées : 4e seau, dosage de sa 3e couche.
-    coupe = duree_max(reglages_depot, 1600)
+    # Coupure de courant au bout de 1830 s simulées : 4e seau, dosage de sa 3e couche.
+    coupe = duree_max(reglages_depot, 1830)
     with Simulateur(coupe, liste, "cycle", carnet=carnet) as simulateur:
         _, planning, _ = jouer_cycle(simulateur)
     assert planning.probleme.startswith("bloqué au bout de duree_max_s")

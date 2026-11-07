@@ -24,6 +24,11 @@ le solveur (tâche 23). C'est le scénario « remplissage » du simulateur, et u
     doser                  le Mycélium dose la couche (il mène le chariot : poste, dosage, retour
                            au vidage)
     revenir_au_vidage      couche suivante : retour au vidage (plateau à sa hauteur)
+    preparer_le_couvercle  (avec le Couvercle, tâche 41 bis) après la dernière couche : chariot à
+                           y 0,50, plateau à H_app, barres ouvertes, pesée P0
+    prendre_le_couvercle   la préhension prend un couvercle à la pile du stockage
+    poser_le_couvercle     elle le pose sur le seau plein (sans appuyer) et s'en va
+    controler_le_couvercle la balance voit P − P0 ≈ la masse d'un couvercle
     ranger_le_bras         (avec la Fermeture, tâche 41) au démarrage : bras du galet rangé,
                            plateau en bas
     fermer_le_seau         (avec la Fermeture) après la dernière couche : le couvercle posé est
@@ -58,6 +63,7 @@ from vidange.remplissage.remplissage import QUOI_FAIRE, Remplissage
 from vidange.stockage.stockage import BANDE, QUOI_FAIRE_BANDE, QUOI_FAIRE_TIROIR, Stockage
 
 if TYPE_CHECKING:
+    from vidange.couvercle.couvercle import Couvercle
     from vidange.spray.spray import Spray
 
 GESTE = "remplissage_geste_max"
@@ -112,6 +118,7 @@ def module_remplissage(
     seau_vide_au_poste: bool = False,
     spray: "Spray | None" = None,
     griffe_partie: Callable[[], bool] = lambda: False,
+    couvercle: "Couvercle | None" = None,
 ) -> Module:
     """`air` : condition d'entrée de la prise d'un seau par le venturi (sur la machine :
     `chef.condition_permission("air")`, l'attente de mise en pression du module Air, tâche 42).
@@ -120,7 +127,11 @@ def module_remplissage(
     centrage, le seau VIDE va au poste ; le `spray` (s'il est donné) y dose, une fois par seau,
     pendant le 1er aller-retour de la griffe (`griffe_partie`), puis le micropore pose ses
     rangées du haut ; ensuite seulement la 1re couche. La rangée du fond reste au vidage, quand
-    le seau pèse assez (micropore → fond_poids_min_kg)."""
+    le seau pèse assez (micropore → fond_poids_min_kg).
+
+    `couvercle` (tâche 41 bis) : après la dernière couche, la préhension pose un couvercle sur le
+    seau plein avant la fermeture ; la pose attend le bras de fermeture rangé et la griffe
+    partie."""
     chariot, tete = remplissage.chariot, prehension.tete
     magasin = plan.magasin
     # Règle 9 : la tête ne descend au-dessus du chariot que barres ouvertes, micropore rentré.
@@ -218,7 +229,7 @@ def module_remplissage(
             geste("fermer_le_seau", remplissage.geste_fermer, entree=(libre, manivelle_en_bas)),
         )
 
-    def geste_tete(nom: str, fabrique, ensuite=None, avec_air: bool = False) -> Etape:
+    def geste_tete(nom: str, fabrique, ensuite=None, avec_air: bool = False, entree=()) -> Etape:
         venturi = (air,) if avec_air and air is not None else ()
         return Etape(
             nom,
@@ -226,8 +237,49 @@ def module_remplissage(
             action=lambda: prehension.lancer(fabrique),
             fin=fin_tete,
             delai_max=GESTE_PREHENSION,
-            entree=(tete.pretes, chariot.pretes, *boucle, *venturi),
+            entree=(tete.pretes, chariot.pretes, *boucle, *venturi, *entree),
             ensuite=ensuite,
+        )
+
+    # Couvercle (tâche 41 bis) : posé sur le seau plein, avant la fermeture.
+    pose_couvercle: tuple[Etape, ...] = ()
+    if couvercle is not None:
+        bras_range = Condition(
+            "bras de fermeture vu rangé (la tête ne pose le couvercle que bras rangé)",
+            lambda: remplissage.contexte().bras_galet_range is True,
+        )
+        griffe_loin = Condition("griffe hors du chemin de la préhension", griffe_partie)
+
+        def format_du_seau() -> str:
+            return plan.seau.format
+
+        def masse_et_tolerance():
+            return remplissage.geste_controler_couvercle(
+                couvercle.masse_kg(format_du_seau()), couvercle.tolerance_kg(format_du_seau())
+            )
+
+        def apres_controle() -> str:
+            return "fermer_le_seau" if remplissage.fermeture_branchee else "ranger"
+
+        pose_couvercle = (
+            geste(
+                "preparer_le_couvercle",
+                lambda: remplissage.geste_preparer_couvercle(
+                    couvercle.plateau_z(format_du_seau()), couvercle.chariot_y()
+                ),
+                entree=(libre, manivelle_en_bas, bras_range),
+            ),
+            geste_tete(
+                "prendre_le_couvercle",
+                lambda: couvercle.geste_prendre(prehension, format_du_seau()),
+                avec_air=True,
+            ),
+            geste_tete(
+                "poser_le_couvercle",
+                lambda: couvercle.geste_poser(prehension, format_du_seau()),
+                entree=(bras_range, griffe_loin),
+            ),
+            geste("controler_le_couvercle", masse_et_tolerance, apres_controle, entree=(libre,)),
         )
 
     def place_fixe(place: PlaceSimulee | None, quoi: str) -> PlaceSimulee:
@@ -275,7 +327,9 @@ def module_remplissage(
         if plan.couche < remplissage.format(plan.seau.format).couches:
             plan.couche += 1
             return "revenir_au_vidage"
-        # Fermeture (tâche 41) : le couvercle posé sur le seau plein est clipsé avant le rangement.
+        # Couvercle (tâche 41 bis) posé sur le seau plein, puis clipsé (tâche 41) avant le rangé.
+        if couvercle is not None:
+            return "preparer_le_couvercle"
         return "fermer_le_seau" if remplissage.fermeture_branchee else "ranger"
 
     def ranger():
@@ -433,6 +487,7 @@ def module_remplissage(
                 lambda: "verser",
                 entree=(libre, manivelle_en_bas),
             ),
+            *pose_couvercle,
             *fermeture,
             geste(
                 "ranger", ranger, apres_rangement, entree=(libre, manivelle_en_bas, file_permise)

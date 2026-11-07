@@ -935,6 +935,10 @@ class VitessesPrehension(Modele):
     vissage_deg_s: float = Field(gt=0)
     # Derniers mm de la pose du bocal entre les mors (porte_bocal → descente_lente_pose_m).
     pose_bocal: float | None = Field(default=None, gt=0)
+    # Pose du couvercle sur le seau plein (tâche 41 bis) : approche de la pile, décollage et
+    # dégagement (20 mm/s) ; approche de la pose sur le seau (10 mm/s).
+    couvercle_pile: float | None = Field(default=None, gt=0)
+    couvercle_pose: float | None = Field(default=None, gt=0)
 
 
 class DescentePrehension(Modele):
@@ -3112,6 +3116,85 @@ class Entonnoir(Modele):
         return self
 
 
+# ------------------------------------------------------------- couvercle sur le seau plein (41 bis)
+
+
+class PileCouvercle(Modele):
+    """Prise à la pile des couvercles du stockage (fiche, § 1 a, étapes 1 à 6)."""
+
+    # Haut prévu de la pile quand le Pi n'a pas de mémoire de la dernière prise (face, m).
+    haut_sans_memoire_z: float
+    # Descente rapide jusqu'à tant au-dessus du haut prévu (m), puis lente jusqu'au contact.
+    approche_m: float = Field(gt=0)
+    # Épaisseur du dernier couvercle (m) : pas de contact avant fond + tant = pile vide.
+    epaisseur_dernier_m: float = Field(gt=0)
+    # Décollage lent sur tant (m) : deux couvercles empilés peuvent coller.
+    decollage_m: float = Field(gt=0)
+
+
+class VideCouvercle(Modele):
+    """Le vide de la prise (−55 kPa) et celui de l'arrêt (−40 kPa) sont ceux de la Préhension
+    (prehension → vide) ; ici ce qui est propre au couvercle."""
+
+    # Une impulsion du venturi dure tant (s) ; au plus tant d'impulsions par essai.
+    impulsion_s: float = Field(gt=0)
+    impulsions_max: int = Field(ge=1)
+    # Essais de prise (souffler, remonter de remontee_reessai_m, redescendre au contact).
+    essais_max: int = Field(ge=1)
+    remontee_reessai_m: float = Field(gt=0)
+    # Lâché : le vide est revenu au-dessus de ce seuil (kPa) ; « souffler » dure souffle_s.
+    lache_kpa: float = Field(lt=0)
+    souffle_s: float = Field(gt=0)
+    delai_lacher_s: float = Field(gt=0)
+
+
+class PoseCouvercle(Modele):
+    """Pose sur le seau plein, plateau déjà à H_app (fiche, § 1 b et § 2)."""
+
+    # Axe de l'outil à la pose (figé : compense le décalage de 1 cm de la prise).
+    x: float
+    y: float
+    # Dessus du couvercle posé quand le plateau est à Hc : Z_pose = H_app + dessus_pose_z − Hc.
+    dessus_pose_z: float
+    # Descente rapide jusqu'à Z_pose + tant (m), puis à la vitesse couvercle_pose.
+    rapide_m: float = Field(gt=0)
+    # Contact attendu à Z_pose ± fenetre_m ; plus haut que Z_pose + fenetre_m : « mal posé » ;
+    # pas de contact à Z_pose − sans_contact_m : « pas de seau ».
+    fenetre_m: float = Field(gt=0)
+    sans_contact_m: float = Field(gt=0)
+    # Dégagement lent sur tant (m) ; le M8 doit retomber dans les premiers m8_retombe_m.
+    degagement_m: float = Field(gt=0)
+    m8_retombe_m: float = Field(gt=0)
+
+
+class FormatCouvercle(Modele):
+    # Masse d'un couvercle de ce format (kg) : À PESER sur les vrais couvercles.
+    masse_kg: float = Field(gt=0)
+    # Format C (fiche, § 5 point 1) : descente à la vitesse de la pose entre ces deux faces (m),
+    # en attendant la réponse du Micropore (passage à 2,3 mm de sa tête escamotée).
+    descente_lente_z: tuple[float, float] | None = None
+
+
+class Couvercle(Modele):
+    """Pose du couvercle sur le seau plein par la Préhension (tâche 41 bis ; fiche
+    pose-couvercle-pour-logiciel.md du 07/11/2026). Rien n'est câblé en dur pour ce geste : le
+    vide, le M8 et les pesées ne protègent jamais personne."""
+
+    exemple: bool = False
+    # Masse d'un couvercle = m_c ± tolerance_pct % (contrôle « un seul couvercle » et pesée sur
+    # la balance du chariot).
+    tolerance_pct: float = Field(gt=0, lt=100)
+    # Après le lâcher, le palier pesé revient à vide à ± tant (N).
+    palier_vide_n: float = Field(gt=0)
+    pile: PileCouvercle
+    vide: VideCouvercle
+    pose: PoseCouvercle
+    formats: dict[Nom, FormatCouvercle] = Field(min_length=1)
+
+    def tolerance_kg(self, format: str) -> float:
+        return self.formats[format].masse_kg * self.tolerance_pct / 100
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -3168,6 +3251,9 @@ class Machine(Modele):
     # Entonnoir à bocaux (None : pas d'entonnoir). Demande la préhension (objet « entonnoir ») et
     # le stockage (places des bocaux).
     entonnoir: Entonnoir | None = None
+    # Pose du couvercle sur le seau plein (None : pas de couvercle). Demande la préhension (objet
+    # « couvercle »), le stockage (pile des couvercles), la fermeture (hauteurs) et la griffe.
+    couvercle: Couvercle | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -3244,6 +3330,7 @@ class Machine(Modele):
         erreurs += self._verifier_micropore()
         erreurs += self._verifier_fermeture()
         erreurs += self._verifier_entonnoir()
+        erreurs += self._verifier_couvercle()
         if self.camera_dosage is not None and (self.prehension is None or self.mycelium is None):
             erreurs.append(
                 "camera_dosage : il faut aussi les parties « prehension » et « mycelium »"
@@ -4379,6 +4466,131 @@ class Machine(Modele):
                 )
         return erreurs
 
+    def _verifier_couvercle(self) -> list[str]:
+        """Les formats, les hauteurs (Z_pose, pile), les vitesses et la position de la pose
+        tiennent dans les courses et s'accordent avec la fermeture, le remplissage et le
+        stockage."""
+        from vidange.stockage import places
+
+        couvercle = self.couvercle
+        if couvercle is None:
+            return []
+        manque = [
+            nom
+            for nom in ("prehension", "stockage", "fermeture", "remplissage", "griffe")
+            if getattr(self, nom) is None
+        ]
+        if manque:
+            return [
+                "couvercle : il faut aussi les parties " + ", ".join(f"« {nom} »" for nom in manque)
+            ]
+        assert self.prehension and self.stockage and self.fermeture and self.remplissage
+        assert self.griffe
+        erreurs = []
+        prehension = self.prehension
+        if "couvercle" not in prehension.objets:
+            erreurs.append("couvercle : il manque l'objet « couvercle » dans prehension → objets")
+        for vitesse in ("couvercle_pile", "couvercle_pose"):
+            valeur = getattr(prehension.vitesses, vitesse)
+            if valeur is None:
+                erreurs.append(f"couvercle : il manque prehension → vitesses → {vitesse}")
+            elif valeur > prehension.vitesses.z:
+                erreurs.append(
+                    f"prehension → vitesses → {vitesse} ({valeur:g}) plus grande que la vitesse "
+                    f"de Z ({prehension.vitesses.z:g})"
+                )
+        bas, haut = self.axes["prehension_z"].course
+        haut = min(haut, prehension.haut_z)
+        pile, pose, vide = couvercle.pile, couvercle.pose, couvercle.vide
+        fond = self.stockage.plateau_z
+        bas_pile = fond + pile.epaisseur_dernier_m - prehension.tolerance_m
+        if bas_pile < bas:
+            erreurs.append(
+                f"couvercle : la descente à la pile irait à {bas_pile:g} m, sous la course de la "
+                f"tête ({bas:g} à {haut:g} m)"
+            )
+        if pile.haut_sans_memoire_z + pile.approche_m > haut:
+            erreurs.append(
+                f"couvercle → pile : haut sans mémoire {pile.haut_sans_memoire_z:g} + approche "
+                f"{pile.approche_m:g} m au-dessus de la butée haute ({haut:g} m)"
+            )
+        if pile.haut_sans_memoire_z <= fond + pile.epaisseur_dernier_m:
+            erreurs.append("couvercle → pile → haut_sans_memoire_z doit être au-dessus du fond")
+        if vide.lache_kpa <= prehension.vide.perte_kpa:
+            erreurs.append(
+                f"couvercle → vide → lache_kpa ({vide.lache_kpa:g}) doit être au-dessus de "
+                f"prehension → vide → perte_kpa ({prehension.vide.perte_kpa:g})"
+            )
+        if pose.fenetre_m >= pose.rapide_m:
+            erreurs.append("couvercle → pose : fenetre_m doit être plus petit que rapide_m")
+        if pose.m8_retombe_m >= pose.degagement_m:
+            erreurs.append("couvercle → pose : m8_retombe_m doit être plus petit que degagement_m")
+        pont = pose.x - prehension.decalage_mat_x
+        debut_x, fin_x = self.axes["pont_x"].course
+        debut_y, fin_y = self.axes["chariot_y"].course
+        if not debut_x <= pont <= fin_x or not debut_y <= pose.y <= fin_y:
+            erreurs.append(
+                f"couvercle → pose : l'outil en ({pose.x:g} ; {pose.y:g}) est hors des courses "
+                f"(pont à {pont:g} m : {debut_x:g} à {fin_x:g} ; chariot : {debut_y:g} à {fin_y:g})"
+            )
+        if abs(pose.x - self.remplissage.axe_x) > 1e-6:
+            erreurs.append(
+                f"couvercle → pose → x ({pose.x:g}) doit être l'axe du plateau "
+                f"(remplissage → axe_x : {self.remplissage.axe_x:g})"
+            )
+        # Le couvercle est pris à 1 cm hors d'axe (pile en y 0,84, outil en y 0,83) : l'outil se
+        # pose du même côté, pour que le couvercle arrive centré sur le seau (chariot_y).
+        pile_y = self.stockage.piles.couvercles[1]
+        decalage = pile_y - places.prise_y(self, pile_y)
+        voulu = self.fermeture.chariot_y - decalage
+        if abs(pose.y - voulu) > 1e-6:
+            erreurs.append(
+                f"couvercle → pose → y ({pose.y:g}) : la pile est prise à {decalage:g} m hors "
+                f"d'axe, donc l'outil se pose à fermeture → chariot_y − {decalage:g} = {voulu:g}"
+            )
+        for nom, reglage in couvercle.formats.items():
+            seau = self.griffe.formats.get(nom)
+            if seau is None or nom not in self.fermeture.formats:
+                erreurs.append(
+                    f"couvercle → formats → {nom} : format absent de griffe → formats ou de "
+                    "fermeture → formats"
+                )
+                continue
+            if seau.diametre_couvercle is None:
+                erreurs.append(f"couvercle → formats → {nom} : il faut diametre_couvercle (griffe)")
+            zp = self.z_pose_couvercle(nom)
+            if zp - pose.sans_contact_m < bas:
+                erreurs.append(
+                    f"couvercle → formats → {nom} : Z_pose {zp:g} m, la descente de contrôle "
+                    f"irait sous la course de la tête ({bas:g} m)"
+                )
+            if zp + pose.rapide_m > haut:
+                erreurs.append(f"couvercle → formats → {nom} : Z_pose {zp:g} m trop haut")
+            lente = reglage.descente_lente_z
+            if lente is not None and not (zp + pose.rapide_m < lente[1] < lente[0] <= haut):
+                erreurs.append(
+                    f"couvercle → formats → {nom} → descente_lente_z : il faut "
+                    f"Z_pose + rapide_m < fin < début ≤ {haut:g} m"
+                )
+        for nom in self.fermeture.formats:
+            if nom not in couvercle.formats:
+                erreurs.append(
+                    f"couvercle → formats : le format « {nom} » de la fermeture n'a pas de "
+                    "masse de couvercle"
+                )
+        return erreurs
+
+    def z_pose_couvercle(self, format: str) -> float:
+        """Face de la ventouse quand le couvercle est posé, pas clipsé, sur le seau : Z_pose =
+        H_app + dessus_pose_z − Hc (fiche, § 2)."""
+        assert self.couvercle and self.fermeture
+        bas = self.axes["plateau_z"].course[0]
+        return (
+            self.fermeture.h_approche(format, bas)
+            + self.couvercle.pose.dessus_pose_z
+            - self.fermeture.hc(format)
+        )
+
     def _verifier_entonnoir(self) -> list[str]:
         """L'objet « entonnoir » existe, les hauteurs tiennent dans la course de la tête, le seuil
         de lâcher est au-dessus de celui de la perte, et la ventouse atteint l'oreille de chaque
@@ -5109,6 +5321,10 @@ class CycleSimule(Modele):
     prises_doubles: list[Annotated[int, Field(ge=1)]] = Field(default_factory=list)
     # Angle des oreilles de l'anse vu par la fausse caméra (°), le même pour tous les seaux.
     anse_deg: float = 0.0
+    # La pile de couvercles du stockage imaginaire (tâche 41 bis) : combien, et le pas d'empilage
+    # (m, À MESURER sur les vrais couvercles).
+    couvercles: int = Field(default=0, ge=0)
+    pas_couvercles_m: float = Field(default=0.009, gt=0)
 
     @model_validator(mode="after")
     def _verifier_seaux(self) -> "CycleSimule":

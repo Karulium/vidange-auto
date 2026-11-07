@@ -595,6 +595,13 @@ def principal(
             "contrôle, du vide et délais d'EXEMPLE : les mesurer sur l'entonnoir reçu "
             "(pi/systeme/essai-entonnoir.md), puis passer « exemple » à false."
         )
+    couvercle = reglages.machine.couvercle
+    if couvercle is not None and couvercle.exemple:
+        journal.warning(
+            "machine.yaml, couvercle : masses des couvercles, tolérance, haut de la pile, "
+            "fenêtre du contact, durées du vide et vitesses d'EXEMPLE : les mesurer sur les vrais "
+            "couvercles et seaux (pi/systeme/essai-couvercle.md), puis passer « exemple » à false."
+        )
     camera_dosage = reglages.machine.camera_dosage
     if camera_dosage is not None and camera_dosage.exemple:
         journal.warning(

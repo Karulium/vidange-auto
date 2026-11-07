@@ -1502,9 +1502,20 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   `plateau_lecture_qr`, pendant un tour avant le serrage des barres ; `docs/decisions.md`, réponses à la PR n° 89). Règles de la fiche `micropore/logiciel/micropore-pour-logiciel.md`
   (§ vision). Tests sur des images fabriquées (OpenCV, comme la tâche 22) ; ce qui demande des photos réelles reste
   un faux (tâche 22 ter).
-- [ ] **41 bis. Pose du couvercle sur le seau plein** — Modèle : Sonnet, effort moyen. À écrire d'abord : demander au
-  fil du module qui fait ce geste (Préhension ou Remplissage) un fichier `<module>/logiciel/...-pour-logiciel.md`.
-  Ne pas inventer le geste. Avant le premier cycle complet (`docs/decisions.md`, PR n° 86, point 3).
+- [x] **41 bis. Pose du couvercle sur le seau plein** — Modèle : Sonnet, effort moyen. Source, recopiée ici le
+  07/11/2026 : `prehension/logiciel/pose-couvercle-pour-logiciel.md` du projet mécanique (fil Préhension, qui porte ce
+  geste). Relire la fiche telle qu'elle est (elle a changé au § 5 le 07/11).
+  - Prise à la pile de couvercles du stockage (outil à y 0,83, contact M8, vide −55 kPa, contrôle « un seul couvercle »
+    au palier pesé) ; pose avec l'outil en (0,925 ; 0,49), plateau du chariot déjà à H_app ; contact M8 attendu à la
+    face 0,439 (0,446 pour D) ± 8 mm, sans appui (c'est la fermeture, tâche 41, qui clipse) ; souffler, puis contrôle
+    sur la balance du chariot. Format C : descente à 10 mm/s de la face 0,67 à 0,57 (2,3 mm avec la tête du
+    micropore escamotée, en attendant la réponse du Micropore).
+  - Cas d'erreur : étapes 3, 4, 6, 7, 10a, 10b, 12 et 13 de la fiche. Anse relevée : pas de geste ni de signal
+    (Remplissage, 07/11), c'est l'erreur 10a (contact trop tôt) ; le message dit « vérifier l'anse du seau ».
+  - Brancher le poste « couvercle » dans l'ordre du cycle (`pi/vidange/cycle/ordre.py`, tâche 45) avant la
+    fermeture, et la condition de la fermeture « préhension lâchée et remontée au-dessus de z 0,60 ».
+  - Valeurs non figées de la fiche en EXEMPLE ; § 5 de la fiche (points ouverts) en questions dans la PR.
+  Tests : les cas d'erreur de la fiche, et le lot simulé de la tâche 45 avec couvercle et fermeture, sans alarme.
 - [x] **42. Air comprimé** — Modèle : Sonnet, effort bas. Source, recopiée ici le 06/11/2026 :
   `air/logiciel/air-comprime-pour-logiciel.md` du projet mécanique (module gelé le 28/10).
   - Un seul signal du Pi : `relais_compresseur`, une sortie relais vers un contacteur. Il est ouvert pendant l'ozone

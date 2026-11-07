@@ -11,6 +11,9 @@
   vidange-prehension entonnoir bocal_0_0 bocal_0_1
                                               entonnoir (posé à la main sur le 1er bocal) pris par
                                               l'oreille, posé sur le 2e (tâche 43)
+  vidange-prehension couvercle seau_a         un couvercle pris à la pile du stockage, posé sur le
+                                              seau plein du chariot (tâche 41 bis) ; le chariot est
+                                              préparé avant : vidange-remplissage couvercle-preparer
   ... --faux                                  avec de faux FluidNC (essai de l'outil : etat)
 
 Les gestes sont ceux du programme, avec tous leurs verrous (vidange.prehension). Les cotes sont
@@ -86,7 +89,16 @@ def main(arguments: list[str] | None = None) -> int:
         help="manivelle du mycélium vue en bas, caméra du dosage à 0° (porte-bocal)",
     )
     lecteur.add_argument(
-        "commande", choices=["etat", "vide", "prendre-poser", "porte-bocal", "visser", "entonnoir"]
+        "commande",
+        choices=[
+            "etat",
+            "vide",
+            "prendre-poser",
+            "porte-bocal",
+            "visser",
+            "entonnoir",
+            "couvercle",
+        ],
     )
     lecteur.add_argument("valeurs", nargs="*", help="objet et cotes (voir plus haut)")
     options = lecteur.parse_args(arguments)
@@ -114,6 +126,7 @@ def main(arguments: list[str] | None = None) -> int:
         "porte-bocal": 3,
         "visser": 6,
         "entonnoir": 2,
+        "couvercle": 1,
     }
     if len(options.valeurs) != attendus[options.commande]:
         lecteur.error(f"« {options.commande} » attend {attendus[options.commande]} valeurs")
@@ -219,6 +232,8 @@ def _faire(
         return 0
     if options.commande == "entonnoir":
         return _entonnoir(prehension, reglages, valeurs, delai)
+    if options.commande == "couvercle":
+        return _couvercle(prehension, reglages, valeurs[0], delai)
     objet = valeurs[0] if options.commande == "prendre-poser" else None
     try:
         cotes = [float(valeur) for valeur in valeurs[1 if objet else 0 :]]
@@ -283,6 +298,29 @@ def _entonnoir(prehension: Prehension, reglages: Reglages, valeurs: list[str], d
         print(f"Pose ratée deux fois : remis sur {entonnoir.place}, {arrivee} marqué suspect.")
     else:
         print(f"Entonnoir posé sur {entonnoir.place}.")
+    return 0
+
+
+def _couvercle(prehension: Prehension, reglages: Reglages, format: str, delai: float) -> int:
+    """Les vrais gestes de la pose du couvercle (tâche 41 bis) : pris sur la pile du stockage, posé
+    sur le seau plein du chariot (déjà préparé : y 0,50, plateau à H_app, barres ouvertes)."""
+    from vidange.couvercle import Couvercle
+
+    machine = reglages.machine
+    if machine.couvercle is None or machine.stockage is None:
+        print("machine.yaml n'a pas de partie « couvercle »", file=sys.stderr)
+        return 2
+    if format not in machine.couvercle.formats:
+        print(f"Format inconnu : {format}", file=sys.stderr)
+        return 2
+    couvercle = Couvercle(machine)
+    _jouer(prehension, lambda: couvercle.geste_prendre(prehension, format), delai)
+    print(
+        f"Couvercle pris : vide {prehension.vide_prise_kpa:.1f} kPa, "
+        f"poids {prehension.poids_porte_n:.2f} N"
+    )
+    _jouer(prehension, lambda: couvercle.geste_poser(prehension, format), delai)
+    print("Couvercle posé sur le seau (sans appuyer).")
     return 0
 
 
