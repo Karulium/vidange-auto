@@ -202,6 +202,10 @@ class Prehension:
             return "ouverts"
         return "serres" if porte_bocal.serre() else None
 
+    def occupee(self) -> bool:
+        """Un geste est en cours (la tête sert déjà : personne d'autre ne la lance)."""
+        return self._geste is not None
+
     def tient_un_objet(self) -> bool:
         """Vide confirmé sur l'objet tenu par la ventouse (verrou du noyau du Lavage : sa
         rotation s'arrête à toute perte de vide)."""
@@ -726,10 +730,15 @@ class Prehension:
                 QUOI_FAIRE_PORTE_BOCAL,
             )
 
-    def geste_poser_bocal(self) -> Geste:
+    def geste_poser_bocal(
+        self, palier_vide_n: float | None = None, m8_retombe: bool = False
+    ) -> Geste:
         """Poser le bocal tenu dans le porte-bocal (manivelle en bas) : mors grands ouverts, bocal
         à sa hauteur exacte (face au contact de la capsule pour la course de l'agitation), mors à
-        « Ø 98 » à faible courant, lâcher, remonter, puis serrer le bocal."""
+        « Ø 98 » à faible courant, lâcher, remonter, puis serrer le bocal.
+        Bocal neuf de semence (tâche 19 quater, étapes 17 et 18 de la fiche) : `palier_vide_n` =
+        après le lâcher, le palier pesé revient à vide à ± tant (N) ; `m8_retombe` = après la
+        remontée de 5 mm, le M8 doit être retombé ; sinon : alerte, pas de serrage."""
         reglages = self.reglages.porte_bocal
         contact = self.regles.contact_capsule_z
         porte_bocal = self._porte_bocal()
@@ -760,11 +769,30 @@ class Prehension:
             "approche des mors (Ø 98, faible courant)", porte_bocal.approcher_mors
         )
         yield from self._lacher_ici()
+        if palier_vide_n is not None:
+            pesee = yield Pas(
+                "palier pesé à vide",
+                attente_s=self.reglages.force.attente_pesee_s,
+                pesee=True,
+            )
+            assert pesee is not None and pesee.force_n is not None
+            if abs(pesee.force_n) > palier_vide_n:
+                raise ErreurEtape(
+                    f"préhension : le palier pesé lit {pesee.force_n:.2f} N après le lâcher du "
+                    f"bocal (à vide ± {palier_vide_n:g} N) : le bocal tient encore à la tête",
+                    QUOI_FAIRE_PORTE_BOCAL,
+                )
         yield Pas(
             "remonter avant le serrage",
             {"z": contact + reglages.remontee_min_m},
             vitesse="approche",
         )
+        if m8_retombe and self.tete.contact_tete():
+            raise ErreurEtape(
+                "préhension : le M8 voit encore le bocal après la remontée de "
+                f"{reglages.remontee_min_m * 1000:g} mm : bocal pas posé, pas de serrage",
+                QUOI_FAIRE_PORTE_BOCAL,
+            )
         yield from self._mors("serrage du bocal", porte_bocal.serrer_bocal)
         yield from self._monter()
 
@@ -842,6 +870,10 @@ class Prehension:
             vitesse="approche",
         )
         yield from self._monter()
+
+    def verifier_appui(self, resultat: Resultat, quoi: str, fin: bool) -> None:
+        """L'appui d'un pas de vissage ou de dévissage (pour le bocal neuf)."""
+        self._verifier_appui(resultat, quoi, fin)
 
     def _verifier_appui(self, resultat: Resultat, quoi: str, fin: bool) -> None:
         vissage = self.reglages.vissage

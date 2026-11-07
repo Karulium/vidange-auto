@@ -714,7 +714,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   « fermeture », « entonnoir » et « lavage » sur la vraie machine (PR 89 à 92). Chaque pièce absente ou en EXEMPLE ⇒
   poste « pas lancé : raison ». Pas de geste nouveau. Tests avec le faux matériel branché par le même chemin que le
   vrai ; procédure d'essai « démarrer la vraie machine et lire la check-list ».
-- [ ] **19 quater. Bocal neuf de semence pour le Mycélium** — Modèle : Sonnet, effort moyen. Le geste
+- [x] **19 quater. Bocal neuf de semence pour le Mycélium** — Modèle : Sonnet, effort moyen. Le geste
   `nouveau_bocal` (prise d'un bocal de semence au stockage, ouverture de la capsule, pose sur le porte-bocal /
   l'agitateur) n'existe que dans le simulateur ; c'est lui qui bloque le cœur d'un lot sur la vraie machine (PR 93).
   Source, recopiée ici le 07/11/2026 : `prehension/logiciel/bocal-neuf-pour-logiciel.md` (fil Préhension, 20 étapes) :

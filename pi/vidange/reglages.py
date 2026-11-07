@@ -939,6 +939,12 @@ class VitessesPrehension(Modele):
     # dégagement (20 mm/s) ; approche de la pose sur le seau (10 mm/s).
     couvercle_pile: float | None = Field(default=None, gt=0)
     couvercle_pose: float | None = Field(default=None, gt=0)
+    # Bocal neuf de semence (tâche 19 quater) : levée de 3 cm après la prise (20 mm/s), approche
+    # du col du bocal et du porte-bocal (5 mm/s), appui et décollage (2 mm/s). Les 10 mm/s de
+    # l'approche de la capsule sont ceux de « approche ».
+    bocal_levee: float | None = Field(default=None, gt=0)
+    bocal_col: float | None = Field(default=None, gt=0)
+    bocal_appui: float | None = Field(default=None, gt=0)
 
 
 class DescentePrehension(Modele):
@@ -3201,6 +3207,110 @@ class Couvercle(Modele):
         return self.formats[format].masse_kg * self.tolerance_pct / 100
 
 
+# ------------------------------------------------------------- bocal neuf de semence (19 quater)
+
+
+class BocalDeSemence(Modele):
+    """Le bocal de semence (fiche de la Préhension du 07/11/2026) : Ø 95, capsule twist-off en fer
+    Ø 103 × 13 avec son QR, couvercle percé « salière » de même capsule."""
+
+    # Hauteur avec la capsule (ou le couvercle percé) bien vissée (m, ± 0,5 mm) : le bocal pend
+    # sous la face de la tête de tant quand la tête le porte.
+    hauteur_m: float = Field(gt=0)
+    # Masses À PESER (kg) : capsule, couvercle percé, bocal plein de semence (bocal vide : 350 g).
+    # Contrôle des pesées : masse attendue ± tolerance_pct %.
+    m_capsule_kg: float = Field(gt=0)
+    m_couv_perce_kg: float = Field(gt=0)
+    m_bocal_plein_kg: float = Field(gt=0)
+    tolerance_pct: float = Field(gt=0, lt=100)
+
+    def tolerance_n(self, masse_kg: float) -> float:
+        return masse_kg * self.tolerance_pct / 100 * 9.81
+
+
+class DevissageBocalNeuf(Modele):
+    """Dévisser la capsule sur sa place du stockage (étapes 1 à 6 de la fiche)."""
+
+    # La tête tourne, en l'air, à cet angle avant de descendre (° ; dans la course de la rotation).
+    angle_depart_deg: float
+    # Dévissage en sens trigo (positif), au plus tant de degrés en tout ; 1er essai de décollage
+    # après premier_essai_deg, puis tous les pas_essai_deg.
+    rotation_max_deg: float = Field(gt=0)
+    premier_essai_deg: float = Field(gt=0)
+    pas_essai_deg: float = Field(gt=0)
+    # Pas de contact jusqu'à tant sous la cote du dessus de la capsule : pas de bocal.
+    sans_bocal_m: float = Field(gt=0)
+    # Essai de décollage : la poussée est relâchée par petits pas de relache_pas_m (au plus
+    # relache_pas_max) jusqu'à relache_n, puis la tête monte de decollage_m.
+    relache_n: float = Field(ge=0)
+    relache_pas_m: float = Field(gt=0)
+    relache_pas_max: int = Field(ge=1)
+    decollage_m: float = Field(gt=0)
+
+
+class VissageBocalNeuf(Modele):
+    """Visser le couvercle percé sur le bocal (étapes 9 à 11 de la fiche)."""
+
+    # Vissage en sens horaire (négatif) à partir de cet angle, au plus rotation_max_deg.
+    angle_depart_deg: float
+    rotation_max_deg: float = Field(gt=0)
+    # Face au calage : cote du dessus de la capsule au stockage ± tant (m).
+    hauteur_tolerance_m: float = Field(gt=0)
+    # Poussée relâchée jusqu'à appui_nul_n, puis la tête monte de levee_m avec le bocal.
+    appui_nul_n: float = Field(ge=0)
+    levee_m: float = Field(gt=0)
+    # Essais de vissage (couvercle pas encore vissé à la pesée) avant l'alerte.
+    essais_max: int = Field(ge=1)
+
+
+class CaleBocalNeuf(Modele):
+    """Le moteur de la rotation cale quand l'erreur de son codeur dépasse err_deg pendant
+    duree_s. Le couple de serrage C_vis (≈ 1,5 N·m au mât) se règle À LA MAIN sur le pilote, au
+    premier essai : le logiciel ne le commande pas."""
+
+    err_deg: float = Field(gt=0)
+    duree_s: float = Field(ge=0)
+
+
+class BoitesBocalNeuf(Modele):
+    """Les boîtes à capsules du Stockage (stockage → boites) et leurs gestes."""
+
+    # Noms des boîtes dans stockage → boites → places.
+    capsules: Nom
+    couvercles_perces: Nom
+    # Descente rapide jusqu'à tant au-dessus de la cote prévue (m), puis lente jusqu'au contact.
+    approche_m: float = Field(gt=0)
+    # Axe de l'outil centré sur la boîte à tant près (m).
+    centrage_m: float = Field(gt=0)
+    # Contact à la cote prévue ± tant (m), sinon alerte (compte faux ou capsule de travers).
+    fenetre_m: float = Field(gt=0)
+    # Capsule lâchée : attente avant la remontée (s). Remontée lente (m).
+    attente_lacher_s: float = Field(ge=0)
+    remontee_m: float = Field(gt=0)
+    # Prises du couvercle percé (deux collés : reposés et refaits) avant l'alerte.
+    prises_max: int = Field(ge=1)
+
+
+class BocalNeuf(Modele):
+    """Bocal neuf de semence, du stockage au porte-bocal (tâche 19 quater ; fiche
+    `prehension/logiciel/bocal-neuf-pour-logiciel.md` du 07/11/2026, module Préhension gelé le
+    27/10). Rien n'est câblé en dur pour ce geste : l'appui, le M8, les pesées et le calage du
+    moteur ne protègent jamais personne. L'appui de dévissage et de vissage (F_devis, 80 N) est
+    celui de prehension → vissage ; la place des bocaux et la cote du dessus de la capsule
+    (z_capsule_stock) sont celles de stockage → bocaux (semence, capsule_haut_z)."""
+
+    exemple: bool = False
+    bocal: BocalDeSemence
+    # Descente rapide jusqu'à tant au-dessus de la cote du contact attendu (m), puis lente.
+    approche_m: float = Field(gt=0)
+    devissage: DevissageBocalNeuf
+    vissage: VissageBocalNeuf
+    cale: CaleBocalNeuf
+    boites: BoitesBocalNeuf
+    # Le palier pesé revient à vide à ± tant (N) quand le bocal est lâché (± 30 g).
+    palier_vide_n: float = Field(gt=0)
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -3260,6 +3370,9 @@ class Machine(Modele):
     # Pose du couvercle sur le seau plein (None : pas de couvercle). Demande la préhension (objet
     # « couvercle »), le stockage (pile des couvercles), la fermeture (hauteurs) et la griffe.
     couvercle: Couvercle | None = None
+    # Bocal neuf de semence pris au stockage et posé sur le porte-bocal (None : pas de geste).
+    # Demande la préhension, le stockage, le porte-bocal, le mycélium et la griffe.
+    bocal_neuf: BocalNeuf | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -3337,6 +3450,7 @@ class Machine(Modele):
         erreurs += self._verifier_fermeture()
         erreurs += self._verifier_entonnoir()
         erreurs += self._verifier_couvercle()
+        erreurs += self._verifier_bocal_neuf()
         if self.camera_dosage is not None and (self.prehension is None or self.mycelium is None):
             erreurs.append(
                 "camera_dosage : il faut aussi les parties « prehension » et « mycelium »"
@@ -4609,6 +4723,127 @@ class Machine(Modele):
                 )
         return erreurs
 
+    def _verifier_bocal_neuf(self) -> list[str]:
+        """Les angles tiennent dans la course de la rotation (± 500°, cordon), les cotes dans les
+        courses de la tête, du pont et du chariot, les vitesses existent, les boîtes sont celles du
+        Stockage."""
+        neuf = self.bocal_neuf
+        if neuf is None:
+            return []
+        manque = [
+            nom
+            for nom in ("prehension", "stockage", "porte_bocal", "mycelium", "griffe")
+            if getattr(self, nom) is None
+        ]
+        if manque:
+            return [
+                "bocal_neuf : il faut aussi les parties "
+                + ", ".join(f"« {nom} »" for nom in manque)
+            ]
+        assert self.prehension and self.stockage
+        prehension = self.prehension
+        erreurs = []
+        for objet in ("bocal", "capsule"):
+            if objet not in prehension.objets:
+                erreurs.append(
+                    f"bocal_neuf : il manque l'objet « {objet} » dans prehension → objets"
+                )
+        capsule = prehension.objets.get("capsule")
+        if capsule is not None and not capsule.aimants:
+            erreurs.append(
+                "bocal_neuf : l'objet « capsule » de prehension → objets doit avoir aimants"
+            )
+        for vitesse in ("bocal_levee", "bocal_col", "bocal_appui"):
+            valeur = getattr(prehension.vitesses, vitesse)
+            if valeur is None:
+                erreurs.append(f"bocal_neuf : il manque prehension → vitesses → {vitesse}")
+            elif valeur > prehension.vitesses.z:
+                erreurs.append(
+                    f"prehension → vitesses → {vitesse} ({valeur:g}) plus grande que la vitesse "
+                    f"de Z ({prehension.vitesses.z:g})"
+                )
+        debut_a, fin_a = self.axes["prehension_a"].course
+        dev, vis = neuf.devissage, neuf.vissage
+        if not debut_a <= dev.angle_depart_deg <= fin_a:
+            erreurs.append(
+                f"bocal_neuf → devissage → angle_depart_deg ({dev.angle_depart_deg:g}°) hors de la "
+                f"course de la rotation ({debut_a:g} à {fin_a:g}°)"
+            )
+        elif dev.angle_depart_deg + dev.rotation_max_deg > fin_a:
+            erreurs.append(
+                f"bocal_neuf → devissage : {dev.angle_depart_deg:g}° + {dev.rotation_max_deg:g}° "
+                f"sort de la course de la rotation (jusqu'à {fin_a:g}°)"
+            )
+        if not debut_a <= vis.angle_depart_deg <= fin_a:
+            erreurs.append(
+                f"bocal_neuf → vissage → angle_depart_deg ({vis.angle_depart_deg:g}°) hors de la "
+                f"course de la rotation ({debut_a:g} à {fin_a:g}°)"
+            )
+        elif vis.angle_depart_deg - vis.rotation_max_deg < debut_a:
+            erreurs.append(
+                f"bocal_neuf → vissage : {vis.angle_depart_deg:g}° − {vis.rotation_max_deg:g}° "
+                f"sort de la course de la rotation (jusqu'à {debut_a:g}°)"
+            )
+        if dev.premier_essai_deg > dev.rotation_max_deg:
+            erreurs.append("bocal_neuf → devissage : premier_essai_deg après rotation_max_deg")
+        if prehension.vissage.angle_deg <= 0:
+            erreurs.append("bocal_neuf : prehension → vissage → angle_deg doit être positif")
+        boites = self.stockage.boites
+        for quoi, nom in (
+            ("capsules", neuf.boites.capsules),
+            ("couvercles_perces", neuf.boites.couvercles_perces),
+        ):
+            if nom not in boites.places:
+                erreurs.append(
+                    f"bocal_neuf → boites → {quoi} : « {nom} » n'est pas dans stockage → boites → "
+                    f"places ({', '.join(boites.places)})"
+                )
+        if neuf.boites.capsules == neuf.boites.couvercles_perces:
+            erreurs.append(
+                "bocal_neuf → boites : la même boîte pour les capsules et les couvercles"
+            )
+        bas, haut = self.axes["prehension_z"].course
+        haut = min(haut, prehension.haut_z)
+        z_capsule = self.stockage.bocaux.capsule_haut_z
+        if z_capsule - dev.sans_bocal_m < bas:
+            erreurs.append(
+                f"bocal_neuf : la descente au bocal irait à {z_capsule - dev.sans_bocal_m:g} m, "
+                f"sous la course de la tête ({bas:g} m)"
+            )
+        sommet_boite = boites.dessus_z + boites.epaisseur_capsule_m
+        for quoi, cote in (
+            ("capsule du stockage", z_capsule + neuf.approche_m),
+            ("boîtes", sommet_boite + neuf.boites.approche_m),
+        ):
+            if cote > haut:
+                erreurs.append(
+                    f"bocal_neuf : approche de la {quoi} à {cote:g} m, au-dessus de {haut:g} m"
+                )
+        if boites.fond_z - neuf.boites.fenetre_m < bas:
+            erreurs.append("bocal_neuf : le fond des boîtes est trop bas pour la course de la tête")
+        pont_debut, pont_fin = self.axes["pont_x"].course
+        y_debut, y_fin = self.axes["chariot_y"].course
+        from vidange.stockage import places
+
+        points = {
+            **{nom: point for nom, point in places.places_semence(self).items()},
+            **{f"boîte {nom}": point for nom, point in boites.places.items()},
+        }
+        for nom, (x, y) in points.items():
+            pont = x - prehension.decalage_mat_x
+            if not pont_debut <= pont <= pont_fin or not y_debut <= y <= y_fin:
+                erreurs.append(
+                    f"bocal_neuf : l'outil en ({x:g} ; {y:g}) ({nom}) est hors des courses (pont à "
+                    f"{pont:g} m : {pont_debut:g} à {pont_fin:g} ; chariot : {y_debut:g} à "
+                    f"{y_fin:g})"
+                )
+        couloir = prehension.porte_bocal.couloir
+        if couloir is None:
+            erreurs.append(
+                "bocal_neuf : il faut prehension → porte_bocal → couloir (route d'accès)"
+            )
+        return erreurs
+
     def z_pose_couvercle(self, format: str) -> float:
         """Face de la ventouse quand le couvercle est posé, pas clipsé, sur le seau : Z_pose =
         H_app + dessus_pose_z − Hc (fiche, § 2)."""
@@ -5333,6 +5568,26 @@ class StockageSimule(Modele):
     files_pleines: dict[Nom, Annotated[int, Field(ge=0)]] = Field(default_factory=dict)
 
 
+class BocalNeufSimule(Modele):
+    """Le stockage imaginaire du bocal neuf de semence (tâche 19 quater) : `bocaux` bocaux de la
+    variété du lot sur les premières places de semence, des capsules déjà dans la boîte des
+    capsules, des couvercles percés dans l'autre. La physique imaginaire : le filet de la capsule
+    se libère à `devisse_deg` degrés de dévissage ; le couvercle percé cale (moteur) à `filet_deg`
+    degrés de vissage ; la tôle et la capsule se compriment de `raideur_n_m` (N par m). Tout est
+    d'EXEMPLE : c'est la machine imaginaire."""
+
+    bocaux: int = Field(ge=0)
+    capsules: int = Field(default=0, ge=0)
+    couvercles_perces: int = Field(ge=0)
+    devisse_deg: float = Field(gt=0)
+    filet_deg: float = Field(gt=0)
+    raideur_n_m: float = Field(gt=0)
+    # Un bocal sert un seau : un lot de 20 seaux dépasse les 18 places de semence et les 18 capsules
+    # de la boîte. Vrai : Karulium recharge les places vides, vide la boîte des capsules et remplit
+    # celle des couvercles percés entre deux bocaux (machine imaginaire).
+    reapprovisionne: bool = False
+
+
 class CycleSimule(Modele):
     """Le lot du mode seaux joué par « vidange-simulateur cycle » (tâche 45) : des seaux vides d'un
     format, pris sur les piles chargées au départ, remplis, dosés et rangés par le même code que
@@ -5354,6 +5609,9 @@ class CycleSimule(Modele):
     # (m, À MESURER sur les vrais couvercles).
     couvercles: int = Field(default=0, ge=0)
     pas_couvercles_m: float = Field(default=0.009, gt=0)
+
+    # Le bocal neuf de semence (tâche 19 quater) : bocaux de semence du stockage imaginaire.
+    bocal_neuf: BocalNeufSimule | None = None
 
     @model_validator(mode="after")
     def _verifier_seaux(self) -> "CycleSimule":

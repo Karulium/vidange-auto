@@ -16,8 +16,9 @@ exemple: true
 # elle n'avance jamais de plus que ce pas (s), pour voir les délais dépassés.
 pas_max_s: 1
 # Au-delà de ce temps simulé (s), on s'arrête : le cycle est bloqué (il attend quelque chose
-# qui n'arrive jamais). Le plus long scénario, « stockage », dure ≈ 2 h 30.
-duree_max_s: 14400
+# qui n'arrive jamais). Le plus long scénario, « stockage », dure ≈ 2 h 30 ; le lot de 20 seaux du
+# cycle, avec un bocal neuf de semence par seau (tâche 19 quater, ≈ 2 min 45 de plus chacun), ≈ 3 h 50.
+duree_max_s: 21600
 # Temps que met Karulium à donner le Go quand une étape le demande (s). 0 : tout de suite.
 delai_go_s: 20
 
@@ -196,6 +197,20 @@ cycle:
   # d'empilage (EXEMPLES ; à mesurer sur les vrais couvercles).
   couvercles: 24
   pas_couvercles_m: 0.009
+  # Le bocal neuf de semence (tâche 19 quater) : bocaux de la variété du lot sur les premières places
+  # de semence, capsules déjà rangées, couvercles percés ; la capsule se libère après 200° de
+  # dévissage (la fiche prévoit l'essai à 120°, puis tous les 60°), le couvercle percé cale à 270°
+  # de vissage, la tôle se comprime de 1 mm sous 80 N (EXEMPLES : machine imaginaire).
+  bocal_neuf:
+    bocaux: 6
+    capsules: 0
+    couvercles_perces: 18
+    devisse_deg: 200
+    filet_deg: 270
+    raideur_n_m: 80000
+    # Un bocal sert un seau, et le lot en a 20 : plus que les 18 places de semence et que les 18 capsules
+    # de la boîte. Karulium recharge donc entre deux bocaux (machine imaginaire seulement).
+    reapprovisionne: true
 
 # L'enceinte imaginaire du Nettoyage (scénarios « fermeture_purge », « purge_trop_longue »,
 # « nuit_uv_ozone », « fuite_ozone ») : le store ouvert au départ met 25 s à descendre (2,18 m à

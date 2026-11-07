@@ -1452,3 +1452,43 @@ Aucun chiffre nouveau : tout vient de `docs/entrees-sorties.yaml`, `fluidnc.yaml
   2. Une carte branchée après le démarrage ne compte qu'après une relance du programme : gardé ; un bouton
      « relire les cartes » sur la page web viendra peut-être plus tard.
   3. Une carte du spray programmée avec des réglages d'EXEMPLE bloque le poste spray sur la vraie machine : gardé.
+
+## Bocal neuf de semence (tâche 19 quater, 07/11/2026)
+
+Code : `pi/vidange/bocal_neuf/` (`BocalNeuf`), `pi/vidange/mycelium/` (étape « changer_de_bocal » branchée),
+`pi/vidange/prehension/` (pas `cale`, `geste_poser_bocal` complété), `pi/vidange/cycle/machine.py` (agitateur et
+porte-bocal construits) ; essai : `pi/systeme/essai-bocal-neuf.md` (testé sur le vrai matériel : non). Source : la
+fiche `prehension/logiciel/bocal-neuf-pour-logiciel.md` du 07/11/2026, recopiée dans `docs/taches.md`. Les chiffres
+sont dans `pi/reglages/machine.yaml` (partie `bocal_neuf`, `exemple: true`) ; seuls ceux de la fiche ne sont pas des
+exemples (hauteur du bocal, angles, 360° au plus, essai à 120° puis tous les 60°, 3 mm, 5 mm, 0,3 s, 3 cm, ± 8 mm,
+± 3 mm, ± 2 mm, ± 30 g, erreur du codeur 2° pendant 0,2 s).
+
+- **Le geste est à la Préhension** : le Mycélium ne fait que le lancer (manivelle en bas) et attendre sa fin
+  (`Pas(bocal_neuf=True)`, interface `PoseBocalNeuf`). Sans lui (essais, anciens scénarios), `nouveau_bocal` rend
+  tout de suite un bocal, comme avant.
+- **Six phases, reprenables** : dévissage, capsule rangée, couvercle percé pris, vissage, pose, départ. Une alarme au
+  milieu garde la phase en mémoire du programme ; après le Go, le geste reprend là où il s'est arrêté si la tête
+  tient ce que la phase attend, sinon il repart du début (avec un message). Une coupure du programme n'est pas
+  reprise (le bocal et la capsule sont alors à regarder à la main).
+- **Le QR part avec la capsule** : le Pi lit le QR juste avant la prise (2ᵉ lecture) et le recopie au registre
+  AVANT le premier mouvement. QR illisible ou d'une autre variété : le bocal n'est pas pris, sa place est marquée
+  « à vérifier » (inventaire et registre) ; un autre bocal de la variété est pris après le Go.
+- **Échec du dévissage (étape 5a)** : capsule qui tient encore à 360°, moteur qui cale, poussée qui ne se tient
+  pas, palier incohérent : la capsule est reposée (aimants coupés), la tête remonte, le bocal reste marqué.
+- **Le calage du moteur** vient de l'erreur du codeur de la rotation (`TeteFluidnc(erreur_codeur=...)`). La
+  machine n'a pas encore cette lecture : sans elle, le geste refuse de partir (aucun mouvement) et le poste
+  « mycelium » est « pas lancé : raison » sur la vraie machine (aussi : QR du bocal par la caméra de la tête de la
+  griffe, pas branchée).
+- **Choix de Claude (en attendant les réponses de Karulium)** :
+  1. Le bocal vide du porte-bocal n'est pas repris (fiche, § 4 point 5, pas écrite) : les mors s'ouvrent et la
+     machine demande de l'enlever à la main (case vide `reprendre_le_vide`).
+  2. Un lot de 20 seaux demande 20 bocaux (un bocal par seau A) : plus que les 18 places de semence et que les 18
+     capsules de la boîte. Au simulateur, Karulium « recharge » entre deux bocaux (`cycle → bocal_neuf →
+     reapprovisionne`). Sur la machine, il faudra une pause de rechargement en milieu de lot.
+  3. Le lot simulé complet dure maintenant ≈ 3 h 50 (≈ 2 min 45 de plus par seau) : `duree_max_s` du simulateur est
+     passé de 14400 à 21600 s.
+  4. Le Pi ne commande jamais le couple de serrage C_vis (≈ 1,5 N·m) : il se règle sur le pilote, à la main.
+- **Cartes du Mycélium dans `cycle/machine.py`** : « agitateur » (`AgitateurFluidnc` sur la carte
+  `mycelium_lavage`, balance du plateau) et « porte_bocal » (`PorteBocalFluidnc`), construits comme les autres
+  pièces ; la Préhension voit le porte-bocal et la manivelle (zone du porte-bocal). Absents ou en EXEMPLE sur la
+  vraie machine : le poste « mycelium » dit pourquoi.

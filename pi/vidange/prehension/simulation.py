@@ -22,7 +22,9 @@ Pannes pour les essais (attributs de TeteSimulee) :
 - `contact_local(x, y)` : (concerne, cote) pour un endroit que la physique du couvercle (tâche
   41 bis) connaît : si concerne, la descente au contact n'a que ce contact-là (None : rien) ;
 - `contact_actif()` : ce que voit le M8 en ce moment (dégagement du couvercle) ;
-- `vides_colles` : tant de fois la vanne se ferme sans que le vide parte (objet collé).
+- `vides_colles` : tant de fois la vanne se ferme sans que le vide parte (objet collé) ;
+- `cale_apres_deg` : un pas `cale` (vissage du couvercle percé, tâche 19 quater) s'arrête, moteur
+  calé, après tant de degrés de rotation (None : il ne cale jamais).
 """
 
 from collections.abc import Callable
@@ -106,6 +108,7 @@ class TeteSimulee:
         self.contact_actif: Callable[[], bool] = lambda: False
         self.vides_refuses = 0
         self.vides_colles = 0
+        self.cale_apres_deg: float | None = None
         self._colle = False
         # Appelé quand le vide est perdu pendant un pas (l'objet tenu tombe).
         self.apres_perte_de_vide: Callable[[], object] = lambda: None
@@ -185,6 +188,16 @@ class TeteSimulee:
                 arret = "appui_max"
             elif pas.appui_arret_n is not None and appui >= pas.appui_arret_n:
                 arret = "appui"
+        if pas.cale and self.cale_apres_deg is not None and "a" in pas.cibles:
+            tourne = cible.a - depart.a
+            if abs(tourne) > self.cale_apres_deg:
+                sens = 1 if tourne > 0 else -1
+                fraction = self.cale_apres_deg / abs(tourne)
+                cible = cible.avec(
+                    a=depart.a + sens * self.cale_apres_deg,
+                    z=depart.z + (cible.z - depart.z) * fraction,
+                )
+                arret = "cale"
         if pas.traction_max_n is not None and self.traction_n > pas.traction_max_n:
             cible, arret = depart, "traction"
         bougent = {self._noms[cle] for cle in pas.cibles}
@@ -231,6 +244,9 @@ class TeteSimulee:
 
     def tarer(self) -> None:
         pass
+
+    def peut_detecter_le_calage(self) -> bool:
+        return True
 
     def contact_tete(self) -> bool:
         return self.contact_actif()

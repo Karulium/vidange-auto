@@ -21,7 +21,10 @@ déplacement manuel que la rotation de la tête (`brosses`), pendant `duree_s`.
   * trajet (`choc`) : la force lue s'écarte du poids porté de plus de choc_n pendant plus de
     choc_duree_s → arrêt de Z et du pont ;
   * appui (`appui_arret_n`, `appui_max_n`) : l'appui atteint la consigne → arrêt ; dépasse le
-    maximum (vissage au-delà de 150 N) → arrêt et alerte.
+    maximum (vissage au-delà de 150 N) → arrêt et alerte ;
+  * calage (`cale`, vissage du couvercle percé sur le bocal neuf, tâche 19 quater) : l'erreur du
+    codeur de la rotation dépasse `bocal_neuf → cale → err_deg` pendant `duree_s` → arrêt (le
+    couvercle est serré). Sans lecture de cette erreur (`erreur_codeur`), un pas `cale` est refusé.
 Pesée ou vide muets pendant un pas qui les surveille : arrêt aussi.
 
 La force est tarée tête en l'air (`tarer`) : lecture = poids porté − poussée.
@@ -54,7 +57,7 @@ CONTACT = "contact_tete"
 VANNE = "vanne_vide"
 AIMANTS = "electroaimants_capsule"
 
-Arret = Literal["vide", "choc", "appui", "appui_max", "traction"]
+Arret = Literal["vide", "choc", "appui", "appui_max", "traction", "cale"]
 # Les brosses du lavage, par leur nom court dans un Pas → axe de machine.yaml.
 BROSSES = {"noyau": "lavage_noyau", "couronne": "lavage_couronne"}
 
@@ -106,6 +109,8 @@ class Pas:
     traction_max_n: float | None = None
     # Vissage : la rotation va à la vitesse du vissage (Z la suit).
     vissage: bool = False
+    # Arrêt quand le moteur de la rotation cale (erreur du codeur trop grande trop longtemps).
+    cale: bool = False
     # Attente après le mouvement (s), puis pesée (médiane de plusieurs lectures).
     attente_s: float = 0.0
     pesee: bool = False
@@ -230,9 +235,15 @@ class TeteFluidnc:
         force: CapteurForce,
         vide: CapteurVide,
         horloge: Callable[[], float] = time.monotonic,
+        erreur_codeur: Callable[[], float | None] | None = None,
     ) -> None:
+        """`erreur_codeur` : l'erreur de position du codeur de la rotation (°), pour détecter le
+        calage du moteur (vissage du couvercle percé). Sans elle, un pas `cale` est refusé."""
         assert machine.prehension is not None
         self.reglages = machine.prehension
+        self.cale = None if machine.bocal_neuf is None else machine.bocal_neuf.cale
+        self._erreur_codeur = erreur_codeur
+        self._cale_depuis: float | None = None
         self.portique = portique
         self.liaison_tete = prehension
         self.signaux = signaux
@@ -318,6 +329,9 @@ class TeteFluidnc:
             pas = self._pas
             if pas is None or self._arret is not None or not self._en_mouvement():
                 return
+            if pas.cale and self._cale_vue(maintenant):
+                self._arreter_sur("cale", f"moteur de la rotation calé pendant « {pas.texte} »")
+                return
             lecture = brute - self._tare
             appui = self._poids_porte - lecture
             self._appui = appui
@@ -348,6 +362,22 @@ class TeteFluidnc:
 
     def _en_mouvement(self) -> bool:
         return self._fin_mouvement is None
+
+    def peut_detecter_le_calage(self) -> bool:
+        """La tête lit l'erreur du codeur de la rotation (sinon : pas de vissage au calage)."""
+        return self._erreur_codeur is not None and self.cale is not None
+
+    def _cale_vue(self, maintenant: float) -> bool:
+        """L'erreur du codeur dépasse err_deg depuis duree_s (vrai : le moteur cale)."""
+        if self._erreur_codeur is None or self.cale is None:
+            return False
+        erreur = self._erreur_codeur()
+        if erreur is None or abs(erreur) <= self.cale.err_deg:
+            self._cale_depuis = None
+            return False
+        if self._cale_depuis is None:
+            self._cale_depuis = maintenant
+        return maintenant - self._cale_depuis >= self.cale.duree_s
 
     def _surveille_force(self) -> bool:
         pas = self._pas
@@ -476,6 +506,12 @@ class TeteFluidnc:
             raise ErreurEtape(
                 "pesée de la préhension sans lecture : pas de mouvement", QUOI_FAIRE_PESEE
             )
+        if pas.cale and not self.peut_detecter_le_calage():
+            raise ErreurEtape(
+                f"préhension, « {pas.texte} » : l'erreur du codeur de la rotation n'est pas lue, "
+                "le calage du moteur ne peut pas être vu : pas de mouvement"
+            )
+        self._cale_depuis = None
         if pas.vide_perte_kpa is not None and self.vide.valeur() is None:
             raise ErreurEtape("capteur de vide sans lecture : pas de levée", QUOI_FAIRE_VIDE)
         vitesses = self._vitesses(pas)

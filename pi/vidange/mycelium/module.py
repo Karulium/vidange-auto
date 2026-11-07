@@ -6,8 +6,9 @@ Les étapes se répètent (une couche, la suivante...) : `ensuite` dit laquelle 
                          n'est pas connue, puis manivelle en bas (l'attente)
     attendre_une_couche  une couche versée et tassée attend son mycélium (Mycelium.demander)
     ecarter_le_chariot   le chariot de remplissage à y ≥ 0,40 (il attend au vidage, y 0,42)
-    changer_de_bocal     bocal neuf (1er seau, ou bocal fini) : manivelle en bas, mors ouverts,
-                         bocal posé (Préhension, case vide), serré (chariot reculé ou au poste)
+    changer_de_bocal     bocal neuf (1er seau, ou bocal fini) : manivelle en bas, puis la
+                         Préhension le prend au stockage, le pose et le serre (tâche 19 quater,
+                         chariot reculé ou au poste) ; sans elle, `nouveau_bocal`
     retourner_le_bocal   manivelle en haut, demi-tour du bocal tête en bas, manivelle en bas
     amener_le_seau       le chariot amène le seau au poste (spray, micropore), puis au dosage,
                          plateau à la hauteur du dosage
@@ -37,6 +38,8 @@ QUOI_FAIRE_CHARIOT = (
 
 def module_mycelium(mycelium: Mycelium) -> Module:
     agitateur = mycelium.agitateur
+    # Bocal neuf par la Préhension : sa tête (et ses cartes) doit être prête.
+    pose = mycelium.pose_bocal_neuf
     fin = Condition("geste du mycélium fini", mycelium.geste_fini)
     y_ecarte = f"{mycelium.reglages.chariot.y_ecarte_min:g}".replace(".", ",")
     ecarte = Condition(f"chariot de remplissage écarté (y ≥ {y_ecarte})", mycelium.chariot_ecarte)
@@ -93,6 +96,7 @@ def module_mycelium(mycelium: Mycelium) -> Module:
                 mycelium.apres_bocal,
                 quoi_faire="Mettre un bocal neuf de la bonne variété dans le porte-bocal, puis "
                 "acquitter et donner le Go.",
+                entree=() if pose is None else (pose.pretes,),
             ),
             geste("retourner_le_bocal", mycelium.geste_retourner_le_bocal, entree=(ecarte,)),
             chariot(

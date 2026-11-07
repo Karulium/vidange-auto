@@ -35,9 +35,14 @@ changement de bocal (MANIVELLE EN BAS, chariot de remplissage reculé ou au post
 05/11/2026), ses mors s'ouvrent (l'ancien bocal est repris), le bocal neuf est posé, puis serré.
 La manivelle ne remonte ensuite que pour le demi-tour.
 
+Le bocal neuf (tâche 19 quater) : la Préhension le prend au stockage, dévisse sa capsule, visse un
+couvercle percé et le pose sur le porte-bocal (vidange.bocal_neuf). Branchée par
+`brancher_bocal_neuf(pose)`, l'étape « changer_de_bocal » lance ce geste et attend sa fin ; sans
+elle (essais, simulateurs plus anciens), `nouveau_bocal(variete)` rend tout de suite un bocal.
+
 Les modules pas encore écrits sont des cases vides, derrière des interfaces simples :
 - chariot de remplissage (Remplissage, pas figé) : `ChariotRemplissage` ;
-- pose du bocal neuf (Préhension) et QR (tâche 22) : `nouveau_bocal(variete)`.
+- pose du bocal neuf sans la Préhension : `nouveau_bocal(variete)`.
 
 La caméra du dosage (vidange.vision.dosage, tâche 22) : `photo(raison)` pour les alertes, et
 `camera` pour la photo du seau après chaque dose (bocal remis debout), notée avec sa dose. Elle ne
@@ -51,7 +56,7 @@ from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
-from vidange.chef import ErreurEtape
+from vidange.chef import Condition, ErreurEtape
 from vidange.journal import donner_journal
 from vidange.mycelium.agitateur import Agitateur, Pas, Resultat
 from vidange.mycelium.regles import EtatChariot, PoseAgitateur, ReglesMycelium
@@ -96,6 +101,27 @@ class PorteBocal(Protocol):
 
     def fini(self) -> bool:
         """Vrai quand le geste est fini ; ErreurEtape s'il a échoué."""
+        ...
+
+    def arreter(self) -> None: ...
+
+
+class PoseBocalNeuf(Protocol):
+    """Le geste de la Préhension qui met un bocal de semence neuf dans le porte-bocal
+    (vidange.bocal_neuf.BocalNeuf)."""
+
+    pretes: Condition
+
+    def commencer(self, variete: str) -> None:
+        """Lance le geste (ErreurEtape si la tête sert déjà ou si une condition manque)."""
+        ...
+
+    def fini(self) -> bool:
+        """Vrai quand le bocal est posé et serré ; ErreurEtape s'il a échoué."""
+        ...
+
+    def bocal(self) -> "Bocal":
+        """Le bocal posé (son QR et sa variété)."""
         ...
 
     def arreter(self) -> None: ...
@@ -208,6 +234,8 @@ class Mycelium:
         self.chariot = chariot
         self.registre = registre
         self._nouveau_bocal = nouveau_bocal
+        # Le geste de la Préhension (tâche 19 quater), s'il est branché.
+        self.pose_bocal_neuf: PoseBocalNeuf | None = None
         self._horloge = horloge
         self._photo = photo
         self.camera = camera
@@ -362,10 +390,16 @@ class Mycelium:
         assert self.demande is not None
         self.chariot.amener_au_dosage(self.regles.plateau_dosage(self.format))
 
+    def brancher_bocal_neuf(self, pose: PoseBocalNeuf) -> None:
+        """Le bocal neuf est mis par le geste de la Préhension (au lieu de `nouveau_bocal`)."""
+        self.pose_bocal_neuf = pose
+
     def changer_de_bocal(self) -> None:
         demande = self.demande
         assert demande is not None
-        bocal = self._nouveau_bocal(demande.variete)
+        self._adopter_bocal(self._nouveau_bocal(demande.variete))
+
+    def _adopter_bocal(self, bocal: Bocal) -> None:
         journal.info("Mycélium : nouveau bocal %s (%s)", bocal.code, bocal.variete)
         self.plan = Plan(bocal=bocal)
         if self.registre is not None:
@@ -428,6 +462,20 @@ class Mycelium:
         refus = self._refus_tete(pas)
         if refus is not None:
             raise ErreurEtape(refus, QUOI_FAIRE_TETE)
+        if pas.bocal_neuf:
+            # La Préhension prend un bocal au stockage et le pose sur le porte-bocal : la
+            # manivelle reste en bas, bocal debout (le chariot est reculé ou au poste).
+            demande = self.demande
+            assert demande is not None and self.pose_bocal_neuf is not None
+            if self.pose is None or not self.regles.en_bas(self.pose) or self.plan.tete_en_bas:
+                raise ErreurEtape(
+                    f"« {pas.texte} » refusé : le bocal neuf ne se pose que manivelle en bas, "
+                    "bocal debout",
+                    QUOI_FAIRE,
+                )
+            journal.info("Mycélium : %s (variété %s)", pas.texte, demande.variete)
+            self.pose_bocal_neuf.commencer(demande.variete)
+            return
         if pas.origine:
             # Tour lent : la manivelle passe en haut.
             refus = self.regles.refus_manivelle(None, chariot)
@@ -488,7 +536,13 @@ class Mycelium:
         while self._geste is not None:
             pas = self._pas
             assert pas is not None
-            if pas.porte_bocal is not None:
+            if pas.bocal_neuf:
+                assert self.pose is not None and self.pose_bocal_neuf is not None
+                if not self.pose_bocal_neuf.fini():
+                    return False
+                self._adopter_bocal(self.pose_bocal_neuf.bocal())
+                resultat = Resultat(pose=self.pose)
+            elif pas.porte_bocal is not None:
                 assert self.pose is not None
                 if not self.porte_bocal.fini():
                     return False
@@ -515,6 +569,8 @@ class Mycelium:
         self.agitateur.reprendre()
 
     def arreter(self) -> None:
+        if self._pas is not None and self._pas.bocal_neuf and self.pose_bocal_neuf is not None:
+            self.pose_bocal_neuf.arreter()
         self._geste = self._pas = None
         self.agitateur.arreter()
         self.porte_bocal.arreter()
@@ -574,6 +630,11 @@ class Mycelium:
         au poste) ; mors ouverts (l'ancien bocal est repris), bocal neuf posé, serré. La manivelle
         reste en bas : elle ne remonte que pour le demi-tour."""
         yield from self._manivelle(bas=True)
+        if self.pose_bocal_neuf is not None:
+            # Tâche 19 quater : la Préhension ouvre les mors, prend le bocal au stockage, le pose et
+            # le serre (étapes 1 à 20 de sa fiche).
+            yield Pas("bocal neuf de semence (Préhension)", bocal_neuf=True)
+            return
         yield Pas("mors ouverts", porte_bocal="ouvrir")
         self.changer_de_bocal()
         yield Pas("bocal serré", porte_bocal="serrer")
