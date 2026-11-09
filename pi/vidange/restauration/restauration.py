@@ -14,11 +14,14 @@ Ce que la commande fait, dans l'ordre (le logiciel lui-même est déjà install�
   6. prépare le fichier de SECRETS (modèle vide s'il n'existe pas : les secrets ne sont pas dans la
      copie de secours) ;
   7. donne les fichiers au compte du programme ;
+  7 bis. remet les RÉGLAGES que le Pi avait changés par rapport à Git (tâche 25 bis), un par un :
+     un fichier qui ne passe plus la vérification avec le code du jour est mis de côté ;
   8. VÉRIFIE : réglages (comme `vidange --verifier`), puis service lancé ;
   9. dit en français ce qui reste à faire à la main.
 
 Les RÉGLAGES (pi/reglages, fluidnc/, entrees-sorties.yaml) sont dans Git : ils reviennent avec le
-logiciel (`git clone`), ils n'ont pas besoin de copie de secours.
+logiciel (`git clone`). Seuls ceux que le Pi avait CHANGÉS (vrais chiffres de la machine) sont dans
+l'archive et remis par-dessus (étape 7 bis).
 
 Rien ici ne touche à la machine : la restauration remplit des fichiers et lance le service, qui
 propose le retour en lieu sûr et attend le Go à l'écran, comme après toute coupure.
@@ -40,8 +43,11 @@ from vidange.journal import donner_journal
 from vidange.registre import DOSSIER_PHOTOS, NOM_BASE, ErreurRegistre, ouvrir_registre
 from vidange.registre.fichiers_hors_git import (
     DOSSIER_DONNEES_DANS_ARCHIVE,
+    DOSSIER_REGLAGES_DANS_ARCHIVE,
     NOM_COMPTES,
+    chemin_de_reglage_sur,
     est_une_archive,
+    reglages_changes,
 )
 from vidange.reglages import ErreurReglages, Reglages
 
@@ -49,6 +55,7 @@ journal = donner_journal("restauration")
 
 _COPIE_REGISTRE = re.compile(r"^registre-\d{4}-\d{2}-\d{2}\.sqlite$")
 _NOM_SIMPLE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+DOSSIER_MIS_DE_COTE = "reglages-mis-de-cote"
 # Une archive de petits fichiers ne dépasse jamais ça (protection contre une archive piégée).
 TAILLE_MAX_FICHIER = 50 * 1024 * 1024
 
@@ -69,6 +76,8 @@ class Chemins:
     secrets: Path
     comptes: Path
     secrets_exemple: Path
+    # Dossier du dépôt Git du logiciel (None : les réglages changés ne sont pas remis).
+    depot: Path | None = None
 
 
 @dataclass
@@ -182,6 +191,12 @@ def _membre_sur(membre: tarfile.TarInfo) -> str | None:
     if membre.name == NOM_COMPTES:
         return NOM_COMPTES
     if (
+        len(morceaux) > 2
+        and morceaux[0] == DOSSIER_REGLAGES_DANS_ARCHIVE
+        and chemin_de_reglage_sur("/".join(morceaux[1:]))
+    ):
+        return membre.name
+    if (
         len(morceaux) == 2
         and morceaux[0] == DOSSIER_DONNEES_DANS_ARCHIVE
         and _NOM_SIMPLE.match(morceaux[1])
@@ -196,7 +211,10 @@ def restaurer_fichiers(
     ignores: list[str],
     ecraser: bool,
     bilan: Bilan,
-) -> None:
+) -> dict[str, bytes]:
+    """Remet les fichiers des données et les comptes ; rend les réglages du Pi trouvés dans
+    l'archive ({chemin dans le dépôt: contenu}), à remettre ensuite par `remettre_reglages`."""
+    reglages: dict[str, bytes] = {}
     archives = sorted(
         (f for f in copies.rglob("*") if f.is_file() and est_une_archive(f.name)),
         key=lambda f: f.name,
@@ -207,7 +225,7 @@ def restaurer_fichiers(
             "pas d'archive des fichiers hors Git (fichiers-AAAA-MM-JJ.tar.gz) dans la copie de "
             "secours : comptes et fichiers appris non restaurés"
         )
-        return
+        return reglages
     remis = []
     with tarfile.open(archives[0], "r:gz") as archive:
         for membre in archive:
@@ -217,6 +235,9 @@ def restaurer_fichiers(
                 continue
             source = archive.extractfile(membre)
             if source is None:
+                continue
+            if nom.startswith(DOSSIER_REGLAGES_DANS_ARCHIVE + "/"):
+                reglages[nom.split("/", 1)[1]] = source.read()
                 continue
             if nom == NOM_COMPTES:
                 cible, discret = chemins.comptes, True
@@ -247,6 +268,106 @@ def restaurer_fichiers(
             "Aucun compte pour la page web : en créer un avec « sudo -u vidange "
             "/opt/vidange-auto/pi/.venv/bin/vidange compte ajouter NOM --role karulium »."
         )
+    return reglages
+
+
+def _ecrire(cible: Path, contenu: bytes) -> None:
+    provisoire = cible.with_name(cible.name + ".restauration")
+    provisoire.write_bytes(contenu)
+    shutil.copymode(cible, provisoire)
+    os.replace(provisoire, cible)
+
+
+def remettre_reglages(
+    chemins: Chemins,
+    reglages: dict[str, bytes],
+    ecraser: bool,
+    verifier: Callable[[], int],
+    bilan: Bilan,
+) -> list[Path]:
+    """Remet les réglages que l'ancien Pi avait changés, un par un, avec la vérification des
+    réglages après chacun. Un fichier qui ne passe plus avec le code du jour est mis de côté
+    (dans donnees/reglages-mis-de-cote) et dit à Karulium ; les autres sont remis quand même.
+    Rend les fichiers écrits."""
+    if not reglages:
+        return []
+    depot = chemins.depot
+    if depot is None:
+        bilan.a_la_main.append(
+            f"L'archive contient {len(reglages)} réglage(s) changé(s) sur l'ancien Pi, mais le "
+            "dépôt du logiciel est inconnu (--depot) : rien remis."
+        )
+        return []
+    deja = set(reglages_changes(depot))
+    a_remettre: dict[str, tuple[Path, bytes, bytes]] = {}  # chemin: (fichier, nouveau, d'origine)
+    for chemin, contenu in sorted(reglages.items()):
+        fichier = depot / chemin
+        if not fichier.is_file():
+            _mettre_de_cote(chemins, chemin, contenu, "n'existe plus dans cette version", bilan)
+        elif fichier.read_bytes() == contenu:
+            continue
+        elif chemin in deja and not ecraser:
+            bilan.a_la_main.append(
+                f"{chemin} était déjà changé sur ce Pi : gardé tel quel (--ecraser pour mettre "
+                "celui de l'ancien Pi ; il est dans l'archive)."
+            )
+        else:
+            a_remettre[chemin] = (fichier, contenu, fichier.read_bytes())
+    ecrits: list[Path] = []
+    remis: list[str] = []
+
+    def poser(chemin: str, nouveau: bool) -> None:
+        fichier, contenu, origine = a_remettre[chemin]
+        _ecrire(fichier, contenu if nouveau else origine)
+
+    for chemin in a_remettre:
+        poser(chemin, True)
+    if a_remettre and verifier() == 0:
+        remis = list(a_remettre)
+    elif a_remettre:
+        for chemin in a_remettre:
+            poser(chemin, False)
+        if verifier() != 0:
+            # Les réglages du Pi n'y sont pour rien : on les remet, la vérification finale parlera.
+            for chemin in a_remettre:
+                poser(chemin, True)
+            remis = list(a_remettre)
+            bilan.a_la_main.append(
+                "La vérification des réglages échouait déjà sans les réglages de l'ancien Pi : "
+                "ils sont remis, mais à contrôler après avoir corrigé le reste."
+            )
+        else:
+            for chemin in a_remettre:
+                poser(chemin, True)
+                if verifier() == 0:
+                    remis.append(chemin)
+                else:
+                    poser(chemin, False)
+                    _mettre_de_cote(
+                        chemins,
+                        chemin,
+                        a_remettre[chemin][1],
+                        "ne passe plus la vérification avec la version du jour du logiciel",
+                        bilan,
+                    )
+    ecrits = [a_remettre[c][0] for c in remis]
+    if remis:
+        bilan.fait.append(f"réglages de l'ancien Pi remis : {', '.join(remis)}")
+    return ecrits
+
+
+def _mettre_de_cote(
+    chemins: Chemins, chemin: str, contenu: bytes, raison: str, bilan: Bilan
+) -> None:
+    dossier = chemins.donnees / DOSSIER_MIS_DE_COTE
+    dossier.mkdir(parents=True, exist_ok=True)
+    cible = dossier / chemin.replace("/", "__")
+    cible.write_bytes(contenu)
+    bilan.a_la_main.append(
+        f"Réglage de l'ancien Pi PAS remis : {chemin} {raison}. Il est gardé dans {cible} : "
+        "recopier ses valeurs à la main dans le fichier du dépôt (page des réglages ou éditeur), "
+        "puis « vidange --verifier »."
+    )
 
 
 def restaurer_photos(copies: Path, donnees: Path, bilan: Bilan) -> None:
@@ -320,6 +441,7 @@ def restaurer(
     temporaire = donnees / ".restauration"
     shutil.rmtree(temporaire, ignore_errors=True)
     provisoire = False
+    reglages_remis: list[Path] = []
     try:
         copies, provisoire = recuperer(source, temporaire, commandes, options.delai_copie_s)
         bilan.fait.append(f"copie de secours trouvée : {source}")
@@ -327,7 +449,7 @@ def restaurer(
             restaurer_photos(copies, donnees, bilan)
         else:
             restaurer_registre(copies, donnees, options.ecraser, bilan)
-            restaurer_fichiers(
+            reglages_du_pi = restaurer_fichiers(
                 copies,
                 chemins,
                 reglages.programme.registre.restauration_ignore,
@@ -342,12 +464,15 @@ def restaurer(
                     "--photos-seulement » (peut se faire pendant que la machine travaille)."
                 )
             preparer_secrets(chemins, bilan)
+            reglages_remis = remettre_reglages(
+                chemins, reglages_du_pi, options.ecraser, verifier, bilan
+            )
     finally:
         if provisoire or ":" in source:
             shutil.rmtree(temporaire, ignore_errors=True)
 
     if donner_au_programme is not None:
-        for chemin in (donnees, chemins.secrets, chemins.comptes):
+        for chemin in (donnees, chemins.secrets, chemins.comptes, *reglages_remis):
             if chemin.exists():
                 donner_au_programme(chemin)
         bilan.fait.append("fichiers donnés au compte du programme")

@@ -15,6 +15,10 @@ La machine n'a pas besoin de bouger (elle peut même être débranchée du Pi).
       sur l'ordinateur de la maison, le dossier `sauvegardes-vidange/` contient `registre-AAAA-MM-JJ.sqlite`,
       `fichiers-AAAA-MM-JJ.tar.gz` (nouveau, tâche 25) et `photos/`. Si `fichiers-...` manque : lancer
       `vidange-registre sauvegarder` sur le vrai Pi puis attendre l'envoi.
+- [ ] **Réglages changés sur le Pi** (tâche 25 bis) : sur le vrai Pi, `git -C /opt/vidange-auto status --short` liste
+      les réglages changés (à la main ou depuis la page). Noter-les. Après `vidange-registre sauvegarder`,
+      `tar tzf fichiers-AAAA-MM-JJ.tar.gz` (dans `/var/lib/vidange/sauvegardes/`) doit montrer ces mêmes
+      fichiers sous `reglages/` (et aucun fichier de secrets).
 - [ ] Les secrets (jetons) sont dans votre gestionnaire de mots de passe : la copie ne les contient pas.
 
 ## 2. Préparer le Pi de rechange
@@ -69,6 +73,11 @@ La commande affiche trois listes : **FAIT**, **PROBLÈMES** et **IL RESTE À FAI
       mêmes nombres de lignes que sur l'ancien Pi, à la copie du jour près.
 - [ ] Page web du Pi neuf : se connecter avec un compte de l'ancien Pi (même mot de passe) ; l'historique et les photos
       sont là ; les fichiers appris (`/var/lib/vidange/angles.json`...) aussi.
+- [ ] **Réglages de l'ancien Pi** (tâche 25 bis) : la commande a écrit « réglages de l'ancien Pi remis : ... » dans
+      FAIT ; `git -C /opt/vidange-auto status --short` sur le Pi neuf montre les mêmes fichiers changés que noté à
+      l'étape 1 ; les vrais chiffres (course, positions...) sont là. Si un réglage est dans « IL RESTE À FAIRE À LA
+      MAIN » (« PAS remis »), il est dans `/var/lib/vidange/reglages-mis-de-cote/` : recopier ses valeurs dans le
+      fichier du dépôt, puis `vidange --verifier`.
 - [ ] Le Pi neuf **propose le retour en lieu sûr et attend le Go** à l'écran : c'est normal, ne pas donner le Go si la
       machine n'est pas branchée dessus. (L'état d'un cycle en cours de l'ancien Pi n'est volontairement pas repris.)
 - [ ] **Chrono** : de l'étape 2.1 (carte SD prête) à « active (running) » : moins d'une heure. Noter le temps ici : ____
