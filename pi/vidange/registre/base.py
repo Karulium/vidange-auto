@@ -58,6 +58,7 @@ TOUTES_LES_TABLES = (
     "inventaire_stockage",
     "notifications_faites",
     "carnet_de_bord",
+    "durees_gestes",
 )
 
 
@@ -503,6 +504,37 @@ class Registre:
                     "raison": raison,
                 },
             )
+
+    # ------------------------------------------------------------ durées des gestes (tâche 30)
+
+    def noter_duree_geste(
+        self, geste: str, duree_s: float, format: str | None = None, garder: int | None = None
+    ) -> None:
+        """La vraie durée d'un geste (« module.etape », sans les attentes), pour l'estimation de
+        fin. `garder` : nombre de durées gardées au plus pour ce geste et ce format."""
+        with self._ecriture() as cnx:
+            self._inserer(
+                cnx,
+                "durees_gestes",
+                {"quand": self._quand(), "geste": geste, "format": format, "duree_s": duree_s},
+            )
+            if garder is not None:
+                cnx.execute(
+                    "DELETE FROM durees_gestes WHERE geste = ? AND format IS ? AND id <= "
+                    "(SELECT id FROM durees_gestes WHERE geste = ? AND format IS ? "
+                    "ORDER BY id DESC LIMIT 1 OFFSET ?)",
+                    (geste, format, geste, format, garder),
+                )
+
+    def durees_du_geste(self, geste: str, format: str | None, nombre: int) -> list[float]:
+        """Les `nombre` dernières durées vraies de ce geste pour ce format (la plus récente
+        d'abord)."""
+        lignes = self.lire(
+            "SELECT duree_s FROM durees_gestes WHERE geste = ? AND format IS ? "
+            "ORDER BY id DESC LIMIT ?",
+            (geste, format, nombre),
+        )
+        return [ligne["duree_s"] for ligne in lignes]
 
     # ------------------------------------------------------------ carnet de bord (tâche 28 bis)
 

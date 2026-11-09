@@ -528,7 +528,7 @@ function afficherEtat(etat) {
 
   afficherPosteFut(etat.poste_fut);
   afficherNettoyage(etat.nettoyage);
-  afficherLot(etat.lot);
+  afficherLot(etat.lot, etat.estimation);
   chargerStock();
 
   remplir("modules", ...(etat.modules.length ? etat.modules.map((m) =>
@@ -636,7 +636,7 @@ function afficherNettoyage(n) {
 }
 
 // Lancer un lot (tâche 45 quater) : la page PROPOSE, le Go se donne à l'écran de l'armoire.
-function afficherLot(lot) {
+function afficherLot(lot, estimation) {
   $("lot").hidden = !lot;
   if (!lot) return;
   const p = lot.proposition;
@@ -648,6 +648,8 @@ function afficherLot(lot) {
         : "Donner le Go sur l'écran de l'armoire (bouton GO, puis Oui), devant la machine."),
       el("button", { classe: "petit", surclick: () => ordre("/api/lot/annuler", "Lot proposé annulé.") },
         "Annuler")),
+    // Estimation de fin du lot qui tourne (tâche 30) : une information, jamais une garantie.
+    estimation && el("div", { classe: "carte" }, estimation.texte),
     lot.dernier && el("div", { classe: "doux" }, "Dernier lot lancé : " + lot.dernier + "."),
     lot.fond.length ? el("div", { classe: "doux" }, "Boucles de fond du lot : " + lot.fond.join(", ") + ".") : null,
     lot.refus_seaux && el("div", { classe: "doux" }, "Lot de seaux : " + lot.refus_seaux + "."),

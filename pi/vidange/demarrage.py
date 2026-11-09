@@ -80,6 +80,7 @@ from vidange.entretien import NOM_FICHIER as NOM_ENTRETIEN
 from vidange.entretien import Compteurs, Entretien
 from vidange.entretien import verifier_avec_liste as verifier_entretien
 from vidange.envois import mettre_en_file_secours, preparer_facteur
+from vidange.estimation import Estimation, base_du_simulateur
 from vidange.fiabilite import (
     Bilans,
     CheckList,
@@ -131,12 +132,14 @@ from vidange.registre import (
 )
 from vidange.registre.fichiers_hors_git import archiver
 from vidange.reglages import ErreurReglages, Reglages, charger_reglages
+from vidange.simulateur.essai import EssaiEnFond
 from vidange.spray.spray import PORTE as PORTE_SPRAY
 from vidange.spray.spray import Spray
 from vidange.spray.spray import verifier_avec_liste as verifier_spray
 from vidange.statistiques import Statistiques
 from vidange.stockage.correction import Correction
 from vidange.vision.photo import Photographe
+from vidange.vitesse import MonteeVitesse, appliquer_vitesses
 from vidange.vue3d import EnregistreurRejeu, Vue3d
 
 # Codes de sortie. Le service systemd (pi/systeme/vidange.service) utilise CODE_REGLAGES_FAUX.
@@ -206,11 +209,13 @@ def _chemin(option: str | None, variable: str, defaut: Path) -> Path:
     return defaut
 
 
-COMMANDES_A_PART = ("compte", "code-ecran", "restaurer")
+FICHIER_MONTEE = "montee_vitesse.json"
+COMMANDES_A_PART = ("compte", "code-ecran", "restaurer", "simuler", "vitesse")
 
 
 def lancer_commande_a_part(commande: str, arguments: list[str]) -> int:
-    """« vidange compte ... » (comptes de la page web) et « vidange restaurer ... » (Pi neuf)."""
+    """« vidange compte ... » (comptes de la page web), « vidange restaurer ... » (Pi neuf),
+    « vidange simuler --essayer ... » (essai d'un réglage) et « vidange vitesse » (tâche 30)."""
     if commande == "compte":
         from vidange.comptes.outil import lancer_compte
 
@@ -221,6 +226,24 @@ def lancer_commande_a_part(commande: str, arguments: list[str]) -> int:
         return lancer_code_ecran(
             arguments,
             chemin_du_code_ecran(),
+            _chemin(None, "VIDANGE_REGLAGES", DOSSIER_PI / "reglages"),
+        )
+    if commande == "simuler":
+        from vidange.simulateur.essai import lancer_essai
+
+        return lancer_essai(
+            arguments,
+            _chemin(None, "VIDANGE_REGLAGES", DOSSIER_PI / "reglages"),
+            _chemin(
+                None, "VIDANGE_ENTREES_SORTIES", DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml"
+            ),
+        )
+    if commande == "vitesse":
+        from vidange.vitesse.outil import lancer_vitesse
+
+        return lancer_vitesse(
+            arguments,
+            _chemin(None, "VIDANGE_DONNEES", DOSSIER_PI / "donnees"),
             _chemin(None, "VIDANGE_REGLAGES", DOSSIER_PI / "reglages"),
         )
     from vidange.restauration.outil import lancer_restauration
@@ -855,6 +878,19 @@ def principal(
         marche.noter_arret("registre abîmé")
         return CODE_REGISTRE_ABIME
 
+    # Montée en vitesse (tâche 30) : le palier voulu est relu ici ; les vitesses du palier en
+    # vigueur sont mises dans les réglages EN MÉMOIRE (aucun fichier touché), JAMAIS au-dessus du
+    # plafond de Karulium. Faux par défaut : palier 0, réglages inchangés.
+    montee = MonteeVitesse(
+        reglages.programme.montee_vitesse,
+        dossier_donnees / FICHIER_MONTEE,
+        registre,
+        journal_des_actions(dossier_donnees),
+    )
+    reglages = appliquer_vitesses(reglages, montee.palier_en_vigueur)
+    if montee.actif:
+        journal.warning("%s", montee.texte())
+
     if arret is None:
         arret = threading.Event()
         for sorte in (signal.SIGTERM, signal.SIGINT):
@@ -913,6 +949,9 @@ def principal(
         materiel.ecouteur_sortie = compteurs.noter_sortie
     fiabilite = reglages.programme.fiabilite
     chef = Chef(reglages.machine, reglages.programme.chef, carnet)
+    # Montée en vitesse : un seau rangé compte un cycle, une alarme fait reculer (tâche 30).
+    chef.sur_etape_finie.append(montee.sur_etape_finie)
+    chef.sur_alarme.append(montee.sur_alarme)
     # Les pesées du bus RS485, interrogées en fond (griffe, préhension, plateau du remplissage,
     # boîte du poste du fût).
     pesees: TourPesees | None = None
@@ -1004,6 +1043,8 @@ def principal(
         dossier_donnees / "journal" / NOM_FICHIER,
     )
     chef.sur_alarme.append(bilans.recevoir)
+    # L'alarme notée au registre ne doit pas faire reculer la montée en vitesse une 2e fois.
+    bilans.sur_numero.append(montee.apres_alarme_notee)
     # Le clip des dernières secondes de chaque caméra, dans le bilan de chaque alarme.
     bilans.collecteurs["clip_video"] = lambda: cameras.garder_clip("alarme")
     # Vue 3D de la page et rejeu d'incident (tâche 28) : positions des cartes, zones tenues.
@@ -1099,6 +1140,27 @@ def principal(
     lancement = Lancement(
         reglages.programme.lot, reglages.machine, mode_seaux, mode_bocaux, stockage, fond
     )
+    # Estimation de fin du lot qui apprend (tâche 30) : le simulateur donne la base, le registre
+    # garde les vraies durées. Seulement pour un lot de seaux qui tourne ; une information.
+    estimation: Estimation | None = None
+    if reglages.programme.estimation is not None and reglages.programme.estimation.actif:
+
+        def lot_de_seaux_en_cours() -> tuple[str, int, object] | None:
+            en_cours = mode_seaux.en_cours
+            if en_cours is None or not any(
+                module.module == REMPLISSAGE and module.statut != "fini"
+                for module in chef.etat().modules
+            ):
+                return None
+            return en_cours.lot.format, len(en_cours.lot.seaux), en_cours
+
+        estimation = Estimation(
+            reglages.programme.estimation,
+            registre,
+            lot_de_seaux_en_cours,
+            lambda format, nombre: base_du_simulateur(reglages, entrees_sorties, format, nombre),
+        )
+        chef.sur_etape_finie.append(estimation.sur_etape_finie)
     # Corriger l'inventaire du stockage depuis la page web (tâche 45 quinquies) : refusé pendant
     # un lot, confirmé par Karulium sur la page.
     correction = (
@@ -1228,6 +1290,13 @@ def principal(
                 air=air,
                 entretien=entretien,
                 lancement=lancement,
+                estimation=estimation,
+                montee=montee,
+                essai=EssaiEnFond(
+                    dossier_reglages,
+                    chemin_entrees_sorties,
+                    pourquoi_pas_de_changement,
+                ),
                 correction=correction,
                 vue3d=vue3d,
                 rejeux=rejeux,
@@ -1260,6 +1329,7 @@ def principal(
                 mode_bocaux=mode_bocaux,
                 mode_nuit=mode_nuit,
                 lancement=lancement,
+                estimation=estimation,
                 code=code_ecran,
                 actions=journal_des_actions(dossier_donnees),
             )

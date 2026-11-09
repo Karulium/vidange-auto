@@ -200,6 +200,7 @@ export async function ouvrirReglages(conteneur, outils) {
       "Un redémarrage du programme est nécessaire pour que les changements agissent (jamais pendant un cycle : "
       + "voir la procédure, « sudo systemctl restart vidange »)."),
     ...cartes,
+    ...(await blocVitesseEtEssai(outils, recharger)),
     el("h2", {}, "Historique des changements"),
     historique.length === 0 ? el("p", { classe: "doux" }, "Aucun changement fait depuis la page.")
       : el("table", {}, el("tr", {}, el("th", {}, "N°"), el("th", {}, "Quand"), el("th", {}, "Qui"),
@@ -207,6 +208,61 @@ export async function ouvrirReglages(conteneur, outils) {
         ...historique.map((h) => el("tr", {}, el("td", {}, h.numero), el("td", {}, heure(h.quand)), el("td", {}, h.qui),
           el("td", {}, h.libelle + (h.raison.includes("retour") ? " (retour)" : "")), el("td", {}, String(h.ancien)),
           el("td", {}, String(h.nouveau))))));
+}
+
+// Montée en vitesse et essai d'un réglage dans le simulateur (tâche 30).
+async function blocVitesseEtEssai(outils, recharger) {
+  const { el, lire, api, dire, heure, Refus } = outils;
+  const blocs = [];
+  let vitesse = null;
+  try { vitesse = await lire("/api/vitesse"); } catch (erreur) { /* pas de montée sur ce programme */ }
+  if (vitesse && vitesse.present) {
+    blocs.push(el("h2", {}, "Montée en vitesse"),
+      el("div", { classe: "carte" + (vitesse.redemarrage_necessaire ? " attention" : "") },
+        el("div", {}, vitesse.actif
+          ? "Palier " + vitesse.palier + " sur " + vitesse.palier_max + " (vitesses à "
+            + Math.round(vitesse.facteur * 100) + " % du départ) ; " + vitesse.cycles + " cycle(s) sur "
+            + vitesse.cycles_par_palier + " sans alerte avant le palier suivant."
+          : "Pas active (programme.yaml → montee_vitesse → actif)."),
+        el("div", { classe: "doux" }, "Jamais au-dessus des plafonds fixés dans programme.yaml : "
+          + Object.entries(vitesse.plafonds).map(([chemin, plafond]) => chemin + " ≤ " + plafond).join(" ; ")
+          + ". Une alerte ou une alarme fait reculer. Aucun seuil, aucune zone, aucune règle de positions n'est touchée."),
+        vitesse.redemarrage_necessaire && el("div", { classe: "quoi" }, "Palier voulu " + vitesse.palier
+          + ", en vigueur " + vitesse.palier_en_vigueur + " : il agira au prochain démarrage du programme."),
+        ...vitesse.changements.slice(0, 5).map((c) => el("div", { classe: "doux" }, heure(c.quand) + " : palier "
+          + c.avant + " → " + c.apres + " (" + c.raison + ", " + c.qui + ")")),
+        vitesse.peut_annuler && el("button", { classe: "petit", surclick: async () => {
+          if (!confirm("Annuler le dernier changement de palier ?")) return;
+          try { await api("/api/vitesse/annuler", { method: "POST" }); dire("Dernier changement annulé.", "vert"); }
+          catch (erreur) { if (!(erreur instanceof Refus)) dire("Refusé : " + erreur.message, "rouge"); }
+          recharger();
+        } }, "Annuler le dernier changement")));
+  }
+  let essai = null;
+  try { essai = await lire("/api/essai"); } catch (erreur) { /* pas d'essai sur ce programme */ }
+  if (essai) {
+    const zone = el("textarea", { rows: "3", placeholder: "machine.yaml=griffe.vitesses.pont_x=0.2" });
+    const sortie = el("pre", { style: "white-space: pre-wrap; overflow-x: auto; font-size: 0.85em" }, essai.erreur ? "Impossible : " + essai.erreur
+      : essai.en_cours ? "Essai en cours (une minute environ)..." : essai.resultat ? essai.resultat.texte : "");
+    blocs.push(el("h2", {}, "Essai d'un réglage dans le simulateur"),
+      el("div", { classe: "carte" },
+        el("div", { classe: "doux" }, "Un réglage par ligne : fichier=chemin=valeur. Le lot simulé est rejoué avec le réglage changé "
+          + "(sur une copie : aucun vrai fichier n'est touché) et comparé au lot normal : durée, alertes, refus. "
+          + "Refusé pendant un lot."),
+        zone,
+        el("button", { classe: "petit", surclick: async () => {
+          const changements = zone.value.split("\n").map((l) => l.trim()).filter(Boolean);
+          try {
+            await api("/api/essai", { method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ changements }) });
+            dire("Essai lancé.", "vert");
+          } catch (erreur) { if (!(erreur instanceof Refus)) dire("Refusé : " + erreur.message, "rouge"); }
+          recharger();
+        } }, "Lancer l'essai"),
+        el("button", { classe: "petit", surclick: recharger }, "Voir où il en est"),
+        sortie));
+  }
+  return blocs;
 }
 
 // ------------------------------------------------------------ carnet de bord

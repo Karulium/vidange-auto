@@ -213,8 +213,10 @@ class Ecran:
         lancement: "Lancement | None" = None,
         code: CodeEcran | None = None,
         actions: Any = None,
+        estimation: Any = None,
     ) -> None:
-        """`mode_seaux` : quand aucun cycle ne tourne, la page d'état dit si un lot de seaux peut
+        """`estimation` : l'estimation de fin du lot qui tourne (tâche 30), dite sur la page d'état.
+        `mode_seaux` : quand aucun cycle ne tourne, la page d'état dit si un lot de seaux peut
         partir, ou ce qui manque (tâche 45). `mode_bocaux` : de même pour un lot de bocaux (mode
         « production », si les seaux sont prêts) et pour laver les bocaux (mode « lavage »).
         `mode_nuit` : en mode « UV-ozone », la nuit peut partir ou ce qui manque (tâche 45 bis).
@@ -237,6 +239,7 @@ class Ecran:
         self.lancement = lancement
         self.code = code
         self.actions = actions
+        self.estimation = estimation
         # Fonction sensible en attente du code : (nom, ce qu'il faut faire quand le code est bon,
         # page où revenir) ; et les chiffres déjà tapés.
         self._attente_code: tuple[str, Callable[[], None], Page] | None = None
@@ -683,6 +686,11 @@ class Ecran:
         poste = self._etat_poste
         if not info and poste is not None and poste.etat == EN_PLACE:
             info = "Poste du fût : chariot en place, pas prêt."
+        if not info and montre and self.estimation is not None:
+            # Estimation de fin du lot (tâche 30) : une simple information.
+            estimee = self.estimation.calculer()
+            if estimee is not None and estimee.get("disponible"):
+                info = estimee["texte_court"]
         if not info:
             info = pourquoi
         if not info and self.nettoyage is not None:

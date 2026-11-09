@@ -2660,3 +2660,74 @@ fonctions sensibles »). Testé sur le vrai matériel : non.
   1. Pas de code pour REPRENDRE après une Pause : déjà protégé par le « Oui ».
   2. `code_ecran.yaml` n'est pas dans la copie de secours (c'est un secret, comme `secrets.yaml`) : après une
      restauration, on refait `vidange code-ecran` ; la check-list le rappelle.
+
+## Estimation, vitesse et essais, tâche 30 (09/11/2026, niveau 1, tranché par Claude)
+
+Sources : `docs/fonctionnalites.md` fonctions 7, 68, 69 ; cadre « la fiabilité d'abord » (28/10/2026, plus haut).
+Procédure d'essai : `pi/systeme/essai-vitesse-estimation.md`. Testé sur le vrai matériel : non.
+
+**Estimation de fin qui apprend (7)** (`vidange/estimation/`, réglages `programme.yaml → estimation`)
+- Rien n'était calculé avant : « le calcul actuel » est le temps du simulateur. La base : le simulateur rejoue le lot
+  (même code, `simulateur.yaml → cycle` avec le format et le nombre de seaux du vrai lot ; au-delà des seaux que les
+  piles imaginaires portent, durées mises à l'échelle) dans un fil à part au début du lot (≈ 15 s), gardée en mémoire.
+- Le registre garde la vraie durée de chaque geste fini (`module.etape`, de l'action à la fin : sans attente du Go,
+  sans pause, sans attente d'entrée), **par format de seau**, dans la table `durees_gestes` (registre version 11, donc
+  dans la copie de secours). Le chef a un nouveau point d'accroche `sur_etape_finie`. Un geste plus court que
+  `duree_min_s` n'est pas gardé ; au plus `garde_par_geste` durées par geste et format.
+- Correction : par geste, rapport = moyenne glissante des `moyenne_sur` dernières vraies durées / durée simulée,
+  borné `correction_min` à `correction_max`, seulement avec `mesures_min` durées (sinon 1). Rapport du lot = moyenne
+  pondérée par le poids de chaque geste dans le lot simulé. Avancement = part des gestes déjà faits (pondérée de même,
+  compté en mémoire depuis le début du lot). Reste = temps total simulé × rapport × (1 − avancement).
+- Fourchette : écart relatif des vraies durées (pondéré), entre `fourchette_min_pct` et `fourchette_max_pct` ; sans
+  aucune durée vraie, `fourchette_sans_historique_pct`. Texte : « Fin du lot : environ 2 h 10 min (entre 1 h 55 min et
+  2 h 25 min), vers 16:40 », avec sa source (« d'après le simulateur seulement » ou « corrigée par N gestes appris »)
+  et « réglages d'exemple » tant que le simulateur l'est. Montré dans `GET /api/etat` (clé `estimation`), sur la page
+  (carte du lot) et sur la ligne d'information de l'écran. **Information seulement** : elle ne règle rien.
+- Limites : lots de seaux seulement (pas les bocaux ni la nuit) ; attentes du Go et pauses en plus ; après une reprise
+  sur coupure, l'avancement repart de zéro (le lot reste estimé en entier).
+
+**Montée en vitesse (69)** (`vidange/vitesse/`, réglages `programme.yaml → montee_vitesse`, **`actif: false`**)
+- Cadre : Karulium fixe un **plafond** par vitesse (`vitesses`, chemin dans `machine.yaml` → plafond, EXEMPLES
+  pour l'instant : 0,30 m/s pour le pont et le chariot de la griffe et de la préhension). Palier = `palier_pct` de la
+  vitesse de départ en plus (5 %), un palier tous les `cycles_par_palier` cycles (25) sans alerte, au plus
+  `paliers_max` (4). Vitesse envoyée = min(départ × (1 + palier × palier_pct), plafond) : jamais au-dessus.
+- Un cycle = un seau rangé (étape `remplissage.ranger`, réglage `etape_de_cycle`).
+- Recul : à chaque alarme du chef (`sur_alarme`), et à la fin d'un cycle si une alarme a été notée au registre depuis le
+  dernier changement (spray, micropore...) : un palier de moins, ou retour au départ (`au_recul: depart`). L'alarme du
+  chef notée ensuite par les bilans ne compte pas deux fois.
+- Chaque changement : journal (avertissement), registre (`reglages_appliques`), journal des actions, et **annulable**
+  (`vidange vitesse annuler` ou bouton de la page, rôle « régler » ; une annulation ne s'annule pas). État dans
+  `donnees/montee_vitesse.json` (écriture sûre) ; fichier abîmé : retour au départ. `vidange vitesse` l'affiche.
+- **La sécurité n'est jamais apprise** : le facteur ne touche aucun seuil, aucune zone, aucune règle de positions.
+  Vérifié au démarrage (`charger_reglages`) : chaque chemin existe et est un nombre, le plafond n'est pas au-dessous
+  de la vitesse de départ, et aucune vitesse de contact ou d'approche (`lente`, `approche`, `choc`, `contact`, `pose`,
+  `plongee`, `palpage`, `pile`, `vissage` dans le nom) ne peut être citée. Une erreur empêche de démarrer.
+- **Effet au démarrage seulement** : les réglages sont figés (modèles non modifiables) et chaque module en copie des
+  morceaux ; les vitesses du palier en vigueur sont donc mises dans les réglages EN MÉMOIRE au démarrage
+  (`appliquer_vitesses`, aucun fichier touché). Le palier voulu change en route (compte, recul) mais la page dit
+  « agira au prochain démarrage ». Choix volontaire : jamais de vitesse changée au milieu d'un geste.
+- Périmètre : seulement les vitesses listées dans `machine.yaml` (pont et chariot). Les vitesses de FluidNC
+  (`fluidnc/*.yaml`) et d'agitation du mélange ne bougent pas.
+
+**Essai d'un réglage dans le simulateur (68)** (`vidange/simulateur/essai.py`)
+- `vidange simuler --essayer fichier=chemin=valeur` (répétable) : copie provisoire des réglages avec la valeur
+  changée (les vrais fichiers ne sont jamais touchés ; les commentaires de la copie sont perdus, sans importance),
+  **toutes** les vérifications du démarrage dessus (un réglage refusé l'est avec le même message), puis le lot de
+  seaux simulé normal et le lot avec l'essai, comparés : durée totale, alertes (alarme, ordre du cycle pas suivi,
+  retour à l'ordre normal du solveur), refus du chef. Code de sortie 0 / 1 / 2. Une clé qui contient des points
+  (`griffe.vitesses.pont_x` sous `montee_vitesse → vitesses`) se retrouve toute seule.
+- Page web (onglet « Réglages », rôle « régler ») : bloc « Essai d'un réglage dans le simulateur », en arrière-plan
+  (`POST /api/essai`, `GET /api/essai`), un seul à la fois, refusé pendant un lot ou une mise à jour (même règle que
+  les réglages modifiables, il prend du calcul). Le résultat reste affiché jusqu'au prochain essai.
+- Le simulateur ne va jamais plus vite que son axe (`simulateur.yaml → axes`) : pour voir l'effet d'une vitesse
+  plus haute, l'essayer aussi là.
+
+**Ce qui reste à faire** : l'essai sur la vraie machine (procédure) ; régler les plafonds de Karulium ; recaler le
+simulateur sur les vrais temps ; brancher la montée sur les vitesses des autres modules (remplissage, mycélium) quand
+Karulium veut qu'elles montent aussi ; appliquer un palier sans redémarrer (au début d'un lot) si le redémarrage gêne.
+- **Réponses à la PR n° 116** (tâche 30, 09/11/2026, niveau 1, tranché par Claude) :
+  1. Un palier de vitesse agit au prochain démarrage : gardé pour les premiers essais ; une petite tâche « appliquer
+     le palier au début de chaque lot » viendra si ça gêne.
+  2. Plafonds de vitesse : `actif` reste faux tant que chaque plafond n'est pas fixé d'après l'essai à vide de la
+     vraie machine (procédure `pi/systeme/essai-vitesse-estimation.md`).
+  3. « Un cycle » = un seau rangé : gardé.

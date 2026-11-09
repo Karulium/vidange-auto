@@ -355,3 +355,56 @@ carnet:
   texte_max: 2000
   # Notes montrées d'un coup (le bouton « Plus ancien » en montre davantage).
   notes_par_page: 30
+
+# Estimation de fin d'un lot qui apprend (tâche 30, fonction 7). Elle part des durées du simulateur
+# (réglages d'exemple tant que le simulateur n'est pas recalé), puis se corrige avec les VRAIES
+# durées de chaque geste, gardées au registre par format de seau. Sans durée vraie : la durée du
+# simulateur, avec une grande fourchette. Elle n'est qu'une information : jamais un réglage.
+estimation:
+  actif: true
+  # Recalculée au plus toutes les (s). EXEMPLE.
+  rafraichir_s: 5
+  # Moyenne glissante : les dernières durées vraies de chaque geste (par format). EXEMPLE.
+  moyenne_sur: 20
+  # Sous ce nombre de durées vraies, un geste garde la durée simulée. EXEMPLE.
+  mesures_min: 3
+  # Un geste plus court (s) n'est pas gardé : rien à apprendre. EXEMPLE.
+  duree_min_s: 0.5
+  # Durées gardées au plus par geste et par format (les plus anciennes sont effacées). EXEMPLE.
+  garde_par_geste: 200
+  # Bornes du rapport « durée vraie / durée simulée » d'un geste. EXEMPLES.
+  correction_min: 0.5
+  correction_max: 2.0
+  # Fourchette montrée, en % du temps restant : d'après l'écart des durées vraies, entre ces bornes ;
+  # sans aucune durée vraie, la grande fourchette. EXEMPLES.
+  fourchette_min_pct: 5
+  fourchette_max_pct: 40
+  fourchette_sans_historique_pct: 30
+
+# Montée en vitesse par paliers (tâche 30, fonction 69). FAUX par défaut. Quand « actif » est vrai :
+# après `cycles_par_palier` cycles sans alerte, les vitesses listées montent d'un palier, JAMAIS
+# au-dessus du plafond fixé ici par Karulium ; à la première alerte ou alarme, elles reculent.
+# Chaque changement est noté au journal, au registre et au journal des actions, et peut être annulé
+# (page web, rôle « régler », ou « vidange vitesse annuler »). La montée ne touche AUCUN seuil,
+# AUCUNE zone, AUCUNE règle de positions, jamais une vitesse de contact ou d'approche. Le palier
+# voulu est gardé dans donnees/montee_vitesse.json ; les vitesses ne changent qu'au démarrage du
+# programme (les réglages ne sont jamais relus en route), la page le dit. Tout est EXEMPLE.
+montee_vitesse:
+  actif: false
+  # Un palier = cette part (%) de la vitesse de départ en plus.
+  palier_pct: 5
+  # Cycles sans alerte avant de monter d'un palier.
+  cycles_par_palier: 25
+  # Nombre de paliers au plus (les plafonds ci-dessous coupent avant, si besoin).
+  paliers_max: 4
+  # L'étape qui finit un cycle : le seau rangé du Remplissage.
+  etape_de_cycle: remplissage.ranger
+  # À la première alerte : « palier » (recule d'un palier) ou « depart » (retour au départ).
+  au_recul: palier
+  # Les vitesses qui montent : chemin dans machine.yaml → PLAFOND de Karulium (m/s), jamais en dessous
+  # de la vitesse de départ. Le simulateur n'ira pas plus vite que simulateur.yaml → axes.
+  vitesses:
+    griffe.vitesses.pont_x: 0.30
+    griffe.vitesses.chariot_y: 0.30
+    prehension.vitesses.pont_x: 0.30
+    prehension.vitesses.chariot_y: 0.30

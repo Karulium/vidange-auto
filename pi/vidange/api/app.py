@@ -63,8 +63,10 @@ from vidange.nettoyage import ErreurNettoyage, Nettoyage
 from vidange.poste_fut import ErreurPoste, PosteFut
 from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import ReglagesApi, ReglagesCarnet
+from vidange.simulateur.essai import ErreurEssai
 from vidange.spray import Spray
 from vidange.statistiques.calcul import ECHELLES, Statistiques
+from vidange.vitesse.montee import ErreurMontee
 from vidange.vue3d import EnregistreurRejeu, ErreurRejeu, Vue3d
 
 if TYPE_CHECKING:
@@ -138,6 +140,10 @@ class Services:
     statistiques: Statistiques | None = None
     # Réglages que la page a le droit de changer, avec garde-fous (None : aucun).
     modifiables: Modifiables | None = None
+    # Estimation de fin du lot qui apprend, montée en vitesse, essai d'un réglage (tâche 30).
+    estimation: Any = None
+    montee: Any = None
+    essai: Any = None
     # Réglages du carnet de bord (longueur d'une note, notes par page ; None : sans limite propre).
     carnet: ReglagesCarnet | None = None
 
@@ -155,6 +161,12 @@ class ChoixProgramme(BaseModel):
     """Le fichier de programme (déjà envoyé au Pi) à écrire dans une carte."""
 
     fichier: str
+
+
+class EssaiDemande(BaseModel):
+    """Les réglages à essayer : « fichier=chemin=valeur », un par ligne."""
+
+    changements: list[str]
 
 
 class LotDeSeaux(BaseModel):
@@ -487,6 +499,44 @@ def creer_app(
         noter_changement(requete, fait, "changement")
         return fait
 
+    # ------------------------------------------------------------ vitesse et essais (tâche 30)
+
+    def la_montee() -> Any:
+        if services.montee is None:
+            raise HTTPException(404, "pas de montée en vitesse sur ce programme")
+        return services.montee
+
+    @app.get("/api/vitesse", dependencies=regler_sans_trace)
+    def vitesse() -> dict[str, Any]:
+        """Où en est la montée en vitesse : palier, cycles, plafonds, derniers changements."""
+        return la_montee().en_dict()
+
+    @app.post("/api/vitesse/annuler", dependencies=regler)
+    def vitesse_annuler(requete: Request) -> dict[str, Any]:
+        """Annule le dernier changement de palier (agit au prochain démarrage)."""
+        try:
+            return la_montee().annuler(_qui(requete))
+        except ErreurMontee as erreur:
+            raise HTTPException(409, str(erreur)) from None
+
+    def l_essai() -> Any:
+        if services.essai is None:
+            raise HTTPException(404, "pas d'essai de réglage sur ce programme")
+        return services.essai
+
+    @app.get("/api/essai", dependencies=regler_sans_trace)
+    def essai_etat() -> dict[str, Any]:
+        """Où en est l'essai d'un réglage dans le simulateur, et son résultat."""
+        return l_essai().etat()
+
+    @app.post("/api/essai", dependencies=regler)
+    def essai_lancer(choix: EssaiDemande, requete: Request) -> dict[str, Any]:
+        """Lance l'essai d'un réglage dans le simulateur, en arrière-plan (rien n'est écrit)."""
+        try:
+            return l_essai().lancer(choix.changements, _qui(requete))
+        except ErreurEssai as erreur:
+            raise HTTPException(409, str(erreur)) from None
+
     # ------------------------------------------------------------ connexion (tâche 25)
 
     @app.post("/api/connexion")
@@ -571,6 +621,7 @@ def creer_app(
             else services.nettoyage.etat().en_dict(),
             "air": None if services.air is None else services.air.etat().en_dict(),
             "lot": None if services.lancement is None else services.lancement.en_dict(),
+            "estimation": None if services.estimation is None else services.estimation.calculer(),
         }
 
     @app.get("/api/checklist", dependencies=regarder)
