@@ -2725,3 +2725,9 @@ Procédure d'essai : `pi/systeme/essai-vitesse-estimation.md`. Testé sur le vra
 **Ce qui reste à faire** : l'essai sur la vraie machine (procédure) ; régler les plafonds de Karulium ; recaler le
 simulateur sur les vrais temps ; brancher la montée sur les vitesses des autres modules (remplissage, mycélium) quand
 Karulium veut qu'elles montent aussi ; appliquer un palier sans redémarrer (au début d'un lot) si le redémarrage gêne.
+- **Réponses à la PR n° 116** (tâche 30, 09/11/2026, niveau 1, tranché par Claude) :
+  1. Un palier de vitesse agit au prochain démarrage : gardé pour les premiers essais ; une petite tâche « appliquer
+     le palier au début de chaque lot » viendra si ça gêne.
+  2. Plafonds de vitesse : `actif` reste faux tant que chaque plafond n'est pas fixé d'après l'essai à vide de la
+     vraie machine (procédure `pi/systeme/essai-vitesse-estimation.md`).
+  3. « Un cycle » = un seau rangé : gardé.
