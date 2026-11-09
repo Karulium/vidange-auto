@@ -30,7 +30,7 @@ la lecture lève ErreurMateriel (avec le nom du signal) et le reste continue.
 """
 
 import threading
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from typing import Literal, NamedTuple, Protocol
 
@@ -282,6 +282,9 @@ class Materiel:
                 )
             self.branchements = {n: b for n, b in self.branchements.items() if n in choisis}
         self._verrou = threading.RLock()
+        # Pour compter l'usure des relais (tâche 26) : appelé avec (nom, commandée ?) après
+        # chaque commande de sortie réussie. Ne doit rien commander.
+        self.ecouteur_sortie: Callable[[str, bool], None] | None = None
         self._commandes: dict[str, bool] = {}
         self._bus: dict[str, BusI2c] = {}
         self._lignes: dict[Ressource, Lignes] = {}
@@ -605,6 +608,11 @@ class Materiel:
             )
             self._commandes[nom] = commande
         journal.debug("Sortie %s : %s", nom, "commandée" if commande else "au repos")
+        if self.ecouteur_sortie is not None:
+            try:
+                self.ecouteur_sortie(nom, commande)
+            except Exception:
+                journal.exception("Compteur d'usure : sortie %s pas comptée", nom)
 
     def sorties(self) -> Iterator[str]:
         return (nom for nom, b in self.branchements.items() if b.sorte == "sortie")

@@ -1,0 +1,195 @@
+# Entretien : compteurs des axes et des actionneurs, pièces d'usure, calendrier (tâche 26).
+#
+# ATTENTION : TOUTES les limites ci-dessous sont des EXEMPLES (« exemple: true »). Personne ne
+# connaît encore la vraie durée de vie des pièces de cette machine : ne jamais s'y fier. Elles
+# serviront à voir la page « Maintenance » et l'alerte fonctionner. Les vraies limites viendront
+# des fiches des fournisseurs (guidages, crémaillère, vis à billes, freins, électrovannes), puis de
+# ce que Karulium verra sur la machine. Quand une limite est vraie, retirer son « exemple: true ».
+#
+# Comment ça marche :
+#   - Le Pi compte tout seul, sans rien changer à la machine : la distance, le nombre de
+#     mouvements et les heures de marche de chaque axe (d'après les positions que les cartes
+#     FluidNC rapportent), et le nombre de manœuvres de chaque sortie tout-ou-rien (vannes,
+#     freins, électroaimants, relais). Rien n'est jamais remis à zéro : ce sont des totaux à vie.
+#   - Chaque pièce ci-dessous dit quel compteur la fait vieillir et sa limite. Le bouton « Fait »
+#     de la page (réservé au rôle « régler ») note la date et la personne, et la pièce repart de
+#     zéro (les totaux à vie ne changent pas).
+#   - À l'alerte « bientôt » puis à la limite (« à faire »), la check-list de démarrage et le
+#     journal le disent. Jamais un arrêt de la machine : l'entretien informe, il ne protège rien
+#     (la sécurité est câblée).
+#
+# Genres de compteur (« genre ») :
+#   distance    de : un axe de machine.yaml ; limite en mètres (en degrés pour un axe tournant)
+#   mouvements  de : un axe ; limite = nombre de mouvements (un départ après un arrêt)
+#   heures      de : un axe ; limite en heures de marche (le temps où l'axe bouge)
+#   manoeuvres  de : une sortie de entrees-sorties.yaml ; limite = nombre de mises en marche
+#   seaux       (sans « de ») ; limite = nombre de seaux remplis depuis le dernier « fait »
+#   jours       (sans « de ») ; limite = jours depuis le dernier « fait » (calendrier)
+#
+# Vérifié au démarrage : un axe ou une sortie qui n'existe pas, un genre sans « de » (ou avec un
+# « de » en trop), une limite nulle : une erreur claire empêche de démarrer.
+#
+# Le rappel de vider le bidon de purge de l'air comprimé reste dans air.yaml (déjà fait).
+
+exemple: true
+
+compteurs:
+  # Les compteurs sont écrits sur le disque d'un seul coup toutes les 5 minutes (et à l'arrêt) :
+  # pas à chaque geste.
+  ecriture_periode_s: 300
+  # Moins que ça entre deux rapports de carte (mm, ou degrés) : bruit de mesure, pas un mouvement.
+  seuil_mouvement_mm: 0.05
+  # Immobile moins longtemps que ça (s) : c'est toujours le même mouvement.
+  arret_s: 1.0
+  # Un saut plus grand (mm, ou degrés) entre deux rapports : repère perdu, pas compté.
+  saut_max_mm: 500
+  # Deux rapports plus espacés que ça (s) : la liaison était coupée, temps pas compté.
+  trou_max_s: 2.0
+
+alerte:
+  # EXEMPLE : « bientôt » quand il reste moins de 10 % de la limite.
+  avance_pourcent: 10
+
+pieces:
+  # ---- Axes : rails, guidages et transmissions (distance parcourue)
+  pont_x:
+    exemple: true
+    description: Rails et transmission du pont du portique (axe X, deux moteurs)
+    compteur: {genre: distance, de: pont_x}
+    limite: 20000
+    a_faire: >-
+      Contrôler l'état et le jeu des rails et de la transmission du pont (les deux côtés),
+      nettoyer et graisser comme le dit la fiche mécanique, puis cliquer « Fait ».
+  chariot_y:
+    exemple: true
+    description: Rail et transmission du chariot du portique (axe Y)
+    compteur: {genre: distance, de: chariot_y}
+    limite: 20000
+    a_faire: >-
+      Contrôler l'état et le jeu du rail et de la transmission du chariot, nettoyer et graisser
+      comme le dit la fiche mécanique, puis cliquer « Fait ».
+  griffe_z:
+    exemple: true
+    description: Pignon et crémaillère du Z de la griffe
+    compteur: {genre: distance, de: griffe_z}
+    limite: 10000
+    a_faire: >-
+      Contrôler la crémaillère et le pignon (usure, propreté, jeu), nettoyer et graisser comme
+      le dit la fiche mécanique, puis cliquer « Fait ».
+  griffe_b:
+    exemple: true
+    description: Vis à billes du godet de la griffe
+    compteur: {genre: distance, de: griffe_b}
+    limite: 2000
+    a_faire: >-
+      Contrôler la vis à billes du godet (jeu, propreté, graisse), nettoyer et graisser comme
+      le dit la fiche mécanique, puis cliquer « Fait ».
+  prehension_z:
+    exemple: true
+    description: Rail et transmission du Z de la préhension
+    compteur: {genre: distance, de: prehension_z}
+    limite: 10000
+    a_faire: >-
+      Contrôler le guidage et la transmission du Z de la préhension, nettoyer et graisser comme
+      le dit la fiche mécanique, puis cliquer « Fait ».
+  remplissage_y:
+    exemple: true
+    description: Rail et transmission de l'avance du chariot de remplissage
+    compteur: {genre: distance, de: remplissage_y}
+    limite: 10000
+    a_faire: >-
+      Contrôler le rail et la transmission de l'avance du chariot de remplissage, nettoyer et
+      graisser comme le dit la fiche mécanique, puis cliquer « Fait ».
+  plateau_z:
+    exemple: true
+    description: Guidage et transmission du Z du plateau du remplissage
+    compteur: {genre: distance, de: plateau_z}
+    limite: 5000
+    a_faire: >-
+      Contrôler le guidage et la transmission du Z du plateau, nettoyer et graisser comme le
+      dit la fiche mécanique, puis cliquer « Fait ».
+
+  # ---- Axe : heures de marche
+  lavage_noyau:
+    exemple: true
+    description: Rotation du noyau du lavage (heures de marche)
+    compteur: {genre: heures, de: lavage_noyau}
+    limite: 500
+    a_faire: >-
+      Contrôler la rotation du noyau du lavage (jeu, bruit, étanchéité) comme le dit la fiche
+      mécanique, puis cliquer « Fait ».
+
+  # ---- Actionneurs tout-ou-rien (manœuvres)
+  frein_griffe_z:
+    exemple: true
+    description: Frein du Z de la griffe
+    compteur: {genre: manoeuvres, de: frein_griffe_z}
+    limite: 200000
+    a_faire: >-
+      Contrôler le frein du Z de la griffe (il doit tenir l'axe à l'arrêt, sans traîner), puis
+      cliquer « Fait ». Si le frein est changé : « Fait » aussi.
+  frein_prehension_z:
+    exemple: true
+    description: Frein du Z de la préhension
+    compteur: {genre: manoeuvres, de: frein_prehension_z}
+    limite: 200000
+    a_faire: >-
+      Contrôler le frein du Z de la préhension (il doit tenir l'axe à l'arrêt, sans traîner),
+      puis cliquer « Fait ». Si le frein est changé : « Fait » aussi.
+  vanne_vide:
+    exemple: true
+    description: Électrovanne « aspirer » de la ventouse
+    compteur: {genre: manoeuvres, de: vanne_vide}
+    limite: 500000
+    a_faire: >-
+      Contrôler l'électrovanne « aspirer » (fuite, bruit, temps de réponse du vide), la changer
+      si besoin, puis cliquer « Fait ».
+  vanne_souffler:
+    exemple: true
+    description: Électrovanne « souffler » de la ventouse
+    compteur: {genre: manoeuvres, de: vanne_souffler}
+    limite: 500000
+    a_faire: >-
+      Contrôler l'électrovanne « souffler » (fuite, bruit, objet qui se lâche bien), la changer
+      si besoin, puis cliquer « Fait ».
+  electroaimants_capsule:
+    exemple: true
+    description: Électroaimants de la capsule (préhension)
+    compteur: {genre: manoeuvres, de: electroaimants_capsule}
+    limite: 200000
+    a_faire: >-
+      Contrôler les électroaimants (tenue de la capsule, échauffement, câble), puis cliquer
+      « Fait ».
+  electroaimant_verrou_plateau:
+    exemple: true
+    description: Électroaimant du verrou du plateau du porte-bocal
+    compteur: {genre: manoeuvres, de: electroaimant_verrou_plateau}
+    limite: 200000
+    a_faire: >-
+      Contrôler l'électroaimant et le verrou du plateau (tenue, jeu), puis cliquer « Fait ».
+  relais_compresseur:
+    exemple: true
+    description: Relais du compresseur
+    compteur: {genre: manoeuvres, de: relais_compresseur}
+    limite: 100000
+    a_faire: >-
+      Contrôler le relais du compresseur (contacts, échauffement), le changer si besoin, puis
+      cliquer « Fait ».
+
+  # ---- Seaux et calendrier
+  controle_lavage:
+    exemple: true
+    description: Contrôle du lavage (rampes, buses, vannes) selon le nombre de seaux
+    compteur: {genre: seaux}
+    limite: 1000
+    a_faire: >-
+      Contrôler les rampes, les buses et les vannes du lavage (bouchage, fuite, jets), puis
+      cliquer « Fait ».
+  tour_general:
+    exemple: true
+    description: Tour général de la machine (vis, câbles, propreté)
+    compteur: {genre: jours}
+    limite: 90
+    a_faire: >-
+      Faire le tour de la machine : vis et fixations, câbles et chaînes porte-câbles, fins de
+      course, propreté, puis cliquer « Fait ».

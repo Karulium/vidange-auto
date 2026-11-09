@@ -32,6 +32,7 @@ from dataclasses import replace
 from vidange.chef import Carnet, Chef, Condition, Etape, EtatChef, Module, Programme
 from vidange.chef.chef import ATTENTE_GO
 from vidange.entrees_sorties import EntreesSorties
+from vidange.entretien import Compteurs
 from vidange.materiel import FausseFabrique, Materiel
 from vidange.materiel.faux import FausseBoitePosteFut, FausseCarteSpray
 from vidange.pesees.tour import TourPesees
@@ -56,9 +57,12 @@ class Simulateur:
         liste: EntreesSorties,
         scenario: str | None = None,
         carnet: Carnet | None = None,
+        compteurs: Compteurs | None = None,
     ) -> None:
         """`carnet` : le chef note l'état du cycle comme sur la machine (essais de reprise après
-        une coupure, tâche 45) ; sans carnet, rien n'est écrit."""
+        une coupure, tâche 45) ; sans carnet, rien n'est écrit. `compteurs` : les compteurs
+        d'usure (tâche 26), que le cycle joué fait bouger comme sur la machine."""
+        self._compteurs = compteurs
         self._tous = reglages
         self._reglages = reglages.simulateur
         self._machine = reglages.machine
@@ -76,6 +80,8 @@ class Simulateur:
         self.temps = 0.0
         self.fabrique = FausseFabrique(liste)
         self.materiel = Materiel(liste, self.fabrique)
+        if compteurs is not None:
+            self.materiel.ecouteur_sortie = compteurs.noter_sortie
         # La fausse carte du spray, à l'heure du simulateur, avec les réglages de machine.yaml
         # (comme le programme de la carte à sa fabrication).
         spray = reglages.machine.spray
@@ -199,6 +205,7 @@ class Simulateur:
             self.chef.lancer(suivi)
             self._commencer_etape(module.nom, 0)
         probleme = self._boucle()
+        self._compter_les_mouvements()
         recul = self.chef.recul_programme or ""
         if programme is not None and not recul and self.chef.programme_en_jeu:
             recul = "des passages du programme n'ont pas été faits"
@@ -251,6 +258,17 @@ class Simulateur:
                 duree_max = self._reglages.duree_max_s
                 return f"bloqué au bout de duree_max_s ({duree_max:g} s) : {attentes}"
             self.temps = self._prochain_instant()
+
+    def _compter_les_mouvements(self) -> None:
+        """Les compteurs d'usure : chaque mouvement joué fait avancer ses axes (distance,
+        mouvement, heures de marche)."""
+        if self._compteurs is None:
+            return
+        for mouvement in self._axes.mouvements:
+            for axe, (depart, arrivee) in mouvement.axes.items():
+                self._compteurs.noter_mouvement(
+                    axe, abs(arrivee - depart), mouvement.fin - mouvement.debut
+                )
 
     def _prochain_instant(self) -> float:
         """Le prochain événement connu, sans dépasser « pas_max_s » ni « duree_max_s »."""

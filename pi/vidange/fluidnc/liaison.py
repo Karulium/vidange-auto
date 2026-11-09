@@ -153,6 +153,12 @@ class Liaison:
         self._pause_avant_connexion = False
         self._reinitialisation_demandee = False
 
+        # Pour compter l'usure (tâche 26) : appelés avec (nom de la carte, EtatCarte) après chaque
+        # rapport d'état, et (nom de la carte, ligne) pour chaque ligne prise en charge. Ils ne
+        # doivent rien commander ni rien attendre ; une erreur de leur part est seulement notée.
+        self.ecouteur_rapport: Callable[[str, EtatCarte], None] | None = None
+        self.ecouteur_ligne: Callable[[str, str], None] | None = None
+
         self._arret = threading.Event()
         self._fil: threading.Thread | None = None
 
@@ -221,6 +227,13 @@ class Liaison:
             self._a_envoyer.append(commande)
             self._pousser()
             self._mettre_a_jour()
+        if probleme is None and self.ecouteur_ligne is not None:
+            try:
+                self.ecouteur_ligne(self.nom, commande.ligne)
+            except Exception:
+                self._journal.exception(
+                    "Compteur d'usure : ligne « %s » pas comptée", commande.ligne
+                )
         return commande
 
     def envoyer_et_attendre(self, ligne: str, delai_s: float) -> None:
@@ -506,3 +519,8 @@ class Liaison:
             date_rapport=self._horloge(),
             rapports_recus=self._etat.rapports_recus + 1,
         )
+        if self.ecouteur_rapport is not None:
+            try:
+                self.ecouteur_rapport(self.nom, self._etat)
+            except Exception:
+                self._journal.exception("Compteur d'usure : rapport d'état pas compté")

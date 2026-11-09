@@ -947,7 +947,12 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   Fait : comptes de la page web (3 rôles, `vidange compte`, journal des actions), archive quotidienne des fichiers
   hors Git, `restaurer.sh` et `vidange restaurer`. Choix et reste à faire : `docs/decisions.md`, « Comptes et
   restauration, tâche 25 ». Essais : `pi/systeme/essai-comptes.md`, `pi/systeme/essai-restauration.md`.
-- [ ] 26. Entretien : compteurs par axe, calendrier, pièces d'usure, page maintenance (40 à 44). — Sonnet.
+- [x] 26. Entretien : compteurs par axe, calendrier, pièces d'usure, page maintenance (40 à 44). — Sonnet.
+  Fait : compteurs par axe (distance, mouvements, heures de marche) et par sortie tout-ou-rien (manœuvres), écrits
+  par groupes sur le disque, pièces d'usure et calendrier (`pi/reglages/entretien.yaml`, toutes les limites sont des
+  EXEMPLES), alerte « bientôt » / « à faire » (check-list et journal, jamais bloquante), onglet « Maintenance » de la
+  page web avec le bouton « Fait ». La santé de l'informatique (45) existait déjà (`fiabilite/sante.py`, tâche 7).
+  Choix et reste à faire : `docs/decisions.md`, « Entretien, tâche 26 ». Essai : `pi/systeme/essai-entretien.md`.
 - [ ] 27. Notifications sur le téléphone (ntfy), résumé du soir, escalade (60 à 63). — Sonnet.
 - [ ] 28. Page web : vue 3D en direct et rejeu d'incident (54, 55), statistiques (57), appli installable (59),
   réglages avec garde-fous (56), carnet de bord (86). — Sonnet.

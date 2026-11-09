@@ -7634,6 +7634,83 @@ class ReglagesAir(Modele):
         return self
 
 
+# ------------------------------------------------------------ entretien.yaml
+
+GenreCompteur = Literal["distance", "mouvements", "heures", "manoeuvres", "seaux", "jours"]
+# Les genres qui comptent un axe de machine.yaml, et celui qui compte un actionneur.
+GENRES_AXE = ("distance", "mouvements", "heures")
+
+
+class CompteursEntretien(Modele):
+    """Comment on compte ce que font les axes à partir des rapports des cartes FluidNC."""
+
+    # Les compteurs sont écrits sur le disque en un seul coup tous les (s) : pas à chaque geste.
+    ecriture_periode_s: float = Field(gt=0)
+    # Un axe qui change de moins que ça (mm, ou degrés) entre deux rapports ne bouge pas :
+    # c'est le bruit de la mesure.
+    seuil_mouvement_mm: float = Field(gt=0)
+    # Un axe immobile moins longtemps que ça (s) fait toujours le même mouvement.
+    arret_s: float = Field(gt=0)
+    # Un saut plus grand (mm, ou degrés) entre deux rapports : repère perdu (carte redémarrée,
+    # prise d'origine), pas une distance parcourue : il n'est pas compté.
+    saut_max_mm: float = Field(gt=0)
+    # Deux rapports plus espacés que ça (s) : la liaison était coupée, le temps n'est pas compté.
+    trou_max_s: float = Field(gt=0)
+
+
+class AlerteEntretien(Modele):
+    """Quand prévenir qu'une pièce approche de sa limite."""
+
+    # « Bientôt » quand il reste moins que ce pourcentage de la limite (10 = à 90 % d'usure).
+    avance_pourcent: float = Field(gt=0, lt=100)
+
+
+class CompteurPiece(Modele):
+    """Ce qui fait vieillir une pièce.
+
+    distance, mouvements, heures : d'un axe de machine.yaml (`de`) ; manoeuvres : d'un actionneur
+    tout-ou-rien (`de`, nom de entrees-sorties.yaml) ; seaux : nombre de seaux remplis depuis le
+    dernier « fait » ; jours : temps qui passe depuis le dernier « fait ».
+    """
+
+    genre: GenreCompteur
+    de: Nom | None = None
+
+    @model_validator(mode="after")
+    def _verifier_de(self) -> "CompteurPiece":
+        if self.genre in ("seaux", "jours"):
+            if self.de is not None:
+                raise ValueError(f"un compteur « {self.genre} » n'a pas de « de »")
+        elif self.de is None:
+            quoi = "l'axe" if self.genre in GENRES_AXE else "l'actionneur"
+            raise ValueError(f"un compteur « {self.genre} » dit « de » : le nom de {quoi}")
+        return self
+
+
+class PieceEntretien(Modele):
+    """Une pièce d'usure, ou une opération d'entretien."""
+
+    # Vrai : la limite est un EXEMPLE, pas une durée de vie connue.
+    exemple: bool = False
+    # Son nom en français, tel que la page le montre.
+    description: str = Field(min_length=1)
+    compteur: CompteurPiece
+    # Limite, dans l'unité du compteur : m ou degrés (distance), nombre (mouvements, manoeuvres,
+    # seaux), heures, jours.
+    limite: float = Field(gt=0)
+    # Ce qu'il faut faire, en clair.
+    a_faire: str = Field(min_length=1)
+
+
+class ReglagesEntretien(Modele):
+    """entretien.yaml : compteurs, pièces d'usure et calendrier d'entretien (tâche 26)."""
+
+    exemple: bool = False
+    compteurs: CompteursEntretien
+    alerte: AlerteEntretien
+    pieces: dict[Nom, PieceEntretien]
+
+
 # --------------------------------------------------------------- l'ensemble
 
 
@@ -7646,6 +7723,7 @@ class Reglages(Modele):
     pesees: ReglagesPesees
     vision: ReglagesVision
     air: ReglagesAir
+    entretien: ReglagesEntretien
 
 
 # Nom du fichier → (nom dans Reglages, modèle). Ajouter ici chaque nouveau fichier.
@@ -7658,6 +7736,7 @@ FICHIERS: dict[str, tuple[str, type[Modele]]] = {
     "pesees.yaml": ("pesees", ReglagesPesees),
     "vision.yaml": ("vision", ReglagesVision),
     "air.yaml": ("air", ReglagesAir),
+    "entretien.yaml": ("entretien", ReglagesEntretien),
 }
 
 
@@ -7708,6 +7787,20 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
         if geste.prise_origine is not None and geste.prise_origine not in fluidnc.cartes
     ]
     erreurs += _verifier_pilotes_entre_fichiers(machine, fluidnc)
+    entretien = valeurs["entretien"]
+    assert isinstance(entretien, ReglagesEntretien)
+    for nom_piece, piece in entretien.pieces.items():
+        axe = piece.compteur.de
+        if piece.compteur.genre in GENRES_AXE and axe not in machine.axes:
+            erreurs.append(
+                f"entretien.yaml, pieces → {nom_piece} → compteur → de : l'axe « {axe} » n'est pas "
+                f"dans machine.yaml (axes : {', '.join(machine.axes)})"
+            )
+        elif piece.compteur.genre in GENRES_AXE and machine.axes[axe].carte is None:  # type: ignore[index]
+            erreurs.append(
+                f"entretien.yaml, pieces → {nom_piece} → compteur → de : l'axe « {axe} » n'a pas "
+                "de carte FluidNC dans machine.yaml : ses déplacements ne peuvent pas être comptés"
+            )
     programme = valeurs["programme"]
     assert isinstance(programme, Programme)
     avance, periode_etat = programme.distance.avance_s, fluidnc.liaison.periode_etat_s
