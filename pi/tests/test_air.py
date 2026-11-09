@@ -3,10 +3,9 @@
 from datetime import datetime, timedelta
 
 import pytest
-from fastapi.testclient import TestClient
 
 from vidange.air import Air
-from vidange.api.app import Services, creer_app
+from vidange.api.app import Services
 from vidange.chef import Condition
 from vidange.chef.chef import GESTES_PROTEGES
 from vidange.demarrage import constats_air, preparer_air
@@ -21,7 +20,7 @@ from vidange.reglages import ReglagesAir, charger_reglages
 from vidange.simulateur import Simulateur
 
 from .conftest import DOSSIER_PI
-from .test_api import CLE, LOCAL, reglages_api
+from .test_api import LOCAL, client_connecte, creer_app_de_test
 from .test_chef import Horloge, nouveau_chef
 from .test_nettoyage import Banc, nuit_complete
 from .test_reglages import erreur_de, remplacer
@@ -228,8 +227,8 @@ def test_branche_au_chef_au_demarrage(a, tmp_path):
 def client_api(tmp_path, air):
     registre = Registre(tmp_path / "registre.sqlite", tmp_path / "photos")
     services = Services(nouveau_chef(Horloge()), registre, lambda *_: None, list, air=air)
-    app = creer_app(services, reglages_api(), CLE)
-    return TestClient(app, client=LOCAL, headers={"Authorization": f"Bearer {CLE}"}), registre
+    app = creer_app_de_test(services, tmp_path)
+    return client_connecte(app, adresse=LOCAL), registre
 
 
 def test_api_de_l_air(a, tmp_path):

@@ -14,6 +14,7 @@ Une coupure pendant un envoi : l'envoi est refait au démarrage suivant, avec la
 le destinataire reconnaît ce qu'il a déjà reçu.
 """
 
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -36,6 +37,7 @@ from vidange.reglages import EnvoiSecours, ReglagesEnvois
 
 journal = donner_journal("envois")
 
+_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 DESTINATIONS = {"culture": "logiciel de culture", "secours": "copie de secours (maison)"}
 
 
@@ -62,9 +64,11 @@ def mettre_en_file_secours(
 
     def ajouter(copie: Path) -> None:
         objet = relatif(copie, donnees)
-        motif = (Path(objet).parent / "registre-%.sqlite").as_posix()
+        # Une copie plus ancienne qui attend encore (« registre-AAAA-MM-JJ.sqlite », ou
+        # « fichiers-AAAA-MM-JJ.tar.gz ») est remplacée par la nouvelle.
+        motif = (Path(objet).parent / _DATE.sub("%", copie.name)).as_posix()
         registre.ajouter_envoi("secours", "fichier", objet, remplace=motif)
-        if reglages.photos:
+        if reglages.photos and copie.name.startswith("registre-"):
             registre.ajouter_envoi("secours", "fichier", DOSSIER_PHOTOS)
 
     return ajouter

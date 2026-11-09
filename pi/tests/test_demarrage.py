@@ -8,6 +8,7 @@ import urllib.request
 
 from vidange.accelerometre.faux import FauxRp2040
 from vidange.cameras import FausseCamera
+from vidange.comptes import Comptes, Role
 from vidange.demarrage import (
     CODE_OK,
     CODE_REDEMARRER,
@@ -40,6 +41,26 @@ def options(reglages, tmp_path):
         "--donnees",
         str(tmp_path / "donnees"),
     ]
+
+
+MOT_DE_PASSE = "un-mot-de-passe-de-test"
+
+
+def creer_compte(tmp_path) -> None:
+    """Un compte « karulium » dans comptes.yaml, à côté du fichier de secrets."""
+    Comptes(tmp_path / "comptes.yaml").ajouter("chef", Role.KARULIUM, MOT_DE_PASSE)
+
+
+def se_connecter(port: int) -> str:
+    """Se connecte à la vraie API et rend le cookie de session à renvoyer."""
+    demande = urllib.request.Request(
+        f"http://127.0.0.1:{port}/api/connexion",
+        data=json.dumps({"nom": "chef", "mot_de_passe": MOT_DE_PASSE}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(demande, timeout=5) as reponse:
+        return reponse.headers["Set-Cookie"].split(";")[0]
 
 
 def test_verifier_des_reglages_corrects(reglages, tmp_path, capsys):
@@ -194,9 +215,7 @@ def test_l_api_demarre_avec_la_cle_et_s_arrete_avec_le_programme(
         port = prise.getsockname()[1]
     remplacer(reglages / "programme.yaml", "adresse: 0.0.0.0", "adresse: 127.0.0.1")
     remplacer(reglages / "programme.yaml", "port: 8080", f"port: {port}")
-    secrets = tmp_path / "secrets.yaml"
-    secrets.write_text("cle_api: une-cle-de-test-assez-longue\n", encoding="utf-8")
-    secrets.chmod(0o600)
+    creer_compte(tmp_path)
     raccords, messages, _ = raccords_faux(entrees_sorties)
     arguments = [*options(reglages, tmp_path), "--entrees-sorties", str(entrees_sorties)]
     arret = threading.Event()
@@ -205,8 +224,7 @@ def test_l_api_demarre_avec_la_cle_et_s_arrete_avec_le_programme(
     try:
         attendre(lambda: "READY=1" in messages)
         demande = urllib.request.Request(
-            f"http://127.0.0.1:{port}/api/etat",
-            headers={"Authorization": "Bearer une-cle-de-test-assez-longue"},
+            f"http://127.0.0.1:{port}/api/etat", headers={"Cookie": se_connecter(port)}
         )
         with urllib.request.urlopen(demande, timeout=5) as reponse:
             etat = json.loads(reponse.read())
@@ -250,13 +268,26 @@ def test_au_demarrage_seules_les_vannes_de_la_ventouse_sont_fermees(
     assert "vannes de la ventouse fermées (vanne_vide, vanne_souffler)" in journal
 
 
-def test_sans_cle_la_machine_demarre_sans_api(reglages, tmp_path):
+def test_sans_compte_la_machine_demarre_et_la_page_est_fermee(reglages, tmp_path):
     arret = threading.Event()
     arret.set()
     assert principal(options(reglages, tmp_path), arret) == CODE_OK
     journal = (tmp_path / "donnees" / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
-    assert "l'API et la page web ne démarrent pas" in journal
-    assert "[attention] API et page web : pas de clé" in journal
+    assert "[attention] API et page web : à l'écoute" in journal
+    assert "aucun compte : la page est fermée" in journal
+
+
+def test_comptes_faux_empechent_de_demarrer(reglages, tmp_path, capsys):
+    (tmp_path / "comptes.yaml").write_text(
+        "comptes:\n  gael: {role: patron, mot_de_passe: x}\n", encoding="utf-8"
+    )
+    assert principal([*options(reglages, tmp_path), "--verifier"]) == CODE_REGLAGES_FAUX
+    assert "rôle inconnu" in capsys.readouterr().err
+
+
+def test_verifier_accepte_les_comptes_corrects(reglages, tmp_path):
+    creer_compte(tmp_path)
+    assert principal([*options(reglages, tmp_path), "--verifier"]) == CODE_OK
 
 
 # ---------------------------------------------------------------- tâche 9 : écran de l'armoire
@@ -308,9 +339,7 @@ def test_pilotage_a_distance_puis_l_armoire_reprend_la_main(reglages, entrees_so
         port = prise.getsockname()[1]
     remplacer(reglages / "programme.yaml", "adresse: 0.0.0.0", "adresse: 127.0.0.1")
     remplacer(reglages / "programme.yaml", "port: 8080", f"port: {port}")
-    secrets = tmp_path / "secrets.yaml"
-    secrets.write_text("cle_api: une-cle-de-test-assez-longue\n", encoding="utf-8")
-    secrets.chmod(0o600)
+    creer_compte(tmp_path)
     nextion = FauxNextion()
     raccords, messages, _ = raccords_faux(entrees_sorties)
     raccords.ecran = nextion.ouvrir
@@ -319,11 +348,13 @@ def test_pilotage_a_distance_puis_l_armoire_reprend_la_main(reglages, entrees_so
     fil = threading.Thread(target=lambda: principal(arguments, arret, raccords))
     fil.start()
 
+    cookie = []
+
     def demander(chemin: str, methode: str = "GET"):
+        if not cookie:
+            cookie.append(se_connecter(port))
         demande = urllib.request.Request(
-            f"http://127.0.0.1:{port}{chemin}",
-            method=methode,
-            headers={"Authorization": "Bearer une-cle-de-test-assez-longue"},
+            f"http://127.0.0.1:{port}{chemin}", method=methode, headers={"Cookie": cookie[0]}
         )
         with urllib.request.urlopen(demande, timeout=5) as reponse:
             return reponse.headers, reponse.read()
@@ -381,9 +412,7 @@ def test_mise_a_jour_d_une_carte_puis_du_pi_depuis_la_page(reglages, entrees_sor
     remplacer(reglages / "programme.yaml", "port: 8080", f"port: {port}")
     remplacer(reglages / "programme.yaml", "delai_commande_s: 5", "delai_commande_s: 0.05")
     remplacer(reglages / "programme.yaml", "delai_reponse_s: 30", "delai_reponse_s: 0.5")
-    secrets = tmp_path / "secrets.yaml"
-    secrets.write_text("cle_api: une-cle-de-test-assez-longue\n", encoding="utf-8")
-    secrets.chmod(0o600)
+    creer_compte(tmp_path)
     raccords, messages, _ = raccords_faux(entrees_sorties)
     faux = FausseCarteEsp32()
     raccords.cartes_maj = {
@@ -404,7 +433,11 @@ def test_mise_a_jour_d_une_carte_puis_du_pi_depuis_la_page(reglages, entrees_sor
     fil = threading.Thread(target=lambda: resultat.append(principal(arguments, arret, raccords)))
     fil.start()
 
+    cookie = []
+
     def demander(chemin: str, methode: str = "GET", corps: bytes | None = None, json_=None):
+        if not cookie:
+            cookie.append(se_connecter(port))
         if json_ is not None:
             corps = json.dumps(json_).encode()
         demande = urllib.request.Request(
@@ -412,7 +445,7 @@ def test_mise_a_jour_d_une_carte_puis_du_pi_depuis_la_page(reglages, entrees_sor
             data=corps,
             method=methode,
             headers={
-                "Authorization": "Bearer une-cle-de-test-assez-longue",
+                "Cookie": cookie[0],
                 "Content-Type": "application/json"
                 if json_ is not None
                 else "application/octet-stream",

@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-from vidange.api import Services, creer_app
+from vidange.api import Services
 from vidange.fluidnc import EtatCarte
 from vidange.mises_a_jour import (
     CarteEsp32,
@@ -15,7 +15,7 @@ from vidange.mises_a_jour import (
 )
 from vidange.reglages import ReglagesMajPi, ReglagesMisesAJour
 
-from .test_api import CLE, BancApi, reglages_api
+from .test_api import BancApi, creer_app_de_test
 from .test_chef import tour
 from .test_maj_cartes import REGLAGES_FLUIDNC, reglages_cartes
 
@@ -116,7 +116,7 @@ class BancMaj(BancApi):
             pilote=None,
             mises_a_jour=self.maj,
         )
-        self.app = creer_app(services, reglages_api(), CLE)
+        self.app = creer_app_de_test(services)
 
     def redemarrer(self) -> None:
         self.redemarrages += 1
@@ -194,7 +194,7 @@ def test_programme_envoye_puis_ecrit_dans_la_carte(b):
     assert (note["fichier"], note["reglage"], note["qui"]) == (
         "carte portique",
         "programme",
-        "page web (192.168.1.20)",
+        "page web (chef, 192.168.1.20)",
     )
     assert note["ancien"] == '"3.9.4 FluidNC v3.9.4"' and note["nouveau"] == '"fluidnc-3.9.5.bin"'
     etat = b.client().get("/api/mises-a-jour").json()

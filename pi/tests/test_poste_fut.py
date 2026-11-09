@@ -4,9 +4,8 @@ pesées), états du poste, bouton « Prêt », pesée absente, accu du plateau, 
 import logging
 
 import pytest
-from fastapi.testclient import TestClient
 
-from vidange.api import Services, creer_app
+from vidange.api import Services
 from vidange.ecran import Ecran, FauxNextion, LiaisonEcran
 from vidange.entrees_sorties import charger_entrees_sorties
 from vidange.fiabilite import Bilans
@@ -34,7 +33,7 @@ from vidange.simulateur import ErreurSimulation, Simulateur
 from vidange.simulateur.outil import main as simulateur
 
 from .conftest import DOSSIER_PI
-from .test_api import CLE, LOCAL, reglages_api
+from .test_api import LOCAL, client_connecte, creer_app_de_test
 from .test_chef import Horloge, nouveau_chef
 from .test_ecran import REGLAGES as REGLAGES_ECRAN
 from .test_reglages import erreur_de, remplacer
@@ -728,11 +727,7 @@ def test_page_web_du_poste(b, tmp_path):
     chef = nouveau_chef(b.horloge)
     bilans = Bilans(tmp_path, ReglagesBilan(lignes_journal=0), b.registre, chef)
     services = Services(chef, b.registre, bilans.acquitter, checklist=list, poste=b.poste)
-    client = TestClient(
-        creer_app(services, reglages_api(), CLE),
-        client=LOCAL,
-        headers={"Authorization": f"Bearer {CLE}"},
-    )
+    client = client_connecte(creer_app_de_test(services), adresse=LOCAL)
     assert client.get("/api/etat").json()["poste_fut"]["etat"] == ABSENT
     reponse = client.post("/api/poste-fut/pret")
     assert reponse.status_code == 409 and "il manque : plateau du fût" in reponse.json()["detail"]
@@ -745,11 +740,7 @@ def test_page_web_du_poste(b, tmp_path):
     assert reponse.status_code == 200 and reponse.json()["etat"] == PRET
     assert client.get("/api/poste-fut").json()["gestes"][-1] == "Appuyer sur « Prêt »"
     sans_poste = Services(chef, b.registre, bilans.acquitter, checklist=list)
-    client = TestClient(
-        creer_app(sans_poste, reglages_api(), CLE),
-        client=LOCAL,
-        headers={"Authorization": f"Bearer {CLE}"},
-    )
+    client = client_connecte(creer_app_de_test(sans_poste), adresse=LOCAL)
     assert client.get("/api/poste-fut").status_code == 404
 
 

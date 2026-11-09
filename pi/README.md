@@ -340,20 +340,28 @@ Tout ce qui doit partir du Pi attend dans la table `envois` du registre (elle su
 ## API et page web (tâche 8)
 
 La page web s'ouvre sur `http://<adresse du Pi>:8080` (port dans `programme.yaml` → `api`), sur place ou par
-Tailscale (voir `systeme/installation.md`). Sur un PC : mettre une clé dans `pi/secrets.yaml`, lancer
-`.venv/bin/vidange`, puis ouvrir `http://127.0.0.1:8080`.
+Tailscale (voir `systeme/installation.md`). Sur un PC : créer un compte (`.venv/bin/vidange compte ajouter
+moi --role karulium`, avec `VIDANGE_COMPTES=pi/comptes.yaml`), lancer `.venv/bin/vidange`, puis ouvrir
+`http://127.0.0.1:8080`.
 
-- **Clé** : `cle_api` du fichier de secrets (au moins 16 caractères). Sans clé, l'API ne démarre pas (la machine,
-  elle, tourne : la check-list le signale). Chaque appel `/api/...` envoie `Authorization: Bearer <clé>`.
+- **Comptes (tâche 25)** : un nom et un mot de passe par personne, dans `comptes.yaml` (hors Git, à côté du fichier de
+  secrets ; modèle vide `comptes.exemple.yaml`). Trois rôles : `karulium` (tous les droits), `employe` (regarder et
+  produire : Go, lots, boutons de production), `visiteur` (regarder seulement). On gère les comptes avec
+  `vidange compte liste|ajouter|changer|supprimer` (mots de passe hachés scrypt, jamais écrits en clair ; le programme
+  relit le fichier tout seul). Chaque route de l'API déclare son niveau (regarder, produire, régler) : une route sans
+  niveau empêche de démarrer. Sans aucun compte, tout est refusé (503) sauf la page qui explique comment créer le premier.
+  Connexion par `POST /api/connexion` (cookie signé, `session_h` heures) ; trop d'essais ratés bloquent l'adresse
+  (`connexions_ratees_max`, `blocage_s`). Les actions « produire » et « régler » sont notées dans
+  `donnees/actions.jsonl` (qui, quand, quoi ; `GET /api/actions`, rôle karulium).
 - **Réseaux autorisés** : `reseaux_autorises` (réseau local, Tailscale) ; toute autre adresse est refusée (403),
-  même avec la clé, même pour la page.
+  même connecté, même pour la page.
 - Les ordres passent par le chef d'orchestre, comme ceux de l'écran ; un ordre impossible est refusé (409) avec
   la raison en clair. Chaque ordre est noté au journal avec l'adresse d'où il vient.
-- Pas de pages de documentation automatiques (`/docs`) : elles montreraient l'API sans clé.
+- Pas de pages de documentation automatiques (`/docs`) : elles montreraient l'API sans connexion.
 
 | Adresse | Rôle |
 |---|---|
-| `GET /` | La page web (sans clé : elle demande la clé, puis la garde dans le téléphone) |
+| `GET /` | La page web (sans connexion : formulaire nom et mot de passe ; sans aucun compte : l'explication du premier compte) |
 | `GET /api/etat` | Pause ou pas, chaque module (étape, ce qu'il attend, zones, alarme), Go attendus, alarmes ouvertes |
 | `GET /api/checklist` | La check-list refaite maintenant : `prete`, constats et « quoi faire » |
 | `POST /api/pause`, `POST /api/reprendre` | Pause et reprise de toute la machine |

@@ -8,9 +8,9 @@ on regarde seulement la page. Cocher chaque essai réussi.
 
 ## Préparer
 
-1. Sur le Pi, vérifier que la clé est bien dans le fichier de secrets :
+1. Sur le Pi, vérifier qu'il y a un compte (voir `installation.md`, étape 3, et `essai-comptes.md`) :
    ```
-   sudo grep -c cle_api /etc/vidange/secrets.yaml      # doit afficher 1
+   sudo -u vidange VIDANGE_SECRETS=/etc/vidange/secrets.yaml /opt/vidange-auto/pi/.venv/bin/vidange compte liste
    sudo systemctl restart vidange
    journalctl -u vidange -n 50 | grep "API"
    ```
@@ -21,12 +21,12 @@ on regarde seulement la page. Cocher chaque essai réussi.
 ## Essais
 
 - [ ] **Page sur le téléphone, sur place** : téléphone sur le Wi-Fi de l'atelier, ouvrir
-      `http://<adresse locale du Pi>:8080`. La page demande la clé ; taper la clé → l'état de la machine
+      `http://<adresse locale du Pi>:8080`. La page demande le nom et le mot de passe ; les taper → l'état de la machine
       s'affiche, l'heure en haut avance toute seule.
-- [ ] **Mauvaise clé** : appuyer sur « changer de clé », taper une clé fausse → « Clé refusée par le Pi ».
-      Le journal du Pi dit « Clé de l'API absente ou fausse » avec l'adresse du téléphone. Remettre la bonne clé.
+- [ ] **Mauvais mot de passe** : appuyer sur « se déconnecter », taper un mauvais mot de passe → « nom ou mot de
+      passe faux ». Le journal du Pi dit « Connexion ratée » avec l'adresse du téléphone. Se reconnecter.
 - [ ] **Pause depuis la page** : appuyer sur PAUSE → le bandeau devient orange « Machine en PAUSE », le bouton
-      devient REPRENDRE ; le journal du Pi dit « Pause demandée par la page web (adresse du téléphone) ».
+      devient REPRENDRE ; le journal du Pi dit « Pause demandée par la page web (votre nom, adresse du téléphone) ».
       Appuyer sur REPRENDRE, confirmer.
 - [ ] **Go depuis la page** : au démarrage, le retour en lieu sûr attend le Go. **Seulement si la machine est
       prête à bouger** (personne dedans, réglages réels, check-list sans ligne rouge) : appuyer sur
@@ -42,6 +42,4 @@ on regarde seulement la page. Cocher chaque essai réussi.
       ouvrir `http://<adresse Tailscale du Pi>:8080` → la même page.
 - [ ] **Sans Tailscale, depuis Internet** : appli Tailscale éteinte, en 4G → la page ne s'ouvre pas
       (rien n'est ouvert sur la box).
-- [ ] **Pi sans clé** : enlever la clé (`cle_api: ""`), redémarrer le service → la machine démarre quand même,
-      la page ne répond plus, la check-list du journal dit « API et page web : pas de clé ». Remettre la clé
-      et redémarrer.
+- [ ] **Pi sans compte** : voir `essai-comptes.md` (la page est fermée et explique le premier compte).

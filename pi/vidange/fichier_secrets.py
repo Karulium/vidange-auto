@@ -21,7 +21,9 @@ LONGUEUR_MIN_CLE = 16
 class Secrets(Modele):
     """Les secrets connus. Chaque tâche qui a besoin d'un secret l'ajoute ici et dans le modèle."""
 
-    # Clé que l'API du Pi demandera (tâche 8). SecretStr : jamais écrite dans le journal.
+    # OBSOLÈTE depuis la tâche 25 : la page web et l'API demandent maintenant un nom et un mot de
+    # passe (comptes.yaml, commande « vidange compte »). Ce champ est encore permis pour ne pas
+    # casser un ancien fichier, mais il ne sert plus à rien. SecretStr : jamais écrite au journal.
     cle_api: SecretStr | None = Field(default=None)
     # Jeton du logiciel de culture (Django REST Framework, « Token ») pour lui envoyer les cycles.
     jeton_culture: SecretStr | None = Field(default=None)

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vidange automatique : premier compte</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #1b1f23; color: #eee; margin: 0; padding: 16px; }
+  main { max-width: 640px; margin: 24px auto; }
+  code, pre { background: #0d1117; border-radius: 6px; padding: 2px 6px; }
+  pre { padding: 12px; overflow-x: auto; }
+  h1 { font-size: 22px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Vidange automatique : il faut créer le premier compte</h1>
+  <p>La page est fermée tant qu'il n'y a aucun compte. Pour en créer un, il faut être devant le Pi
+    (ou y entrer par SSH). Taper cette commande, puis un mot de passe d'au moins 10 caractères :</p>
+  <pre>sudo -u vidange /opt/vidange-auto/pi/.venv/bin/vidange compte ajouter moi --role karulium</pre>
+  <p>Remplacer <code>moi</code> par le nom voulu. Les trois rôles :</p>
+  <ul>
+    <li><code>karulium</code> : tous les droits (regarder, produire, régler) ;</li>
+    <li><code>employe</code> : regarder et produire (Go, lots, boutons de production), sans réglages ;</li>
+    <li><code>visiteur</code> : regarder seulement.</li>
+  </ul>
+  <p>Ensuite, recharger cette page : le formulaire de connexion apparaît (pas besoin de redémarrer le
+    programme). Pas à pas : <code>pi/systeme/essai-comptes.md</code>.</p>
+</main>
+</body>
+</html>

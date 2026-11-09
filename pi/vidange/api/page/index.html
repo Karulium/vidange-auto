@@ -6,8 +6,8 @@
 <title>Vidange automatique</title>
 <!--
   Page web locale de la machine (tâche 8). Une seule page, sans rien à télécharger d'Internet :
-  elle marche aussi sans réseau extérieur. Elle demande la clé de l'API une fois et la garde
-  dans le téléphone. Tout passe par l'API du Pi (/api/...).
+  elle marche aussi sans réseau extérieur. Elle demande le nom et le mot de passe du compte
+  (cookie posé par le Pi). Tout passe par l'API du Pi (/api/...).
 -->
 <style>
   :root {
@@ -74,7 +74,7 @@
   .photos img { width: 100%; border-radius: 8px; display: block; background: var(--bord); min-height: 80px; }
   .photos figcaption { font-size: 13px; color: var(--doux); }
   #cle { max-width: 420px; margin: 40px auto; }
-  #cle input { width: 100%; padding: 12px; font-size: 18px; border-radius: 8px; border: 1px solid var(--bord); }
+  #cle input { width: 100%; margin-bottom: 8px; padding: 12px; font-size: 18px; border-radius: 8px; border: 1px solid var(--bord); }
   #erreur { color: var(--rouge); font-weight: 700; margin: 8px 0; }
   .bleu { background: var(--bleu); }
   .camera { width: 100%; display: block; border-radius: 8px; background: #000; min-height: 120px; }
@@ -94,11 +94,11 @@
 
 <div id="cle" hidden>
   <div class="carte">
-    <h2>Clé de la machine</h2>
-    <p class="doux">La clé est dans le fichier de secrets du Pi (« cle_api »). Elle reste gardée
-      dans ce téléphone.</p>
+    <h2>Connexion</h2>
+    <p class="doux">Le nom et le mot de passe de votre compte (créés sur le Pi avec « vidange compte »).</p>
     <form id="formulaire-cle">
-      <input id="saisie-cle" type="password" autocomplete="current-password" placeholder="Clé de l'API">
+      <input id="saisie-nom" type="text" autocomplete="username" autocapitalize="none" placeholder="Nom" required>
+      <input id="saisie-cle" type="password" autocomplete="current-password" placeholder="Mot de passe" required>
       <button class="gros vert" type="submit">Entrer</button>
     </form>
     <p id="erreur-cle" class="doux"></p>
@@ -233,7 +233,7 @@
     </section>
 
     <p class="doux">Version <span id="version">?</span> ·
-      <a href="#" id="oublier-cle">changer de clé</a></p>
+      <span id="qui-suis-je"></span> <a href="#" id="oublier-cle">se déconnecter</a></p>
   </main>
 </div>
 
@@ -244,8 +244,7 @@
 // ------------------------------------------------------------ outils
 
 const $ = (id) => document.getElementById(id);
-let cle = "";
-try { cle = localStorage.getItem("cle_api") || ""; } catch (e) { cle = ""; }
+// La connexion est un cookie posé par le Pi (nom et mot de passe) : rien n'est gardé ici.
 
 // Fabrique un élément ; le texte passe toujours par textContent (jamais de HTML venu du Pi).
 function el(balise, attributs, ...enfants) {
@@ -285,9 +284,10 @@ class Refus extends Error {}
 async function api(chemin, options = {}) {
   const reponse = await fetch(chemin, {
     ...options,
-    headers: { Authorization: "Bearer " + cle, ...(options.headers || {}) },
+    headers: { ...(options.headers || {}) },
+    credentials: "same-origin",
   });
-  if (reponse.status === 401) { demanderCle("Clé refusée par le Pi."); throw new Refus("clé refusée"); }
+  if (reponse.status === 401) { demanderCle("Connexion demandée."); throw new Refus("connexion demandée"); }
   if (!reponse.ok) {
     let detail = reponse.statusText;
     try { detail = (await reponse.json()).detail || detail; } catch (e) { /* pas de JSON */ }
@@ -308,7 +308,7 @@ async function ordre(chemin, texteOk) {
   rafraichir();
 }
 
-// ------------------------------------------------------------ clé
+// ------------------------------------------------------------ connexion
 
 function demanderCle(texte) {
   $("appli").hidden = true;
@@ -316,17 +316,31 @@ function demanderCle(texte) {
   $("erreur-cle").textContent = texte || "";
 }
 
-$("formulaire-cle").addEventListener("submit", (ev) => {
+$("formulaire-cle").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  cle = $("saisie-cle").value.trim();
-  try { localStorage.setItem("cle_api", cle); } catch (e) { /* téléphone sans mémoire : tant pis */ }
+  try {
+    const reponse = await fetch("/api/connexion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nom: $("saisie-nom").value.trim(), mot_de_passe: $("saisie-cle").value }),
+    });
+    if (!reponse.ok) {
+      let detail = reponse.statusText;
+      try { detail = (await reponse.json()).detail || detail; } catch (e) { /* pas de JSON */ }
+      demanderCle(typeof detail === "string" ? detail : "Connexion refusée.");
+      return;
+    }
+  } catch (e) {
+    demanderCle("Le Pi ne répond pas.");
+    return;
+  }
+  $("saisie-cle").value = "";
   demarrer();
 });
 
-$("oublier-cle").addEventListener("click", (ev) => {
+$("oublier-cle").addEventListener("click", async (ev) => {
   ev.preventDefault();
-  try { localStorage.removeItem("cle_api"); } catch (e) { /* rien */ }
-  cle = "";
+  try { await fetch("/api/deconnexion", { method: "POST" }); } catch (e) { /* tant pis */ }
   demanderCle("");
 });
 
@@ -735,7 +749,7 @@ async function montrerCycle(numero) {
 
 let dernierePhoto = null;
 
-// Les photos demandent la clé : on les lit avec fetch, puis on les montre.
+// Les photos demandent une connexion : on les lit avec fetch, puis on les montre.
 function vignette(p) {
   const image = el("img", { alt: "photo n° " + p.id });
   const lien = el("a", { href: "#" }, image);
@@ -1200,8 +1214,11 @@ $("maj-envoyer").addEventListener("click", async () => {
 
 // ------------------------------------------------------------ départ
 
-function demarrer() {
-  if (!cle) { demanderCle(""); return; }
+async function demarrer() {
+  let moi = { connecte: false };
+  try { moi = await (await fetch("/api/moi", { credentials: "same-origin" })).json(); } catch (e) { /* hors ligne */ }
+  if (!moi.connecte) { demanderCle(""); return; }
+  $("qui-suis-je").textContent = moi.nom + " (" + moi.role + ") ·";
   $("cle").hidden = true;
   $("appli").hidden = false;
   montrer(vue);

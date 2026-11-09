@@ -21,8 +21,9 @@
    pièces partent avec lui.
 7. Lance la surveillance : santé du Pi, onduleur, chien de garde (et dit à systemd « prêt »),
    bilan de chaque alarme. Écrit la check-list de démarrage au journal.
-   Lance l'API et la page web, si le fichier de secrets donne une clé (sinon la machine
-   tourne quand même, et la check-list le signale), et l'écran de l'armoire. Lance la file
+   Lance l'API et la page web (avec les comptes de comptes.yaml : sans aucun compte la page est
+   fermée et explique comment créer le premier ; la machine tourne quand même et la check-list le
+   signale), et l'écran de l'armoire. Lance la file
    d'envoi (cycles vers le logiciel de culture, copies vers la maison), les caméras (vidéo en
    direct, clip à chaque alarme), le pilotage à distance (qui attend qu'on l'active) et la
    liaison avec l'accéléromètre (chocs notés au registre).
@@ -53,9 +54,11 @@ from vidange.accelerometre.liaison import LiaisonAccelerometre, PortAccelerometr
 from vidange.accelerometre.liaison import ouvrir_port as ouvrir_port_accelerometre
 from vidange.air import Air
 from vidange.angles_gardes import AnglesGardes
-from vidange.api import ServeurApi, Services, constats_api, creer_app
+from vidange.api import JournalActions, ServeurApi, Services, constats_api, creer_app
+from vidange.api.acces import NOM_JOURNAL_ACTIONS
 from vidange.cameras import Cameras, Flux
 from vidange.chef import Carnet, Chef, ErreurChef, Module
+from vidange.comptes import Comptes, charger_comptes
 from vidange.cycle import Lancement, ModeBocaux, ModeNuit, ModeSeaux
 from vidange.cycle.machine import (
     FondDuLot,
@@ -97,7 +100,7 @@ from vidange.fiabilite.constats import Constat
 from vidange.fiabilite.lieu_sur import NOM as NOM_LIEU_SUR
 from vidange.fiabilite.onduleur import RAISON_ARRET
 from vidange.fiabilite.onduleur import SIGNAL as SIGNAL_ONDULEUR
-from vidange.fichier_secrets import Secrets, charger_secrets
+from vidange.fichier_secrets import charger_secrets
 from vidange.fluidnc import Liaison
 from vidange.fluidnc.ports import Port
 from vidange.journal import NOM_FICHIER, configurer_journal, donner_journal
@@ -120,6 +123,7 @@ from vidange.registre import (
     SauvegardeQuotidienne,
     ouvrir_registre,
 )
+from vidange.registre.fichiers_hors_git import archiver
 from vidange.reglages import ErreurReglages, Reglages, charger_reglages
 from vidange.spray.spray import PORTE as PORTE_SPRAY
 from vidange.spray.spray import Spray
@@ -189,6 +193,26 @@ def _chemin(option: str | None, variable: str, defaut: Path) -> Path:
     return defaut
 
 
+COMMANDES_A_PART = ("compte", "restaurer")
+
+
+def lancer_commande_a_part(commande: str, arguments: list[str]) -> int:
+    """« vidange compte ... » (comptes de la page web) et « vidange restaurer ... » (Pi neuf)."""
+    if commande == "compte":
+        from vidange.comptes.outil import lancer_compte
+
+        return lancer_compte(arguments, chemin_des_comptes())
+    from vidange.restauration.outil import lancer_restauration
+
+    return lancer_restauration(arguments)
+
+
+def chemin_des_comptes(option: str | None = None) -> Path:
+    """Le fichier des comptes : l'option, VIDANGE_COMPTES, ou à côté du fichier de secrets."""
+    secrets = _chemin(None, "VIDANGE_SECRETS", DOSSIER_PI / "secrets.yaml")
+    return _chemin(option, "VIDANGE_COMPTES", secrets.with_name("comptes.yaml"))
+
+
 def lire_arguments(arguments: list[str] | None) -> argparse.Namespace:
     lecteur = argparse.ArgumentParser(
         prog="vidange", description="Programme du Pi de la machine « Vidange automatique »."
@@ -199,6 +223,10 @@ def lire_arguments(arguments: list[str] | None) -> argparse.Namespace:
         help="liste des entrées/sorties (défaut : docs/entrees-sorties.yaml)",
     )
     lecteur.add_argument("--secrets", help="fichier de secrets (défaut : pi/secrets.yaml)")
+    lecteur.add_argument(
+        "--comptes",
+        help="fichier des comptes de la page web (défaut : à côté du fichier de secrets)",
+    )
     lecteur.add_argument("--donnees", help="dossier des données : journal... (défaut : pi/donnees)")
     lecteur.add_argument(
         "--verifier", action="store_true", help="vérifie les réglages et s'arrête sans démarrer"
@@ -284,16 +312,14 @@ def preparer_chef(
     return repris, None
 
 
-def preparer_api(secrets: Secrets, reglages: Reglages, services: Services) -> ServeurApi | None:
-    """Le serveur de l'API, ou None s'il n'y a pas de clé (l'API ne tourne jamais sans clé)."""
-    if secrets.cle_api is None:
-        journal.warning(
-            "Pas de clé « cle_api » dans le fichier de secrets : l'API et la page web "
-            "ne démarrent pas."
-        )
-        return None
-    app = creer_app(services, reglages.programme.api, secrets.cle_api.get_secret_value())
-    return ServeurApi(app, reglages.programme.api)
+def preparer_api(
+    comptes: Comptes, reglages: Reglages, services: Services, dossier_donnees: Path
+) -> ServeurApi:
+    """Le serveur de l'API et de la page web. Sans aucun compte, la page est fermée et explique
+    comment créer le premier (tâche 25) ; la machine, elle, tourne."""
+    actions = JournalActions(dossier_donnees / NOM_JOURNAL_ACTIONS)
+    app = creer_app(services, reglages.programme.api, comptes, actions)
+    return ServeurApi(app, reglages.programme.api, comptes)
 
 
 def constats_ecran(liaison: LiaisonEcran | None) -> list[Constat]:
@@ -504,6 +530,12 @@ def principal(
     raccords: Raccords | None = None,
 ) -> int:
     """Lance le programme et rend le code de sortie. `arret` et `raccords` servent aux tests."""
+    if arguments is None:
+        arguments = sys.argv[1:]
+    # « vidange compte ... » et « vidange restaurer ... » : des commandes à part, le programme ne
+    # démarre pas (tâche 25).
+    if arguments and arguments[0] in COMMANDES_A_PART:
+        return lancer_commande_a_part(arguments[0], arguments[1:])
     options = lire_arguments(arguments)
     raccords = raccords or Raccords()
     dossier_reglages = _chemin(options.reglages, "VIDANGE_REGLAGES", DOSSIER_PI / "reglages")
@@ -513,6 +545,9 @@ def principal(
         DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml",
     )
     chemin_secrets = _chemin(options.secrets, "VIDANGE_SECRETS", DOSSIER_PI / "secrets.yaml")
+    chemin_comptes = _chemin(
+        options.comptes, "VIDANGE_COMPTES", chemin_secrets.with_name("comptes.yaml")
+    )
     dossier_donnees = _chemin(options.donnees, "VIDANGE_DONNEES", DOSSIER_PI / "donnees")
 
     # Journal à l'écran seulement, le temps de lire ses propres réglages.
@@ -528,6 +563,7 @@ def principal(
         )
         entrees_sorties = charger_entrees_sorties(chemin_entrees_sorties)
         secrets = charger_secrets(chemin_secrets)
+        comptes = charger_comptes(chemin_comptes)
     except ErreurReglages as erreur:
         journal.error("%s", erreur)
         return CODE_REGLAGES_FAUX
@@ -759,6 +795,7 @@ def principal(
         dossier_donnees / DOSSIER_SAUVEGARDES,
         reglages.programme.registre,
         apres_copie=mettre_en_file_secours(registre, envois.secours, dossier_donnees),
+        archiver_fichiers=lambda cible: archiver(dossier_donnees, chemin_comptes, cible),
     )
     fils = [sauvegarde.demarrer(arret), facteur.demarrer(arret)]
     materiel, erreur_materiel = ouvrir_materiel(entrees_sorties, raccords.fabrique)
@@ -1044,7 +1081,7 @@ def principal(
             }
         )
         serveur = preparer_api(
-            secrets,
+            comptes,
             reglages,
             Services(
                 chef,
@@ -1061,9 +1098,9 @@ def principal(
                 lancement=lancement,
                 correction=correction,
             ),
+            dossier_donnees,
         )
-        if serveur is not None:
-            serveur.demarrer()
+        serveur.demarrer()
         if liaison_ecran is not None:
             ecran = Ecran(
                 reglages.programme.ecran,

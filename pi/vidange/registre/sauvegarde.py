@@ -5,6 +5,9 @@ et vérifiée de la base est posée dans le dossier des sauvegardes, sous le nom
 « registre-AAAA-MM-JJ.sqlite ». On garde les dernières copies (nombre réglé), les plus
 vieilles sont effacées. Si le Pi était éteint à l'heure dite, la copie se fait dès qu'il tourne.
 
+Avec elle, une archive « fichiers-AAAA-MM-JJ.tar.gz » reprend les petits fichiers des données et
+les comptes de la page web (fichiers_hors_git.py), pour remettre un Pi neuf en état (tâche 25).
+
 Les photos ne sont pas dans cette copie (elles restent en fichiers). Chaque copie faite est
 donnée à `apres_copie` : la file d'envoi l'emporte à la maison (vidange/envois).
 
@@ -19,6 +22,7 @@ from pathlib import Path
 
 from vidange.journal import donner_journal
 from vidange.registre.base import Registre, maintenant
+from vidange.registre.fichiers_hors_git import est_une_archive, nom_de_archive
 from vidange.reglages import ReglagesRegistre
 
 journal = donner_journal("registre")
@@ -38,12 +42,15 @@ class SauvegardeQuotidienne:
         reglages: ReglagesRegistre,
         horloge: Callable[[], datetime] = maintenant,
         apres_copie: Callable[[Path], None] | None = None,
+        archiver_fichiers: Callable[[Path], Path] | None = None,
     ) -> None:
         self.registre = registre
         self.dossier = dossier
         self.reglages = reglages
         self._horloge = horloge
         self._apres_copie = apres_copie
+        # Fabrique l'archive des fichiers hors Git à l'endroit donné (None : pas d'archive).
+        self._archiver_fichiers = archiver_fichiers
 
     def copies(self) -> list[Path]:
         """Les copies quotidiennes présentes, de la plus vieille à la plus récente."""
@@ -70,7 +77,20 @@ class SauvegardeQuotidienne:
         self.nettoyer()
         if self._apres_copie is not None:
             self._apres_copie(cible)
+        self._archiver_les_fichiers()
         return cible
+
+    def _archiver_les_fichiers(self) -> None:
+        """L'archive des fichiers hors Git du jour (un échec ne gâche pas la copie du registre)."""
+        if self._archiver_fichiers is None:
+            return
+        try:
+            archive = self._archiver_fichiers(self.dossier / nom_de_archive(self._horloge().date()))
+            journal.info("Copie de secours des fichiers hors Git faite : %s", archive)
+            if self._apres_copie is not None:
+                self._apres_copie(archive)
+        except Exception:
+            journal.exception("Copie de secours des fichiers hors Git ratée")
 
     def nettoyer(self) -> list[Path]:
         """Efface les copies quotidiennes en trop (les plus vieilles)."""
@@ -78,6 +98,14 @@ class SauvegardeQuotidienne:
         for copie in en_trop:
             copie.unlink()
             journal.info("Vieille copie de secours effacée : %s", copie)
+        archives = (
+            sorted(f for f in self.dossier.iterdir() if est_une_archive(f.name))
+            if self.dossier.is_dir()
+            else []
+        )
+        for archive in archives[: -self.reglages.copies_gardees]:
+            archive.unlink()
+            journal.info("Vieille archive de secours effacée : %s", archive)
         return en_trop
 
     def demarrer(self, arret: threading.Event) -> threading.Thread:

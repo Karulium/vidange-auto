@@ -2269,3 +2269,79 @@ partout) : ce qui en dépend est « à vérifier à réception ». Procédure d'
   2. Éviter l'alarme au calage (seuil d'erreur du pilote ou courant limité pendant le vissage) est essayé en premier
      (partie C.1 de `pi/systeme/essai-derive.md`). Si cela marche, une petite tâche fera finir le pas `cale` autrement
      que par l'alarme ; elle sera écrite à réception du pilote, après l'essai.
+
+## Comptes et restauration, tâche 25 (09/11/2026, niveau 1, tranché par Claude)
+
+Sources : `docs/fonctionnalites.md` lignes 58 (comptes) et 79 (restauration d'un Pi neuf). Procédures d'essai :
+`pi/systeme/essai-comptes.md` et `pi/systeme/essai-restauration.md`. Testé sur le vrai matériel : non.
+
+**Comptes de la page web (58)**
+
+- **Trois rôles** : `karulium` (tous les droits), `employe` (regarder et produire), `visiteur` (regarder seulement).
+  Chaque route de l'API déclare un des trois niveaux : **regarder** (toute lecture : état, historique, photos,
+  caméras, check-list), **produire** (Pause, Reprise, Go, lots, correction du stockage après confirmation, poste du
+  fût, Nettoyage, air, spray, acquitter une alarme), **régler** (mises à jour des cartes et du Pi, pilotage à
+  distance, lecture du journal des actions). Une route sans niveau empêche de démarrer (`verifier_roles_declares`,
+  appelé par `creer_app`, avec un test). Seules routes publiques : la page `/`, `GET /api/moi`, la connexion et la
+  déconnexion.
+- **Pilotage à distance = « régler »** (choix de Claude) : c'est le geste « en cas de problème » de Karulium, il
+  déplace les axes sans les règles validées. Un employé sur place passe par l'écran de l'armoire. Si Karulium veut
+  l'ouvrir à l'employé : changer une ligne dans `app.py` (`regler` en `produire` pour `/api/distance/...`).
+- **Rien dans le dépôt** : `comptes.yaml` (Git l'ignore) est à côté de `secrets.yaml` (sur le Pi :
+  `/etc/vidange/comptes.yaml`, droits 600). Le dépôt n'a que `pi/comptes.exemple.yaml`, vide. Mots de passe hachés
+  par `hashlib.scrypt` (bibliothèque standard, sel au hasard, coût écrit dans chaque hachage : on peut le changer
+  plus tard). Mot de passe de 10 caractères au moins.
+- **Commande** : `vidange compte liste|ajouter|changer|supprimer` (`vidange restaurer` de même : ce sont des
+  sous-commandes du programme principal). Le mot de passe se tape à l'écran, jamais dans la commande (l'historique
+  du terminal le garderait). Le dernier compte `karulium` ne peut être ni supprimé ni rétrogradé. Le programme
+  relit le fichier quand il change : pas de redémarrage. Un fichier faux (rôle inconnu, hachage faux...) empêche de
+  démarrer avec un message clair, y compris pour `vidange --verifier`.
+- **Pas de compte = page fermée** : toutes les routes répondent 503 ; `/` montre seulement une page qui explique la
+  commande du premier compte ; la check-list le signale (attention, jamais bloquant : la machine tourne).
+- **Connexion** : `POST /api/connexion` pose un cookie signé (HMAC-SHA256 avec `cle_session`, du fichier des comptes),
+  `HttpOnly`, `SameSite=Strict`, valable `session_h` (12) heures. Changer le rôle ou le mot de passe, ou supprimer
+  le compte, annule ses cookies tout de suite. Après `connexions_ratees_max` (5) mots de passe ratés depuis une
+  adresse, elle est bloquée `blocage_s` (300 s). Réglages dans `programme.yaml` → `api`.
+- **La clé `cle_api` disparaît** : elle est remplacée par les comptes (encore tolérée dans `secrets.yaml` pour ne
+  pas casser un ancien fichier, mais sans effet). Aucun programme externe n'appelait l'API avec cette clé.
+- **Journal « qui a fait quoi »** : une ligne JSON par action « produire » ou « régler » (et par connexion) dans
+  `donnees/actions.jsonl` (qui, rôle, adresse, quand, méthode, chemin), lisible par karulium (`GET /api/actions`) ; le
+  journal du programme et le registre gardent aussi « page web (nom, adresse) ». Le fichier est dans la copie de
+  secours (archive ci-dessous). « Je tiens le bouton » du pilotage à distance n'y est pas (plusieurs fois par seconde ;
+  le journal du pilote le note déjà).
+- **Mot de passe en clair sur le Wi-Fi de l'atelier** : la page est en http sur le réseau local (décision de la PR n° 9,
+  option A) ; par Tailscale tout est chiffré. Si d'autres personnes utilisent ce Wi-Fi : passer à « Tailscale
+  seulement » (retirer les réseaux locaux de `reseaux_autorises`).
+- **Écran Nextion** : inchangé, sans comptes (on est devant la machine). Le code des fonctions sensibles de l'écran
+  reste la tâche 29.
+- **Pas fait** : la page ne cache pas les boutons interdits au rôle (le serveur les refuse avec un message clair) ;
+  pas de page web pour gérer les comptes (la commande suffit pour 3 ou 4 personnes).
+
+**Restauration d'un Pi neuf (79)**
+
+- **Ce qui est sauvegardé** : avant la tâche 25, seulement le registre (une copie par jour) et les photos. Maintenant
+  une 2ᵉ archive chaque jour, `fichiers-AAAA-MM-JJ.tar.gz`, qui part à la maison avec la copie du registre : les petits
+  fichiers du dossier des données (angles, état de l'entonnoir, de l'eau de lavage, appris de la préhension, journal
+  des actions...) et le fichier des comptes. Les **réglages** sont dans Git, ils reviennent avec le logiciel.
+- **Les secrets ne sont jamais dans la copie de secours** (jetons : le N97 n'a pas à les garder, même si c'est
+  Karulium qui l'administre). Ils restent dans le gestionnaire de mots de passe de Karulium ; la restauration pose
+  le modèle vide, en 600, et dit lesquels remplir. Les comptes, eux, sont dans la copie (mots de passe hachés).
+- **Une commande** : `sudo bash /opt/vidange-auto/pi/systeme/restaurer.sh --depuis vidange@maison:sauvegardes-vidange/`
+  (le logiciel doit avoir été copié par `git clone` avant : il est impossible de télécharger le script d'un dépôt
+  privé sans lui). Le script refait les étapes 1 à 7 de `installation.md` (paquets, compte, I2C et UART, environnement
+  Python, service, droit d'éteindre, chien de garde), va chercher la copie (rsync par Tailscale avec la clé SSH du
+  compte `vidange`, ou un dossier / une clé USB), puis lance `vidange restaurer`, qui remet le registre (la copie la
+  plus récente dont la base est saine ; une base abîmée est sautée), les fichiers hors Git, les comptes et les
+  photos, donne tout au compte `vidange`, vérifie les réglages (`vidange --verifier`), lance le service et attend
+  qu'il soit actif. Il se relance sans danger. `VIDANGE_A_BLANC=1` montre les commandes sans rien faire.
+- **Garde-fous** : il refuse d'écraser un registre existant (`--ecraser` le met de côté sous
+  `registre.sqlite.avant-restauration`) ; l'archive est lue avec des noms de fichiers contrôlés (rien ne sort du dossier
+  des données) ; `programme.yaml` → `registre` → `restauration_ignore` liste ce qu'un Pi neuf ne reprend pas
+  (`etat-cycle.json`, `etat-programme.json`, `pi.json` : le cycle en cours et la version installée de l'autre Pi).
+  Le Pi restauré propose le retour en lieu sûr et **attend le Go** à l'écran, comme après toute coupure.
+- **Photos** : `--sans-photos` puis `--photos-seulement` pour ne pas retarder le retour de la machine (l'heure d'une
+  copie de plusieurs Go par Tailscale est inconnue : elle sera mesurée à l'essai).
+- **Reste à la main, dit en français par la commande** : secrets, Tailscale, comptes si l'archive manque, matériel (noms
+  des caméras, cartes neuves).
+- **« Moins d'une heure »** : non mesuré (aucun Pi ici). L'essai le mesure (`essai-restauration.md`, étape 5).
+

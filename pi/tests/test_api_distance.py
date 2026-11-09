@@ -2,11 +2,11 @@
 
 import pytest
 
-from vidange.api import Services, creer_app
+from vidange.api import Services
 from vidange.cameras import Cameras, FausseCamera, fausse_image
 from vidange.distance import ErreurDistance
 
-from .test_api import CLE, LOCAL, BancApi, reglages_api
+from .test_api import LOCAL, BancApi, creer_app_de_test
 from .test_cameras import reglages as reglages_cameras
 
 
@@ -56,12 +56,12 @@ def b(tmp_path):
         cameras=banc.cameras,
         pilote=banc.pilote,
     )
-    banc.app = creer_app(services, reglages_api(), CLE)
+    banc.app = creer_app_de_test(services, banc.dossier)
     yield banc
     banc.registre.fermer()
 
 
-QUI = f"page web ({LOCAL[0]})"
+QUI = f"page web (chef, {LOCAL[0]})"
 
 
 def test_ordres_du_pilotage(b):
@@ -107,8 +107,8 @@ def test_pas_de_go_ni_de_reprise_pendant_le_pilotage(b):
     assert b.chef.etat().attendent_go == ["essai"]
 
 
-def test_pilotage_et_cameras_demandent_la_cle(b):
-    client = b.client(cle=None)
+def test_pilotage_et_cameras_demandent_une_connexion(b):
+    client = b.client(nom=None)
     for chemin in ("/api/distance", "/api/cameras", "/api/cameras/plafond/image", "/api/clips"):
         assert client.get(chemin).status_code == 401
     assert client.post("/api/distance/activer").status_code == 401
@@ -159,7 +159,7 @@ def test_clips(b):
 
 def test_sans_cameras_ni_pilote(b):
     services = Services(b.chef, b.registre, b.bilans.acquitter, checklist=list)
-    b.app = creer_app(services, reglages_api(), CLE)
+    b.app = creer_app_de_test(services, b.dossier)
     client = b.client()
     assert client.get("/api/cameras").json() == {"cameras": [], "images_par_s": 0}
     assert client.get("/api/distance").status_code == 404

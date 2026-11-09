@@ -2,13 +2,18 @@
 
 import logging
 import socket
+import tempfile
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from vidange.api import ServeurApi, Services, constats_api, creer_app
+from vidange.api import JournalActions, ServeurApi, Services, constats_api, creer_app
+from vidange.api.acces import COOKIE
+from vidange.comptes import Compte, Comptes, Role
+from vidange.comptes.comptes import ecrire_fichier, hacher
 from vidange.fiabilite import Bilans
 from vidange.fiabilite.constats import Constat
 from vidange.registre import Registre
@@ -16,8 +21,45 @@ from vidange.reglages import ReglagesApi, ReglagesBilan
 
 from .test_chef import Banc, Horloge, etat_de, module_simple, nouveau_chef, tour
 
-CLE = "une-cle-de-test-assez-longue"
+MOT_DE_PASSE = "un-mot-de-passe-de-test"
 LOCAL = ("192.168.1.20", 50000)
+# Un compte par rôle.
+CHEF, AIDE, INVITE = "chef", "aide", "invite"
+_HACHAGE = hacher(MOT_DE_PASSE)
+
+
+def fabriquer_comptes(dossier) -> Comptes:
+    """Trois comptes de test (hachage fait une seule fois : scrypt est lent exprès)."""
+    chemin = dossier / "comptes.yaml"
+    ecrire_fichier(
+        chemin,
+        "c" * 40,
+        {
+            CHEF: (Role.KARULIUM, _HACHAGE),
+            AIDE: (Role.EMPLOYE, _HACHAGE),
+            INVITE: (Role.VISITEUR, _HACHAGE),
+        },
+    )
+    return Comptes(chemin)
+
+
+def creer_app_de_test(services, dossier=None, comptes=None):
+    """L'application avec ses trois comptes (dossier provisoire si on n'en donne pas)."""
+    if dossier is None:
+        dossier = Path(tempfile.mkdtemp(prefix="comptes-essai-"))
+    comptes = comptes or fabriquer_comptes(dossier)
+    app = creer_app(services, reglages_api(), comptes, JournalActions(dossier / "actions.jsonl"))
+    app.comptes_de_test = comptes
+    return app
+
+
+def client_connecte(app, nom: str | None = CHEF, adresse=LOCAL) -> TestClient:
+    """Un client avec le cookie de session de `nom` (None : personne n'est connecté)."""
+    client = TestClient(app, client=adresse)
+    if nom is not None:
+        comptes = app.comptes_de_test
+        client.cookies.set(COOKIE, comptes.creer_session(Compte(nom, comptes.noms()[nom]), 3600))
+    return client
 
 
 def reglages_api(port: int = 8080) -> ReglagesApi:
@@ -28,6 +70,9 @@ def reglages_api(port: int = 8080) -> ReglagesApi:
             "reseaux_autorises": ["127.0.0.0/8", "192.168.0.0/16", "100.64.0.0/10"],
             "rafraichir_s": 2,
             "lignes_max": 3,
+            "session_h": 12,
+            "connexions_ratees_max": 3,
+            "blocage_s": 300,
         }
     )
 
@@ -46,11 +91,11 @@ class BancApi:
         services = Services(
             self.chef, self.registre, self.bilans.acquitter, checklist=lambda: self.constats
         )
-        self.app = creer_app(services, reglages_api(), CLE)
+        self.dossier = dossier
+        self.app = creer_app_de_test(services, dossier)
 
-    def client(self, adresse=LOCAL, cle: str | None = CLE) -> TestClient:
-        entetes = {"Authorization": f"Bearer {cle}"} if cle is not None else {}
-        return TestClient(self.app, client=adresse, headers=entetes)
+    def client(self, adresse=LOCAL, nom: str | None = CHEF) -> TestClient:
+        return client_connecte(self.app, nom, adresse)
 
     def jusqu_au_go(self) -> None:
         """Le module passe l'étape « un » et attend le Go de l'étape « deux »."""
@@ -78,31 +123,27 @@ def caplog(caplog, monkeypatch):
 # ---------------------------------------------------------------- garde-fous
 
 
-def test_pas_d_api_sans_cle(b):
-    with pytest.raises(ValueError):
-        creer_app(Services(b.chef, b.registre, b.bilans.acquitter, list), reglages_api(), "")
-
-
-@pytest.mark.parametrize("cle", [None, "fausse-cle", CLE + "x"])
-def test_cle_absente_ou_fausse_refusee(b, cle, caplog):
-    reponse = b.client(cle=cle).get("/api/etat")
+def test_personne_de_connecte_refuse(b, caplog):
+    client = b.client(nom=None)
+    reponse = client.get("/api/etat")
     assert reponse.status_code == 401
-    assert reponse.json()["detail"] == "clé de l'API absente ou fausse"
-    assert "192.168.1.20" in caplog.text
+    assert "connexion demandée" in reponse.json()["detail"]
     # Un ordre aussi est refusé, et il n'a pas lieu.
-    assert b.client(cle=cle).post("/api/pause").status_code == 401
+    assert client.post("/api/pause").status_code == 401
     assert not b.chef.en_pause
 
 
-def test_cle_dans_un_autre_format_refusee(b):
-    client = TestClient(b.app, client=LOCAL, headers={"Authorization": CLE})
+@pytest.mark.parametrize("cookie", ["n'importe quoi", "abc.def", "."])
+def test_cookie_faux_refuse(b, cookie):
+    client = TestClient(b.app, client=LOCAL)
+    client.cookies.set(COOKIE, cookie)
     assert client.get("/api/etat").status_code == 401
 
 
 @pytest.mark.parametrize("adresse", ["8.8.8.8", "2001:db8::1", "testclient"])
 def test_adresse_hors_des_reseaux_autorises_refusee(b, adresse):
     client = b.client(adresse=(adresse, 50000))
-    # Même avec la bonne clé, et même pour la page.
+    # Même connecté, et même pour la page.
     assert client.get("/api/etat").status_code == 403
     assert client.get("/").status_code == 403
 
@@ -121,8 +162,8 @@ def test_pas_de_documentation_automatique(b):
 # ---------------------------------------------------------------- page et état
 
 
-def test_la_page_se_charge_sans_cle(b):
-    reponse = b.client(cle=None).get("/")
+def test_la_page_se_charge_sans_connexion(b):
+    reponse = b.client(nom=None).get("/")
     assert reponse.status_code == 200
     assert "text/html" in reponse.headers["content-type"]
     assert '<html lang="fr">' in reponse.text
@@ -162,7 +203,7 @@ def test_pause_et_reprise(b, caplog):
     with caplog.at_level(logging.INFO, logger="vidange.api"):
         assert client.post("/api/pause").json() == {"en_pause": True}
     assert b.chef.en_pause
-    assert "Pause demandée par la page web (192.168.1.20)" in caplog.text
+    assert "Pause demandée par la page web (chef, 192.168.1.20)" in caplog.text
     assert client.get("/api/etat").json()["en_pause"] is True
     assert client.post("/api/reprendre").json() == {"en_pause": False}
     assert not b.chef.en_pause
@@ -227,7 +268,7 @@ def test_alarme_du_chef_acquittee_depuis_la_page(b):
     assert etat_de(b.chef).statut == "en_cours"
     assert client.get("/api/etat").json()["attendent_go"] == ["essai"]
     (ligne,) = client.get("/api/alarmes?toutes=true").json()
-    assert ligne["acquittee_par"] == "page web (192.168.1.20)"
+    assert ligne["acquittee_par"] == "page web (chef, 192.168.1.20)"
 
     # Deux fois : refusé.
     assert client.post(f"/api/alarmes/{numero}/acquitter").status_code == 409
@@ -298,8 +339,8 @@ def test_photos(b, tmp_path):
     assert reponse.content == b"\xff\xd8 photo"
     assert reponse.headers["content-type"] == "image/jpeg"
     assert client.get("/api/photos/999").status_code == 404
-    # La photo demande la clé, comme le reste.
-    assert b.client(cle=None).get(f"/api/photos/{photo}").status_code == 401
+    # La photo demande une connexion, comme le reste.
+    assert b.client(nom=None).get(f"/api/photos/{photo}").status_code == 401
 
 
 def test_photo_effacee_ou_hors_du_dossier(b, tmp_path):
@@ -324,15 +365,16 @@ def port_libre() -> int:
 
 def test_vrai_serveur_demarre_et_s_arrete(b):
     reglages = reglages_api(port_libre())
-    serveur = ServeurApi(b.app, reglages)
+    serveur = ServeurApi(b.app, reglages, b.app.comptes_de_test)
     assert constats_api(serveur)[0].niveau == "attention"
+    jeton = b.app.comptes_de_test.creer_session(Compte(CHEF, Role.KARULIUM), 3600)
     serveur.demarrer()
     try:
         assert serveur.en_route
         assert constats_api(serveur)[0].niveau == "ok"
         demande = urllib.request.Request(
             f"http://127.0.0.1:{reglages.port}/api/etat",
-            headers={"Authorization": f"Bearer {CLE}"},
+            headers={"Cookie": f"{COOKIE}={jeton}"},
         )
         with urllib.request.urlopen(demande, timeout=5) as reponse:
             assert reponse.status == 200
@@ -357,7 +399,6 @@ def test_port_deja_pris(b, caplog):
     assert "ne répond pas" in constats_api(serveur)[0].texte
 
 
-def test_sans_cle_la_check_list_le_dit():
+def test_sans_api_la_check_list_le_dit():
     (constat,) = constats_api(None)
     assert constat.niveau == "attention"
-    assert "cle_api" in constat.quoi_faire

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import pytest
 from fastapi.testclient import TestClient
 
-from vidange.api import Services, creer_app
+from vidange.api import Services
 from vidange.bocal_neuf.bocal_neuf import BocalNeuf
 from vidange.chef import Chef, ErreurChef
 from vidange.chef.chef import ATTENTE_GO, EtatChef, EtatModule
@@ -52,7 +52,7 @@ from vidange.simulateur import Simulateur
 from vidange.stockage import places
 
 from .conftest import DOSSIER_PI
-from .test_api import CLE, LOCAL, reglages_api
+from .test_api import LOCAL, client_connecte, creer_app_de_test
 from .test_cycle_cartes import Banc
 from .test_ecran import BancEcran
 
@@ -631,11 +631,7 @@ def test_page_web_propose_le_lot_et_dit_le_refus(tmp_path):
         bilans = Bilans(tmp_path, ReglagesBilan(lignes_journal=0), registre, chef)
         lancement = FauxLancement()
         services = Services(chef, registre, bilans.acquitter, list, lancement=lancement)
-        client = TestClient(
-            creer_app(services, reglages_api(), CLE),
-            client=LOCAL,
-            headers={"Authorization": f"Bearer {CLE}"},
-        )
+        client = client_connecte(creer_app_de_test(services), adresse=LOCAL)
         reponse = client.post(
             "/api/lot/seaux", json={"format": FORMAT, "nombre": 3, "variete": VARIETE}
         )
@@ -791,11 +787,11 @@ def test_page_web_corrige_l_inventaire_avec_la_cle_et_la_confirmation(tmp_path, 
         bilans = Bilans(tmp_path, ReglagesBilan(lignes_journal=0), registre, chef)
         correction = une_correction(machine)
         services = Services(chef, registre, bilans.acquitter, list, correction=correction)
-        app = creer_app(services, reglages_api(), CLE)
+        app = creer_app_de_test(services)
         sans_cle = TestClient(app, client=LOCAL)
         assert sans_cle.get("/api/stockage").status_code == 401
         assert sans_cle.post("/api/stockage/confirmer").status_code == 401
-        client = TestClient(app, client=LOCAL, headers={"Authorization": f"Bearer {CLE}"})
+        client = client_connecte(app, adresse=LOCAL)
         inventaire = client.get("/api/stockage").json()
         assert inventaire["boites"][BOITES.capsules] == {"nombre": 0, "capacite": 18}
         assert inventaire["semence"][SEMENCE[0]] == VARIETE

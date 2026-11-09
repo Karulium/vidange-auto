@@ -20,6 +20,12 @@ registre:
   copies_gardees: 30
   # Tous les combien de minutes on regarde s'il faut faire la copie du jour.
   periode_verification_min: 10
+  # Fichiers des données qui sont dans la copie de secours mais que « vidange restaurer » ne remet
+  # pas sur un Pi neuf : l'état d'un cycle en cours et la note de version installée.
+  restauration_ignore:
+    - etat-cycle.json
+    - etat-programme.json
+    - pi.json
 
 fiabilite:
   # Santé de l'informatique du Pi : mesurée, notée dans le registre, et alerte au-delà des seuils.
@@ -57,8 +63,9 @@ fiabilite:
     periode_s: 1
     attente_vannes_s: 5
 
-# API du Pi et page web locale (téléphone, PC), protégées par la clé « cle_api » du fichier de secrets.
-# Sans clé, l'API ne démarre pas (la machine, elle, tourne quand même).
+# API du Pi et page web locale (téléphone, PC), protégées par des comptes (nom et mot de passe,
+# fichier comptes.yaml hors Git, commande « vidange compte »). Sans aucun compte, la page est fermée
+# (la machine, elle, tourne quand même).
 api:
   # 0.0.0.0 : l'API répond sur toutes les liaisons réseau du Pi (réseau local et Tailscale).
   # Aucun port n'est ouvert sur la box : depuis Internet, on ne passe que par Tailscale.
@@ -78,6 +85,11 @@ api:
   rafraichir_s: 2
   # Nombre de lignes rendues au plus d'un coup (historique, alarmes, photos).
   lignes_max: 200
+  # Comptes de la page web (tâche 25) : une connexion vaut 12 heures (une journée de travail).
+  session_h: 12
+  # 5 mots de passe ratés depuis une même adresse = adresse bloquée 5 minutes.
+  connexions_ratees_max: 5
+  blocage_s: 300
 
 # Écran Nextion de la porte de l'armoire (pages décrites dans nextion/pages.md). Il est relié
 # au Pi par le signal « ecran_nextion » de docs/entrees-sorties.yaml (fichier de l'UART).
