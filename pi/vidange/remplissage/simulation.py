@@ -13,8 +13,7 @@ tenu par la tête (`fond_z`),
 ≈ 3 cm plus bas pour deux seaux emboîtés. La barrière est coupée tant que deux seaux emboîtés y
 sont (`double`) : ils sont séparés quand la tête tire le seau du dessus (prise double f), sauf
 `separation_ratee`. Le pousseur qui sort fait partir le seau.
-`alarmes_barres_actives` : les barres (« côté mur », « côté allée ») dont le pilote est en alarme
-(ALM).
+`alarme_pilotes_active` : un pilote de la carte du chariot est en alarme (ALM).
 """
 
 import math
@@ -83,7 +82,7 @@ class ChariotSimule:
         self.separation_ratee = False
         self.barriere_muette = False
         self.sans_contact = False
-        self.alarmes_barres_actives: list[str] = []
+        self.alarme_pilotes_active = False
         self.pretes = Condition("cartes simulées prêtes", lambda: True)
         self.surveillance = Condition("cartes simulées sans alarme", lambda: True)
 
@@ -109,8 +108,8 @@ class ChariotSimule:
     def barriere_coupee(self) -> bool | None:
         return None if self.barriere_muette else self.double
 
-    def alarmes_barres(self) -> list[str]:
-        return list(self.alarmes_barres_actives)
+    def alarme_pilotes(self) -> bool:
+        return self.alarme_pilotes_active
 
     def executer(self, pas: Pas, cible: Pose) -> None:
         depart = self.position()

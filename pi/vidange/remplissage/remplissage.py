@@ -108,8 +108,9 @@ QUOI_FAIRE_BARRIERE = (
     "acquitter et donner le Go."
 )
 QUOI_FAIRE_ALARME_BARRES = (
-    "Le pilote d'une barre est en alarme (ALM) : elle force (seau mal centré, coincé, barre "
-    "bloquée ?). Regarder la vidéo, dégager, vérifier le réglage du centrage du format, puis "
+    "Un pilote de la carte du chariot est en alarme (ALM), sans doute une barre qui force (seau "
+    "mal centré, coincé, barre bloquée ?). Le Pi ne sait pas lequel : regarder les voyants des 6 "
+    "pilotes de la carte et la vidéo, dégager, vérifier le réglage du centrage du format, puis "
     "acquitter et donner le Go."
 )
 QUOI_FAIRE_BOCAL = (
@@ -348,14 +349,12 @@ class Remplissage:
         """Condition de fin des étapes : fait partir les pas l'un après l'autre."""
         while self._geste is not None:
             pas = self._pas
-            alarmes = self.chariot.alarmes_barres() if pas is not None else []
-            if pas is not None and "barres" in pas.cibles and alarmes:
+            if pas is not None and "barres" in pas.cibles and self.chariot.alarme_pilotes():
                 self.arreter()
-                barres = " et ".join(f"de la barre {barre}" for barre in alarmes)
-                self._photo(f"alarme du pilote {barres}")
+                self._photo("alarme d'un pilote de la carte du chariot")
                 raise ErreurEtape(
-                    f"remplissage : alarme du pilote {barres} pendant « {pas.texte} » "
-                    f"({'elles forcent' if len(alarmes) > 1 else 'elle force'})",
+                    f"remplissage : alarme d'un pilote de la carte du chariot pendant "
+                    f"« {pas.texte} » (une barre force ? on ne sait pas quel pilote)",
                     QUOI_FAIRE_ALARME_BARRES,
                 )
             if not self.chariot.fini():

@@ -202,6 +202,12 @@ class FauxFluidnc:
             self.alarmes_pilote.add(lettre)
             self.entrees.add(lettre)
 
+    def retomber_alarme_pilote(self, lettre: str) -> None:
+        """Le pilote d'une entrée perd son ALM (son courant a été coupé puis remis)."""
+        with self._verrou:
+            self.alarmes_pilote.discard(lettre)
+            self.entrees.discard(lettre)
+
     def glisser(self, axe: str, mm: float) -> None:
         """La courroie glisse de `mm` : la carte ne le sait pas, le fin de course si."""
         with self._verrou:

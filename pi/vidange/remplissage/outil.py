@@ -238,8 +238,7 @@ def _etat(remplissage: Remplissage, chariot: ChariotFluidnc) -> None:
         f"pousseur : {pose.pousseur:.4f} m"
     )
     print(f"barrière coupée : {chariot.barriere_coupee()}")
-    alarmes = chariot.alarmes_barres()
-    print(f"alarme des pilotes des barres : {', '.join(alarmes) if alarmes else 'aucune'}")
+    print(f"alarme des pilotes de la carte : {'OUI' if chariot.alarme_pilotes() else 'aucune'}")
     try:
         print(f"balance : {chariot.peser():.3f} kg")
     except ErreurEtape as erreur:

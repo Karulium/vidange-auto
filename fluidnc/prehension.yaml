@@ -15,8 +15,9 @@
 #       Z de la griffe, avant Y et X de la carte n° 1 (vidange.portique).
 #       Frein à manque de courant : le Pi le desserre avant de bouger (sortie digital2,
 #       frein_prehension_z ; P2 réservée au frein, Implantation 07/11/2026), le serre à l'arrêt
-#       long. Alarme du pilote de Z sur macro0 (lettre 0 de « Pn: », sans macro) : arrêt et
-#       alerte.
+#       long. Alarme groupée des 4 pilotes de la carte sur macro0 (lettre 0 de « Pn: »,
+#       sans macro) : arrêt et alerte. Sens : « :low » si l'ALM conduit en alarme (parallèle), sans
+#       « :low » si elle s'ouvre (série, à préférer) ; à vérifier à réception.
 #   A : rotation de la tête, maintien plein (≈ 3 N·m pendant le brossage du lavage et le
 #       vissage, fiche). Visser = sens horaire vu d'en haut = A positif ; aucun axe inversé
 #       (fiche). Origine : origine_rotation_tete, capteur Hall sous la poulie de 60 dents (il voit
@@ -151,7 +152,7 @@ probe:
   pin: gpio.32:low
   check_mode_start: true
 
-# Alarme du pilote de Z (alarme_prehension_z), lue par le Pi (lettre 0). EXEMPLE de broche.
+# Alarme groupée des 4 pilotes (alarme_carte4), lue par le Pi (lettre 0). EXEMPLE de broche.
 control:
   macro0_pin: gpio.34:low
 

@@ -2201,3 +2201,71 @@ Procédure d'essai : `pi/systeme/essai-derive.md`. Testé sur le vrai matériel 
   4. Contrôle d'origine : reste `actif: false` jusqu'à l'essai D.2 de `pi/systeme/essai-derive.md` ; si FluidNC
      refuse de passer le fin de course, `soft_limits: false` sur cet axe seulement, puis activer.
   5. Seul le début de lot est branché ; « tous les N seaux » sera ajouté si l'essai montre une dérive en cours de lot.
+
+## Alarmes par carte, tâche 24 bis (09/11/2026, niveau 1, réponse de l'Implantation puis choix de Claude)
+
+Source : `implantation/logiciel/alarmes-pilotes.md` (Implantation, 09/11/2026, décisions de niveau 1, réponse aux
+questions 1 à 3 de la PR n° 107). Le modèle exact du pilote n'est pas acheté (CDC-PILOTE : boucle fermée, même modèle
+partout) : ce qui en dépend est « à vérifier à réception ». Procédure d'essai : `pi/systeme/essai-derive.md`
+(parties B et C). Testé sur le vrai matériel : non.
+
+**Réponse de l'Implantation (recopiée)**
+
+- **Une seule entrée « alarme » par carte FluidNC** : les ALM de tous les pilotes de la carte sont regroupés.
+  À vérifier à réception : si la sortie ALM (optocoupleur) est **ouverte en alarme** (à préférer), les ALM sont mis
+  **en série** (une alarme ou un fil coupé ouvre la boucle : sécurité positive) ; si elle **conduit en alarme**, ils
+  sont **en parallèle** (OU câblé, un fil coupé ne se voit pas).
+- Le logiciel sait qu'un pilote de la carte est en alarme, pas lequel. Pour trouver lequel : comparer la position
+  demandée et la position lue, axe par axe, ou regarder les LED des pilotes.
+- Carte 1 : X1, X2, Y, Z griffe, A rotation de la griffe, B godet : 6 pilotes, `alarme_carte1`. Carte 2 : avance, montée
+  (plateau Z), rotation (plateau A), pousseur, barre 1, barre 2 : **6** (pas 4 : les 2 barres sont aussi en boucle
+  fermée depuis le 31/10), `alarme_carte2`. Carte 3 : le HBS86H de l'agitateur ; les TMC2209 n'ont pas d'ALM,
+  leur DIAG sert déjà, `alarme_carte3`. Carte 4 : Z préhension, rotation préhension, noyau, couronne : 4,
+  `alarme_carte4`. Le logiciel choisit le numéro de l'entrée parmi les entrées isolées de la carte.
+- Question 1, remise à zéro après un calage voulu : le ENA de chaque pilote est câblé sur la sortie « disable » de sa
+  carte FluidNC, donc l'EXEMPLE du logiciel (`$MD` puis `$ME`) est le bon premier essai. Sur beaucoup de pilotes
+  du commerce, l'alarme ne s'efface QU'EN COUPANT LEUR ALIMENTATION (à vérifier à réception). Si ENA ne suffit pas :
+  un relais DIN à contact repos dans le +48 V du SEUL pilote de la rotation de la préhension, commandé par
+  `relais_1` K3 (libre) ; le Pi coupe 2 s puis remet ; l'angle est retrouvé par le Hall et le potentiomètre 10 tours.
+  Couper K1 n'est pas une solution (tous les moteurs). Mieux : régler le seuil d'erreur de position du pilote, ou limiter
+  le courant pendant le vissage, pour que le calage voulu ne déclenche pas d'alarme.
+- Question 2, chariot du remplissage : regroupement confirmé sur une seule entrée, sur les **6** pilotes de la carte 2.
+- Question 3, griffe : oui, ses ALM sont câblés, sur l'entrée alarme de la **carte 1**, avec X1, X2, Y et Z (6 pilotes).
+
+**Ce qui est fait (choix de Claude)**
+
+- **Entrées** (`docs/entrees-sorties.yaml`) : les 15 entrées `alarme_*` par axe sont remplacées par `alarme_carte1`
+  (E5), `alarme_carte2` (E6), `alarme_carte3` (E5) et `alarme_carte4` (E4), EXEMPLES, sur des broches déjà prises par
+  l'une des anciennes entrées de la même carte. Lettres dans « Pn: » (`fluidnc.yaml`) : carte 1 `0`, carte 2 `1`
+  (la barrière garde `0`), carte 3 `3`, carte 4 `0`. Les macros devenues inutiles disparaissent de `fluidnc/*.yaml`.
+  Une même lettre ne peut plus être donnée à deux signaux d'une carte (le « OU câblé » de la tâche 24 est retiré).
+- **Sens de l'entrée** (série ou parallèle) : c'est le suffixe `:low` de la broche dans `fluidnc/<carte>.yaml`
+  (comme les autres entrées), avec `repos` du signal dans `entrees-sorties.yaml` ; les fichiers du dépôt gardent
+  `:low` (EXEMPLE : parallèle). Procédure d'essai B.1 : mesurer à réception puis régler.
+- **`machine.yaml → pilotes`** : tous les axes d'une carte donnent la même entrée. Vérifié au démarrage : une alarme
+  partagée par des axes de **cartes différentes** = erreur claire ; la coupure du courant demande un axe qui a une
+  alarme et, si elle est active, au moins une sortie. `griffe_a` et `griffe_b` sortent de `sans_alarme` et rejoignent
+  le module `griffe`.
+- **Arrêt des modules** : l'ALM d'une carte arrête tous les modules qui ont un axe de cette carte en mouvement
+  (`Pilotes.probleme_du_module`). Le message dit « un pilote de la carte « X » (axes ... : on ne sait pas lequel,
+  regarder les voyants des pilotes) » ; le « quoi faire » aussi. Le portique garde sa propre vérification (cartes 1 et 4)
+  et le remplissage son arrêt du centrage : il lit `alarme_carte2` (`alarme_pilotes()` remplace `alarmes_barres()`, qui
+  disait quelle barre : on ne le sait plus).
+- **Calage voulu** : pendant le pas `cale`, l'ALM de la carte 4 est attendue ; elle **masque les 3 autres pilotes de la
+  carte 4** (Z de la préhension, noyau, couronne) pour tous les modules, jusqu'à la remise à zéro au début du pas
+  suivant de la tête. Conséquence assumée : une vraie alarme de l'un de ces 3 pilotes pendant ce pas n'est vue qu'au
+  pas suivant (où l'ALM, si elle ne retombe pas, arrête la machine). Le Pi ne peut pas séparer les pilotes d'une carte.
+- **Remise à zéro** : 1er essai `$MD` puis `$ME` (inchangé) ; 2e essai, si l'alarme ne retombe pas dans `delai_max_s` :
+  coupure de `reset_pilote_rotation_prehension` (`relais_1` K3, 24 V, relais DIN à contact repos : commandé = coupé,
+  nom donné par l'Implantation dans `relais-du-pi.md`) pendant `duree_s` (2 s, EXEMPLE), puis attente de
+  `attente_retour_s`, puis nouvelle attente de `delai_max_s`. Derrière `pilotes → remise_a_zero → coupure → actif`
+  (**faux** tant que l'essai n'est pas fait). Actif sans que la sortie soit dans `entrees-sorties.yaml` : le Pi ne
+  construit pas les alarmes des pilotes et le dit dans le journal. Jamais K1. Le relais est toujours remis, même en cas
+  d'erreur.
+- **Hors de la tâche** : retrouver quel pilote est en alarme en comparant positions demandée et lue.
+- **Réponses à la PR n° 108** (tâche 24 bis, 09/11/2026, niveau 1, tranché par Claude) :
+  1. Pendant le pas `cale`, l'ALM de la carte 4 masque aussi le Z de la préhension, le noyau et la couronne : accepté.
+     Aucun de ces axes ne bouge pendant le vissage, et le pas suivant arrête la machine si l'alarme reste.
+  2. Éviter l'alarme au calage (seuil d'erreur du pilote ou courant limité pendant le vissage) est essayé en premier
+     (partie C.1 de `pi/systeme/essai-derive.md`). Si cela marche, une petite tâche fera finir le pas `cale` autrement
+     que par l'alarme ; elle sera écrite à réception du pilote, après l'essai.

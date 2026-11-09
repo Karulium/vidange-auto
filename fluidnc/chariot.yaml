@@ -41,10 +41,11 @@
 #       c'est « rentré » ; il pousse toujours vers le stockage, de 0 à 325 (la palette va de −0,165
 #       à +0,16 de l'axe du plateau, fiche du 28/10).
 #   Entrées lues par le Pi dans « Pn: » : barrière lumineuse (barre côté mur, à 0,7315) sur macro0
-#       (lettre 0), alarmes ALM des pilotes des barres : côté mur sur macro1 (lettre 1), côté allée
-#       sur macro2 (lettre 2), sans macro : le Pi arrête le geste et alerte si une barre force.
-#       Lettres : pi/reglages/fluidnc.yaml. Les alarmes des autres pilotes sont câblées comme sur
-#       les autres cartes (plan de câblage).
+#       (lettre 0), alarme groupée des 6 pilotes de la carte sur macro1 (lettre 1), sans macro : le
+#       Pi arrête le geste et alerte si un pilote lève ALM (une barre qui force, par exemple). Sens
+#       de la broche : « :low » si la sortie ALM conduit en alarme (parallèle), sans « :low » si
+#       elle s'ouvre en alarme (série, à préférer). À vérifier à réception.
+#       Lettres : pi/reglages/fluidnc.yaml.
 #   Le vérin du galet (fermeture, tâche 41) est sur cette carte : il viendra avec sa tâche.
 #   À VÉRIFIER à l'essai de la carte (pi/systeme/essai-remplissage.md, étapes 1 et 2) : sens de
 #   chaque axe (les 2 barres se serrent ensemble), origines, les lettres de « Pn: ».
@@ -220,15 +221,12 @@ axes:
 
 # Entrées lues par le Pi dans « Pn: » (pi/reglages/fluidnc.yaml → entrees). EXEMPLES de broches.
 #   macro0 (lettre 0) : barriere_remplissage.
-#   macro1 (lettre 1) : alarme_barre_mur (ALM du pilote de la barre côté mur).
-#   macro2 (lettre 2) : alarme_barre_allee (ALM du pilote de la barre côté allée).
+#   macro1 (lettre 1) : alarme_carte2 (ALM des 6 pilotes de la carte, regroupés).
 control:
   macro0_pin: gpio.32:low
   macro1_pin: gpio.2:low
-  macro2_pin: gpio.19:low
 
 # Aucune macro : ces broches servent seulement à être lues.
 macros:
   macro0: ""
   macro1: ""
-  macro2: ""

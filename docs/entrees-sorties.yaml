@@ -273,7 +273,7 @@ cartes:
   fluidnc_chariot:
     exemple: true
     description: Carte FluidNC n° 2 (chariot de remplissage), 6 axes, pilotes externes
-    # 14 entrées : 6 fins de course et capteurs d'origine, barrière, 6 alarmes de pilote, 1 libre
+    # 14 entrées : 6 fins de course et capteurs d'origine, barrière, 1 alarme groupée (6 pilotes), 6 libres
     # (EXEMPLE : à confirmer avec le choix de la carte). Le fin de course haut du plateau n'en
     # est plus une : il est en série dans l'arrêt (31/10).
     entrees: 14
@@ -295,8 +295,8 @@ cartes:
   fluidnc_portique:
     exemple: true
     description: Carte FluidNC n° 1 (portique), 6 axes, pilotes externes
-    # 12 entrées : 4 fins de course, 2 origines de la griffe (godet, rotation), 4 alarmes de
-    # pilote, OK des chocs, 1 libre (EXEMPLE : à confirmer avec le choix de la carte).
+    # 12 entrées : 4 fins de course, 2 origines de la griffe (godet, rotation), 1 alarme groupée
+    # (6 pilotes), OK des chocs, 4 libres (EXEMPLE : à confirmer avec le choix de la carte).
     entrees: 12
     sorties: 18
     tension_max: 24
@@ -353,7 +353,7 @@ cartes:
 #   la boîte du poste dit son état). Pas de capteur du volet du dessus ni de fût posé.
 # (tâche 19, mycélium : tous sur la carte FluidNC n° 3, lus par FluidNC ; agitateur fixe depuis la
 #   tâche 19 ter, plus de glissière) :
-#   origine_manivelle, alarme_manivelle, moteur_manivelle.
+#   origine_manivelle, alarme_carte3, moteur_manivelle.
 # (tâche 20, porte-bocal : sur la carte FluidNC n° 3 ; le Pi lit origine_manivelle,
 #   verrou_plateau_engage et inclinaison_bocal dans l'état de la carte, et commande les 3 sorties
 #   du demi-tour par elle : leurs lettres et numéros sont dans pi/reglages/fluidnc.yaml) :
@@ -363,8 +363,8 @@ cartes:
 #   carte et commande vanne_vide, vanne_souffler (tâche 45 undecies) et electroaimants_capsule par
 #   elle : lettres et numéros dans pi/reglages/fluidnc.yaml ; vide_venturi est lu par l'ADS1115 de
 #   l'armoire) :
-#   contact_tete, fdc_prehension_haut, origine_rotation_tete, alarme_prehension_z,
-#   alarme_rotation_tete, moteur_prehension_z, moteur_rotation_tete, vanne_vide, vanne_souffler,
+#   contact_tete, fdc_prehension_haut, origine_rotation_tete, alarme_carte4,
+#   moteur_prehension_z, moteur_rotation_tete, vanne_vide, vanne_souffler,
 #   electroaimants_capsule, vide_venturi, compte_tours_tete (tâche 36 bis : le tour de la tête
 #   à la prise d'origine de sa rotation).
 # (tâche 43, entonnoir à bocaux : AUCUN signal à lui. Il emploie ceux de la préhension : vanne_vide
@@ -375,11 +375,10 @@ cartes:
 # (tâche 36 bis, griffe : sur la carte FluidNC n° 1, lus dans son état) : origine_godet_griffe,
 #   origine_rotation_griffe.
 # (tâches 34, 34 bis et 34 quater, remplissage : sur la carte FluidNC n° 2 ; le Pi lit
-#   barriere_remplissage, alarme_barre_mur et alarme_barre_allee dans l'état de la carte : lettres
+#   barriere_remplissage et alarme_carte2 dans l'état de la carte : lettres
 #   dans pi/reglages/fluidnc.yaml ; la balance est pesee_plateau_remplissage, sur le bus des pesées) :
 #   fdc_plateau_bas, hall_rotation_plateau, origine_barre_mur, origine_barre_allee,
-#   origine_remplissage_y, origine_pousseur, barriere_remplissage, alarme_remplissage_y,
-#   alarme_plateau_z, alarme_plateau_a, alarme_barre_mur, alarme_barre_allee, alarme_pousseur,
+#   origine_remplissage_y, origine_pousseur, barriere_remplissage, alarme_carte2,
 #   moteur_remplissage_y, moteur_plateau_z, moteur_plateau_a, moteur_barre_mur,
 #   moteur_barre_allee, moteur_pousseur.
 #   Le fin de course haut du plateau (il coupe la montée vers 0,578) n'est pas dans cette liste :
@@ -693,9 +692,15 @@ signaux:
     tension: 24
     repos: ouvert
     module: mycelium
-  alarme_manivelle:
+  alarme_carte3:
     exemple: true
-    description: Alarme du pilote HBS86H de la manivelle (NEMA 34 à codeur, 48 V)
+    description: >-
+      Alarme groupée de la carte n° 3 : ALM du seul pilote HBS86H de la manivelle (NEMA 34 à codeur,
+      48 V) ; les TMC2209 n'ont pas d'ALM (tâche 24 bis)
+    # Câblage (Implantation, 09/11/2026) : si la sortie ALM du pilote est OUVERTE en alarme, les ALM sont
+    # en SÉRIE (une alarme ou un fil coupé ouvre la boucle : sécurité positive, à préférer) ; si elle
+    # CONDUIT en alarme, ils sont en PARALLÈLE (OU câblé, un fil coupé ne se voit pas). À vérifier à
+    # réception du pilote ; le sens se règle dans fluidnc/<carte>.yaml (macro..._pin, avec ou sans :low).
     carte: fluidnc_mycelium_lavage
     broche: E5
     type: npn
@@ -879,56 +884,17 @@ signaux:
     tension: 24
     repos: ouvert
     module: remplissage
-  alarme_remplissage_y:
+  alarme_carte2:
     exemple: true
-    description: Alarme du pilote boucle fermée de l'avance du chariot (NEMA 17)
+    description: >-
+      Alarme groupée de la carte n° 2 : ALM des 6 pilotes boucle fermée (avance, montée et rotation du
+      plateau, pousseur, barres côté mur et côté allée), regroupés sur UNE entrée (tâche 24 bis)
+    # Câblage (Implantation, 09/11/2026) : si la sortie ALM du pilote est OUVERTE en alarme, les ALM sont
+    # en SÉRIE (une alarme ou un fil coupé ouvre la boucle : sécurité positive, à préférer) ; si elle
+    # CONDUIT en alarme, ils sont en PARALLÈLE (OU câblé, un fil coupé ne se voit pas). À vérifier à
+    # réception du pilote ; le sens se règle dans fluidnc/<carte>.yaml (macro..._pin, avec ou sans :low).
     carte: fluidnc_chariot
     broche: E6
-    type: npn
-    tension: 24
-    repos: ouvert
-    module: remplissage
-  alarme_plateau_z:
-    exemple: true
-    description: Alarme du pilote boucle fermée de la montée du plateau (NEMA 23 à frein)
-    carte: fluidnc_chariot
-    broche: E7
-    type: npn
-    tension: 24
-    repos: ouvert
-    module: remplissage
-  alarme_plateau_a:
-    exemple: true
-    description: Alarme du pilote boucle fermée de la rotation du plateau (NEMA 17)
-    carte: fluidnc_chariot
-    broche: E8
-    type: npn
-    tension: 24
-    repos: ouvert
-    module: remplissage
-  alarme_barre_mur:
-    exemple: true
-    description: Alarme ALM du pilote boucle fermée de la barre côté mur (NEMA 17, vis T8)
-    carte: fluidnc_chariot
-    broche: E9
-    type: npn
-    tension: 24
-    repos: ouvert
-    module: remplissage
-  alarme_barre_allee:
-    exemple: true
-    description: Alarme ALM du pilote boucle fermée de la barre côté allée (NEMA 17, vis T8)
-    carte: fluidnc_chariot
-    broche: E13
-    type: npn
-    tension: 24
-    repos: ouvert
-    module: remplissage
-  alarme_pousseur:
-    exemple: true
-    description: Alarme du pilote boucle fermée du pousseur (NEMA 23 à frein)
-    carte: fluidnc_chariot
-    broche: E10
     type: npn
     tension: 24
     repos: ouvert
@@ -983,8 +949,8 @@ signaux:
     module: remplissage
   # Portique (fiche du module, gelé le 28/10/2026, fichier du fil Portique du 01/11 ; carte n° 1,
   # sauf le Z de la préhension sur la carte n° 4). Repères : EXEMPLES (plan de câblage). Fins de
-  # course NF (fil coupé = déclenché) ; alarmes des pilotes lues par le Pi (macro0 à 3) : arrêt et
-  # alerte. Les freins des deux Z serrent sans courant (24 V coupé par l'arrêt d'urgence).
+  # course NF (fil coupé = déclenché) ; alarme groupée des 6 pilotes de la carte lue par le Pi
+  # (alarme_carte1) : arrêt et alerte. Les freins des deux Z serrent sans courant (24 V coupé par l'arrêt d'urgence).
   fdc_pont_x1:
     exemple: true
     description: Fin de course NF du moteur X1 du pont, côté fût (origine de X1)
@@ -1021,38 +987,17 @@ signaux:
     tension: 24
     repos: ferme
     module: portique
-  alarme_pont_x1:
+  alarme_carte1:
     exemple: true
-    description: Alarme du pilote boucle fermée du moteur X1 du pont
+    description: >-
+      Alarme groupée de la carte n° 1 : ALM des 6 pilotes boucle fermée (X1, X2, Y, Z de la griffe,
+      rotation A et godet B de la griffe), regroupés sur UNE entrée (tâche 24 bis)
+    # Câblage (Implantation, 09/11/2026) : si la sortie ALM du pilote est OUVERTE en alarme, les ALM sont
+    # en SÉRIE (une alarme ou un fil coupé ouvre la boucle : sécurité positive, à préférer) ; si elle
+    # CONDUIT en alarme, ils sont en PARALLÈLE (OU câblé, un fil coupé ne se voit pas). À vérifier à
+    # réception du pilote ; le sens se règle dans fluidnc/<carte>.yaml (macro..._pin, avec ou sans :low).
     carte: fluidnc_portique
     broche: E5
-    type: npn
-    tension: 24
-    repos: ouvert
-    module: portique
-  alarme_pont_x2:
-    exemple: true
-    description: Alarme du pilote boucle fermée du moteur X2 du pont
-    carte: fluidnc_portique
-    broche: E6
-    type: npn
-    tension: 24
-    repos: ouvert
-    module: portique
-  alarme_chariot_y:
-    exemple: true
-    description: Alarme du pilote boucle fermée du chariot Y
-    carte: fluidnc_portique
-    broche: E7
-    type: npn
-    tension: 24
-    repos: ouvert
-    module: portique
-  alarme_griffe_z:
-    exemple: true
-    description: Alarme du pilote boucle fermée du Z de la griffe (NEMA 23 à frein)
-    carte: fluidnc_portique
-    broche: E8
     type: npn
     tension: 24
     repos: ouvert
@@ -1177,20 +1122,17 @@ signaux:
     tension: 24
     repos: ouvert
     module: prehension
-  alarme_prehension_z:
+  alarme_carte4:
     exemple: true
-    description: Alarme du pilote boucle fermée de Z (pignon-crémaillère, NEMA 23 à frein)
+    description: >-
+      Alarme groupée de la carte n° 4 : ALM des 4 pilotes boucle fermée (Z de la préhension, rotation de
+      la tête, noyau et couronne du lavage), regroupés sur UNE entrée (tâche 24 bis)
+    # Câblage (Implantation, 09/11/2026) : si la sortie ALM du pilote est OUVERTE en alarme, les ALM sont
+    # en SÉRIE (une alarme ou un fil coupé ouvre la boucle : sécurité positive, à préférer) ; si elle
+    # CONDUIT en alarme, ils sont en PARALLÈLE (OU câblé, un fil coupé ne se voit pas). À vérifier à
+    # réception du pilote ; le sens se règle dans fluidnc/<carte>.yaml (macro..._pin, avec ou sans :low).
     carte: fluidnc_prehension
     broche: E4
-    type: npn
-    tension: 24
-    repos: ouvert
-    module: portique
-  alarme_rotation_tete:
-    exemple: true
-    description: Alarme du pilote boucle fermée de la rotation de la tête
-    carte: fluidnc_prehension
-    broche: E5
     type: npn
     tension: 24
     repos: ouvert
@@ -1248,24 +1190,6 @@ signaux:
   # (la rotation de la tête est dans la même commande). Eau sur la carte n° 3 ; jet d'air et
   # chauffage sur la carte n° 4 (FluidNC n'a que 8 sorties « digital » et la carte n° 3 n'en a
   # plus de libre). Aucun capteur « brosses fermées », aucun capteur d'origine des brosses.
-  alarme_noyau_lavage:
-    exemple: true
-    description: Alarme du pilote boucle fermée du noyau du lavage (NEMA 23)
-    carte: fluidnc_prehension
-    broche: E6
-    type: npn
-    tension: 24
-    repos: ouvert
-    module: lavage
-  alarme_couronne_lavage:
-    exemple: true
-    description: Alarme du pilote boucle fermée de la couronne du lavage (NEMA 23)
-    carte: fluidnc_prehension
-    broche: E7
-    type: npn
-    tension: 24
-    repos: ouvert
-    module: lavage
   moteur_noyau_lavage:
     exemple: true
     description: Pas et sens du pilote du noyau à brosses (axe B de la carte n° 4)
@@ -1491,6 +1415,21 @@ signaux:
     tension: 230
     repos: ouvert
     module: air_comprime
+  reset_pilote_rotation_prehension:
+    exemple: true
+    # Réservé (Implantation, relais-du-pi.md, 09/11/2026) : seulement si « $MD » puis « $ME » n'efface
+    # pas l'ALM du pilote de la rotation de la tête après un vissage qui cale. K3 (24 V) commande la
+    # bobine d'un relais DIN à contact REPOS dans le +48 V de CE SEUL pilote : commandé = coupé (le Pi
+    # coupe 2 s, puis remet). Jamais
+    # K1 (il couperait tous les moteurs). Le Pi ne s'en sert que si machine.yaml → pilotes →
+    # remise_a_zero → coupure → actif est vrai.
+    description: Coupure du +48 V du seul pilote de rotation de la préhension (commandé = coupé)
+    carte: relais_1
+    broche: K3
+    type: relais
+    tension: 24
+    repos: ferme
+    module: prehension
   coupure_ventilateur_armoire:
     exemple: true
     # Contact FERMÉ au repos : le ventilateur de l'armoire tourne si le Pi s'arrête. Le Pi le coupe

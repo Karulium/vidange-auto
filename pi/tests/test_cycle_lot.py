@@ -834,7 +834,7 @@ def test_le_calage_de_la_tete_vient_de_l_alarme_du_pilote_de_la_rotation(machine
 def _essai_calage(machine, tete, carte):
     assert tete.peut_detecter_le_calage()
     assert not tete._cale_vue()
-    carte.lever_alarme_pilote(REGLAGES.fluidnc.cartes["prehension"].entrees["alarme_rotation_tete"])
+    carte.lever_alarme_pilote(REGLAGES.fluidnc.cartes["prehension"].entrees["alarme_carte4"])
     attendre_vrai(tete._cale_vue)
     # Hors vissage, le chef arrêterait le module ; pendant le vissage l'alarme est voulue.
     pilotes = machine.cartes.pilotes

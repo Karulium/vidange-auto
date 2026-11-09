@@ -3623,8 +3623,9 @@ class VissageBocalNeuf(Modele):
 
 class CaleBocalNeuf(Modele):
     """Le moteur de la rotation cale quand l'erreur de suivi de son pilote dépasse err_deg pendant
-    duree_s : le pilote lève alors son ALM (alarme_rotation_tete), que le Pi lit (tâche 24). Ces
-    deux valeurs se règlent SUR LE PILOTE (procédure d'essai) : le code ne les lit pas.
+    duree_s : le pilote lève alors son ALM (alarme_carte4, groupée avec celles des 3 autres
+    pilotes de la carte), que le Pi lit (tâches 24 et 24 bis). Ces deux valeurs se règlent SUR LE
+    PILOTE (procédure d'essai) : le code ne les lit pas.
     Le couple de serrage C_vis (≈ 1,5 N·m au mât) se règle À LA MAIN sur le pilote, au premier
     essai : le logiciel ne le commande pas."""
 
@@ -3697,6 +3698,19 @@ class Solveur(Modele):
         return self
 
 
+class CoupureAlimentationPilote(Modele):
+    """2e essai de la remise à zéro : couper puis remettre l'alimentation d'UN pilote par un relais
+    du Pi (tâche 24 bis). Sans effet tant que `actif` est faux."""
+
+    actif: bool
+    # Axe → nom de la sortie du Pi (docs/entrees-sorties.yaml) qui coupe l'alimentation de SON
+    # pilote seul. Commandée = coupé (contact repos).
+    sorties: dict[Nom, Nom] = Field(default_factory=dict)
+    # Durée de la coupure (s), puis attente avant de relire l'alarme (s).
+    duree_s: float = Field(gt=0)
+    attente_retour_s: float = Field(ge=0)
+
+
 class RemiseAZeroPilote(Modele):
     """Comment l'alarme ALM d'un pilote se remet à zéro après un calage voulu (vissage). EXEMPLE
     tant que `exemple` est vrai : cela dépend du modèle de pilote (docs/decisions.md, tâche 24)."""
@@ -3709,6 +3723,8 @@ class RemiseAZeroPilote(Modele):
     attente_s: float = Field(ge=0)
     # Temps permis pour que l'alarme retombe (s) ; sinon : à faire à la main sur le pilote.
     delai_max_s: float = Field(gt=0)
+    # Si l'alarme ne retombe pas avec les lignes : coupure de l'alimentation du pilote (None : non).
+    coupure: CoupureAlimentationPilote | None = None
 
 
 class Pilotes(Modele):
@@ -3719,7 +3735,8 @@ class Pilotes(Modele):
     « Pn: » de la carte de l'axe (fluidnc.yaml → entrees). Elle protège la MACHINE, jamais les
     personnes."""
 
-    # Axe → ses signaux d'alarme (docs/entrees-sorties.yaml). Un axe à deux moteurs en a deux.
+    # Axe → ses signaux d'alarme (docs/entrees-sorties.yaml). Une entrée par carte FluidNC,
+    # donnée à tous les axes de la carte (leurs ALM sont câblés ensemble).
     alarmes: dict[Nom, list[Nom]] = Field(default_factory=dict)
     # Axes moteur qui n'ont pas d'ALM lue, avec la raison.
     sans_alarme: dict[Nom, str] = Field(default_factory=dict)
@@ -3964,7 +3981,7 @@ class Machine(Modele):
             for nom in noms:
                 if nom not in self.axes:
                     erreurs.append(f"pilotes → {quoi} : axe inconnu « {nom} »")
-        vus: dict[str, str] = {}
+        cartes_du_signal: dict[str, str] = {}
         for axe, signaux in pilotes.alarmes.items():
             if axe in pilotes.sans_alarme:
                 erreurs.append(
@@ -3977,11 +3994,24 @@ class Machine(Modele):
                     erreurs.append(
                         f"pilotes → alarmes → {axe} : « {signal} » doit s'appeler alarme_..."
                     )
-                autre = vus.setdefault(signal, axe)
-                if autre != axe:
+                carte_axe = self.axes[axe].carte if axe in self.axes else None
+                autre = cartes_du_signal.setdefault(signal, carte_axe or "")
+                if carte_axe is not None and autre != carte_axe:
                     erreurs.append(
-                        f"pilotes : « {signal} » est donné aux axes « {autre} » et « {axe} »"
+                        f"pilotes : « {signal} » est donné à des axes de cartes différentes "
+                        f"(« {autre} » et « {carte_axe} ») : une alarme ne se partage qu'entre "
+                        "axes d'une même carte"
                     )
+        coupure = pilotes.remise_a_zero.coupure
+        if coupure is not None:
+            for axe in coupure.sorties:
+                if axe not in pilotes.alarmes:
+                    erreurs.append(
+                        f"pilotes → remise_a_zero → coupure → sorties : l'axe « {axe} » n'a pas "
+                        "d'alarme (alarmes)"
+                    )
+            if coupure.actif and not coupure.sorties:
+                erreurs.append("pilotes → remise_a_zero → coupure : actif, mais aucune sortie")
         surveilles = {axe for axes in pilotes.modules.values() for axe in axes}
         for nom, axe in self.axes.items():
             if axe.carte is None:
@@ -6077,8 +6107,7 @@ class CarteFluidnc(Modele):
             vus: dict[object, str] = {}
             for nom, valeur in valeurs.items():
                 autre = vus.setdefault(valeur, nom)
-                # Des alarmes de pilotes peuvent être câblées en OU sur une même entrée.
-                if autre != nom and not (nom.startswith("alarme_") and autre.startswith("alarme_")):
+                if autre != nom:
                     erreurs.append(f"{quoi} : « {autre} » et « {nom} » ont la même ({valeur})")
         if erreurs:
             raise ValueError("\n".join(erreurs))
