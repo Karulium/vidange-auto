@@ -958,8 +958,24 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   sorte d'alarme dans `programme.yaml`, heures calmes, fin de fût, nettoyage à faire, pièces d'usure « à faire »,
   résumé du soir, escalade (rappel puis 2ᵉ liste) et bouton « J'ai vu » sur la page. Choix et reste à faire :
   `docs/decisions.md`, « Notifications, tâche 27 ». Essai : `pi/systeme/essai-notifications.md`.
-- [ ] 28. Page web : vue 3D en direct et rejeu d'incident (54, 55), statistiques (57), appli installable (59),
-  réglages avec garde-fous (56), carnet de bord (86). — Sonnet.
+- [x] 28. Page web : vue 3D en direct et rejeu d'incident (54, 55). — Sonnet.
+  Coupée en deux le 09/11 (trop grosse pour une session) : le reste est la 28 bis.
+  1. Vue 3D en direct : boîtes simples (portique, pont, chariot, griffe, tête de préhension, chariot du
+     remplissage, zones des modules) dessinées depuis les réglages (`machine.yaml`, `fluidnc/*.yaml`), jamais
+     depuis des chiffres dans le code ; positions des axes lues comme la page les lit déjà (rapport d'état des
+     cartes), rafraîchies plusieurs fois par seconde ; zones tenues en couleur. Le Pi tourne sans Internet : la
+     bibliothèque 3D (par exemple three.js, licence MIT) est copiée dans le dépôt à une version fixe, pas chargée
+     d'un site.
+  2. Rejeu d'incident : pour une alarme du registre, rejouer en 3D les positions des 60 s avant et après (le
+     « bilan après alarme », fonction 17) avec lecture, pause et curseur. Si ces positions ne sont pas encore
+     gardées, les garder (fichier par alarme, taille bornée par un réglage, purge des plus vieux).
+  Rôle « regarder » pour les deux (tâche 25).
+  Fait : onglet « Vue 3D » (boîtes et zones dessinées depuis `vue3d.yaml` et `machine.yaml`, positions lues 5 fois
+  par seconde, zones tenues en orange), three.js 0.160.0 copiée dans le dépôt, rejeu des 60 s avant et après chaque
+  alarme (fichier par alarme dans `donnees/rejeux`, taille bornée, purge des plus vieux), bouton « Rejouer en 3D ».
+  Choix et reste à faire : `docs/decisions.md`, « Vue 3D et rejeu, tâche 28 ». Essai : `pi/systeme/essai-vue-3d.md`.
+- [ ] 28 bis. Page web : statistiques (57), appli installable (59), réglages avec garde-fous (56), carnet de
+  bord (86). — Sonnet.
 - [ ] 29. Écran : code pour les fonctions sensibles (50). — Sonnet.
 - [ ] 30. Estimation de fin qui apprend (7), montée en vitesse réglable (69), essai d'un réglage dans le simulateur (68). — Sonnet.
 - [ ] 31. Plans d'expériences : application d'un plan d'essais accepté par Karulium, seau par seau (6, 76). — Opus.

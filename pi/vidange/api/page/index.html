@@ -9,6 +9,10 @@
   elle marche aussi sans réseau extérieur. Elle demande le nom et le mot de passe du compte
   (cookie posé par le Pi). Tout passe par l'API du Pi (/api/...).
 -->
+<!-- La bibliothèque 3D est dans le dépôt (statique/three/) : pas de lien vers un site. -->
+<script type="importmap">
+{ "imports": { "three": "/statique/three/three.module.min.js", "three/addons/": "/statique/three/" } }
+</script>
 <style>
   :root {
     --fond: #f4f5f2; --carte: #ffffff; --texte: #1d2320; --doux: #5d6862; --bord: #d6dbd7;
@@ -114,6 +118,7 @@
       <button data-vue="historique">Historique</button>
       <button data-vue="video">Vidéo</button>
       <button data-vue="photos">Photos</button>
+      <button data-vue="3d">Vue 3D</button>
       <button data-vue="checklist">Check-list</button>
       <button data-vue="maintenance">Maintenance</button>
       <button data-vue="maj">Mises à jour</button>
@@ -213,6 +218,10 @@
     <section id="vue-checklist">
       <button id="bouton-checklist" class="petit">Refaire la check-list</button>
       <div id="constats"></div>
+    </section>
+
+    <section id="vue-3d">
+      <div id="vue3d"></div>
     </section>
 
     <section id="vue-maintenance">
@@ -372,6 +381,34 @@ function montrer(nom) {
   if (nom === "checklist") chargerChecklist();
   if (nom === "maj") chargerMaj(); else clearTimeout(minuterieMaj);
   if (nom === "maintenance") chargerMaintenance();
+  if (nom === "3d") ouvrir3d(); else fermer3d();
+}
+
+// ------------------------------------------------------------ vue 3D (tâche 28)
+
+let module3d = null;
+
+async function charger3d() {
+  // Le code de la vue 3D n'est chargé qu'à la première ouverture de l'onglet.
+  if (!module3d) module3d = await import("/statique/vue3d.js");
+  return module3d;
+}
+
+async function ouvrir3d() {
+  try { await (await charger3d()).ouvrir($("vue3d"), lire); }
+  catch (erreur) { if (!(erreur instanceof Refus)) remplir("vue3d", el("p", { classe: "doux" }, "Vue 3D impossible : " + erreur.message)); }
+}
+
+function fermer3d() { if (module3d) module3d.fermer(); }
+
+// Depuis une alarme : ouvre la vue 3D et rejoue les positions autour de cette alarme.
+async function rejouer3d(numero) {
+  montrer("3d");
+  try {
+    const m = await charger3d();
+    await m.ouvrir($("vue3d"), lire);
+    await m.rejouer(numero);
+  } catch (erreur) { if (!(erreur instanceof Refus)) dire("Rejeu impossible : " + erreur.message, "rouge"); }
 }
 
 // ------------------------------------------------------------ état
@@ -436,7 +473,8 @@ function afficherEtat(etat) {
           if (confirm("Acquitter l'alarme n° " + a.id + " ? Le problème doit être corrigé : l'étape sera refaite après un Go."))
             ordre("/api/alarmes/" + a.id + "/acquitter", "Alarme n° " + a.id + " acquittée.");
         },
-      }, "J'ai corrigé : acquitter"))));
+      }, "J'ai corrigé : acquitter"),
+      el("button", { classe: "petit", surclick: () => rejouer3d(a.id) }, "Rejouer en 3D"))));
 
   afficherPosteFut(etat.poste_fut);
   afficherNettoyage(etat.nettoyage);
@@ -708,7 +746,8 @@ $("bouton-anciennes").addEventListener("click", async () => {
         el("strong", {}, "N° " + a.id + " — " + a.module), " · " + heure(a.quand),
         el("div", {}, a.message),
         el("div", { classe: "doux" }, a.acquittee_le
-          ? "Acquittée le " + heure(a.acquittee_le) + " par " + a.acquittee_par : "Pas encore acquittée"))));
+          ? "Acquittée le " + heure(a.acquittee_le) + " par " + a.acquittee_par : "Pas encore acquittée"),
+        el("button", { classe: "petit", surclick: () => rejouer3d(a.id) }, "Rejouer en 3D"))));
   } catch (erreur) { if (!(erreur instanceof Refus)) dire(erreur.message, "rouge"); }
 });
 

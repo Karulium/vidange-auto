@@ -68,6 +68,8 @@ class Bilans:
         self._horloge = horloge
         # Nom → fonction : ce qu'on ajoute au bilan (le clip vidéo de la tâche 12...).
         self.collecteurs: dict[str, Callable[[], Any]] = {}
+        # Appelés avec (alarme, numéro dans le registre) une fois l'alarme notée (rejeu en 3D...).
+        self.sur_numero: list[Callable[[Alarme, int], None]] = []
         self._file: queue.Queue[Alarme] = queue.Queue()
 
     # ------------------------------------------------------------ côté chef
@@ -123,6 +125,11 @@ class Bilans:
             journal.error("Alarme notée sans son cycle (%s) : %s", cycle, erreur)
             numero = self.registre.noter_alarme(**valeurs)
         journal.info("Bilan de l'alarme n° %d écrit : %s", numero, relatif)
+        for suite in self.sur_numero:
+            try:
+                suite(alarme, numero)
+            except Exception:
+                journal.exception("Suite de l'alarme n° %d ratée", numero)
         return numero
 
     def rassembler(self, alarme: Alarme, memoire: Any) -> dict[str, Any]:

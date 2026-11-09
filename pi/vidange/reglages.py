@@ -7853,6 +7853,106 @@ class ReglagesEntretien(Modele):
     pieces: dict[Nom, PieceEntretien]
 
 
+# ---------------------------------------------------------------- vue3d.yaml
+
+
+class SuiviVue3d(Modele):
+    """Où est une boîte sur un des trois sens du dessin (x, y, z).
+
+    Avec « axe » : le centre de la boîte suit cet axe de machine.yaml (en m), plus « decalage ».
+    Sans « axe » : le centre est fixe, à « decalage » (m).
+    """
+
+    axe: Nom | None = None
+    decalage: float = 0.0
+
+
+class BoiteVue3d(Modele):
+    """Une boîte simple de la vue 3D (portique, pont, chariot, griffe...), centrée en (x, y, z)."""
+
+    libelle: str = Field(min_length=1)
+    # Nom d'une couleur de « couleurs → boites ».
+    couleur: Nom
+    # Longueur en x, y, z (m).
+    taille: tuple[
+        Annotated[float, Field(gt=0)], Annotated[float, Field(gt=0)], Annotated[float, Field(gt=0)]
+    ]
+    x: SuiviVue3d
+    y: SuiviVue3d
+    z: SuiviVue3d
+    # Axe tournant (en degrés, machine.yaml) qui fait tourner la boîte autour de la verticale.
+    tourne: Nom | None = None
+
+
+class CouleursVue3d(Modele):
+    fond: Couleur
+    sol: Couleur
+    zone_libre: Couleur
+    zone_tenue: Couleur
+    boites: dict[Nom, Couleur] = Field(min_length=1)
+
+
+class EtendueVue3d(Modele):
+    """Le volume dessiné (m) : le sol, et les côtés des zones qui ne citent pas tous les axes."""
+
+    x: Intervalle
+    y: Intervalle
+    z: Intervalle
+
+    @model_validator(mode="after")
+    def _dans_l_ordre(self) -> "EtendueVue3d":
+        for sens in ("x", "y", "z"):
+            debut, fin = getattr(self, sens)
+            if debut >= fin:
+                raise ValueError(
+                    f"« {sens} » doit aller du plus petit au plus grand ({debut:g} puis {fin:g})"
+                )
+        return self
+
+
+class RejeuVue3d(Modele):
+    """Rejeu d'incident (fonction 55) : les positions autour de chaque alarme, gardées sur le Pi."""
+
+    # Secondes gardées avant l'alarme et après.
+    avant_s: float = Field(gt=0, le=600)
+    apres_s: float = Field(gt=0, le=600)
+    # Une position de chaque axe toutes les (s).
+    periode_s: float = Field(ge=0.05, le=5)
+    # Taille totale du dossier des rejeux (Mo) : au-delà, les plus vieux fichiers sont effacés.
+    dossier_max_mo: float = Field(gt=0, le=100000)
+    # Nombre d'alarmes proposées au rejeu dans la page.
+    alarmes_proposees: int = Field(ge=1, le=200)
+    # Vitesses de lecture proposées (1 = temps réel).
+    vitesses: list[Annotated[float, Field(gt=0, le=100)]] = Field(min_length=1)
+
+
+class ReglagesVue3d(Modele):
+    """vue3d.yaml : la vue 3D de la page web et le rejeu d'incident (tâche 28)."""
+
+    exemple: bool = False
+    # La page redemande les positions des axes tous les (s).
+    rafraichir_s: float = Field(gt=0, le=5)
+    etendue: EtendueVue3d
+    couleurs: CouleursVue3d
+    # Dans quel sens du dessin (x, y ou z) chaque axe en mètres bouge. Les zones de machine.yaml
+    # sont dessinées avec ça : tous les axes qu'elles citent doivent y être.
+    axes_monde: dict[Nom, Literal["x", "y", "z"]] = Field(min_length=1)
+    boites: dict[Nom, BoiteVue3d] = Field(min_length=1)
+    rejeu: RejeuVue3d
+
+    @model_validator(mode="after")
+    def _verifier_couleurs(self) -> "ReglagesVue3d":
+        erreurs = [
+            f"boites → {nom} → couleur : « {boite.couleur} » absente de couleurs → boites "
+            f"(couleurs : {', '.join(self.couleurs.boites)})"
+            for nom, boite in self.boites.items()
+            if boite.couleur not in self.couleurs.boites
+        ]
+        if erreurs:
+            raise ValueError("; ".join(erreurs))
+        return self
+
+
 # --------------------------------------------------------------- l'ensemble
 
 
@@ -7866,6 +7966,7 @@ class Reglages(Modele):
     vision: ReglagesVision
     air: ReglagesAir
     entretien: ReglagesEntretien
+    vue3d: ReglagesVue3d
 
 
 # Nom du fichier → (nom dans Reglages, modèle). Ajouter ici chaque nouveau fichier.
@@ -7879,6 +7980,7 @@ FICHIERS: dict[str, tuple[str, type[Modele]]] = {
     "vision.yaml": ("vision", ReglagesVision),
     "air.yaml": ("air", ReglagesAir),
     "entretien.yaml": ("entretien", ReglagesEntretien),
+    "vue3d.yaml": ("vue3d", ReglagesVue3d),
 }
 
 
@@ -8095,6 +8197,7 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
         ]
     erreurs += _verifier_micropore_entre_fichiers(valeurs)
     erreurs += _verifier_fermeture_entre_fichiers(valeurs)
+    erreurs += _verifier_vue3d_entre_fichiers(valeurs)
     if simulateur.depart is not None and simulateur.depart not in machine.positions:
         erreurs.append(
             f"simulateur.yaml, depart : position « {simulateur.depart} » absente de machine.yaml"
@@ -8126,6 +8229,67 @@ def _verifier_pilotes_entre_fichiers(machine: Machine, fluidnc: Fluidnc) -> list
             for signal in carte.entrees
             if signal.startswith("alarme_") and signal not in donnees
         ]
+    return erreurs
+
+
+def _verifier_vue3d_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
+    """La vue 3D ne cite que des axes de machine.yaml, dans le bon sens ; les zones sont
+    dessinables ; un rejeu tient dans la taille permise (au moins 10 rejeux)."""
+    machine, vue = valeurs["machine"], valeurs["vue3d"]
+    assert isinstance(machine, Machine) and isinstance(vue, ReglagesVue3d)
+    axes = ", ".join(machine.axes)
+    erreurs = []
+    for nom in vue.axes_monde:
+        if nom not in machine.axes:
+            erreurs.append(
+                f"vue3d.yaml, axes_monde → {nom} : axe absent de machine.yaml (axes : {axes})"
+            )
+        elif machine.axes[nom].unite != "m":
+            erreurs.append(
+                f"vue3d.yaml, axes_monde → {nom} : l'axe tourne (degrés) ; "
+                "il va dans « tourne » d'une boîte, pas dans axes_monde"
+            )
+    for nom_boite, boite in vue.boites.items():
+        for sens in ("x", "y", "z"):
+            axe = getattr(boite, sens).axe
+            if axe is None:
+                continue
+            ou = f"vue3d.yaml, boites → {nom_boite} → {sens} → axe"
+            if axe not in vue.axes_monde:
+                erreurs.append(f"{ou} : « {axe} » absent de axes_monde")
+            elif vue.axes_monde[axe] != sens:
+                erreurs.append(
+                    f"{ou} : « {axe} » bouge en {vue.axes_monde[axe]} (axes_monde), pas en {sens}"
+                )
+        if boite.tourne is not None:
+            axe = machine.axes.get(boite.tourne)
+            if axe is None:
+                erreurs.append(
+                    f"vue3d.yaml, boites → {nom_boite} → tourne : axe « {boite.tourne} » absent "
+                    f"de machine.yaml (axes : {axes})"
+                )
+            elif axe.unite != "deg":
+                erreurs.append(
+                    f"vue3d.yaml, boites → {nom_boite} → tourne : « {boite.tourne} » n'est pas "
+                    "un axe tournant (degrés)"
+                )
+    for nom_zone, zone in machine.zones.items():
+        erreurs += [
+            f"vue3d.yaml, axes_monde : il manque « {axe} » (cité par la zone « {nom_zone} » de "
+            "machine.yaml)"
+            for axe in zone
+            if axe in machine.axes and machine.axes[axe].unite == "m" and axe not in vue.axes_monde
+        ]
+    rejeu = vue.rejeu
+    nombre_axes = sum(1 for axe in machine.axes.values() if axe.carte is not None)
+    octets = (rejeu.avant_s + rejeu.apres_s) / rejeu.periode_s * (nombre_axes * 9 + 8)
+    if octets * 10 > rejeu.dossier_max_mo * 1_000_000:
+        erreurs.append(
+            f"vue3d.yaml, rejeu : un rejeu ({rejeu.avant_s:g} + {rejeu.apres_s:g} s, une position "
+            f"toutes les {rejeu.periode_s:g} s, {nombre_axes} axes) pèse environ "
+            f"{octets / 1_000_000:.1f} Mo : dossier_max_mo ({rejeu.dossier_max_mo:g}) doit en "
+            "garder au moins 10"
+        )
     return erreurs
 
 

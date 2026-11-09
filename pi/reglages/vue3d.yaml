@@ -1,0 +1,128 @@
+# Vue 3D de la page web et rejeu d'incident (tâche 28, fonctions 54 et 55).
+#
+# La page dessine des BOÎTES SIMPLES depuis ce fichier et machine.yaml ; elle ne connaît aucun chiffre
+# de la machine. Repère : celui de la machine (x vers le stockage, y vers l'allée, z vers le haut),
+# en mètres. Les tailles et décalages de dessin sont des EXEMPLES tirés des commentaires de
+# machine.yaml (mât de la griffe à pont − 0,187, plaque Z à 0,913 au-dessus des axes de la griffe,
+# etc.) : ils ne commandent rien, ils servent seulement à dessiner. Si une cote change dans
+# machine.yaml, la mettre à jour ici pour que le dessin reste juste.
+exemple: true
+
+# La page redemande les positions des axes tous les (s) : EXEMPLE (5 fois par seconde).
+rafraichir_s: 0.2
+
+# Le volume dessiné : le sol, et les côtés des zones qui ne citent pas tous les axes.
+etendue:
+  x: [0.0, 3.1]
+  y: [0.0, 1.0]
+  z: [0.0, 2.3]
+
+couleurs:
+  fond: "#141816"
+  sol: "#2a3530"
+  # Zone réservée libre / tenue par un module (le chef la réserve entre les modules).
+  zone_libre: "#3cb371"
+  zone_tenue: "#f0a030"
+  boites:
+    fixe: "#6b7570"
+    portique: "#64a0e8"
+    griffe: "#e8c24a"
+    prehension: "#c58be8"
+    remplissage: "#4ac2b8"
+
+# Dans quel sens du dessin chaque axe en mètres bouge. Les zones de machine.yaml sont dessinées
+# avec cette table : tous les axes qu'elles citent doivent y être (sinon : erreur au démarrage).
+axes_monde:
+  exemple_x: x
+  exemple_y: y
+  exemple_z: z
+  pont_x: x
+  chariot_y: y
+  griffe_z: z
+  prehension_z: z
+  remplissage_y: y
+  plateau_z: z
+  pousseur: x
+
+# Les boîtes : taille (x, y, z) en m, centre fixe (decalage seul) ou qui suit un axe (axe + decalage).
+boites:
+  fut:
+    libelle: Fût (poste du fût)
+    couleur: fixe
+    taille: [0.60, 0.60, 0.86]
+    x: {decalage: 0.29}
+    y: {decalage: 0.57}
+    z: {decalage: 0.6125}
+  # Le pont roule en x sur les deux rails ; il couvre toute la largeur y.
+  pont:
+    libelle: Pont (portique)
+    couleur: portique
+    taille: [0.12, 1.0, 0.10]
+    x: {axe: pont_x}
+    y: {decalage: 0.5}
+    z: {decalage: 2.25}
+  # Le chariot roule en y sur le pont ; son centre est à 0,040 devant les mâts (portique → chariot).
+  chariot:
+    libelle: Chariot (portique)
+    couleur: portique
+    taille: [0.20, 0.20, 0.12]
+    x: {axe: pont_x}
+    y: {axe: chariot_y, decalage: 0.040}
+    z: {decalage: 2.25}
+  mat_griffe:
+    libelle: Mât de la griffe
+    couleur: griffe
+    taille: [0.05, 0.05, 0.913]
+    x: {axe: pont_x, decalage: -0.187}
+    y: {axe: chariot_y}
+    z: {axe: griffe_z, decalage: 0.4565}
+  griffe:
+    libelle: Griffe (tête)
+    couleur: griffe
+    taille: [0.222, 0.172, 0.30]
+    x: {axe: pont_x, decalage: -0.187}
+    y: {axe: chariot_y}
+    z: {axe: griffe_z, decalage: -0.063}
+    tourne: griffe_a
+  mat_prehension:
+    libelle: Mât de la préhension
+    couleur: prehension
+    taille: [0.05, 0.05, 1.078]
+    x: {axe: pont_x, decalage: 0.129}
+    y: {axe: chariot_y}
+    z: {axe: prehension_z, decalage: 0.539}
+  prehension:
+    libelle: Tête de préhension
+    couleur: prehension
+    taille: [0.12, 0.12, 0.20]
+    x: {axe: pont_x, decalage: 0.129}
+    y: {axe: chariot_y}
+    z: {axe: prehension_z, decalage: 0.10}
+    tourne: prehension_a
+  # Le chariot des seaux (remplissage) roule en y à x fixe ; son plateau monte et tourne.
+  chariot_remplissage:
+    libelle: Chariot du remplissage
+    couleur: remplissage
+    taille: [0.45, 0.35, 0.10]
+    x: {decalage: 0.925}
+    y: {axe: remplissage_y}
+    z: {decalage: 0.10}
+  plateau_remplissage:
+    libelle: Plateau du remplissage
+    couleur: remplissage
+    taille: [0.35, 0.35, 0.02]
+    x: {decalage: 0.925}
+    y: {axe: remplissage_y}
+    z: {axe: plateau_z, decalage: -0.01}
+    tourne: plateau_a
+
+# Rejeu d'incident : les positions des axes autour de chaque alarme, gardées dans le dossier
+# donnees/rejeux (un fichier JSON par alarme, nommé avec le numéro de l'alarme). EXEMPLES.
+rejeu:
+  avant_s: 60
+  apres_s: 60
+  periode_s: 0.2
+  # Au-delà, les plus vieux fichiers sont effacés.
+  dossier_max_mo: 200
+  alarmes_proposees: 20
+  vitesses: [0.5, 1, 2, 4]

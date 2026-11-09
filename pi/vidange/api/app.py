@@ -62,6 +62,7 @@ from vidange.poste_fut import ErreurPoste, PosteFut
 from vidange.registre import ErreurRegistre, Registre
 from vidange.reglages import ReglagesApi
 from vidange.spray import Spray
+from vidange.vue3d import EnregistreurRejeu, ErreurRejeu, Vue3d
 
 if TYPE_CHECKING:
     from vidange.cycle.lancement import Lancement
@@ -71,6 +72,8 @@ journal = donner_journal("api")
 
 PAGE = Path(__file__).resolve().parent / "page" / "index.html"
 PAGE_AUCUN_COMPTE = Path(__file__).resolve().parent / "page" / "aucun-compte.html"
+# Les fichiers fixes de la page (bibliothèque 3D copiée dans le dépôt, code de la vue 3D).
+STATIQUE = Path(__file__).resolve().parent / "page" / "statique"
 
 
 @dataclass
@@ -103,6 +106,9 @@ class Services:
     lancement: "Lancement | None" = None
     # Corriger l'inventaire du stockage : la page propose, Karulium confirme (None : pas possible).
     correction: "Correction | None" = None
+    # Vue 3D en direct et rejeu d'incident (None : pas de vue 3D).
+    vue3d: Vue3d | None = None
+    rejeux: EnregistreurRejeu | None = None
 
 
 class Tenir(BaseModel):
@@ -231,6 +237,64 @@ def creer_app(
         # Sans aucun compte : seulement l'explication du premier compte.
         fichier = PAGE_AUCUN_COMPTE if comptes.vide else PAGE
         return HTMLResponse(fichier.read_text(encoding="utf-8"))
+
+    # ------------------------------------------------------------ vue 3D et rejeu (tâche 28)
+
+    @app.get("/statique/{chemin:path}", dependencies=regarder, include_in_schema=False)
+    def statique(chemin: str) -> FileResponse:
+        # Les fichiers de la page (bibliothèque 3D, code de la vue), seulement dans ce dossier.
+        fichier = (STATIQUE / chemin).resolve()
+        if not fichier.is_relative_to(STATIQUE.resolve()) or not fichier.is_file():
+            raise HTTPException(404, "fichier inconnu")
+        return FileResponse(fichier)
+
+    def la_vue() -> Vue3d:
+        if services.vue3d is None:
+            raise HTTPException(404, "pas de vue 3D sur ce programme")
+        return services.vue3d
+
+    @app.get("/api/vue3d/scene", dependencies=regarder)
+    def vue3d_scene() -> dict[str, Any]:
+        """Les boîtes et les zones à dessiner, venues de vue3d.yaml et machine.yaml."""
+        return la_vue().scene()
+
+    @app.get("/api/vue3d/positions", dependencies=regarder)
+    def vue3d_positions() -> dict[str, Any]:
+        """Les positions des axes (m, ou ° pour un axe tournant) et les zones tenues."""
+        vue = la_vue()
+        return {
+            "heure": datetime.now().astimezone().isoformat(timespec="milliseconds"),
+            "axes": vue.positions(),
+            "zones_tenues": vue.zones_tenues(),
+            "en_alarme": any(m.statut == "alarme" for m in chef.etat().modules),
+        }
+
+    def les_rejeux() -> EnregistreurRejeu:
+        if services.rejeux is None:
+            raise HTTPException(404, "pas de rejeu d'incident sur ce programme")
+        return services.rejeux
+
+    @app.get("/api/vue3d/rejeux", dependencies=regarder)
+    def vue3d_rejeux() -> list[dict[str, Any]]:
+        """Les alarmes qui ont un rejeu, de la plus récente à la plus ancienne."""
+        vue, rejeux = la_vue(), les_rejeux()
+        numeros = rejeux.numeros()[: vue.reglages.rejeu.alarmes_proposees]
+        if not numeros:
+            return []
+        marques = ",".join("?" * len(numeros))
+        return registre.lire(
+            "SELECT id, quand, module, etape, message FROM alarmes "
+            f"WHERE id IN ({marques}) ORDER BY id DESC",
+            tuple(numeros),
+        )
+
+    @app.get("/api/vue3d/rejeux/{numero}", dependencies=regarder)
+    def vue3d_rejeu(numero: int) -> dict[str, Any]:
+        """Les positions des axes autour d'une alarme (format : vidange/vue3d/rejeu.py)."""
+        try:
+            return les_rejeux().lire(numero)
+        except ErreurRejeu as erreur:
+            raise HTTPException(404, str(erreur)) from None
 
     # ------------------------------------------------------------ connexion (tâche 25)
 
