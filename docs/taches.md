@@ -919,6 +919,30 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      question avec ta recommandation. Le simulateur (faux FluidNC) sait glisser d'un nombre de mm donné, pour les
      tests.
   Hors de la tâche : la lecture des positions par la vision, la montée en vitesse (30).
+- [ ] 24 bis. Alarmes des pilotes regroupées par carte (réponse de l'Implantation du 09/11,
+  `implantation/logiciel/alarmes-pilotes.md`, recopiée dans decisions.md). — Sonnet.
+  1. **Une seule entrée « alarme » par carte FluidNC** : les ALM de tous les pilotes de la carte sont regroupés
+     (en série si la sortie ALM est ouverte en alarme, sécurité positive à préférer ; en parallèle sinon : à
+     vérifier à réception, donc le sens de l'entrée est un réglage). Dans `docs/entrees-sorties.yaml`, les entrées
+     `alarme_*` par axe sont remplacées par `alarme_carte1` (fluidnc_portique : X1, X2, Y, Z griffe, rotation A et
+     godet B de la griffe, 6 pilotes), `alarme_carte2` (fluidnc_chariot : avance, plateau Z, plateau A, pousseur,
+     les 2 barres, 6 pilotes), `alarme_carte3` (fluidnc_mycelium_lavage : HBS86H de la manivelle ; les TMC2209
+     n'ont pas d'ALM) et `alarme_carte4` (fluidnc_prehension : Z et rotation de la préhension, noyau, couronne,
+     4 pilotes). Numéro d'entrée choisi par toi parmi les entrées libres de chaque carte (EXEMPLE).
+  2. Section `pilotes` de `machine.yaml` : une alarme peut être partagée par tous les axes de sa carte (vérifié au
+     démarrage : une alarme partagée par des axes de cartes différentes = erreur). La griffe sort de `sans_alarme`.
+     Une ALM de carte arrête tous les modules qui ont un axe de cette carte en mouvement, et le « quoi faire » dit
+     qu'on ne sait pas quel pilote : regarder les LED des pilotes de la carte. Les barres du remplissage gardent
+     leur geste (arrêt du centrage) mais lisent `alarme_carte2`.
+  3. Calage voulu de la rotation de la tête : pendant le pas `cale`, l'ALM de la carte 4 est attendue ; elle masque
+     les 3 autres pilotes de la carte pendant ce pas (écrit dans decisions.md). Remise à zéro : `$MD` puis `$ME`
+     d'abord (ENA est bien sur la sortie « disable »), puis, en 2ᵉ essai si l'ALM ne retombe pas, coupure 2 s du
+     48 V du seul pilote de rotation de la préhension par `relais_1` K3 (relais à contact repos, réservé dans
+     `relais-du-pi.md`), derrière un réglage (EXEMPLE, désactivé tant que l'essai n'est pas fait). Jamais couper K1
+     (tous les moteurs). La procédure d'essai dit aussi d'essayer d'abord d'éviter l'alarme (seuil d'erreur du pilote
+     ou courant limité pendant le vissage).
+  Hors de la tâche : retrouver quel pilote est en alarme en comparant positions demandée et lue.
+
 - [ ] 25. Comptes (58) et restauration d'un Pi neuf depuis la sauvegarde (79). — Sonnet.
 - [ ] 26. Entretien : compteurs par axe, calendrier, pièces d'usure, page maintenance (40 à 44). — Sonnet.
 - [ ] 27. Notifications sur le téléphone (ntfy), résumé du soir, escalade (60 à 63). — Sonnet.
