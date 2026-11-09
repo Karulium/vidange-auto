@@ -643,6 +643,7 @@ function afficherLot(lot, estimation) {
   remplir("lot-etat",
     p && el("div", { classe: "carte " + (lot.refus_go ? "alarme" : "attention") },
       el("strong", {}, "Lot de " + p.texte + " proposé"),
+      lot.plan_essais && el("div", {}, "Avec plan d'essais : " + lot.plan_essais.nom + " (n° " + lot.plan_essais.numero + ")."),
       el("div", {}, lot.refus_go
         ? "Il ne peut pas partir : " + lot.refus_go + "."
         : "Donner le Go sur l'écran de l'armoire (bouton GO, puis Oui), devant la machine."),
@@ -651,6 +652,8 @@ function afficherLot(lot, estimation) {
     // Estimation de fin du lot qui tourne (tâche 30) : une information, jamais une garantie.
     estimation && el("div", { classe: "carte" }, estimation.texte),
     lot.dernier && el("div", { classe: "doux" }, "Dernier lot lancé : " + lot.dernier + "."),
+    lot.plan_accepte && !lot.plan_essais && el("div", { classe: "doux" }, "Plan d'essais accepté « " + lot.plan_accepte.nom
+      + " » : il partira avec le prochain lot de " + lot.plan_accepte.lot + "."),
     lot.fond.length ? el("div", { classe: "doux" }, "Boucles de fond du lot : " + lot.fond.join(", ") + ".") : null,
     lot.refus_seaux && el("div", { classe: "doux" }, "Lot de seaux : " + lot.refus_seaux + "."),
     lot.refus_bocaux && el("div", { classe: "doux" }, "Lot de bocaux : " + lot.refus_bocaux + "."));

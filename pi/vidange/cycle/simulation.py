@@ -69,6 +69,7 @@ from vidange.stockage.stockage import Stockage
 
 if TYPE_CHECKING:
     from vidange.chef import Programme
+    from vidange.essais import PlanEssais
     from vidange.remplissage.simulation import ScenarioRemplissage
 
 # Postes joués en faux par le simulateur, vérifiés dans le planning comme les postes lancés : la
@@ -301,21 +302,36 @@ def lot_du_simulateur(simulateur: Simulateur) -> Lot:
 
 
 def jouer_cycle(
-    simulateur: Simulateur, programme: "Programme | None" = None
+    simulateur: Simulateur,
+    programme: "Programme | None" = None,
+    plan: "PlanEssais | None" = None,
 ) -> tuple[ModeSeaux, Planning, list[str]]:
     """Prépare le mode seaux (même code que la machine), joue le lot, puis vérifie que chaque seau
     a suivi ORDRE_SEAU. Rend le mode, le planning et les écarts à l'ordre (vide : aucun).
 
-    `programme` : un programme du solveur donné au chef (tâche 23, vidange.simulateur.solveur)."""
+    `programme` : un programme du solveur donné au chef (tâche 23, vidange.simulateur.solveur).
+    `plan` : un plan d'essais appliqué aux seaux du lot (tâche 31 ; rien n'est noté au registre)."""
     mode = ModeSeaux(simulateur.reglages, PiecesSimulees(simulateur), simulateur.chef)
     refus = mode.refus_lot()
     if refus is not None:
         raise ErreurSimulation(f"lot de seaux impossible : {refus}")
-    modules = mode.modules_du_lot(lot_du_simulateur(simulateur))
+    lot = lot_du_simulateur(simulateur)
+    if plan is not None:
+        from vidange.essais import appliquer
+
+        # N° 0 : un plan joué au simulateur, gardé nulle part.
+        lot = appliquer(0, plan, lot, simulateur.reglages.machine)
+    modules = mode.modules_du_lot(lot)
     planning = simulateur.jouer(modules, programme)
     faites = [f"{ligne.module}.{ligne.etape}" for ligne in planning.lignes]
     verifies = [*mode.postes_lances, *JOUES_EN_FAUX]
-    problemes = verifier_ordre(faites, verifies) if planning.fini else []
+    # Un seau « sans spray » d'un plan d'essais ne passe pas par le spray.
+    sans = {
+        numero: ("spray",)
+        for numero, seau in enumerate(lot.seaux, start=1)
+        if seau.essai is not None and seau.essai.get("spray") is False
+    }
+    problemes = verifier_ordre(faites, verifies, sans=sans) if planning.fini else []
     return mode, planning, problemes
 
 

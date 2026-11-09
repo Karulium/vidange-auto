@@ -1,0 +1,22 @@
+# Exemple de plan d'essais (tâche 31), à copier et changer. Format : vidange/essais/plan.py ;
+# variables permises et leurs bornes : pi/reglages/essais.yaml. Procédure :
+# pi/systeme/essai-plan-essais.md.
+#
+#   vidange plan verifier systeme/plan-essais-exemple.yaml   # vérifier et voir le tableau
+#   vidange plan essayer systeme/plan-essais-exemple.yaml    # le rejouer au simulateur
+#   vidange plan charger systeme/plan-essais-exemple.yaml    # le proposer (Karulium l'accepte
+#                                                             # ensuite sur la page web)
+nom: Dose de mycélium et spray, exemple
+auteur: Karulium (exemple)
+remarque: trois doses de mycélium, un seau sans spray, un seau avec plus de spray ; les autres témoins
+lot:
+  variete: pleurote_grise
+  format: seau_a
+  seaux: 6
+# Par numéro dans le lot (1 = le premier seau rempli). Les seaux non cités (ici 6) : réglages normaux.
+seaux:
+  1: {mycelium_g: 100}
+  2: {mycelium_g: 100}
+  3: {mycelium_g: 200}
+  4: {mycelium_g: 200, spray: false}
+  5: {spray_g: 13}

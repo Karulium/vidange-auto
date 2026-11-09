@@ -174,6 +174,9 @@ class Demande:
     variete: str
     # Cycle du registre (vidange du fût), s'il y en a un.
     cycle: int | None = None
+    # Mycélium de cette couche (kg) voulu par un plan d'essais accepté (tâche 31) ; None : celui
+    # du format (griffe → formats → mycelium_kg).
+    mycelium_kg: float | None = None
 
 
 @dataclass(frozen=True)
@@ -656,7 +659,7 @@ class Mycelium:
         demande = self.demande
         assert demande is not None
         plan, dose = self.plan, self.reglages.dose
-        voulu = self.format.mycelium_kg
+        voulu = demande.mycelium_kg or self.format.mycelium_kg
         assert voulu is not None
         yield from self._manivelle(bas=True)
         if plan.poids_depart_kg is None:

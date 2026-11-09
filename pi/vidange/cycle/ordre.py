@@ -34,7 +34,7 @@ l'invente pas. `coeur` : sans lui, aucun lot ne peut partir,
 même dans le simulateur. `obligatoire` : sur la vraie machine, un lot ne part pas sans lui.
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 
@@ -232,17 +232,23 @@ def verifier_ordre(
     ordre: Sequence[Poste] = ORDRE_SEAU,
     debut: str = DEBUT_DU_SEAU,
     unite: str = "seau",
+    sans: Mapping[int, Iterable[str]] | None = None,
 ) -> list[str]:
     """Les étapes faites (« module.etape », dans l'ordre du temps) suivent-elles ORDRE_SEAU pour
     chaque seau ? Rend les problèmes, en clair (liste vide : tout va bien). Seuls les postes
     donnés sont vérifiés (lancés, ou joués en faux par le simulateur : la griffe) ; chacune de
     leurs étapes doit être faite, au moins une fois par seau, et leurs premières fois dans
-    l'ordre (QR avant le serrage des barres, spray et rangées du haut avant la 1re couche...)."""
+    l'ordre (QR avant le serrage des barres, spray et rangées du haut avant la 1re couche...).
+    `sans` : n° du seau → les postes qu'il ne doit pas faire (seau « sans spray » d'un plan
+    d'essais, tâche 31)."""
     lances = set(postes_lances)
-    attendues = [etape for p in ordre if p.nom in lances for etape in p.etapes]
+    tous = [etape for p in ordre if p.nom in lances for etape in p.etapes]
+    sans = sans or {}
     debuts = [i for i, etape in enumerate(etapes_faites) if etape == debut]
-    problemes = [] if debuts or not attendues else [f"aucun {unite} commencé"]
+    problemes = [] if debuts or not tous else [f"aucun {unite} commencé"]
     for numero, debut in enumerate(debuts, start=1):
+        sautes = set(sans.get(numero, ()))
+        attendues = [e for p in ordre if p.nom in lances - sautes for e in p.etapes]
         fin = debuts[numero] if numero < len(debuts) else len(etapes_faites)
         morceau = list(etapes_faites[debut:fin])
         premieres = []

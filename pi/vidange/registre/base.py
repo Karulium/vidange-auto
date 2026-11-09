@@ -59,6 +59,8 @@ TOUTES_LES_TABLES = (
     "notifications_faites",
     "carnet_de_bord",
     "durees_gestes",
+    "plans_essais",
+    "essais_appliques",
 )
 
 
@@ -794,6 +796,76 @@ class Registre:
             return cnx.execute(
                 "DELETE FROM envois WHERE statut = 'envoye' AND envoye_le < ?", (heure(avant),)
             ).rowcount
+
+    # ------------------------------------------------------------ plans d'essais (tâche 31)
+
+    def ajouter_plan_essais(self, qui: str, **plan: Any) -> int:
+        """Un plan d'essais chargé (état « propose ») : cle, nom, auteur, format, variete, seaux,
+        contenu (JSON), texte (le fichier reçu)."""
+        with self._ecriture() as cnx:
+            return self._inserer(
+                cnx,
+                "plans_essais",
+                {**plan, "etat": "propose", "charge_le": self._quand(), "charge_par": qui},
+            )
+
+    def changer_etat_plan(
+        self, plan: int, etat: str, qui: str | None, depuis: tuple[str, ...]
+    ) -> None:
+        """Passe un plan à « accepte », « lance » ou « retire » (qui et quand notés), seulement
+        s'il est dans un des états `depuis` ; « accepte » depuis « lance » : le lancement est
+        défait (Go raté). ErreurRegistre sinon."""
+        with self._ecriture() as cnx:
+            ligne = cnx.execute("SELECT etat FROM plans_essais WHERE id = ?", (plan,)).fetchone()
+            if ligne is None:
+                raise ErreurRegistre(f"plan d'essais n° {plan} inconnu")
+            if ligne[0] not in depuis:
+                raise ErreurRegistre(f"plan d'essais n° {plan} : il est « {ligne[0]} »")
+            if etat == "accepte" and ligne[0] == "lance":
+                cnx.execute(
+                    "UPDATE plans_essais SET etat = 'accepte', lance_le = NULL, lance_par = NULL "
+                    "WHERE id = ?",
+                    (plan,),
+                )
+                return
+            cnx.execute(
+                f"UPDATE plans_essais SET etat = ?, {etat}_le = ?, {etat}_par = ? WHERE id = ?",
+                (etat, self._quand(), qui, plan),
+            )
+
+    def noter_essai_applique(
+        self,
+        plan: int,
+        numero: int,
+        seau: str | None,
+        variable: str,
+        voulu: Any,
+        mesure: float | None = None,
+        unite: str | None = None,
+        couche: int | None = None,
+        remarque: str | None = None,
+    ) -> int:
+        """Une valeur d'un plan d'essais vraiment appliquée à un seau ; le plan part (de nouveau,
+        plus complet) vers le logiciel de culture, dans la même écriture."""
+        with self._ecriture() as cnx:
+            ident = self._inserer(
+                cnx,
+                "essais_appliques",
+                {
+                    "plan_id": plan,
+                    "numero": numero,
+                    "variable": variable,
+                    "voulu": json.dumps(voulu),
+                    "mesure": mesure,
+                    "unite": unite,
+                    "couche": couche,
+                    "remarque": remarque,
+                    "quand": self._quand(),
+                    **self._objets(cnx, {"seau": seau or None}),
+                },
+            )
+            self._ajouter_envoi(cnx, "culture", "essais", str(plan))
+            return ident
 
     # ------------------------------------------------------------ lecture et copie
 

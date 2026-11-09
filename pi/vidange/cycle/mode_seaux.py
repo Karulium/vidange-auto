@@ -62,6 +62,7 @@ from vidange.stockage import places
 if TYPE_CHECKING:
     from vidange.couvercle.couvercle import Couvercle
     from vidange.cycle.griffe_du_lot import GriffeDuSeau
+    from vidange.essais import PlansEssais
     from vidange.reglages import Machine
     from vidange.spray.spray import Spray
     from vidange.stockage.stockage import Stockage
@@ -145,6 +146,11 @@ class Lot:
     seaux: tuple[SeauAFaire, ...]
     fin_de_lot: bool = True
 
+    @property
+    def plan_essais(self) -> int | None:
+        """Le n° du plan d'essais appliqué à ce lot (tâche 31), ou None."""
+        return next((s.plan_essais for s in self.seaux if s.plan_essais is not None), None)
+
     def memoire(self) -> dict[str, Any]:
         return {
             "format": self.format,
@@ -216,14 +222,17 @@ class ModeSeaux:
         pieces: Pieces,
         chef: Chef,
         mode_actuel: Callable[[], str] | None = None,
+        plans: "PlansEssais | None" = None,
     ) -> None:
         """`mode_actuel` : le mode de la machine (ModeMachine.actuel) ; un lot de seaux ne part
         qu'en mode « production », et jamais pendant un autre lot (tâche 45 bis). None : pas
-        vérifié (simulateur)."""
+        vérifié (simulateur). `plans` : où noter les valeurs d'un plan d'essais vraiment
+        appliquées à chaque seau (tâche 31 ; None : pas notées, simulateur)."""
         self.reglages = reglages
         self.pieces = pieces
         self.chef = chef
         self.mode_actuel = mode_actuel
+        self.plans = plans
         self.etats: dict[str, EtatPoste] = {}
         for poste in ORDRE_SEAU:
             self.etats[poste.nom] = self._verifier(poste)
@@ -337,6 +346,15 @@ class ModeSeaux:
                 raise ErreurChef(f"lot de seaux refusé : {refus}")
         plan = pieces.plan
         plan.fin_de_lot = lot.fin_de_lot
+        # Plan d'essais (tâche 31) : chaque seau garde ses valeurs (les pièces du simulateur
+        # refont les seaux du plan) ; ce qui est vraiment appliqué est noté au registre.
+        if len(plan.seaux) == len(lot.seaux):
+            plan.seaux = [
+                replace(seau, plan_essais=du_lot.plan_essais, essai=du_lot.essai)
+                for seau, du_lot in zip(plan.seaux, lot.seaux, strict=True)
+            ]
+        if self.plans is not None:
+            plan.noter_essai = self.plans.noter
         if memoire is not None:
             self._retrouver(pieces, memoire)
         griffe = pieces.griffe

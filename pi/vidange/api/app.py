@@ -55,6 +55,7 @@ from vidange.chef import Chef, ErreurChef
 from vidange.comptes import Comptes, Niveau
 from vidange.distance import ErreurDistance, PiloteDistance
 from vidange.entretien import Entretien, ErreurEntretien
+from vidange.essais.plan import ErreurPlan
 from vidange.fiabilite.constats import Constat, pire
 from vidange.journal import donner_journal
 from vidange.mises_a_jour import ErreurMiseAJour, MisesAJour
@@ -71,6 +72,7 @@ from vidange.vue3d import EnregistreurRejeu, ErreurRejeu, Vue3d
 
 if TYPE_CHECKING:
     from vidange.cycle.lancement import Lancement
+    from vidange.essais import PlansEssais
     from vidange.stockage.correction import Correction
 
 journal = donner_journal("api")
@@ -133,6 +135,8 @@ class Services:
     lancement: "Lancement | None" = None
     # Corriger l'inventaire du stockage : la page propose, Karulium confirme (None : pas possible).
     correction: "Correction | None" = None
+    # Plans d'essais : chargés, acceptés par Karulium, appliqués au lot visé (tâche 31).
+    plans: "PlansEssais | None" = None
     # Vue 3D en direct et rejeu d'incident (None : pas de vue 3D).
     vue3d: Vue3d | None = None
     rejeux: EnregistreurRejeu | None = None
@@ -167,6 +171,12 @@ class EssaiDemande(BaseModel):
     """Les réglages à essayer : « fichier=chemin=valeur », un par ligne."""
 
     changements: list[str]
+
+
+class PlanEnvoye(BaseModel):
+    """Un plan d'essais envoyé au Pi : le texte du fichier (YAML ou JSON)."""
+
+    texte: str
 
 
 class LotDeSeaux(BaseModel):
@@ -286,6 +296,7 @@ def creer_app(
     @app.exception_handler(ErreurPoste)
     @app.exception_handler(ErreurNettoyage)
     @app.exception_handler(ErreurEntretien)
+    @app.exception_handler(ErreurPlan)
     async def refus(_: Request, erreur: Exception) -> JSONResponse:
         # Un ordre impossible maintenant (pas de Go attendu, alarme déjà acquittée...).
         return JSONResponse({"detail": str(erreur)}, status_code=409)
@@ -534,6 +545,53 @@ def creer_app(
         """Lance l'essai d'un réglage dans le simulateur, en arrière-plan (rien n'est écrit)."""
         try:
             return l_essai().lancer(choix.changements, _qui(requete))
+        except ErreurEssai as erreur:
+            raise HTTPException(409, str(erreur)) from None
+
+    # ------------------------------------------------------------ plans d'essais (tâche 31)
+
+    def les_plans() -> "PlansEssais":
+        if services.plans is None:
+            raise HTTPException(404, "pas de plans d'essais sur ce programme")
+        return services.plans
+
+    @app.get("/api/plans-essais", dependencies=regler_sans_trace)
+    def plans_essais() -> dict[str, Any]:
+        """Les plans d'essais (le plus récent d'abord) et ce qu'un plan peut faire varier."""
+        plans = les_plans()
+        return {
+            "plans": plans.liste(),
+            "variables": plans.variables(),
+            "exemple": plans.essais.exemple,
+        }
+
+    @app.post("/api/plans-essais", dependencies=regler)
+    def plan_charger(choix: PlanEnvoye, requete: Request) -> dict[str, Any]:
+        """Un plan arrive (vérifié) : ce n'est qu'une proposition, à accepter sur la page."""
+        plans = les_plans()
+        return plans.en_dict(plans.charger(choix.texte, _qui(requete)))
+
+    @app.post("/api/plans-essais/{numero}/accepter", dependencies=regler)
+    def plan_accepter(numero: int, requete: Request) -> dict[str, Any]:
+        """Karulium accepte le plan : il ira au prochain lot qu'il vise, montré au Go."""
+        plans = les_plans()
+        plans.accepter(numero, _qui(requete))
+        return plans.en_dict(numero)
+
+    @app.post("/api/plans-essais/{numero}/retirer", dependencies=regler)
+    def plan_retirer(numero: int, requete: Request) -> dict[str, Any]:
+        """Retire un plan chargé ou accepté (pas un plan déjà parti avec son lot)."""
+        plans = les_plans()
+        plans.retirer(numero, _qui(requete))
+        return plans.en_dict(numero)
+
+    @app.post("/api/plans-essais/{numero}/essayer", dependencies=regler)
+    def plan_essayer(numero: int, requete: Request) -> dict[str, Any]:
+        """Rejoue le lot du plan au simulateur (résultat : GET /api/essai)."""
+        plans = les_plans()
+        plan = plans.en_dict(numero)
+        try:
+            return l_essai().lancer_plan(plans.texte(numero), plan["nom"], _qui(requete))
         except ErreurEssai as erreur:
             raise HTTPException(409, str(erreur)) from None
 

@@ -80,6 +80,7 @@ from vidange.entretien import NOM_FICHIER as NOM_ENTRETIEN
 from vidange.entretien import Compteurs, Entretien
 from vidange.entretien import verifier_avec_liste as verifier_entretien
 from vidange.envois import mettre_en_file_secours, preparer_facteur
+from vidange.essais import PlansEssais
 from vidange.estimation import Estimation, base_du_simulateur
 from vidange.fiabilite import (
     Bilans,
@@ -210,12 +211,13 @@ def _chemin(option: str | None, variable: str, defaut: Path) -> Path:
 
 
 FICHIER_MONTEE = "montee_vitesse.json"
-COMMANDES_A_PART = ("compte", "code-ecran", "restaurer", "simuler", "vitesse")
+COMMANDES_A_PART = ("compte", "code-ecran", "restaurer", "simuler", "vitesse", "plan")
 
 
 def lancer_commande_a_part(commande: str, arguments: list[str]) -> int:
     """« vidange compte ... » (comptes de la page web), « vidange restaurer ... » (Pi neuf),
-    « vidange simuler --essayer ... » (essai d'un réglage) et « vidange vitesse » (tâche 30)."""
+    « vidange simuler --essayer ... » (essai d'un réglage), « vidange vitesse » (tâche 30) et
+    « vidange plan ... » (plans d'essais, tâche 31)."""
     if commande == "compte":
         from vidange.comptes.outil import lancer_compte
 
@@ -233,6 +235,17 @@ def lancer_commande_a_part(commande: str, arguments: list[str]) -> int:
 
         return lancer_essai(
             arguments,
+            _chemin(None, "VIDANGE_REGLAGES", DOSSIER_PI / "reglages"),
+            _chemin(
+                None, "VIDANGE_ENTREES_SORTIES", DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml"
+            ),
+        )
+    if commande == "plan":
+        from vidange.essais.outil import lancer_plan
+
+        return lancer_plan(
+            arguments,
+            _chemin(None, "VIDANGE_DONNEES", DOSSIER_PI / "donnees"),
             _chemin(None, "VIDANGE_REGLAGES", DOSSIER_PI / "reglages"),
             _chemin(
                 None, "VIDANGE_ENTREES_SORTIES", DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml"
@@ -836,6 +849,11 @@ def principal(
             "modifiables.yaml : les bornes des réglages que la page web peut changer sont des "
             "EXEMPLES (exemple: true) : les ajuster à l'usage, puis passer « exemple » à false."
         )
+    if reglages.essais.exemple:
+        journal.warning(
+            "essais.yaml : les bornes des plans d'essais sont des EXEMPLES (exemple: true) : "
+            "Karulium les fixe, puis passer « exemple » à false (pi/systeme/essai-plan-essais.md)."
+        )
     if reglages.air.exemple:
         journal.warning(
             "air.yaml contient des valeurs d'EXEMPLE (exemple: true) : attente de mise en "
@@ -1009,6 +1027,9 @@ def principal(
         reglages.machine, materiel if erreur_materiel is None else None, registre
     )
     sources = Sources()
+    # Plans d'essais (tâche 31) : chargés par la commande ou l'API, acceptés sur la page, appliqués
+    # par le Pi seul au lot qu'ils visent ; tout est dans le registre.
+    plans = PlansEssais(registre, reglages.machine, reglages.essais)
     # Le mode seaux : chaque poste du cycle d'un seau, prêt ou pourquoi pas (vrai matériel :
     # réglages d'EXEMPLE interdits). Un lot de seaux ne part qu'en mode « production ».
     mode_seaux = ModeSeaux(
@@ -1030,6 +1051,7 @@ def principal(
         ),
         chef,
         mode_actuel=lambda: mode.actuel,
+        plans=plans,
     )
     sante = Sante(dossier_donnees, fiabilite.sante, registre, sauvegarde.copies, raccords.sondes)
     bilans = Bilans(
@@ -1138,7 +1160,13 @@ def principal(
     # boucles de fond des pièces partent avec le lot et s'arrêtent à sa fin ou sur alarme.
     fond = FondDuLot(cartes, reglages.programme.lot, chef)
     lancement = Lancement(
-        reglages.programme.lot, reglages.machine, mode_seaux, mode_bocaux, stockage, fond
+        reglages.programme.lot,
+        reglages.machine,
+        mode_seaux,
+        mode_bocaux,
+        stockage,
+        fond,
+        plans=plans,
     )
     # Estimation de fin du lot qui apprend (tâche 30) : le simulateur donne la base, le registre
     # garde les vraies durées. Seulement pour un lot de seaux qui tourne ; une information.
@@ -1298,6 +1326,7 @@ def principal(
                     pourquoi_pas_de_changement,
                 ),
                 correction=correction,
+                plans=plans,
                 vue3d=vue3d,
                 rejeux=rejeux,
                 statistiques=Statistiques(registre, reglages.programme.statistiques),
