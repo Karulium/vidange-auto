@@ -111,6 +111,21 @@ ecran:
   confirmation_s: 15
   # Durée d'affichage d'un message (« Aucun Go attendu »...).
   message_s: 8
+  # Code des fonctions sensibles (tâche 29, fonction 50). Il évite les fausses manoeuvres ; il ne
+  # protège PAS les personnes (arrêt d'urgence et portes sont câblés). Le code lui-même est dans
+  # code_ecran.yaml (hors Git) : « vidange code-ecran » le change.
+  code:
+    longueur: 4              # nombre de chiffres (4 à 6)
+    essais_max: 3            # codes faux de suite avant l'attente
+    attente_s: 60            # attente après trop d'essais ratés (s)
+    valable_s: 30            # un code juste ouvre les fonctions sensibles pendant (s)
+    # Ce qui demande le code. Ce qui ne fait que regarder, Pause, RÉPARÉ, GO / REPRENDRE (déjà
+    # confirmés par « Oui »), PRÊT du poste du fût et la lumière n'en demandent jamais.
+    #   changer_mode : production / lavage / UV-ozone / maïs
+    #   enceinte_store : OUVRIR / FERMER le store (libère les verrous)
+    #   enceinte_nuit : lancer la nuit UV-ozone
+    #   enceinte_outre : PASSER OUTRE la purge
+    fonctions_sensibles: [changer_mode, enceinte_store, enceinte_nuit, enceinte_outre]
   # Code couleur (fonction 47) : « #RRGGBB », fond et texte.
   couleurs:
     marche: {fond: "#00A000", texte: "#FFFFFF"}   # vert : la machine travaille

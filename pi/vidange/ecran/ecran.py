@@ -39,14 +39,16 @@ import threading
 import time
 from collections.abc import Callable
 from datetime import date
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from vidange.chef import Chef, ErreurChef
 from vidange.chef.chef import EtatChef, EtatModule
 from vidange.distance import PiloteDistance
+from vidange.ecran.code import CodeEcran
 from vidange.ecran.liaison import LiaisonEcran
 from vidange.ecran.pages import (
     ALARME,
+    CODE,
     COMPTEURS,
     CONFIRMER,
     ETAT,
@@ -209,12 +211,17 @@ class Ecran:
         mode_bocaux: "ModeBocaux | None" = None,
         mode_nuit: "ModeNuit | None" = None,
         lancement: "Lancement | None" = None,
+        code: CodeEcran | None = None,
+        actions: Any = None,
     ) -> None:
         """`mode_seaux` : quand aucun cycle ne tourne, la page d'état dit si un lot de seaux peut
         partir, ou ce qui manque (tâche 45). `mode_bocaux` : de même pour un lot de bocaux (mode
         « production », si les seaux sont prêts) et pour laver les bocaux (mode « lavage »).
         `mode_nuit` : en mode « UV-ozone », la nuit peut partir ou ce qui manque (tâche 45 bis).
-        `lancement` : le lot proposé par la page web, lancé par GO (tâche 45 quater)."""
+        `lancement` : le lot proposé par la page web, lancé par GO (tâche 45 quater).
+        `code` : le code des fonctions sensibles (tâche 29) ; sans lui (essais seulement), rien
+        n'est protégé. Le programme principal le donne toujours. `actions` : le journal des
+        actions (`JournalActions`), où chaque fonction sensible faite est notée."""
         self.reglages = reglages
         self.liaison = liaison
         self.chef = chef
@@ -228,6 +235,12 @@ class Ecran:
         self.mode_bocaux = mode_bocaux
         self.mode_nuit = mode_nuit
         self.lancement = lancement
+        self.code = code
+        self.actions = actions
+        # Fonction sensible en attente du code : (nom, ce qu'il faut faire quand le code est bon,
+        # page où revenir) ; et les chiffres déjà tapés.
+        self._attente_code: tuple[str, Callable[[], None], Page] | None = None
+        self._saisie = ""
         self._etat_poste: EtatPoste | None = None
         self._horloge = horloge
         self._aujourdhui = aujourdhui
@@ -280,6 +293,8 @@ class Ecran:
     def _aller(self, page: Page) -> None:
         if page is not CONFIRMER:
             self._question = None
+        if page is not CODE:
+            self._attente_code, self._saisie = None, ""
         self._page = page
         self._depuis = self._horloge()
 
@@ -324,8 +339,8 @@ class Ecran:
     def _revenir_seul(self) -> None:
         """Retour à la page d'état sans appui (jamais depuis la page d'alarme)."""
         attente = self._horloge() - self._depuis
-        if self._page is CONFIRMER and attente > self.reglages.confirmation_s:
-            journal.info("Écran : question sans réponse, abandonnée")
+        if self._page in (CONFIRMER, CODE) and attente > self.reglages.confirmation_s:
+            journal.info("Écran : question ou code sans réponse, abandonnés")
             self._aller(ETAT)
         elif (
             self._page in (COMPTEURS, MODE, NETTOYAGE) and attente > self.reglages.retour_accueil_s
@@ -363,6 +378,8 @@ class Ecran:
             self._appui_nettoyage(bouton, self.nettoyage)
         elif page is CONFIRMER:
             self._repondre(bouton == "b_oui")
+        elif page is CODE:
+            self._appui_code(bouton)
         elif page is POSTE_FUT and self.poste is not None:
             self.poste.appuyer_pret(QUI)
 
@@ -430,30 +447,49 @@ class Ecran:
     def _appui_nettoyage(self, bouton: str, nettoyage: Nettoyage) -> None:
         etat = nettoyage.etat()
         if bouton == "b_store":
-            if etat.store == FERME and not etat.verrous_liberes:
-                nettoyage.demander_ouverture(QUI)
-            else:
-                nettoyage.demander_fermeture(QUI)
-            messages = nettoyage.etat().messages
-            if messages:
-                self._dire(messages[-1])
+            self._exiger("enceinte_store", lambda: self._bouger_le_store(nettoyage))
         elif bouton == "b_lumiere":
             nettoyage.eclairage(not etat.eclairage, QUI)
         elif bouton == "b_nuit":
             if etat.nuit == "attente_depart":
-                self._demander("Départ de la nuit UV-ozone tout de suite ?", "nuit_maintenant")
+                self._exiger(
+                    "enceinte_nuit",
+                    lambda: self._demander(
+                        "Départ de la nuit UV-ozone tout de suite ?", "nuit_maintenant"
+                    ),
+                )
             elif etat.refus_nuit is not None:
                 self._dire(f"Nuit UV-ozone impossible : {etat.refus_nuit}.")
             else:
                 heure = nettoyage.reglages.ozone.heure_depart
-                self._demander(
-                    f"Nuit UV-ozone à {heure} ? Personne dans l'enceinte, store fermé.", "nuit"
+                self._exiger(
+                    "enceinte_nuit",
+                    lambda: self._demander(
+                        f"Nuit UV-ozone à {heure} ? Personne dans l'enceinte, store fermé.", "nuit"
+                    ),
                 )
         elif bouton == "b_outre":
             if not etat.purge:
                 self._dire("Pas de purge en cours.")
             else:
-                self._demander("Passer outre la purge (noté au journal) ?", "outre")
+                self._exiger(
+                    "enceinte_outre",
+                    lambda: self._demander("Passer outre la purge (noté au journal) ?", "outre"),
+                )
+
+    def _bouger_le_store(self, nettoyage: Nettoyage) -> None:
+        etat = nettoyage.etat()
+        if etat.store == FERME and not etat.verrous_liberes:
+            nettoyage.demander_ouverture(QUI)
+        else:
+            nettoyage.demander_fermeture(QUI)
+        self._noter(
+            "enceinte_store",
+            "ouvrir" if etat.store == FERME and not etat.verrous_liberes else "fermer",
+        )
+        messages = nettoyage.etat().messages
+        if messages:
+            self._dire(messages[-1])
 
     def _choisir_mode(self, nouveau: str) -> None:
         if nouveau == self.mode.actuel:
@@ -463,7 +499,75 @@ class Ecran:
         if refus is not None:
             self._dire(f"Impossible : {refus}.")
             return
-        self._demander(f"Passer en mode {MODES[nouveau]} ?", "mode", nouveau)
+        self._exiger(
+            "changer_mode",
+            lambda: self._demander(f"Passer en mode {MODES[nouveau]} ?", "mode", nouveau),
+        )
+
+    # ------------------------------------------------------------ le code des fonctions sensibles
+
+    def _exiger(self, fonction: str, suite: Callable[[], None]) -> None:
+        """Fait `suite` tout de suite si la fonction n'est pas sensible ou si le code vient d'être
+        tapé ; sinon montre la page du code (ou dit pourquoi on ne peut pas)."""
+        if self.code is None or fonction not in self.code.reglages.fonctions_sensibles:
+            suite()
+            return
+        refus = self.code.refus()
+        if refus is not None:
+            journal.warning("Écran : fonction sensible « %s » refusée : %s", fonction, refus)
+            self._dire(refus)
+            return
+        if self.code.encore_valable():
+            suite()
+            return
+        retour = self._page
+        self._aller(CODE)
+        self._attente_code = (fonction, suite, retour)
+        self._saisie = ""
+
+    def _appui_code(self, bouton: str) -> None:
+        if self.code is None or self._attente_code is None:
+            self._aller(ETAT)
+            return
+        if bouton == "b_effacer":
+            self._saisie = self._saisie[:-1]
+            return
+        self._saisie += bouton.removeprefix("b_")
+        if len(self._saisie) < self.code.reglages.longueur:
+            return
+        saisie, self._saisie = self._saisie, ""
+        fonction, suite, retour = self._attente_code
+        if self.code.verifier(saisie):
+            journal.info("Écran : code juste pour « %s »", fonction)
+            self._aller(retour)
+            suite()
+            return
+        journal.warning("Écran : code faux pour « %s »", fonction)
+        refus = self.code.refus()
+        if refus is not None:
+            self._aller(retour)
+            self._dire(refus)
+        else:
+            self._dire(f"Code faux. Encore {self.code.essais_restants} essai(s).")
+
+    def _noter(self, fonction: str, detail: str = "") -> None:
+        """Une fonction sensible faite : une ligne au journal des actions (« écran », sans nom de
+        personne : l'écran n'a pas de comptes)."""
+        if (
+            self.code is None
+            or self.actions is None
+            or fonction not in self.code.reglages.fonctions_sensibles
+        ):
+            return
+        self.actions.noter(
+            qui="écran",
+            role="",
+            adresse="",
+            niveau="sensible",
+            methode="ECRAN",
+            chemin=f"ecran/{fonction}",
+            detail=detail,
+        )
 
     def _demander(self, question: str, ordre: str, argument: str = "") -> None:
         retour = self._page
@@ -490,10 +594,13 @@ class Ecran:
             self.chef.reprendre()
         elif ordre == "mode":
             self.mode.changer(argument, QUI)
+            self._noter("changer_mode", argument)
         elif self.nettoyage is not None and ordre in ("nuit", "nuit_maintenant"):
             self.nettoyage.programmer_nuit(QUI, tout_de_suite=ordre == "nuit_maintenant")
+            self._noter("enceinte_nuit", ordre)
         elif self.nettoyage is not None and ordre == "outre":
             self.nettoyage.passer_outre(QUI)
+            self._noter("enceinte_outre")
 
     # ------------------------------------------------------------ ce que montre chaque page
 
@@ -516,6 +623,8 @@ class Ecran:
             self._composer_poste(page)
         elif self._page is NETTOYAGE:
             self._composer_nettoyage(page)
+        elif self._page is CODE:
+            self._composer_code(page)
         else:
             self._composer_question(page)
         return page.valeurs
@@ -736,3 +845,13 @@ class Ecran:
         page.mettre("t_question", self._question[0] if self._question else "")
         page.mettre("b_non", "NON", "repos")
         page.mettre("b_oui", "OUI", "marche")
+
+    def _composer_code(self, page: _Composition) -> None:
+        longueur = self.code.reglages.longueur if self.code is not None else 4
+        page.mettre("t_titre", "CODE", "go")
+        page.mettre("t_saisie", "*" * len(self._saisie) + "-" * (longueur - len(self._saisie)))
+        page.mettre("t_info", self._message_actuel() or "Taper le code de l'écran.")
+        for chiffre in range(10):
+            page.mettre(f"b_{chiffre}", str(chiffre), "bouton")
+        page.mettre("b_effacer", "EFFACER", "bouton")
+        page.mettre("b_retour", "RETOUR", "bouton")

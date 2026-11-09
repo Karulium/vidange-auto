@@ -74,6 +74,7 @@ from vidange.cycle.postes import refus_lancement
 from vidange.distance import PiloteDistance
 from vidange.ecran import SIGNAL as SIGNAL_ECRAN
 from vidange.ecran import Ecran, LiaisonEcran, PortEcran, ouvrir_port_ecran
+from vidange.ecran.code import CodeEcran, lire_hachage
 from vidange.entrees_sorties import EntreesSorties, charger_entrees_sorties
 from vidange.entretien import NOM_FICHIER as NOM_ENTRETIEN
 from vidange.entretien import Compteurs, Entretien
@@ -205,7 +206,7 @@ def _chemin(option: str | None, variable: str, defaut: Path) -> Path:
     return defaut
 
 
-COMMANDES_A_PART = ("compte", "restaurer")
+COMMANDES_A_PART = ("compte", "code-ecran", "restaurer")
 
 
 def lancer_commande_a_part(commande: str, arguments: list[str]) -> int:
@@ -214,6 +215,14 @@ def lancer_commande_a_part(commande: str, arguments: list[str]) -> int:
         from vidange.comptes.outil import lancer_compte
 
         return lancer_compte(arguments, chemin_des_comptes())
+    if commande == "code-ecran":
+        from vidange.ecran.outil_code import lancer_code_ecran
+
+        return lancer_code_ecran(
+            arguments,
+            chemin_du_code_ecran(),
+            _chemin(None, "VIDANGE_REGLAGES", DOSSIER_PI / "reglages"),
+        )
     from vidange.restauration.outil import lancer_restauration
 
     return lancer_restauration(arguments)
@@ -223,6 +232,12 @@ def chemin_des_comptes(option: str | None = None) -> Path:
     """Le fichier des comptes : l'option, VIDANGE_COMPTES, ou à côté du fichier de secrets."""
     secrets = _chemin(None, "VIDANGE_SECRETS", DOSSIER_PI / "secrets.yaml")
     return _chemin(option, "VIDANGE_COMPTES", secrets.with_name("comptes.yaml"))
+
+
+def chemin_du_code_ecran() -> Path:
+    """Le fichier du code de l'écran : VIDANGE_CODE_ECRAN, ou à côté du fichier de secrets."""
+    secrets = _chemin(None, "VIDANGE_SECRETS", DOSSIER_PI / "secrets.yaml")
+    return _chemin(None, "VIDANGE_CODE_ECRAN", secrets.with_name("code_ecran.yaml"))
 
 
 def lire_arguments(arguments: list[str] | None) -> argparse.Namespace:
@@ -324,12 +339,16 @@ def preparer_chef(
     return repris, None
 
 
+def journal_des_actions(dossier_donnees: Path) -> JournalActions:
+    return JournalActions(dossier_donnees / NOM_JOURNAL_ACTIONS)
+
+
 def preparer_api(
     comptes: Comptes, reglages: Reglages, services: Services, dossier_donnees: Path
 ) -> ServeurApi:
     """Le serveur de l'API et de la page web. Sans aucun compte, la page est fermée et explique
     comment créer le premier (tâche 25) ; la machine, elle, tourne."""
-    actions = JournalActions(dossier_donnees / NOM_JOURNAL_ACTIONS)
+    actions = journal_des_actions(dossier_donnees)
     app = creer_app(services, reglages.programme.api, comptes, actions)
     return ServeurApi(app, reglages.programme.api, comptes)
 
@@ -586,6 +605,9 @@ def principal(
     chemin_comptes = _chemin(
         options.comptes, "VIDANGE_COMPTES", chemin_secrets.with_name("comptes.yaml")
     )
+    chemin_code_ecran = _chemin(
+        None, "VIDANGE_CODE_ECRAN", chemin_secrets.with_name("code_ecran.yaml")
+    )
     dossier_donnees = _chemin(options.donnees, "VIDANGE_DONNEES", DOSSIER_PI / "donnees")
 
     # Journal à l'écran seulement, le temps de lire ses propres réglages.
@@ -602,6 +624,8 @@ def principal(
         entrees_sorties = charger_entrees_sorties(chemin_entrees_sorties)
         secrets = charger_secrets(chemin_secrets)
         comptes = charger_comptes(chemin_comptes)
+        # Un fichier du code de l'écran faux empêche de démarrer (comme celui des comptes).
+        lire_hachage(chemin_code_ecran)
     except ErreurReglages as erreur:
         journal.error("%s", erreur)
         return CODE_REGLAGES_FAUX
@@ -1144,6 +1168,7 @@ def principal(
             fils += air.demarrer(arret)
         if objet_tenu is not None:
             fils.append(objet_tenu.demarrer(arret))
+        code_ecran = CodeEcran(chemin_code_ecran, reglages.programme.ecran.code)
         checklist = CheckList(
             {
                 "réglages": lambda: constats_reglages(reglages, entrees_sorties),
@@ -1160,6 +1185,7 @@ def principal(
                 "santé du Pi": sante.constats,
                 "onduleur": onduleur.constats,
                 "API": lambda: constats_api(serveur),
+                "code de l'écran": code_ecran.constats,
                 "écran": lambda: constats_ecran(liaison_ecran),
                 "envois": facteur.constats,
                 "caméras": cameras.constats,
@@ -1234,6 +1260,8 @@ def principal(
                 mode_bocaux=mode_bocaux,
                 mode_nuit=mode_nuit,
                 lancement=lancement,
+                code=code_ecran,
+                actions=journal_des_actions(dossier_donnees),
             )
             fil_ecran = ecran.demarrer(arret_ecran)
         gardien.pret()

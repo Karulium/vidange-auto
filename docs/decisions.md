@@ -2615,3 +2615,44 @@ Réponse 2 à la PR n° 113. Testé sur le vrai matériel : non. Procédure : `p
 - **Pas fait** : une valeur de réglage n'est jamais fusionnée ligne à ligne avec la nouvelle version du fichier :
   c'est tout ou rien par fichier, et Karulium recopie à la main ce qui est mis de côté. La mise à jour du Pi n'a pas
   changé (elle garde déjà les changements locaux).
+
+## Code de l'écran, tâche 29 (09/11/2026, niveau 1, tranché par Claude)
+
+Source : `docs/fonctionnalites.md` ligne 50. Procédure d'essai : `pi/systeme/essai-ecran.md` (section « Code des
+fonctions sensibles »). Testé sur le vrai matériel : non.
+
+- **À quoi il sert** : éviter les **fausses manoeuvres** (un doigt qui glisse, un visiteur curieux). Il **ne protège
+  pas les personnes** : arrêt d'urgence, portes et fins de course de sécurité sont câblés, le logiciel n'est jamais
+  la sécurité (règle n° 1).
+- **Fonctions sensibles** (liste dans `programme.yaml` → `ecran` → `code` → `fonctions_sensibles`, vérifiée au
+  démarrage ; on la raccourcit ou on la vide sans toucher au code) : `changer_mode`, `enceinte_store` (OUVRIR /
+  FERMER), `enceinte_nuit`, `enceinte_outre` (PASSER OUTRE la purge). L'écran n'a ni « réglages » ni « arrêt du
+  programme » : ils ne sont pas inventés ; quand une fonction de ce genre sera ajoutée à l'écran, on l'ajoute à la
+  liste des noms permis (`FONCTIONS_ECRAN_SENSIBLES` dans `reglages.py`).
+- **Sans code** : tout ce qui ne fait que regarder, PAUSE, REPRENDRE, GO d'un module qui attend, GO d'un lot (déjà
+  protégés par le « Oui »), PRÊT du poste du fût, LUMIÈRE de l'enceinte, et **RÉPARÉ** (décision de la PR n° 10,
+  point 1 : acquitter ne fait rien bouger ; le module attend ensuite un Go confirmé par OUI).
+- **Le code** : 4 à 6 chiffres (`longueur`, 4 pour commencer), haché par la même méthode que les mots de passe
+  (scrypt, `comptes.hacher`), dans `code_ecran.yaml` à côté de `secrets.yaml` (sur le Pi :
+  `/etc/vidange/code_ecran.yaml`, droits 600, Git l'ignore, le dépôt n'a que `pi/code_ecran.exemple.yaml`, vide).
+  `vidange code-ecran` le change (deux saisies cachées) ; `--retirer` l'enlève ; le programme relit le fichier
+  quand il change. Fichier faux : le programme ne démarre pas, avec un message clair. **Il n'est pas dans la copie
+  quotidienne** (comme `secrets.yaml`) : après une restauration, refaire la commande. Un code de 4 chiffres a 10 000
+  possibilités : suffisant contre une fausse manoeuvre, pas contre quelqu'un qui aurait déjà le fichier.
+- **Sans code réglé** : les fonctions sensibles sont refusées (« Code de l'écran pas réglé : lancer « vidange
+  code-ecran » ») ; la check-list le dit (« code de l'écran », attention, jamais bloquant : la machine tourne).
+- **Saisie** : page Nextion « code » (numéro 7) avec les chiffres, EFFACER et RETOUR ; pas de bouton OK, la
+  vérification se fait au dernier chiffre. Elle vient **avant** la question « Oui / Non » (le refus « pas pendant un
+  cycle » est dit sans demander le code). Sans appui pendant `confirmation_s`, retour à l'état. **La page est à
+  dessiner par Karulium dans Nextion Editor** (noms des objets dans `nextion/pages.md`, page 7) ; le Pi est testé
+  avec le faux écran.
+- **Essais ratés** : `essais_max` (3) codes faux de suite, puis plus d'essai pendant `attente_s` (60 s), même avec le
+  bon code. Le compte est pour tout l'écran (un seul écran), pas par personne.
+- **Valable** : un code juste ouvre toutes les fonctions sensibles pendant `valable_s` (30 s), puis il faut le
+  retaper ; changer le code ferme tout de suite.
+- **Journal des actions** (`donnees/actions.jsonl`, lisible par `GET /api/actions`) : une ligne par fonction
+  sensible **faite** (pas refusée) : `qui: écran`, `methode: ECRAN`, `chemin: ecran/<fonction>`, `detail`. Pas de nom de
+  personne (l'écran n'a pas de comptes, décision de la tâche 25), jamais le code.
+- **Pas fait** : pas de code pour le pilotage à distance (c'est la page web, avec ses comptes) ; pas de demande du
+  code par la page web pour changer le code (la commande sur le Pi suffit).
+

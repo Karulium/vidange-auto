@@ -1,0 +1,12 @@
+# MODÈLE VIDE du fichier du code de l'écran. NE RIEN ÉCRIRE ICI : ce fichier est dans Git.
+#
+# Le vrai fichier s'appelle « code_ecran.yaml » (Git l'ignore), à côté de secrets.yaml (sur le Pi :
+# /etc/vidange/code_ecran.yaml). On NE LE REMPLIT PAS À LA MAIN : la commande
+#   sudo -u vidange /opt/vidange-auto/pi/.venv/bin/vidange code-ecran
+# le fabrique (le code est haché, jamais lisible). Ce code évite les fausses manoeuvres sur
+# l'écran de l'armoire ; il ne protège pas les personnes (arrêt d'urgence et portes sont câblés).
+#
+# Modèle d'un fichier fabriqué (la valeur ci-dessous est fausse) :
+#
+# code: "scrypt$16384$8$1$<32 caractères>$<64 caractères>"
+code: ""
