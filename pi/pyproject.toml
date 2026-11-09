@@ -67,7 +67,7 @@ include = ["vidange*"]
 
 [tool.setuptools.package-data]
 # La page web est livrée avec le programme.
-vidange = ["api/page/*.html"]
+vidange = ["api/page/*.html", "api/page/statique/*.js", "api/page/statique/three/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

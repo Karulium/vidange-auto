@@ -45,6 +45,7 @@ Chaque morceau peut planter sans faire tomber les autres.
 
 - `fluidnc/<carte>.yaml` : réglages FluidNC (pas par mm, courses, vitesses, accélérations, sens des fins de course).
 - `pi/reglages/machine.yaml` : positions nommées, zones interdites, hauteurs de passage, durées, poids cibles.
+- `pi/reglages/vue3d.yaml` : la vue 3D de la page web (boîtes, couleurs, sens des axes) et le rejeu d'incident (durées, taille du dossier).
 - `docs/entrees-sorties.yaml` : chaque capteur, moteur, relais, avec sa carte, sa broche, son type de signal et son sens au repos.
 
 Repère de la machine : x vers le stockage, y vers l'allée, z vers le haut, en mètres.

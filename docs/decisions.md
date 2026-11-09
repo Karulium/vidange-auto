@@ -2482,3 +2482,53 @@ téléphone éteint) ne change rien à la sécurité des personnes.
      (une personne de confiance qui peut venir à l'atelier, avec ntfy installé). Rien à changer dans le code.
   3. Telegram : prêt mais éteint ; Karulium l'allume en remplissant ses secrets s'il le veut. ntfy reste le canal
      conseillé.
+
+## Vue 3D et rejeu, tâche 28 (09/11/2026, niveau 1, tranché par Claude)
+
+Sources : `docs/fonctionnalites.md` fonctions 54 (vue 3D) et 55 (rejeu d'incident). Procédure d'essai :
+`pi/systeme/essai-vue-3d.md`. Testé sur le vrai matériel : non. La 28 bis (statistiques, appli installable,
+réglages avec garde-fous, carnet de bord) n'est pas faite.
+
+- **Un nouveau fichier de réglages**, `pi/reglages/vue3d.yaml` (modèle `ReglagesVue3d`, vérifié au démarrage avec
+  `machine.yaml`) : rafraîchissement, volume dessiné, couleurs, « dans quel sens bouge chaque axe » (`axes_monde`),
+  les boîtes et le rejeu. Tailles et décalages de dessin : **EXEMPLES** tirés des commentaires de `machine.yaml`
+  (`exemple: true`, avertissement au démarrage) ; ils ne commandent rien. Si une cote change dans `machine.yaml`,
+  la changer aussi ici (doublon voulu : le dessin n'est pas la machine). Ni le Python ni le JavaScript ne
+  contiennent de chiffre de la machine : la page lit tout par `GET /api/vue3d/scene`.
+- **Erreurs refusées au démarrage** (messages en français) : boîte sur un axe absent de `machine.yaml`, boîte dont
+  l'axe bouge dans un autre sens que celui où on le place, axe tournant dans `axes_monde` (ou axe droit dans
+  `tourne`), couleur inconnue, zone de `machine.yaml` qui cite un axe en mètres absent de `axes_monde`, volume à
+  l'envers, et un rejeu si gros que `dossier_max_mo` n'en garderait pas 10.
+- **Boîtes** : un parallélépipède centré, plein, avec ses arêtes (lisible et léger sur un téléphone) ; une boîte
+  suit un axe par sens (`axe` + `decalage`, ou position fixe) et peut tourner autour de la verticale (`tourne`).
+  Zones : boîtes transparentes à arêtes ; **vertes** (libres), **orange** (tenues par un module, nom du module écrit
+  au-dessus de la scène). Un sens que la zone ne cite pas prend tout le volume dessiné (`etendue`) ; deux axes dans
+  le même sens : leur enveloppe ; un axe tournant dans une zone : ignoré pour le dessin.
+- **Sondage et non flux** : la page redemande `GET /api/vue3d/positions` toutes les `rafraichir_s` (0,2 s, EXEMPLE,
+  5 fois par seconde). Raison : même chemin et mêmes droits que le reste de l'API (cookie, rôle, réseaux autorisés),
+  rien à garder ouvert ni à reconnecter ; une réponse fait ~1 Ko. Les positions viennent des rapports d'état des
+  cartes (`liaison.etat.positions`, les mêmes que le pilotage à distance) : mm → m, degrés inchangés. Un axe sans
+  position connue : la boîte garde sa place (jamais de position inventée).
+- **Rôle « regarder »** pour toutes les routes nouvelles : `GET /api/vue3d/scene`, `/positions`, `/rejeux`,
+  `/rejeux/{n}` et `GET /statique/...` (fichiers de la page).
+- **Bibliothèque 3D** : three.js **0.160.0** (MIT), `three.module.min.js` 670 Ko + `OrbitControls.js` 30 Ko, copiées
+  sans modification dans `pi/vidange/api/page/statique/three/` avec leur `LICENSE`, servies par le Pi (carte
+  `importmap` dans la page : aucun lien vers un site). Navigateurs : ceux de 2023 et après (importmap, WebGL) ; sans
+  WebGL la page le dit. Le code de la vue est chargé seulement à la première ouverture de l'onglet.
+- **Rejeu (fonction 55)** : un petit fil (`EnregistreurRejeu`) relève les positions de tous les axes toutes les
+  `periode_s` (0,2 s) et garde `avant_s` (60 s) en mémoire ; à chaque alarme du chef il les met de côté, ajoute les
+  `apres_s` (60 s) suivantes, attend le numéro de l'alarme dans le registre (`Bilans.sur_numero`, nouveau), puis
+  écrit `donnees/rejeux/NNNNNNNN.json` (numéro sur 8 chiffres). Le chef n'attend jamais : `recevoir` copie une liste
+  en mémoire. Ce sont des positions seulement (le bilan complet et le clip vidéo existent déjà, tâches 11 et 12).
+- **Format** : JSON compact, `version`, `alarme`, `module`, `message`, `quand`, `periode_s`, `axes` (liste),
+  `zones_tenues` (au moment de l'alarme), `echantillons` : un tableau par relevé `[temps_s, valeur par axe...]`
+  (temps négatif avant l'alarme, 0 = l'alarme, `null` = position inconnue). Environ 100 Ko par alarme
+  (600 relevés × 19 axes). Taille bornée : `dossier_max_mo` (200, EXEMPLE) ; au-delà, les plus vieux fichiers
+  (numéros les plus bas) sont effacés, jamais le dernier écrit. Mémoire bornée par `avant_s` / `periode_s`.
+- **Lecture** : bouton Lecture / Pause, curseur libre, vitesses de `rejeu.vitesses` (×0,5 à ×4), interpolation entre
+  deux relevés. Le bouton « Rejouer en 3D » est sur chaque alarme de l'onglet « État » ; pour une alarme de moins
+  de 2 minutes, le rejeu n'existe pas encore : la page le dit.
+- **Pas fait / reste** : essai sur le vrai Pi et la vraie machine (cotes des boîtes à comparer, sens des axes
+  tournants) ; le rejeu n'est pas dans la copie de secours (gros, peu utile : il fait partie du carnet de la
+  machine, pas de sa restauration) ; pas de rejeu des sorties (vannes, freins) ni des entrées, seulement des axes ;
+  alarmes d'avant cette tâche : pas de rejeu (positions jamais gardées).

@@ -1,0 +1,7 @@
+three.js version 0.160.0 (décembre 2023), licence MIT (fichier LICENSE à côté).
+Copiée du paquet npm « three@0.160.0 » sans modification :
+  - three.module.min.js  = build/three.module.min.js (670 Ko)
+  - OrbitControls.js     = examples/jsm/controls/OrbitControls.js (30 Ko)
+Elle est dans le dépôt pour que la page marche sans Internet (le Pi n'a pas toujours de réseau).
+Pour changer de version : refaire la copie depuis le même paquet, mettre à jour ce fichier,
+puis relancer le test pi/tests/test_vue3d_navigateur.py.

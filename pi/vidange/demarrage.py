@@ -134,6 +134,7 @@ from vidange.spray.spray import Spray
 from vidange.spray.spray import verifier_avec_liste as verifier_spray
 from vidange.stockage.correction import Correction
 from vidange.vision.photo import Photographe
+from vidange.vue3d import EnregistreurRejeu, Vue3d
 
 # Codes de sortie. Le service systemd (pi/systeme/vidange.service) utilise CODE_REGLAGES_FAUX.
 CODE_OK = 0
@@ -159,6 +160,11 @@ SIGNAL_COMPTE_TOURS = "compte_tours_tete"
 SIGNAL_VIDE = "vide_venturi"
 
 journal = donner_journal("demarrage")
+
+
+def zones_tenues(chef: Chef) -> dict[str, str]:
+    """Zone réservée → module qui la tient, pour la vue 3D."""
+    return {zone: m.module for m in chef.etat().modules for zone in m.zones}
 
 
 def lancer_commande(commande: list[str]) -> None:
@@ -749,6 +755,12 @@ def principal(
             "valeurs d'EXEMPLE ; les régler aux essais (pi/systeme/essai-inspection.md), puis "
             "passer « inspection → exemple » à false."
         )
+    if reglages.vue3d.exemple:
+        journal.warning(
+            "vue3d.yaml contient des tailles de boîtes et des décalages de dessin d'EXEMPLE "
+            "(exemple: true) : les comparer à la vraie machine (pi/systeme/essai-vue-3d.md), "
+            "puis passer « exemple » à false."
+        )
     if reglages.air.exemple:
         journal.warning(
             "air.yaml contient des valeurs d'EXEMPLE (exemple: true) : attente de mise en "
@@ -940,6 +952,14 @@ def principal(
     chef.sur_alarme.append(bilans.recevoir)
     # Le clip des dernières secondes de chaque caméra, dans le bilan de chaque alarme.
     bilans.collecteurs["clip_video"] = lambda: cameras.garder_clip("alarme")
+    # Vue 3D de la page et rejeu d'incident (tâche 28) : positions des cartes, zones tenues.
+    vue3d = Vue3d(reglages.vue3d, reglages.machine, liaisons, lambda: zones_tenues(chef))
+    rejeux = EnregistreurRejeu(
+        dossier_donnees, reglages.vue3d.rejeu, vue3d.positions, vue3d.zones_tenues
+    )
+    chef.sur_alarme.append(rejeux.recevoir)
+    bilans.sur_numero.append(rejeux.numero)
+    fils.append(rejeux.demarrer(arret))
     pilote = PiloteDistance(
         reglages.programme.distance,
         reglages.machine,
@@ -1143,6 +1163,8 @@ def principal(
                 entretien=entretien,
                 lancement=lancement,
                 correction=correction,
+                vue3d=vue3d,
+                rejeux=rejeux,
             ),
             dossier_donnees,
         )
