@@ -2419,3 +2419,8 @@ maintenance, 44 pièces d'usure). Réglages : `pi/reglages/entretien.yaml`. Code
 - **Pas fait / reste** : les vraies limites ; les compteurs de pièces qui n'ont pas de signal (lampe UV : heures
   d'allumage, générateur d'ozone, caméras) ; les heures de marche des moteurs en maintien (sous tension, à l'arrêt) ;
   un total des heures de la machine ; les notifications sur le téléphone (tâche 27).
+- **Réponses à la PR n° 110** (tâche 26, 09/11/2026, niveau 1, tranché par Claude) :
+  1. Le bouton « Fait » de la page Maintenance reste réservé au rôle « régler » (Karulium) : remettre un compteur à
+     zéro efface la trace de l'usure. À ouvrir à l'employé plus tard si Karulium le demande (une ligne à changer).
+  2. Les vraies durées de vie des pièces seront remplies pièce par pièce dans `pi/reglages/entretien.yaml` au fil
+     des essais et des fiches des fournisseurs ; d'ici là, toutes les limites restent des EXEMPLES.
