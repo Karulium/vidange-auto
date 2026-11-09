@@ -2586,3 +2586,11 @@ Testé sur le vrai matériel : non.
   Pi neuf, les réglages changés depuis la page ne reviennent pas (Git) : à refaire d'après l'historique (un rejeu
   automatique serait une petite tâche) ; bouton « Noter » depuis une alarme ; export du carnet.
 
+- **Réponses à la PR n° 113** (tâche 28 bis, 09/11/2026, niveau 1, tranché par Claude) :
+  1. Derrière `tailscale serve`, toutes les connexions viennent de 127.0.0.1 (blocage après 5 essais commun à tous,
+     adresse du téléphone perdue au journal) : accepté pour l'instant ; si ça gêne à l'essai, petite tâche pour lire
+     l'adresse réelle dans l'en-tête que pose Tailscale.
+  2. Réglages du Pi qui diffèrent de Git (changés depuis la page **ou à la main**, comme les vrais chiffres de la
+     machine à l'installation) : la mise à jour les garde déjà (mise de côté puis remise), mais la copie de secours
+     ne les contient pas, donc une restauration les perdrait. Il faut les ajouter à la copie quotidienne et les
+     remettre à la restauration : tâche 25 bis, faite tout de suite après celle-ci.

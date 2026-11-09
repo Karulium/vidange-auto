@@ -980,6 +980,15 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   supprimées) et « Réglages » (liste `modifiables.yaml`, bornes, vérifications du démarrage avant écriture,
   historique, retour) ; manifeste, icônes et service worker (coquille seulement). Choix et reste à faire :
   `docs/decisions.md`, « Page web, tâche 28 bis ». Essai : `pi/systeme/essai-page-web-2.md`.
+- [ ] 25 bis. Copie de secours des réglages propres au Pi (réponse 2 à la PR n° 113). — Sonnet.
+  Les fichiers de réglages suivis par Git que le Pi a changés (depuis la page, tâche 28 bis, ou à la main : les vrais
+  chiffres de la machine) ne sont pas dans la copie quotidienne : une restauration (tâche 25) les perdrait.
+  1. La copie quotidienne ajoute ces fichiers changés (liste donnée par Git, réglages seulement : `pi/reglages/`,
+     `fluidnc/`, `docs/entrees-sorties.yaml`), jamais les secrets.
+  2. `vidange restaurer` les remet après l'installation, vérifie les réglages (`vidange --verifier`) et dit lesquels
+     sont revenus ; un fichier qui ne passe plus la vérification avec le code du jour est mis de côté avec un message
+     clair, sans empêcher le reste.
+  3. Tests sans Pi (faux dépôt Git, fausse copie) ; la procédure d'essai de la restauration est complétée.
 - [ ] 29. Écran : code pour les fonctions sensibles (50). — Sonnet.
 - [ ] 30. Estimation de fin qui apprend (7), montée en vitesse réglable (69), essai d'un réglage dans le simulateur (68). — Sonnet.
 - [ ] 31. Plans d'expériences : application d'un plan d'essais accepté par Karulium, seau par seau (6, 76). — Opus.
