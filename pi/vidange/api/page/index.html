@@ -115,6 +115,7 @@
       <button data-vue="video">Vidéo</button>
       <button data-vue="photos">Photos</button>
       <button data-vue="checklist">Check-list</button>
+      <button data-vue="maintenance">Maintenance</button>
       <button data-vue="maj">Mises à jour</button>
     </nav>
   </header>
@@ -212,6 +213,16 @@
     <section id="vue-checklist">
       <button id="bouton-checklist" class="petit">Refaire la check-list</button>
       <div id="constats"></div>
+    </section>
+
+    <section id="vue-maintenance">
+      <div id="maintenance-resume"></div>
+      <h2>Pièces d'usure et calendrier</h2>
+      <div id="maintenance-pieces"></div>
+      <h2>Compteurs des axes (totaux depuis la mise en service)</h2>
+      <div id="maintenance-axes"></div>
+      <h2>Manœuvres des sorties (vannes, freins, électroaimants, relais)</h2>
+      <div id="maintenance-actionneurs"></div>
     </section>
 
     <section id="vue-maj">
@@ -360,6 +371,7 @@ function montrer(nom) {
   if (nom === "video") ouvrirVideo(); else fermerVideo();
   if (nom === "checklist") chargerChecklist();
   if (nom === "maj") chargerMaj(); else clearTimeout(minuterieMaj);
+  if (nom === "maintenance") chargerMaintenance();
 }
 
 // ------------------------------------------------------------ état
@@ -1063,6 +1075,67 @@ async function chargerChecklist() {
 }
 $("bouton-checklist").addEventListener("click", chargerChecklist);
 
+// ------------------------------------------------------------ maintenance (tâche 26)
+
+let droits = [];
+const NIVEAUX_USURE = { ok: "ok", bientot: "attention", a_faire: "alarme" };
+const MOTS_USURE = { ok: "en bon état", bientot: "BIENTÔT À FAIRE", a_faire: "À FAIRE" };
+
+function nombre(n, decimales) {
+  return Number(n).toLocaleString("fr-FR", { maximumFractionDigits: decimales === undefined ? 1 : decimales });
+}
+
+async function chargerMaintenance() {
+  try {
+    afficherMaintenance(await lire("/api/entretien"));
+  } catch (erreur) {
+    if (erreur instanceof Refus) return;
+    remplir("maintenance-resume", el("div", { classe: "carte alarme" }, erreur.message));
+  }
+}
+
+async function pieceFaite(p) {
+  const question = "« " + p.description + " » est contrôlée ou changée ? Son usure repart de zéro, et votre nom est noté.";
+  if (!confirm(question)) return;
+  try {
+    await api("/api/entretien/" + encodeURIComponent(p.nom) + "/fait", { method: "POST" });
+    dire("Noté : " + p.description, "vert");
+  } catch (erreur) {
+    if (!(erreur instanceof Refus)) dire("Refusé : " + erreur.message, "rouge");
+  }
+  chargerMaintenance();
+}
+
+function afficherMaintenance(e) {
+  const faire = e.pieces.filter((p) => p.niveau === "a_faire");
+  const bientot = e.pieces.filter((p) => p.niveau === "bientot");
+  remplir("maintenance-resume",
+    el("div", { classe: "carte " + (faire.length ? "alarme" : bientot.length ? "attention" : "ok") },
+      el("strong", {}, faire.length ? faire.length + " à faire" : bientot.length ? bientot.length + " bientôt à faire" : "Rien à faire pour l'instant"),
+      el("div", { classe: "doux" }, "L'entretien informe : il n'arrête jamais la machine. « Bientôt » = il reste moins de "
+        + nombre(e.avance_pourcent) + " % de la limite."),
+      e.exemple && el("div", { classe: "quoi" }, "Les limites sont des EXEMPLES (entretien.yaml) : pas les vraies durées de vie.")));
+  remplir("maintenance-pieces", ...e.pieces.map((p) => el("div", { classe: "carte " + NIVEAUX_USURE[p.niveau] },
+    el("strong", {}, p.description), " — " + MOTS_USURE[p.niveau],
+    el("div", {}, nombre(p.usure) + " sur " + nombre(p.limite, 0) + " " + p.unite + " (" + nombre(p.pourcent) + " %)"
+      + (p.exemple ? ", limite d'exemple" : "")),
+    el("div", { classe: "doux" }, "Compte : " + p.compteur + ". Depuis le " + heure(p.depuis)
+      + (p.fait_par ? " (fait par " + p.fait_par + ")" : " (mise en service)")),
+    p.niveau !== "ok" && el("div", { classe: "quoi" }, el("strong", {}, "Quoi faire : "), p.a_faire),
+    el("button", { classe: "petit", disabled: droits.includes("régler") ? null : "",
+      title: droits.includes("régler") ? null : "Réservé au rôle « régler » (karulium)",
+      surclick: () => pieceFaite(p) }, "Fait"))));
+  const axes = Object.entries(e.compteurs.axes);
+  remplir("maintenance-axes", axes.length
+    ? tableau(["Axe", "Distance", "Mouvements", "Heures de marche"], axes.map(([nom, a]) =>
+      [nom, nombre(a.distance, 1) + " " + a.unite, nombre(a.mouvements, 0), nombre(a.heures, 2)]))
+    : el("p", { classe: "doux" }, "Aucun axe."));
+  const sorties = Object.entries(e.compteurs.actionneurs);
+  remplir("maintenance-actionneurs", sorties.length
+    ? tableau(["Sortie", "Manœuvres"], sorties.map(([nom, n]) => [nom, nombre(n, 0)]))
+    : el("p", { classe: "doux" }, "Aucune manœuvre comptée pour l'instant."));
+}
+
 // ------------------------------------------------------------ mises à jour
 
 let minuterieMaj = null;
@@ -1218,6 +1291,7 @@ async function demarrer() {
   let moi = { connecte: false };
   try { moi = await (await fetch("/api/moi", { credentials: "same-origin" })).json(); } catch (e) { /* hors ligne */ }
   if (!moi.connecte) { demanderCle(""); return; }
+  droits = moi.droits || [];
   $("qui-suis-je").textContent = moi.nom + " (" + moi.role + ") ·";
   $("cle").hidden = true;
   $("appli").hidden = false;

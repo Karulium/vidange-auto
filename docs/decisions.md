@@ -2351,3 +2351,71 @@ Sources : `docs/fonctionnalites.md` lignes 58 (comptes) et 79 (restauration d'un
      la réponse de Karulium (carte du 09/11 : garder ainsi, ou page joignable par Tailscale seulement).
   3. Les secrets ne sont jamais dans la copie de secours ; ils sont recopiés à la main après une restauration :
      gardé (niveau 1, c'est le choix le plus sûr ; une copie chiffrée par phrase secrète serait une tâche à part).
+
+## Entretien, tâche 26 (09/11/2026, niveau 1, tranché par Claude)
+
+Sources : `docs/fonctionnalites.md`, « Entretien » (40 compteurs par axe, 41 calendrier, 42 alerte d'usure, 43 page
+maintenance, 44 pièces d'usure). Réglages : `pi/reglages/entretien.yaml`. Code : `pi/vidange/entretien/`. Essai :
+`pi/systeme/essai-entretien.md`. Testé sur le vrai matériel : non.
+
+- **45 (santé de l'informatique) n'est pas refaite** : `pi/vidange/fiabilite/sante.py` (tâche 7) la couvre déjà
+  (température et alimentation du Pi, disque, mémoire, heure, âge de la copie de secours).
+- **Ce qu'on compte** (40) : pour chaque axe de `machine.yaml` qui a une carte, la **distance** parcourue (m, ou
+  degrés pour un axe tournant), le nombre de **mouvements** et les **heures de marche** (le temps où l'axe bouge,
+  pas le temps sous tension). Pour chaque sortie tout-ou-rien, le nombre de **manœuvres** (passages « arrêt →
+  en marche » : redire « en marche » à une sortie déjà en marche ne compte pas ; pour un frein, « en marche » =
+  desserré). Ce sont des **totaux à vie** : rien n'est remis à zéro.
+- **D'où viennent les nombres** : le Pi ne fait que lire. Les positions des rapports d'état des cartes FluidNC
+  (un crochet `Liaison.ecouteur_rapport`, appelé après chaque rapport) donnent les axes ; les lignes `M62` à `M65`
+  envoyées aux cartes (`Liaison.ecouteur_ligne`) donnent les vannes, freins et électroaimants des cartes ; les
+  commandes de relais du Pi (`Materiel.ecouteur_sortie`) donnent les relais. Un crochet qui plante est seulement
+  noté au journal, jamais un souci pour la liaison ni le matériel. Une ligne envoyée mais perdue par la carte
+  compte quand même : c'est un ordre de grandeur pour l'entretien, pas une mesure.
+- **Réglages du comptage** (`entretien.yaml → compteurs`, en EXEMPLE) : `seuil_mouvement_mm` (en dessous, c'est du
+  bruit de mesure), `arret_s` (immobile moins longtemps : même mouvement), `saut_max_mm` (un saut plus grand
+  entre deux rapports = repère perdu, pas compté), `trou_max_s` (liaison coupée : temps pas compté).
+  Une carte coupée puis revenue ne compte pas le trajet fait entre-temps.
+- **Sans user le disque** : les compteurs vivent en mémoire et sont écrits d'un coup toutes les
+  `ecriture_periode_s` (300 s) seulement s'ils ont changé, et à l'arrêt propre, dans `donnees/entretien.json`
+  (écriture atomique : fichier provisoire puis remplacement). Une coupure de courant fait perdre au plus 5 minutes.
+  Le fichier est relu au démarrage. Il est **dans la copie de secours** sans rien changer : l'archive de la
+  tâche 25 prend tous les petits fichiers du dossier des données. Fichier illisible : mis de côté
+  (`entretien.json.abime`), compteurs repartis de zéro, la check-list le dit (attention).
+- **Pièces d'usure** (44) et **calendrier** (41) : un seul fichier, `entretien.yaml → pieces`. Chaque pièce : nom
+  en français (`description`), compteur qui la fait vieillir (`genre` : `distance`, `mouvements`, `heures` d'un
+  axe ; `manoeuvres` d'une sortie ; `seaux` = seaux remplis depuis le dernier « fait », lus dans le registre ;
+  `jours` = le calendrier), `limite`, `a_faire` (ce qu'il faut faire). Une pièce garde un **point de départ** (la
+  valeur du compteur au dernier « Fait ») : son usure est la différence, les totaux à vie ne bougent pas. Une pièce
+  ajoutée plus tard au fichier part de zéro ce jour-là, sans hériter de l'usure passée.
+- **Toutes les limites sont des EXEMPLES** (`exemple: true` sur chaque pièce, et `exemple: true` en tête du fichier) :
+  personne ne connaît les vraies durées de vie. Le démarrage le dit au journal, la page le dit, l'alerte écrit
+  « limite d'exemple ». Pièces mises : seulement celles dont l'existence est sûre dans le dépôt (axes de
+  `machine.yaml`, sorties de `fluidnc.yaml` et de `entrees-sorties.yaml`) : rails et transmissions des axes, pignon
+  et crémaillère du Z de la griffe (cité dans `machine.yaml`), vis à billes du godet (cité), freins des deux Z,
+  électrovannes de la ventouse, électroaimants, relais du compresseur, rotation du noyau du lavage (heures), un
+  contrôle du lavage par nombre de seaux, un tour général tous les 90 jours. Les noms des pièces mécaniques (courroie,
+  roulement, joint...) ne sont pas inventés : le « quoi faire » renvoie à la fiche mécanique du module. Le rappel du
+  bidon de purge reste dans `air.yaml` (déjà fait, tâche 42).
+- **Vérifié au démarrage** : l'axe d'une pièce doit être dans `machine.yaml` et avoir une carte (dans
+  `reglages.py`, avec les autres liens entre fichiers) ; la sortie d'une pièce « manœuvres » doit exister dans
+  `entrees-sorties.yaml` (type relais ou logique) ou dans une carte de `fluidnc.yaml` (`entretien/verification.py`,
+  appelé comme les autres vérifications croisées, donc aussi par `vidange --verifier`). Un genre sans `de`, un `de`
+  en trop, une limite nulle, une avance de 100 % : refusés avec le fichier, la pièce et la raison.
+- **Alerte** (42) : `alerte.avance_pourcent` (10, EXEMPLE) : « bientôt » quand il reste moins que ce pourcentage de la
+  limite ; « à faire » à la limite. Dans la **check-list** (niveau « attention », **jamais « bloquant »** : un
+  compteur peut se tromper et l'entretien n'est pas une sécurité), et au **journal** (une ligne à chaque passage
+  « bientôt » puis « à faire », pas toutes les 5 minutes ; vérifié toutes les `ecriture_periode_s`). Pas de
+  notification téléphone : c'est la tâche 27.
+- **Page « Maintenance »** (43) : nouvel onglet : résumé (n à faire, n bientôt), chaque pièce (usure sur limite,
+  pourcentage, depuis quand, fait par qui, « quoi faire »), tableau des axes et des sorties. Routes :
+  `GET /api/entretien` (**regarder**) et `POST /api/entretien/{piece}/fait` (**régler**, comme le veut Karulium).
+  « Fait » remet la pièce à zéro et note qui et quand : au journal du programme, dans le **journal des actions**
+  (chemin, nom, rôle, adresse : fait par la tâche 25) et dans le **registre** (`reglages_appliques`, fichier
+  « entretien », réglage = la pièce, usure d'avant, raison « entretien fait : ... »), sans nouvelle table. La page
+  grise le bouton sans le droit « régler » ; le serveur refuse de toute façon (403).
+- **Le simulateur** : `Simulateur(..., compteurs=...)` fait bouger les compteurs : chaque mouvement joué compte sa
+  distance, 1 mouvement et sa durée en heures de marche pour chaque axe ; les sorties du faux matériel comptent
+  leurs manœuvres.
+- **Pas fait / reste** : les vraies limites ; les compteurs de pièces qui n'ont pas de signal (lampe UV : heures
+  d'allumage, générateur d'ozone, caméras) ; les heures de marche des moteurs en maintien (sous tension, à l'arrêt) ;
+  un total des heures de la machine ; les notifications sur le téléphone (tâche 27).

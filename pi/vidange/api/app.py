@@ -53,6 +53,7 @@ from vidange.cameras import Cameras, ErreurCamera
 from vidange.chef import Chef, ErreurChef
 from vidange.comptes import Comptes, Niveau
 from vidange.distance import ErreurDistance, PiloteDistance
+from vidange.entretien import Entretien, ErreurEntretien
 from vidange.fiabilite.constats import Constat, pire
 from vidange.journal import donner_journal
 from vidange.mises_a_jour import ErreurMiseAJour, MisesAJour
@@ -96,6 +97,8 @@ class Services:
     spray: Spray | None = None
     # Air comprimé : compresseur, mise en pression, bidon de purge (None : pas d'air).
     air: Air | None = None
+    # Entretien : compteurs, pièces d'usure, calendrier (None : pas d'entretien).
+    entretien: Entretien | None = None
     # Lancer un lot : la page web propose, Go à l'écran (None : pas de lot possible).
     lancement: "Lancement | None" = None
     # Corriger l'inventaire du stockage : la page propose, Karulium confirme (None : pas possible).
@@ -209,6 +212,7 @@ def creer_app(
     @app.exception_handler(ErreurMiseAJour)
     @app.exception_handler(ErreurPoste)
     @app.exception_handler(ErreurNettoyage)
+    @app.exception_handler(ErreurEntretien)
     async def refus(_: Request, erreur: Exception) -> JSONResponse:
         # Un ordre impossible maintenant (pas de Go attendu, alarme déjà acquittée...).
         return JSONResponse({"detail": str(erreur)}, status_code=409)
@@ -494,6 +498,27 @@ def creer_app(
         air = l_air()
         air.bidon_vide(_qui(requete))
         return air.etat().en_dict()
+
+    # ------------------------------------------------------------ entretien (tâche 26)
+
+    def l_entretien() -> Entretien:
+        if services.entretien is None:
+            raise HTTPException(404, "pas d'entretien (entretien.yaml)")
+        return services.entretien
+
+    @app.get("/api/entretien", dependencies=regarder)
+    def entretien_etat() -> dict[str, Any]:
+        """Les compteurs, les pièces d'usure et ce qui est bientôt à faire."""
+        return l_entretien().en_dict()
+
+    @app.post("/api/entretien/{piece}/fait", dependencies=regler)
+    def entretien_fait(piece: str, requete: Request) -> dict[str, Any]:
+        """La pièce a été contrôlée ou changée : son usure repart de zéro (noté : qui, quand)."""
+        entretien = l_entretien()
+        if piece not in entretien.reglages.pieces:
+            raise HTTPException(404, f"pièce « {piece} » inconnue (entretien.yaml → pieces)")
+        journal.info("Entretien : « %s » fait, demandé par la %s", piece, _qui(requete))
+        return entretien.fait(piece, _qui(requete)).en_dict()
 
     # ------------------------------------------------------------ spray
 

@@ -75,6 +75,9 @@ from vidange.distance import PiloteDistance
 from vidange.ecran import SIGNAL as SIGNAL_ECRAN
 from vidange.ecran import Ecran, LiaisonEcran, PortEcran, ouvrir_port_ecran
 from vidange.entrees_sorties import EntreesSorties, charger_entrees_sorties
+from vidange.entretien import NOM_FICHIER as NOM_ENTRETIEN
+from vidange.entretien import Compteurs, Entretien
+from vidange.entretien import verifier_avec_liste as verifier_entretien
 from vidange.envois import mettre_en_file_secours, preparer_facteur
 from vidange.fiabilite import (
     Bilans,
@@ -572,9 +575,10 @@ def principal(
         erreurs_pesees += verifier_nettoyage(reglages.machine.nettoyage, entrees_sorties)
     if reglages.machine.spray is not None:
         erreurs_pesees += verifier_spray(reglages.machine.spray, entrees_sorties)
+    erreurs_pesees += verifier_entretien(reglages.entretien, entrees_sorties, reglages.fluidnc)
     if erreurs_pesees:
         journal.error(
-            "Réglages qui ne vont pas ensemble (pesées, ventilateur, spray) :\n%s",
+            "Réglages qui ne vont pas ensemble (pesées, ventilateur, spray, entretien) :\n%s",
             "\n".join(f"  - {erreur}" for erreur in erreurs_pesees),
         )
         return CODE_REGLAGES_FAUX
@@ -750,6 +754,14 @@ def principal(
             "pression et rappel du bidon ; les mesurer à l'essai (pi/systeme/essai-air.md), "
             "puis passer « exemple » à false."
         )
+    pieces_exemple = [n for n, p in reglages.entretien.pieces.items() if p.exemple]
+    if reglages.entretien.exemple or pieces_exemple:
+        journal.warning(
+            "entretien.yaml : limites d'usure d'EXEMPLE (%d pièce(s)) : les remplacer par les "
+            "vraies durées de vie (fiches des fournisseurs, constat sur la machine), puis "
+            "retirer leur « exemple: true » (pi/systeme/essai-entretien.md).",
+            len(pieces_exemple),
+        )
     exemples = entrees_sorties.exemples()
     if exemples:
         journal.warning(
@@ -804,6 +816,20 @@ def principal(
         nom: Liaison(nom, reglages.fluidnc, ouvrir=ports.get(nom))
         for nom in reglages.fluidnc.cartes
     }
+    # Entretien (tâche 26) : les compteurs lisent les rapports des cartes et les ordres envoyés ;
+    # ils ne commandent rien. Écrits d'un coup toutes les ecriture_periode_s, relus ici.
+    compteurs = Compteurs(
+        reglages.entretien.compteurs,
+        reglages.machine,
+        reglages.fluidnc,
+        dossier_donnees / NOM_ENTRETIEN,
+    )
+    entretien = Entretien(reglages.entretien, compteurs, registre)
+    for liaison in liaisons.values():
+        liaison.ecouteur_rapport = compteurs.noter_rapport_liaison
+        liaison.ecouteur_ligne = compteurs.noter_ligne
+    if materiel is not None:
+        materiel.ecouteur_sortie = compteurs.noter_sortie
     fiabilite = reglages.programme.fiabilite
     chef = Chef(reglages.machine, reglages.programme.chef, carnet)
     # Les pesées du bus RS485, interrogées en fond (griffe, préhension, plateau du remplissage,
@@ -1031,6 +1057,8 @@ def principal(
         chef.demarrer()
         cameras.demarrer()
         fils += [
+            compteurs.demarrer(arret),
+            entretien.demarrer(arret),
             sante.demarrer(arret),
             onduleur.demarrer(arret),
             gardien.demarrer(arret),
@@ -1074,6 +1102,7 @@ def principal(
                 "enceinte": lambda: constats_nettoyage(nettoyage),
                 "spray": lambda: constats_spray(spray),
                 "air": lambda: constats_air(air),
+                "entretien": entretien.constats,
                 "cartes du chariot et de la tête": cartes.constats,
                 "mode seaux": mode_seaux.constats,
                 "mode bocaux": mode_bocaux.constats,
@@ -1095,6 +1124,7 @@ def principal(
                 nettoyage=nettoyage,
                 spray=spray,
                 air=air,
+                entretien=entretien,
                 lancement=lancement,
                 correction=correction,
             ),
@@ -1154,6 +1184,8 @@ def principal(
         cameras.arreter()
         for liaison in liaisons.values():
             liaison.arreter()
+        # Dernière écriture des compteurs d'usure (les liaisons ne comptent plus).
+        compteurs.ecrire()
         if materiel is not None:
             materiel.fermer()
         if liaison_ecran is not None:
