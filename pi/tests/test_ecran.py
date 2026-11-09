@@ -446,3 +446,28 @@ def test_pilotage_a_distance_affiche_et_appui_reprend_la_main(b):
     # Ensuite, les boutons refont leur travail habituel.
     b.appuyer("b_go")
     assert b.nextion.page == "confirmer"
+
+
+# ---------------------------------------------------------------- estimation de fin (tâche 30)
+
+
+def test_la_page_d_etat_dit_la_fin_estimee_du_lot(b):
+    class Estimee:
+        def __init__(self, resultat):
+            self.resultat = resultat
+
+        def calculer(self):
+            return self.resultat
+
+    b.ecran.estimation = Estimee(
+        {"disponible": True, "texte_court": "Fin vers 16:40 (env. 2 h 10 min)"}
+    )
+    b.tour()
+    assert b.texte("t_info") == "Fin vers 16:40 (env. 2 h 10 min)"
+    # Estimation pas prête ou pas de lot : rien d'inventé.
+    b.ecran.estimation = Estimee({"disponible": False, "texte": "calcul en cours"})
+    b.tour()
+    assert b.texte("t_info") == ""
+    b.ecran.estimation = Estimee(None)
+    b.tour()
+    assert b.texte("t_info") == ""

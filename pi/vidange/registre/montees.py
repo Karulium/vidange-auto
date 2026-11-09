@@ -365,6 +365,22 @@ _VERSION_10 = (
     """,
 )
 
+# Version 11 (tâche 30) : les vraies durées des gestes (étape finie par le chef, sans les attentes),
+# par format de seau, pour que l'estimation de fin apprenne. « geste » = « module.etape ».
+_VERSION_11 = (
+    """
+    CREATE TABLE durees_gestes (
+        id INTEGER PRIMARY KEY,
+        quand TEXT NOT NULL,
+        geste TEXT NOT NULL,
+        -- Format du seau du lot (NULL : geste sans format).
+        format TEXT,
+        duree_s REAL NOT NULL CHECK (duree_s >= 0)
+    )
+    """,
+    "CREATE INDEX durees_gestes_geste ON durees_gestes (geste, format, id)",
+)
+
 # Montée n° i (en partant de 1) : ce qui fait passer la base de la version i - 1 à la version i.
 MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_1,
@@ -377,6 +393,7 @@ MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_8,
     _VERSION_9,
     _VERSION_10,
+    _VERSION_11,
 )
 
 VERSION = len(MONTEES)

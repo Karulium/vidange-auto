@@ -6236,6 +6236,81 @@ class ReglagesCarnet(Modele):
     notes_par_page: int = Field(ge=1, le=1000)
 
 
+class ReglagesEstimation(Modele):
+    """Estimation de fin d'un lot qui apprend (tâche 30) : elle part des durées du simulateur, puis
+    se corrige avec les vraies durées gardées au registre (par geste et par format de seau)."""
+
+    actif: bool
+    # L'estimation affichée est recalculée au plus toutes les (s).
+    rafraichir_s: float = Field(gt=0)
+    # Moyenne glissante : les dernières durées gardées de chaque geste (par format).
+    moyenne_sur: int = Field(ge=1, le=1000)
+    # Sous ce nombre de durées vraies, un geste n'est pas corrigé (il garde la durée simulée).
+    mesures_min: int = Field(ge=1, le=1000)
+    # Un geste plus court (s) n'est pas gardé : rien à apprendre (attentes, étapes vides).
+    duree_min_s: float = Field(ge=0)
+    # Combien de durées sont gardées au plus par geste et par format (les plus anciennes partent).
+    garde_par_geste: int = Field(ge=1, le=100000)
+    # Bornes du rapport « vraie durée / durée simulée » d'un geste : une mesure aberrante ne
+    # fait pas dire n'importe quoi à l'estimation.
+    correction_min: float = Field(gt=0)
+    correction_max: float = Field(gt=0)
+    # Fourchette montrée (en % du temps restant) : d'après l'écart des durées vraies, entre ces
+    # deux bornes ; sans aucune durée vraie, la fourchette « sans historique ».
+    fourchette_min_pct: float = Field(ge=0, le=100)
+    fourchette_max_pct: float = Field(ge=0, le=100)
+    fourchette_sans_historique_pct: float = Field(ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "ReglagesEstimation":
+        erreurs = []
+        if self.correction_min > 1 or self.correction_max < 1:
+            erreurs.append("correction_min doit être au plus 1 et correction_max au moins 1")
+        if self.fourchette_min_pct > self.fourchette_max_pct:
+            erreurs.append("fourchette_min_pct doit être au plus fourchette_max_pct")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
+class ReglagesMonteeVitesse(Modele):
+    """Montée en vitesse par paliers (tâche 30, fonction 69). Faux par défaut. Les vitesses
+    montent d'un palier après `cycles_par_palier` cycles sans alerte, JAMAIS au-dessus du plafond
+    de Karulium ; une alerte ou une alarme fait reculer. Ne touche aucun seuil, aucune zone,
+    aucune règle de positions : seulement les vitesses de déplacement listées dans `vitesses`."""
+
+    actif: bool
+    # Un palier = cette part (%) de la vitesse de départ en plus (EXEMPLE : 5).
+    palier_pct: float = Field(gt=0, le=100)
+    # Cycles sans alerte avant de monter d'un palier (EXEMPLE : 25).
+    cycles_par_palier: int = Field(ge=1, le=100000)
+    # Nombre de paliers au plus (en plus, les plafonds de `vitesses` coupent).
+    paliers_max: int = Field(ge=1, le=1000)
+    # L'étape qui finit un cycle (« module.etape »), comptée à chaque fois : un seau rangé.
+    etape_de_cycle: str = Field(pattern=r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
+    # À la première alerte ou alarme : « palier » (recule d'un palier) ou « depart » (retour aux
+    # vitesses de départ).
+    au_recul: Literal["palier", "depart"]
+    # Les vitesses qui montent : chemin dans machine.yaml (« griffe.vitesses.pont_x ») → plafond
+    # fixé par Karulium, dans la même unité (m/s ou °/s). Vérifié au démarrage : le chemin existe,
+    # est un nombre, n'est pas une vitesse de contact ou d'approche, et le plafond n'est pas
+    # au-dessous de la vitesse de départ.
+    vitesses: dict[str, float]
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "ReglagesMonteeVitesse":
+        erreurs = [
+            f"vitesses → {chemin} : le plafond doit être positif"
+            for chemin, plafond in self.vitesses.items()
+            if plafond <= 0
+        ]
+        if self.actif and not self.vitesses:
+            erreurs.append("vitesses : actif, mais aucune vitesse à monter")
+        if erreurs:
+            raise ValueError("\n".join(erreurs))
+        return self
+
+
 class Programme(Modele):
     """programme.yaml : réglages du programme lui-même (pas de la machine)."""
 
@@ -6253,6 +6328,9 @@ class Programme(Modele):
     lot: ReglagesLot
     statistiques: ReglagesStatistiques
     carnet: ReglagesCarnet
+    # Tâche 30 : absents = pas d'estimation qui apprend, pas de montée en vitesse.
+    estimation: ReglagesEstimation | None = None
+    montee_vitesse: ReglagesMonteeVitesse | None = None
 
     @model_validator(mode="after")
     def _verifier_video(self) -> "Programme":
@@ -8202,6 +8280,66 @@ def charger_reglages(dossier: Path) -> Reglages:
     return Reglages.model_validate(valeurs)
 
 
+# Morceaux de noms des vitesses qui ne montent JAMAIS (contact, approche, choc, pose, vissage...) :
+# elles sont réglées pour que les capteurs voient le contact ; la montée en vitesse (tâche 30)
+# refuse de les citer.
+MOTS_DE_PRUDENCE = (
+    "lente",
+    "approche",
+    "choc",
+    "contact",
+    "pose",
+    "plongee",
+    "palpage",
+    "pile",
+    "vissage",
+)
+
+
+def valeur_de_la_machine(machine: "Machine", chemin: str) -> float:
+    """Le nombre de machine.yaml au bout de « griffe.vitesses.pont_x » ; ErreurReglages sinon."""
+    courant: Any = machine
+    suivi = "machine.yaml"
+    for morceau in chemin.split("."):
+        if courant is None:
+            raise ErreurReglages(f"{suivi} : cette partie n'est pas dans machine.yaml")
+        if not isinstance(courant, BaseModel) or morceau not in type(courant).model_fields:
+            raise ErreurReglages(f"{suivi} n'a pas de « {morceau} »")
+        courant = getattr(courant, morceau)
+        suivi += f" → {morceau}"
+    if isinstance(courant, bool) or not isinstance(courant, int | float):
+        raise ErreurReglages(f"{suivi} n'est pas un nombre")
+    return float(courant)
+
+
+def erreurs_montee_vitesse(machine: "Machine", programme: "Programme") -> list[str]:
+    """Montée en vitesse (tâche 30) : chaque vitesse citée existe, n'est pas une vitesse de
+    contact ou d'approche, et son plafond n'est pas au-dessous de la vitesse de départ."""
+    montee = programme.montee_vitesse
+    if montee is None:
+        return []
+    erreurs = []
+    for chemin, plafond in montee.vitesses.items():
+        ou = f"programme.yaml, montee_vitesse → vitesses → {chemin}"
+        mot = next((m for m in MOTS_DE_PRUDENCE if m in chemin.split(".")[-1]), None)
+        if mot is not None:
+            erreurs.append(
+                f"{ou} : vitesse de contact ou d'approche (« {mot} »), jamais montée : l'enlever"
+            )
+            continue
+        try:
+            depart = valeur_de_la_machine(machine, chemin)
+        except ErreurReglages as erreur:
+            erreurs.append(f"{ou} : {erreur}")
+            continue
+        if plafond < depart:
+            erreurs.append(
+                f"{ou} : le plafond ({plafond:g}) est au-dessous de la vitesse de départ "
+                f"({depart:g}) de machine.yaml"
+            )
+    return erreurs
+
+
 def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
     """Ce qu'un fichier cite d'un autre fichier doit y exister."""
     machine, fluidnc = valeurs["machine"], valeurs["fluidnc"]
@@ -8236,6 +8374,7 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
             )
     programme = valeurs["programme"]
     assert isinstance(programme, Programme)
+    erreurs += erreurs_montee_vitesse(machine, programme)
     avance, periode_etat = programme.distance.avance_s, fluidnc.liaison.periode_etat_s
     if avance < 2 * periode_etat:
         # Le Pi ajoute du mouvement d'après les positions lues : elles doivent être fraîches.

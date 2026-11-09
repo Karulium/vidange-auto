@@ -41,7 +41,9 @@ Pas encore de vrai module de la machine.
 | `vidange/registre/sauvegarde.py` | Copie de secours quotidienne de la base |
 | `vidange/registre/outil.py` | Commande `vidange-registre` (état de la base, copie à la main) |
 | `vidange/cycle/` | **Programme principal** (tâches 45 et 45 bis) : mode seaux (l'ordre du cycle d'un seau, `ordre.py`, un seul endroit), mode bocaux (lot avec l'entonnoir, lavage des bocaux) et nuit UV-ozone ; les postes prêts ou pourquoi pas (check-list, écran), le lot donné au chef, sa reprise après une coupure |
-| `vidange/simulateur/` | Simulateur de cycle : le vrai chef sur une machine imaginaire, planning et temps total ; commande `vidange-simulateur` |
+| `vidange/simulateur/` | Simulateur de cycle : le vrai chef sur une machine imaginaire, planning et temps total ; commande `vidange-simulateur` ; essai d'un réglage (`vidange simuler --essayer`, tâche 30) |
+| `vidange/estimation/` | Estimation de fin d'un lot qui apprend des vraies durées du registre (tâche 30) |
+| `vidange/vitesse/` | Montée en vitesse par paliers sous plafonds, annulable ; commande `vidange vitesse` (tâche 30, faux par défaut) |
 | `vidange/envois/` | File d'envoi : cycles vers le logiciel de culture, copies vers la maison ; commande `vidange-envois` |
 | `vidange/quoi_faire.py` | **Catalogue des « quoi faire »** de chaque alarme (cartes FluidNC, câble, capteur muet...) |
 | `vidange/fiabilite/chien_de_garde.py` | Chien de garde : surveille les cartes et le chef, dit « je vis » à systemd, battement |

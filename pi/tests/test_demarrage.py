@@ -239,6 +239,55 @@ def test_l_api_demarre_avec_la_cle_et_s_arrete_avec_le_programme(
     assert "API arrêtée" in journal
 
 
+def test_la_montee_en_vitesse_et_l_estimation_sont_branchees_au_demarrage(
+    reglages, entrees_sorties, tmp_path
+):
+    # Tâche 30 : montée active, palier 2 gardé d'avant ; le programme démarre avec les vitesses du
+    # palier (en mémoire) et la page le dit.
+    with socket.socket() as prise:
+        prise.bind(("127.0.0.1", 0))
+        port = prise.getsockname()[1]
+    remplacer(reglages / "programme.yaml", "adresse: 0.0.0.0", "adresse: 127.0.0.1")
+    remplacer(reglages / "programme.yaml", "port: 8080", f"port: {port}")
+    remplacer(
+        reglages / "programme.yaml",
+        "montee_vitesse:\n  actif: false",
+        "montee_vitesse:\n  actif: true",
+    )
+    donnees = tmp_path / "donnees"
+    donnees.mkdir()
+    (donnees / "montee_vitesse.json").write_text(
+        json.dumps({"palier": 2, "cycles": 4, "depuis": None, "changements": []}), encoding="utf-8"
+    )
+    creer_compte(tmp_path)
+    raccords, messages, _ = raccords_faux(entrees_sorties)
+    arguments = [*options(reglages, tmp_path), "--entrees-sorties", str(entrees_sorties)]
+    arret = threading.Event()
+    fil = threading.Thread(target=lambda: principal(arguments, arret, raccords))
+    fil.start()
+    try:
+        attendre(lambda: "READY=1" in messages)
+        cookie = se_connecter(port)
+
+        def lire(chemin):
+            demande = urllib.request.Request(
+                f"http://127.0.0.1:{port}{chemin}", headers={"Cookie": cookie}
+            )
+            with urllib.request.urlopen(demande, timeout=5) as reponse:
+                return json.loads(reponse.read())
+
+        vitesse = lire("/api/vitesse")
+        assert (vitesse["palier"], vitesse["palier_en_vigueur"]) == (2, 2)
+        assert vitesse["redemarrage_necessaire"] is False
+        assert lire("/api/etat")["estimation"] is None  # aucun lot de seaux ne tourne
+        assert lire("/api/essai")["en_cours"] is False
+    finally:
+        arret.set()
+        fil.join(10)
+    journal = (donnees / "journal" / NOM_FICHIER).read_text(encoding="utf-8")
+    assert "Montée en vitesse : palier 2 sur 4" in journal
+
+
 def test_au_demarrage_seules_les_vannes_de_la_ventouse_sont_fermees(
     reglages, entrees_sorties, tmp_path
 ):

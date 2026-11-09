@@ -93,6 +93,8 @@ def test_le_niveau_de_chaque_famille_de_routes(b):
         "/api/actions",
         "/api/reglages-modifiables",
         "/api/reglages-modifiables/historique",
+        "/api/vitesse",
+        "/api/essai",
     }
     assert all(
         n is Niveau.REGARDER
@@ -123,6 +125,10 @@ def test_le_niveau_de_chaque_famille_de_routes(b):
         ("GET", "/api/reglages-modifiables"),
         ("POST", "/api/reglages-modifiables/{nom}"),
         ("POST", "/api/reglages-modifiables/retour/{numero}"),
+        ("GET", "/api/vitesse"),
+        ("POST", "/api/vitesse/annuler"),
+        ("GET", "/api/essai"),
+        ("POST", "/api/essai"),
     ]:
         assert niveaux[(methode, chemin)] is Niveau.REGLER, chemin
 

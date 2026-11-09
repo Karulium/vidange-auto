@@ -990,7 +990,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      clair, sans empêcher le reste.
   3. Tests sans Pi (faux dépôt Git, fausse copie) ; la procédure d'essai de la restauration est complétée.
 - [x] 29. Écran : code pour les fonctions sensibles (50). — Sonnet. Fait : code de 4 à 6 chiffres haché (scrypt), `vidange code-ecran`, page « code » de l'écran (à dessiner : `nextion/pages.md`), essais ratés limités, journal des actions. Testé sur le vrai matériel : non.
-- [ ] 30. Estimation de fin qui apprend (7), montée en vitesse réglable (69), essai d'un réglage dans le simulateur (68). — Sonnet.
+- [x] 30. Estimation de fin qui apprend (7), montée en vitesse réglable (69), essai d'un réglage dans le simulateur (68). — Sonnet. Fait : estimation corrigée par les vraies durées du registre (par geste et par format), montée en vitesse par paliers sous plafonds (`actif: false`, annulable), `vidange simuler --essayer` et bouton de la page. Testé sur le vrai matériel : non.
 - [ ] 31. Plans d'expériences : application d'un plan d'essais accepté par Karulium, seau par seau (6, 76). — Opus.
 - [ ] 32. Mode guidé pour un employé et manuel tenu à jour (84, 85). — Sonnet.
 - [ ] 33. Assistant en français, écoute des bruits, résumé de la semaine (71, 73, 74). — plus tard.

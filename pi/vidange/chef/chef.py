@@ -202,6 +202,9 @@ class Chef:
         self._fil: threading.Thread | None = None
         # Appelées (sous le verrou du chef : elles doivent être rapides) à chaque nouvelle alarme.
         self.sur_alarme: list[Callable[[Alarme], object]] = []
+        # Appelées (sous le verrou, rapides) à chaque étape finie : (module, étape, durée du geste
+        # en s, sans les attentes ni les pauses). Estimation de fin, montée en vitesse (tâche 30).
+        self.sur_etape_finie: list[Callable[[str, str, float], object]] = []
         # Qui peut interdire un geste protégé : refus(geste) → raison, ou None.
         self._interdictions: list[Callable[[str], str | None]] = []
         # Attendues avant chaque étape de chaque module (rapides, comme toutes les conditions).
@@ -671,6 +674,14 @@ class Chef:
         self._zones.liberer(etape.liberer, d.nom)
         journal.info("« %s » : étape « %s » finie en %.1f s", d.nom, etape.nom, d.temps_etape)
         d.attend = ""
+        geste_s = d.temps_phase if d.phase == "fin" else 0.0
+        for ecouteur in self.sur_etape_finie:
+            try:
+                ecouteur(d.nom, etape.nom, geste_s)
+            except Exception:
+                journal.exception(
+                    "« %s », étape « %s » : durée du geste pas notée", d.nom, etape.nom
+                )
         suivante = etape.ensuite() if etape.ensuite is not None else None
         if suivante is None and d.numero + 1 >= len(d.module.etapes):
             d.statut = "fini"
