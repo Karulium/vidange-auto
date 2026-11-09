@@ -322,6 +322,49 @@ _VERSION_9 = (
     "WHERE fin IS NOT NULL",
 )
 
+# Version 10 (tâche 28 bis) : le carnet de bord, des notes libres datées écrites depuis la page web.
+# Une note se rattache, si on veut, à un cycle (un « lot »), à un seau ou à une alarme. Une note ne
+# se supprime jamais et son texte ne change jamais : on la BARRE (qui, quand, pourquoi), et on en
+# écrit une autre si besoin. Les déclencheurs ci-dessous l'imposent à la base elle-même.
+_VERSION_10 = (
+    """
+    CREATE TABLE carnet_de_bord (
+        id INTEGER PRIMARY KEY,
+        quand TEXT NOT NULL,
+        auteur TEXT NOT NULL,
+        texte TEXT NOT NULL CHECK (length(trim(texte)) > 0),
+        cycle_id INTEGER REFERENCES cycles (id),
+        seau_id INTEGER REFERENCES seaux (id),
+        alarme_id INTEGER REFERENCES alarmes (id),
+        barre_le TEXT,
+        barre_par TEXT,
+        barre_raison TEXT
+    )
+    """,
+    "CREATE INDEX carnet_de_bord_quand ON carnet_de_bord (quand)",
+    """
+    CREATE TRIGGER carnet_de_bord_pas_de_suppression BEFORE DELETE ON carnet_de_bord
+    BEGIN
+        SELECT RAISE(ABORT, 'une note du carnet de bord ne se supprime pas : on la barre');
+    END
+    """,
+    """
+    CREATE TRIGGER carnet_de_bord_pas_de_modification
+    BEFORE UPDATE OF quand, auteur, texte, cycle_id, seau_id, alarme_id ON carnet_de_bord
+    BEGIN
+        SELECT RAISE(ABORT, 'une note du carnet de bord ne se modifie pas : on la barre');
+    END
+    """,
+    """
+    CREATE TRIGGER carnet_de_bord_barree_une_fois
+    BEFORE UPDATE OF barre_le, barre_par, barre_raison ON carnet_de_bord
+    WHEN OLD.barre_le IS NOT NULL
+    BEGIN
+        SELECT RAISE(ABORT, 'cette note est déjà barrée');
+    END
+    """,
+)
+
 # Montée n° i (en partant de 1) : ce qui fait passer la base de la version i - 1 à la version i.
 MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_1,
@@ -333,6 +376,7 @@ MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_7,
     _VERSION_8,
     _VERSION_9,
+    _VERSION_10,
 )
 
 VERSION = len(MONTEES)

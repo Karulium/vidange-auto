@@ -2536,3 +2536,53 @@ réglages avec garde-fous, carnet de bord) n'est pas faite.
   1. Sens de rotation des axes tournants sur le dessin : un réglage `sens` par boîte sera ajouté après l'essai sur la
      vraie machine (petite tâche, si le dessin tourne à l'envers).
   2. Rejeu des sorties (vannes, freins) : pas pour l'instant ; on regarde d'abord si le rejeu des axes suffit.
+
+## Page web, tâche 28 bis (09/11/2026, niveau 1, tranché par Claude)
+
+Sources : `docs/fonctionnalites.md` fonctions 56, 57, 59, 86. Essai : `pi/systeme/essai-page-web-2.md`.
+Testé sur le vrai matériel : non.
+
+- **Statistiques (57)** : `GET /api/statistiques?par=jour|semaine|mois` (rôle regarder), calcul dans
+  `pi/vidange/statistiques/`. Tout vient du registre (cycles, seaux_du_cycle, alarmes). Périodes à minuit heure du
+  Pi, semaine le lundi, mois civil ; nombre de périodes dans `programme.yaml → statistiques`. « Durée moyenne par
+  seau » = durée des cycles terminés qui ont des seaux / leur nombre de seaux (pauses comprises, le registre ne les
+  note pas). « Marche » = au moins un cycle tourne (chevauchements comptés une fois) ; « arrêt » = le reste du
+  temps écoulé. Un cycle resté ouvert compte au plus `cycle_ouvert_max_h` (12 h, EXEMPLE). Graphiques : SVG écrits à
+  la main (`statique/onglets.js`), aucune bibliothèque, tableau des chiffres sous chaque graphique.
+- **Appli installable (59)** : manifeste, icônes (PNG 180/192/512 et SVG, générées une fois, simples) et service
+  worker, servis SANS connexion (routes publiques, filtre des réseaux toujours actif). Le service worker garde
+  seulement la coquille (`/`, `/statique/*`, icônes, manifeste), réseau d'abord ; `/api/*` n'est jamais touché ; la
+  page « aucun compte » n'est pas gardée (en-tête `X-Vidange-Coquille`). Numéro de version du cache = empreinte du
+  contenu de tous les fichiers de la page + version du programme (`version_coquille`), donc changé à chaque
+  modification sans y penser ; l'ancien cache est effacé à l'activation. Hors ligne, la page affiche « Le Pi ne
+  répond pas », jamais d'état. HTTPS : seulement par `tailscale serve` (sur le Wi-Fi de l'atelier en http, pas de
+  service worker, la page marche comme avant : le service worker n'est enregistré que si le contexte est sûr).
+  Non testé : le comportement derrière `tailscale serve` (adresse vue = 127.0.0.1, blocage des mots de passe ratés
+  commun) ; cookie sans `Secure` (inchangé, pour ne pas casser le http).
+- **Réglages avec garde-fous (56)** : liste `pi/reglages/modifiables.yaml` (nom, fichier, chemin, genre
+  nombre/entier/heure, min, max, unité, aide, redemarrage), vérifiée au démarrage : la liste ne peut viser que
+  `SECTIONS_MODIFIABLES` (code, `reglages.py`) = `programme.yaml → notifications` et `entretien.yaml → alerte, pieces` ;
+  toute autre entrée (machine, fluidnc, accéléromètre, pesées, chef, lots, API...) = erreur « touche au mouvement »,
+  de même qu'un chemin inexistant, un doublon ou une valeur actuelle hors bornes. Contenu de départ : heure du
+  résumé du soir, début et fin des heures calmes, délais de rappel et de renfort, alarmes citées au résumé, seuil
+  « bientôt » d'usure (bornes = EXEMPLES). Un changement (`Modifiables.changer`) : refusé pendant un geste, un lot
+  (module en cours ou en alarme, même en attente de Go), le pilotage à distance ou une mise à jour ; genre et bornes ;
+  nouvelle version du fichier fabriquée en ne changeant que la valeur (commentaires gardés, `texte_yaml.py`) et relue
+  avec le vrai lecteur YAML ; **toutes** les vérifications du démarrage (`erreurs_de_reglages`, partagées avec
+  `principal`) sur une copie provisoire AVANT d'écrire ; écriture par fichier provisoire + fsync + renommage ; noté
+  dans `reglages_appliques` (table qui existait : qui, quand, avant, après, raison « page : ... ») et au journal des
+  actions (`niveau: réglage`, `avant`, `apres`). « Revenir » : seulement sur le dernier changement d'un réglage et si
+  le fichier n'a pas bougé depuis ; c'est un nouveau changement, passant par les mêmes protections. Routes (rôle
+  régler, y compris la lecture) : `/api/reglages-modifiables`, `/historique`, `POST /{nom}`, `POST /retour/{n}`.
+  **Redémarrage** : le programme ne relit pas ses réglages en route, donc tous agissent au prochain démarrage ; la
+  page le dit (carte orange, valeur « en vigueur » affichée) ; pas de bouton de redémarrage (à faire à la main, machine
+  arrêtée). Ajouter une section permise = changer le code dans une PR, pas une ligne de réglage.
+- **Carnet de bord (86)** : table `carnet_de_bord` (registre version 10), donc dans la copie de secours de la tâche 25.
+  Rattachement à un cycle (= « lot » du registre), un seau (code connu) ou une alarme. Rôle regarder pour lire,
+  produire pour écrire et barrer. L'auteur est le compte connecté. Pas de suppression ni de correction : des
+  déclencheurs SQLite refusent DELETE et UPDATE du texte ; on barre (qui, quand, raison obligatoire). Recherche :
+  texte ou auteur (majuscules ignorées pour les lettres sans accent). Limites dans `programme.yaml → carnet`.
+- **Reste à faire** : essai sur le vrai Pi et le vrai téléphone (HTTPS par Tailscale) ; après la remise en état d'un
+  Pi neuf, les réglages changés depuis la page ne reviennent pas (Git) : à refaire d'après l'historique (un rejeu
+  automatique serait une petite tâche) ; bouton « Noter » depuis une alarme ; export du carnet.
+

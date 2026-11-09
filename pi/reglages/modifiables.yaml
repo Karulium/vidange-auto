@@ -1,0 +1,109 @@
+# Les réglages que la page web a le droit de changer (tâche 28 bis, fonction 56).
+#
+# Seuls les réglages listés ici se changent depuis la page, et seulement avec le rôle « régler »
+# (karulium). Pour chacun : le fichier, le chemin dans le fichier, le genre de valeur, les bornes
+# (min et max), l'unité et un texte d'aide.
+#
+# JAMAIS ici : les positions, courses, zones, vitesses, broches, durées de gestes, ni rien qui
+# touche au mouvement de la machine. Le programme refuse de démarrer si une ligne vise autre chose
+# que ce qui est permis dans le code (vidange/reglages.py, SECTIONS_MODIFIABLES : pour l'instant
+# programme.yaml → notifications, et entretien.yaml → alerte et pieces). Ces réglages ne
+# commandent aucun mouvement : ils règlent seulement quand et comment la machine PRÉVIENT.
+#
+# Genres : « nombre » (avec virgule), « entier », « heure » (écrite "HH:MM", entre guillemets).
+# « redemarrage: true » : le programme lit ce réglage seulement au démarrage ; le changement
+# n'agit qu'après le prochain redémarrage du programme (jamais pendant un cycle).
+#
+# Chaque changement est vérifié (bornes, puis TOUTES les vérifications du démarrage sur la
+# nouvelle version) AVANT d'être écrit ; il est noté (qui, quand, avant, après) et on peut revenir.
+#
+# Les bornes ci-dessous sont des EXEMPLES prudents, à ajuster à l'usage.
+exemple: true
+
+reglages:
+  heure_resume_soir:
+    libelle: Heure du résumé du soir
+    fichier: programme.yaml
+    chemin: notifications.resume_soir.heure
+    genre: heure
+    min: "12:00"
+    max: "22:00"
+    unite: heure (HH:MM)
+    aide: >-
+      Heure à laquelle le résumé du soir part sur le téléphone. Elle ne doit pas tomber dans les
+      heures calmes (sinon le résumé ne partirait pas : le changement est refusé).
+    redemarrage: true
+
+  calmes_debut:
+    libelle: Début des heures calmes
+    fichier: programme.yaml
+    chemin: notifications.heures_calmes.debut
+    genre: heure
+    min: "18:00"
+    max: "23:59"
+    unite: heure (HH:MM)
+    aide: >-
+      À partir de cette heure, seules les alarmes urgentes sonnent sur le téléphone ; le reste
+      attend la fin des heures calmes.
+    redemarrage: true
+
+  calmes_fin:
+    libelle: Fin des heures calmes
+    fichier: programme.yaml
+    chemin: notifications.heures_calmes.fin
+    genre: heure
+    min: "04:00"
+    max: "10:00"
+    unite: heure (HH:MM)
+    aide: Les messages gardés pendant la nuit partent à cette heure.
+    redemarrage: true
+
+  escalade_rappel:
+    libelle: Délai avant le rappel d'une alarme urgente
+    fichier: programme.yaml
+    chemin: notifications.escalade.rappel_apres_min
+    genre: nombre
+    min: 5
+    max: 120
+    unite: minutes
+    aide: >-
+      Une alarme urgente que personne n'a « vue » est renvoyée en priorité haute après ce délai.
+      Doit rester plus court que le délai du renfort.
+    redemarrage: true
+
+  escalade_renfort:
+    libelle: Délai avant l'envoi à la 2ᵉ liste de personnes
+    fichier: programme.yaml
+    chemin: notifications.escalade.renfort_apres_min
+    genre: nombre
+    min: 10
+    max: 360
+    unite: minutes
+    aide: >-
+      Si l'alarme urgente n'est toujours pas vue après ce délai, elle part aussi vers la 2ᵉ liste
+      de destinataires. Doit rester plus long que le délai du rappel.
+    redemarrage: true
+
+  resume_alarmes_max:
+    libelle: Alarmes citées une à une dans le résumé du soir
+    fichier: programme.yaml
+    chemin: notifications.resume_soir.alarmes_max
+    genre: entier
+    min: 1
+    max: 20
+    unite: alarmes
+    aide: Les alarmes au-delà de ce nombre sont seulement comptées dans le résumé.
+    redemarrage: true
+
+  usure_avance:
+    libelle: Seuil d'alerte « bientôt » d'usure d'une pièce
+    fichier: entretien.yaml
+    chemin: alerte.avance_pourcent
+    genre: nombre
+    min: 1
+    max: 50
+    unite: "% de la limite restant"
+    aide: >-
+      L'alerte « bientôt » part quand il reste moins que ce pourcentage de la limite d'une pièce
+      (10 : à 90 % d'usure). Elle informe seulement, elle ne bloque jamais la machine.
+    redemarrage: true

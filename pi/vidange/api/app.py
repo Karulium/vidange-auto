@@ -28,6 +28,7 @@ Les lots (tâche 45 quater) : « Lot de seaux » (format, nombre, variété) et 
 de l'armoire, devant la machine. L'API n'a pas de Go pour un lot.
 """
 
+import hashlib
 import ipaddress
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
@@ -57,11 +58,13 @@ from vidange.entretien import Entretien, ErreurEntretien
 from vidange.fiabilite.constats import Constat, pire
 from vidange.journal import donner_journal
 from vidange.mises_a_jour import ErreurMiseAJour, MisesAJour
+from vidange.modifiables import ErreurModifiable, Modifiables
 from vidange.nettoyage import ErreurNettoyage, Nettoyage
 from vidange.poste_fut import ErreurPoste, PosteFut
 from vidange.registre import ErreurRegistre, Registre
-from vidange.reglages import ReglagesApi
+from vidange.reglages import ReglagesApi, ReglagesCarnet
 from vidange.spray import Spray
+from vidange.statistiques.calcul import ECHELLES, Statistiques
 from vidange.vue3d import EnregistreurRejeu, ErreurRejeu, Vue3d
 
 if TYPE_CHECKING:
@@ -74,6 +77,28 @@ PAGE = Path(__file__).resolve().parent / "page" / "index.html"
 PAGE_AUCUN_COMPTE = Path(__file__).resolve().parent / "page" / "aucun-compte.html"
 # Les fichiers fixes de la page (bibliothèque 3D copiée dans le dépôt, code de la vue 3D).
 STATIQUE = Path(__file__).resolve().parent / "page" / "statique"
+# L'appli installable (tâche 28 bis) : manifeste, service worker (modèle), icônes.
+DOSSIER_PAGE = PAGE.parent
+MANIFESTE = DOSSIER_PAGE / "manifeste.webmanifest"
+SERVICE_WORKER = DOSSIER_PAGE / "sw.js"
+ICONES = DOSSIER_PAGE / "icones"
+# En-tête posé sur la vraie page : le service worker ne garde que celle-là (pas la page qui
+# explique comment créer le premier compte).
+MARQUE_COQUILLE = "X-Vidange-Coquille"
+
+
+def version_coquille(dossier: Path = DOSSIER_PAGE) -> str:
+    """Le numéro de version du cache du service worker : une empreinte du contenu de TOUS les
+    fichiers de la page (page, manifeste, code, icônes, version du programme). Il change dès
+    qu'un de ces fichiers change : le vieux cache est alors effacé, jamais une vieille page."""
+    empreinte = hashlib.sha256(__version__.encode())
+    fichiers = [dossier / "index.html", dossier / "manifeste.webmanifest", dossier / "sw.js"]
+    fichiers += sorted((dossier / "statique").glob("*.js")) + sorted((dossier / "icones").glob("*"))
+    for fichier in fichiers:
+        if fichier.is_file():
+            empreinte.update(fichier.relative_to(dossier).as_posix().encode())
+            empreinte.update(fichier.read_bytes())
+    return empreinte.hexdigest()[:12]
 
 
 @dataclass
@@ -109,6 +134,12 @@ class Services:
     # Vue 3D en direct et rejeu d'incident (None : pas de vue 3D).
     vue3d: Vue3d | None = None
     rejeux: EnregistreurRejeu | None = None
+    # Statistiques d'après le registre (None : pas de statistiques).
+    statistiques: Statistiques | None = None
+    # Réglages que la page a le droit de changer, avec garde-fous (None : aucun).
+    modifiables: Modifiables | None = None
+    # Réglages du carnet de bord (longueur d'une note, notes par page ; None : sans limite propre).
+    carnet: ReglagesCarnet | None = None
 
 
 class Tenir(BaseModel):
@@ -155,6 +186,27 @@ class Connexion(BaseModel):
     mot_de_passe: str
 
 
+class NouvelleNote(BaseModel):
+    """Une note du carnet de bord : le texte, et ce à quoi elle se rattache (si on veut)."""
+
+    texte: str
+    cycle: int | None = None
+    seau: str | None = None
+    alarme: int | None = None
+
+
+class RaisonBarree(BaseModel):
+    """Pourquoi une note du carnet est barrée."""
+
+    raison: str
+
+
+class NouvelleValeur(BaseModel):
+    """La nouvelle valeur d'un réglage modifiable (nombre, ou « HH:MM » pour une heure)."""
+
+    valeur: float | int | str
+
+
 class ChoixCopie(BaseModel):
     """La copie de la mémoire à remettre (None : la plus récente)."""
 
@@ -194,6 +246,9 @@ def creer_app(
     cameras, pilote = services.cameras, services.pilote
     mises_a_jour = services.mises_a_jour
     reseaux = list(reglages.reseaux_autorises)
+    reglages_carnet = services.carnet
+    page_carnet = reglages.lignes_max if reglages_carnet is None else reglages_carnet.notes_par_page
+    texte_carnet_max = None if reglages_carnet is None else reglages_carnet.texte_max
     limite = LimiteConnexions(reglages.connexions_ratees_max, reglages.blocage_s)
 
     def limiter(limite: int | None) -> int:
@@ -223,6 +278,10 @@ def creer_app(
         # Un ordre impossible maintenant (pas de Go attendu, alarme déjà acquittée...).
         return JSONResponse({"detail": str(erreur)}, status_code=409)
 
+    @app.exception_handler(ErreurModifiable)
+    async def refus_reglage(_: Request, erreur: ErreurModifiable) -> JSONResponse:
+        return JSONResponse({"detail": str(erreur)}, status_code=erreur.statut)
+
     regarder = [Depends(Exige(Niveau.REGARDER, comptes, actions))]
     produire = [Depends(Exige(Niveau.PRODUIRE, comptes, actions))]
     regler = [Depends(Exige(Niveau.REGLER, comptes, actions))]
@@ -236,7 +295,44 @@ def creer_app(
     def page() -> HTMLResponse:
         # Sans aucun compte : seulement l'explication du premier compte.
         fichier = PAGE_AUCUN_COMPTE if comptes.vide else PAGE
-        return HTMLResponse(fichier.read_text(encoding="utf-8"))
+        # no-cache : le navigateur redemande toujours la page au Pi (jamais une vieille version).
+        entetes = {"Cache-Control": "no-cache"}
+        if not comptes.vide:
+            entetes[MARQUE_COQUILLE] = "1"
+        return HTMLResponse(fichier.read_text(encoding="utf-8"), headers=entetes)
+
+    # ------------------------------------------------------------ appli installable (tâche 28 bis)
+
+    empreinte_coquille = version_coquille()
+
+    @app.get("/sw.js", include_in_schema=False)
+    def service_worker() -> Response:
+        """Le service worker : il ne garde que la coquille de la page, jamais l'API. Son numéro
+        de version change avec le contenu de la page. Le navigateur ne l'accepte qu'en HTTPS (ou
+        sur « localhost ») : voir pi/systeme/essai-page-web-2.md."""
+        texte = SERVICE_WORKER.read_text(encoding="utf-8").replace(
+            "__VERSION__", empreinte_coquille
+        )
+        return Response(
+            texte,
+            media_type="text/javascript",
+            headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"},
+        )
+
+    @app.get("/manifeste.webmanifest", include_in_schema=False)
+    def manifeste() -> Response:
+        return Response(
+            MANIFESTE.read_text(encoding="utf-8"),
+            media_type="application/manifest+json",
+            headers={"Cache-Control": "no-cache"},
+        )
+
+    @app.get("/icones/{nom}", include_in_schema=False)
+    def icone(nom: str) -> FileResponse:
+        fichier = ICONES / nom
+        if "/" in nom or not fichier.is_file():
+            raise HTTPException(404, "icône inconnue")
+        return FileResponse(fichier, headers={"Cache-Control": "no-cache"})
 
     # ------------------------------------------------------------ vue 3D et rejeu (tâche 28)
 
@@ -295,6 +391,101 @@ def creer_app(
             return les_rejeux().lire(numero)
         except ErreurRejeu as erreur:
             raise HTTPException(404, str(erreur)) from None
+
+    # ------------------------------------------------------------ statistiques (tâche 28 bis)
+
+    @app.get("/api/statistiques", dependencies=regarder)
+    def statistiques(par: str = "jour") -> dict[str, Any]:
+        """Seaux, cycles, alarmes, marche et arrêt par jour, semaine ou mois (registre)."""
+        if services.statistiques is None:
+            raise HTTPException(404, "pas de statistiques sur ce programme")
+        if par not in ECHELLES:
+            raise HTTPException(422, f"« par » : {', '.join(ECHELLES)}")
+        return services.statistiques.calculer(par)
+
+    # ------------------------------------------------------------ carnet de bord (tâche 28 bis)
+
+    @app.get("/api/carnet", dependencies=regarder)
+    def carnet(
+        reponse: Response,
+        recherche: str | None = None,
+        cycle: int | None = None,
+        seau: str | None = None,
+        alarme: int | None = None,
+        barrees: bool = True,
+        limite: int | None = Query(default=None, ge=1),
+        avant: int | None = Query(default=None, ge=1),
+    ) -> list[dict[str, Any]]:
+        """Les notes, de la plus récente à la plus ancienne (« recherche » : un bout de texte ou
+        le nom de l'auteur ; « avant » : page suivante). L'en-tête X-Notes-Par-Page dit la
+        taille d'une page : une page pleine peut avoir une suite."""
+        par_page = min(limite or page_carnet, reglages.lignes_max)
+        reponse.headers["X-Notes-Par-Page"] = str(par_page)
+        return registre.lire_carnet(recherche, cycle, seau, alarme, barrees, par_page, avant)
+
+    @app.post("/api/carnet", dependencies=produire)
+    def carnet_ecrire(note: NouvelleNote, requete: Request) -> dict[str, Any]:
+        """Écrit une note (l'auteur est le compte connecté ; rattachée à un cycle, un seau ou une
+        alarme si on le dit). Elle ne se supprime pas : on la barre."""
+        numero = registre.noter_carnet(
+            requete.state.compte.nom,
+            note.texte,
+            note.cycle,
+            note.seau,
+            note.alarme,
+            texte_carnet_max,
+        )
+        return {"numero": numero}
+
+    @app.post("/api/carnet/{numero}/barrer", dependencies=produire)
+    def carnet_barrer(numero: int, choix: RaisonBarree, requete: Request) -> dict[str, Any]:
+        """Barre une note (elle reste lisible : qui, quand, pourquoi)."""
+        registre.barrer_note(numero, requete.state.compte.nom, choix.raison)
+        return {"barree": numero}
+
+    # ------------------------------------------------------------ réglages modifiables (28 bis)
+
+    def les_modifiables() -> Modifiables:
+        if services.modifiables is None:
+            raise HTTPException(404, "pas de réglages modifiables sur ce programme")
+        return services.modifiables
+
+    @app.get("/api/reglages-modifiables", dependencies=regler_sans_trace)
+    def reglages_modifiables() -> dict[str, Any]:
+        """Les réglages que la page peut changer : valeur, bornes, unité, aide, redémarrage."""
+        return les_modifiables().etat()
+
+    @app.get("/api/reglages-modifiables/historique", dependencies=regler_sans_trace)
+    def reglages_modifiables_historique() -> list[dict[str, Any]]:
+        return les_modifiables().historique(limiter(None))
+
+    def noter_changement(requete: Request, fait: dict[str, Any], motif: str) -> None:
+        """Le journal des actions : qui, quand, avant, après."""
+        compte = requete.state.compte
+        actions.noter(
+            qui=compte.nom,
+            role=compte.role.nom,
+            adresse=requete.client.host if requete.client else "adresse inconnue",
+            niveau="réglage",
+            reglage=fait["nom"],
+            avant=fait["ancien"],
+            apres=fait["nouveau"],
+            motif=motif,
+        )
+
+    @app.post("/api/reglages-modifiables/retour/{numero}", dependencies=regler)
+    def reglage_revenir(numero: int, requete: Request) -> dict[str, Any]:
+        """Remet la valeur d'avant un changement (le dernier de ce réglage)."""
+        fait = les_modifiables().revenir(numero, _qui(requete))
+        noter_changement(requete, fait, f"retour avant le changement n° {numero}")
+        return fait
+
+    @app.post("/api/reglages-modifiables/{nom}", dependencies=regler)
+    def reglage_changer(nom: str, choix: NouvelleValeur, requete: Request) -> dict[str, Any]:
+        """Change un réglage de la liste : bornes, vérifications du démarrage, écriture sûre."""
+        fait = les_modifiables().changer(nom, choix.valeur, _qui(requete))
+        noter_changement(requete, fait, "changement")
+        return fait
 
     # ------------------------------------------------------------ connexion (tâche 25)
 

@@ -48,7 +48,15 @@ def test_toutes_les_routes_de_l_api_declarent_un_niveau(b):
     verifier_roles_declares(b.app)  # ne lève rien
     niveaux = niveaux_des_routes(b.app)
     assert len(niveaux) > 40
-    chemins_publics = {"/", "/api/moi", "/api/connexion", "/api/deconnexion"}
+    chemins_publics = {
+        "/",
+        "/api/moi",
+        "/api/connexion",
+        "/api/deconnexion",
+        "/manifeste.webmanifest",
+        "/sw.js",
+        "/icones/{nom}",
+    }
     for route in b.app.routes:
         if isinstance(route, APIRoute) and route.path not in chemins_publics:
             assert any(chemin == route.path for (_, chemin) in niveaux), route.path
@@ -81,8 +89,15 @@ def test_creer_app_refuse_une_route_sans_niveau(b, monkeypatch):
 def test_le_niveau_de_chaque_famille_de_routes(b):
     niveaux = niveaux_des_routes(b.app)
     # Regarder : toute lecture.
+    lectures_reglees = {
+        "/api/actions",
+        "/api/reglages-modifiables",
+        "/api/reglages-modifiables/historique",
+    }
     assert all(
-        n is Niveau.REGARDER for (m, _), n in niveaux.items() if m == "GET" and _ != "/api/actions"
+        n is Niveau.REGARDER
+        for (m, chemin), n in niveaux.items()
+        if m == "GET" and chemin not in lectures_reglees
     )
     # Produire : Go, Pause, lots, boutons de production.
     for methode, chemin in [
@@ -94,6 +109,8 @@ def test_le_niveau_de_chaque_famille_de_routes(b):
         ("POST", "/api/nettoyage/{ordre}"),
         ("POST", "/api/alarmes/{numero}/acquitter"),
         ("POST", "/api/alarmes/{numero}/vue"),
+        ("POST", "/api/carnet"),
+        ("POST", "/api/carnet/{numero}/barrer"),
     ]:
         assert niveaux[(methode, chemin)] is Niveau.PRODUIRE, chemin
     # Régler : mises à jour, pilotage à distance, journal des actions.
@@ -103,6 +120,9 @@ def test_le_niveau_de_chaque_famille_de_routes(b):
         ("POST", "/api/distance/activer"),
         ("POST", "/api/distance/tenir"),
         ("GET", "/api/actions"),
+        ("GET", "/api/reglages-modifiables"),
+        ("POST", "/api/reglages-modifiables/{nom}"),
+        ("POST", "/api/reglages-modifiables/retour/{numero}"),
     ]:
         assert niveaux[(methode, chemin)] is Niveau.REGLER, chemin
 

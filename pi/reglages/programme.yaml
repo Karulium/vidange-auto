@@ -323,3 +323,20 @@ lot:
   # Le Pi regarde tous les (s) si le lot tourne encore : boucles de fond arrêtées sur alarme
   # (relancées après l'acquittement) et à la fin du lot.
   suivi_periode_s: 0.5
+
+# Statistiques de la page web (tâche 28 bis) : calculées d'après le registre seulement (cycles,
+# seaux, alarmes), rien d'inventé. Nombre de jours, de semaines et de mois montrés.
+statistiques:
+  jours: 14
+  semaines: 12
+  mois: 12
+  # Un cycle resté ouvert (coupure, reprise en attente) compte en « marche » au plus (h) après son
+  # début : on ne sait pas s'il a vraiment tourné plus longtemps. EXEMPLE.
+  cycle_ouvert_max_h: 12
+
+# Carnet de bord de la page web (tâche 28 bis) : notes libres, gardées dans le registre.
+carnet:
+  # Longueur permise d'une note (signes).
+  texte_max: 2000
+  # Notes montrées d'un coup (le bouton « Plus ancien » en montre davantage).
+  notes_par_page: 30
