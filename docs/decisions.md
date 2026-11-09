@@ -2345,3 +2345,9 @@ Sources : `docs/fonctionnalites.md` lignes 58 (comptes) et 79 (restauration d'un
   des caméras, cartes neuves).
 - **« Moins d'une heure »** : non mesuré (aucun Pi ici). L'essai le mesure (`essai-restauration.md`, étape 5).
 
+- **Réponses à la PR n° 109** (tâche 25, 09/11/2026) :
+  1. Pilotage à distance classé « régler » (Karulium seulement) : gardé (niveau 1, tranché par Claude).
+  2. Mot de passe de la page en clair (http) sur le Wi-Fi de l'atelier, chiffré par Tailscale : gardé en attendant
+     la réponse de Karulium (carte du 09/11 : garder ainsi, ou page joignable par Tailscale seulement).
+  3. Les secrets ne sont jamais dans la copie de secours ; ils sont recopiés à la main après une restauration :
+     gardé (niveau 1, c'est le choix le plus sûr ; une copie chiffrée par phrase secrète serait une tâche à part).
