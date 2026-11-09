@@ -2154,3 +2154,40 @@ Fiches de l'Implantation du 07/11/2026 (`implantation/logiciel/relais-du-pi.md`,
      `implantation/logiciel/relais-du-pi.md`) : au démarrage, GPIO23 est une entrée tirée vers le bas ; un module
      actif bas ferait sonner l'alarme à chaque démarrage du Pi. Corrigé dans `docs/entrees-sorties.yaml`.
   2. Module du voyant-buzzer : relais 1 voie à **optocoupleur**, entrée 3,3 V, cavalier H/L sur H (Implantation).
+
+## Dérive de position, tâche 24 (09/11/2026, niveau 1, tranché par Claude)
+
+Contexte : les pilotes boucle fermée n'ont que PUL, DIR, ENA et ALM ; le Pi ne lit jamais la position du codeur.
+Procédure d'essai : `pi/systeme/essai-derive.md`. Testé sur le vrai matériel : non.
+
+- **Un seul endroit pour les alarmes** : `machine.yaml → pilotes` (axe → entrées `alarme_*`, axes `sans_alarme` avec la
+  raison, module du chef → axes qu'il fait bouger). La lettre de chaque entrée dans « Pn: » reste dans
+  `fluidnc.yaml → entrees`. Vérifié au démarrage : un axe moteur oublié, un axe inconnu, une alarme donnée à deux
+  axes, une `alarme_*` de `fluidnc.yaml` sans axe, une alarme absente de la carte de l'axe, un axe d'alarme qu'aucun
+  module ne surveille. Code : `pi/vidange/pilotes.py`.
+- **Arrêt des gestes** : `Chef.surveillance_pilotes` (branchée par `ModeSeaux.lancer_lot` depuis `CartesMachine.pilotes`) :
+  pendant une étape, l'ALM d'un axe du module met le module en alarme (son `arreter` arrête la carte) avec le
+  « quoi faire ». Le portique garde sa propre vérification (il lit sa liste dans `pilotes`) ; les barres du
+  remplissage gardent la leur. Les ALM câblées en OU sur une même entrée (autorisé seulement pour les `alarme_*`)
+  donnent « l'un des pilotes ... ».
+- **« Le moteur cale »** : `TeteFluidnc(pilotes=...)` remplace `erreur_codeur`. Un pas `cale` lit l'ALM de
+  `prehension_a` ; elle est marquée « voulue » (le chef l'ignore), et remise à zéro (`Pilotes.remettre_a_zero`) au début
+  du pas suivant, avec les lignes de `pilotes → remise_a_zero` (**EXEMPLE** : `$MD` puis `$ME`, à vérifier). Si elle ne
+  retombe pas : alarme « couper puis remettre le courant du pilote ». `bocal_neuf → cale` (≈ 2°, 0,2 s) n'est plus lu par
+  le code : c'est le réglage à faire sur le pilote (procédure d'essai). Le geste ne refuse plus de partir sur la vraie
+  machine pour cette raison.
+- **Contrôle d'origine** (`pi/vidange/derive.py`, `machine.yaml → derive`) : approche lente d'un axe vers son fin de course
+  d'origine par un déplacement manuel `$J=` ; dès que « Pn: » montre le capteur, la position du même rapport est lue
+  et le déplacement arrêté (0x85). Écart = position lue − `position_capteur`. Au-delà de `seuil_alerte` : alerte
+  (journal, check-list via `CartesMachine.constats`) ; au-delà de `seuil_arret`, capteur jamais vu ou déjà actif au
+  départ : arrêt propre. `recaler` : prise d'origine de l'axe seul ensuite. Seul moment câblé : `debut_de_lot`
+  (module exclusif lancé avant les seaux). **`actif: false`** : la méthode suppose que FluidNC laisse l'axe passer son
+  fin de course d'origine (`soft_limits: true` dans `fluidnc/portique.yaml` peut l'interdire). Un `$H` mesurant la
+  course parcourue est trop imprécis (FluidNC ne rend pas la distance).
+- **Faux FluidNC** : `lever_alarme_pilote`, `lignes_remise_pilote`, `remise_impossible`, `glisser(axe, mm)`,
+  `definir_fin_de_course(axe, mm, côté)`.
+- **Choix de Claude** : les 4 ALM du chariot de remplissage (avance, plateau Z, plateau A, pousseur) sont en OU sur la
+  macro3 (il n'y a que 4 entrées macro par carte) ; `griffe_a` et `griffe_b` n'ont pas d'ALM dans
+  `entrees-sorties.yaml` (`sans_alarme`).
+- **Questions pour Karulium** (voir la PR) : 1 remise à zéro de l'ALM ; 2 câblage des ALM (macros) ; 3 ALM de la griffe ;
+  4 approche du fin de course (`soft_limits`) ; 5 « tous les N seaux » reste à faire.

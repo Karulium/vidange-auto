@@ -88,6 +88,16 @@ class FauxFluidnc:
         self.prises_origine: list[str] = []
         # Entrées actives (lettres de « Pn: ») et sorties tout-ou-rien (numéro → allumée).
         self.entrees: set[str] = set()
+        # Alarmes de pilotes levées (lettres de « Pn: »), remises à zéro par une des lignes de
+        # `lignes_remise_pilote` (tâche 24). `remise_impossible` : elles ne retombent pas.
+        self.alarmes_pilote: set[str] = set()
+        self.lignes_remise_pilote: set[str] = set()
+        self.remise_impossible = False
+        # Glissement (mm) de chaque axe : la vraie position vaut la position de la carte + lui
+        # (courroie qui glisse : le codeur ne le voit pas). Fin de course d'origine : lettre →
+        # (position vraie en mm, côté « bas » : actif en dessous, « haut » : au-dessus).
+        self.glissement: dict[str, float] = {}
+        self.fins_de_course: dict[str, tuple[float, str]] = {}
         self.sorties: dict[int, bool] = {}
         # Faux matériel autour de la carte, appelé à chaque mise à l'heure.
         self.monde: Callable[[], None] | None = None
@@ -186,6 +196,30 @@ class FauxFluidnc:
             self.etat = "Alarm"
             self._nouveau.notify_all()
 
+    def lever_alarme_pilote(self, lettre: str) -> None:
+        """Le pilote d'une entrée lève son ALM (erreur de suivi trop grande)."""
+        with self._verrou:
+            self.alarmes_pilote.add(lettre)
+            self.entrees.add(lettre)
+
+    def glisser(self, axe: str, mm: float) -> None:
+        """La courroie glisse de `mm` : la carte ne le sait pas, le fin de course si."""
+        with self._verrou:
+            self.glissement[axe] = self.glissement.get(axe, 0.0) + mm
+
+    def definir_fin_de_course(self, axe: str, position_mm: float, cote: str) -> None:
+        with self._verrou:
+            self.fins_de_course[axe] = (position_mm, cote)
+
+    def _maj_fins_de_course(self) -> None:
+        for axe, (position, cote) in self.fins_de_course.items():
+            vraie = self.positions[axe] + self.glissement.get(axe, 0.0)
+            actif = vraie <= position if cote == "bas" else vraie >= position
+            if actif:
+                self.entrees.add(axe)
+            else:
+                self.entrees.discard(axe)
+
     def redemarrer(self) -> None:
         """La carte redémarre seule (coupure de son alimentation...) : position perdue."""
         with self._verrou:
@@ -219,6 +253,7 @@ class FauxFluidnc:
             if not self._file and self.etat in ("Run", "Home", "Jog"):
                 self.etat = "Idle"
                 self._vitesse_actuelle = 0.0
+            self._maj_fins_de_course()
             if self.monde is not None:
                 self.monde()
 
@@ -253,6 +288,7 @@ class FauxFluidnc:
         if bloc.prise_origine and bloc.cible is not None:
             # Chaque moteur d'un axe double s'est arrêté sur son fin de course : d'équerre.
             for axe in bloc.cible:
+                self.glissement[axe] = 0.0
                 if axe in self.travers:
                     self.travers[axe] = 0.0
             self.prises_origine.append("".join(bloc.cible))
@@ -279,6 +315,12 @@ class FauxFluidnc:
                 self._sorties.append(f"error:{erreur.numero}")
 
     def _executer(self, ligne: str) -> None:
+        if ligne.upper() in self.lignes_remise_pilote:
+            if not self.remise_impossible:
+                self.entrees -= self.alarmes_pilote
+                self.alarmes_pilote.clear()
+            self._sorties.append("ok")
+            return
         if ligne.startswith("$"):
             self._commande_dollar(ligne)
             return

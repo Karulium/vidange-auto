@@ -52,6 +52,13 @@ cartes:
       barriere_remplissage: "0"
       alarme_barre_mur: "1"
       alarme_barre_allee: "2"
+      # EXEMPLE : les 4 autres ALM (avance, plateau Z, plateau A, pousseur) en OU câblé sur la
+      # macro3 (il n'y a que 4 entrées macro) : le Pi dit « l'un des pilotes ... ».
+      # Question 2 de la PR de la tâche 24.
+      alarme_remplissage_y: "3"
+      alarme_plateau_z: "3"
+      alarme_plateau_a: "3"
+      alarme_pousseur: "3"
   mycelium_lavage:
     description: Axes du mycélium et du lavage
     numero_serie_usb: "EXEMPLE-MYCELIUM-LAVAGE"
@@ -65,6 +72,8 @@ cartes:
       verrou_plateau_engage: "0"
       inclinaison_bocal: "1"
       flotteur_lavage: "2"
+      # ALM du pilote de la manivelle (macro3, sans macro) : EXEMPLE.
+      alarme_manivelle: "3"
     # Sorties de la carte n° 3 (« user_outputs » digital0 à 7 de fluidnc/mycelium_lavage.yaml).
     # Implantation, sorties-carte-3.md, 07/11/2026 (les numéros P ne changent pas) : P0 et P1 le
     # pont en H du demi-tour (JGY370), JAMAIS ENSEMBLE (le Pi refuse), P2 le relais de la pompe de
@@ -95,6 +104,10 @@ cartes:
       origine_rotation_tete: A
       # Alarme du pilote de Z (macro0, sans macro) : à vérifier à l'essai du portique.
       alarme_prehension_z: "0"
+      # ALM des pilotes de la rotation de la tête et des brosses du lavage (macro1 à 3) : EXEMPLES.
+      alarme_rotation_tete: "1"
+      alarme_noyau_lavage: "2"
+      alarme_couronne_lavage: "3"
     # Sorties « user_outputs » digital0 à 4 de fluidnc/prehension.yaml. P0 et P1 : les deux
     # électrovannes de la ventouse (Implantation, sorties-carte-4.md, 07/11/2026 : sorties
     # auxiliaires 24 V n° 1 et 2 de la carte, sur le 24 V coupé ; ces numéros ne changent pas) :

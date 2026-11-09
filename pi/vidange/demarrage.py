@@ -683,6 +683,19 @@ def principal(
             "après les premiers lots, puis passer « exemple » à false.",
             "actif" if solveur.actif else "pas actif : ordre normal du chef",
         )
+    pilotes = reglages.machine.pilotes
+    if pilotes is not None and pilotes.remise_a_zero.exemple:
+        journal.warning(
+            "machine.yaml, pilotes → remise_a_zero : façon de remettre l'ALM à zéro d'EXEMPLE : "
+            "l'essayer (pi/systeme/essai-derive.md), puis passer « exemple » à false."
+        )
+    derive = reglages.machine.derive
+    if derive is not None and derive.exemple:
+        journal.warning(
+            "machine.yaml, derive : position du capteur, seuils et vitesse d'EXEMPLE (%s) : les "
+            "régler à l'essai (pi/systeme/essai-derive.md), puis passer « exemple » à false.",
+            "actif" if derive.actif else "pas actif",
+        )
     if reglages.vision.exemple:
         journal.warning(
             "vision.yaml contient des valeurs d'EXEMPLE (exemple: true) : positions des caméras, "

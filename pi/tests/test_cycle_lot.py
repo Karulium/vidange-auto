@@ -136,8 +136,10 @@ class Machine:
             vraie_machine,
             presence_fluidnc(REGLAGES.fluidnc, self.banc.ports, lister=list),
             mode=lambda: "production",
-            erreur_codeur=(lambda: 0.0) if codeur else None,
         )
+        if not codeur:
+            # Les alarmes des pilotes ne sont pas lues : le calage du moteur n'est pas visible.
+            self.cartes.tete._pilotes = None
         self.stockage = stockage_de_la_machine(MACHINE, self.banc.materiel, vision=None)
         self.chef = Chef(MACHINE, REGLAGES.programme.chef)
         self.pieces = PiecesMachine(
@@ -217,7 +219,7 @@ def test_piece_manquante_le_lot_dit_pourquoi(liste):
         mode = machine.mode_seaux()
         assert mode.etats["mycelium"].raison == CODEUR
         assert "mycelium" in mode.refus_lot()
-        with pytest.raises(ErreurChef, match="erreur du codeur"):
+        with pytest.raises(ErreurChef, match="alarme du pilote"):
             pieces.remplissage(lot_de(1), False, False, False, False)
         assert pieces.manque("entonnoir") == PHOTO_DU_PLAFOND
         with pytest.raises(ErreurChef, match="photo du plafond"):
@@ -815,3 +817,36 @@ def test_page_web_corrige_l_inventaire_avec_la_cle_et_la_confirmation(tmp_path, 
         assert "Inventaire du stockage" in client.get("/").text
     finally:
         registre.fermer()
+
+
+def test_le_calage_de_la_tete_vient_de_l_alarme_du_pilote_de_la_rotation(machine):
+    """Tâche 24 : plus d'erreur du codeur, l'ALM du pilote de la rotation dit « le moteur cale »."""
+    tete = machine.cartes.tete
+    carte = machine.banc.fluidnc["prehension"]
+    liaison = machine.banc.liaisons["prehension"]
+    liaison.demarrer()
+    try:
+        _essai_calage(machine, tete, carte)
+    finally:
+        liaison.arreter()
+
+
+def _essai_calage(machine, tete, carte):
+    assert tete.peut_detecter_le_calage()
+    assert not tete._cale_vue()
+    carte.lever_alarme_pilote(REGLAGES.fluidnc.cartes["prehension"].entrees["alarme_rotation_tete"])
+    attendre_vrai(tete._cale_vue)
+    # Hors vissage, le chef arrêterait le module ; pendant le vissage l'alarme est voulue.
+    pilotes = machine.cartes.pilotes
+    assert pilotes.probleme_du_module("prehension") is not None
+    pilotes.attendre("prehension_a")
+    assert pilotes.probleme_du_module("prehension") is None
+
+
+def attendre_vrai(condition, delai_s=10):
+    import time
+
+    fin = time.monotonic() + delai_s
+    while not condition():
+        assert time.monotonic() < fin, "attente trop longue"
+        time.sleep(0.01)

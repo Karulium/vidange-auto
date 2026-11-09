@@ -399,6 +399,16 @@ class ModeSeaux:
         if refus is not None:
             raise ErreurChef(refus)
         modules = self.modules_du_lot(lot)
+        cartes = getattr(self.pieces, "cartes", None)
+        pilotes = getattr(cartes, "pilotes", None)
+        if pilotes is not None:
+            # Tâche 24 : l'ALM d'un pilote arrête le module qui fait bouger son axe.
+            self.chef.surveillance_pilotes = pilotes.probleme_du_module
+        derive = getattr(cartes, "derive", None)
+        controle = None if derive is None or not derive.reglages.debut_de_lot else derive.module()
+        if controle is not None:
+            # Contrôle d'origine contre la dérive, avant les seaux (module exclusif).
+            self.chef.lancer(controle)
         for module in modules:
             self.chef.lancer(module)
         self._noter()

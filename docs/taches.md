@@ -894,7 +894,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
 
 ## Partie 3 : fonctions en plus, voir `docs/fonctionnalites.md`
 
-- [ ] 24. Dérive de position : consigne contre pilotes boucle fermée (15). — Sonnet.
+- [x] 24. Dérive de position : consigne contre pilotes boucle fermée (15). — Sonnet.
   Ce que la machine a vraiment (decisions.md, réponse Implantation du 30/10) : les pilotes boucle fermée n'ont que
   PUL, DIR, ENA et une sortie d'alarme **ALM** ; le Pi ne lit jamais la position du codeur. Le pilote rattrape
   seul ses pas ; s'il n'y arrive pas (erreur de suivi au-delà de son réglage, fait sur le pilote), il lève ALM.

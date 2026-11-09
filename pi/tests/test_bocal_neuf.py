@@ -511,7 +511,7 @@ def test_sans_lecture_de_l_erreur_du_codeur_rien_ne_bouge():
         monde.tete.peut_detecter_le_calage = lambda: False
 
     essai = jouer(regler)
-    assert "l'erreur du codeur de la rotation de la tête n'est pas lue" in essai.probleme
+    assert "l'alarme du pilote de la rotation de la tête n'est pas lue" in essai.probleme
     assert "pas de mouvement" in essai.probleme
     assert essai.textes == [] and essai.inventaire.bocaux[PREMIERE] == VARIETE
 
@@ -567,4 +567,4 @@ def test_le_poste_mycelium_dit_ce_qui_manque_sur_la_machine():
     assert PIECES_DES_POSTES["mycelium"] == ("tete", "agitateur", "porte_bocal")
     pieces = PiecesMachine(None, None, vraie_machine=False)
     assert pieces.manque("mycelium") == CARTES_PAS_CONSTRUITES
-    assert "QR du bocal" in BOCAL_NEUF and "codeur" in BOCAL_NEUF
+    assert "QR du bocal" in BOCAL_NEUF and "pilote" in BOCAL_NEUF
