@@ -2656,3 +2656,7 @@ fonctions sensibles »). Testé sur le vrai matériel : non.
 - **Pas fait** : pas de code pour le pilotage à distance (c'est la page web, avec ses comptes) ; pas de demande du
   code par la page web pour changer le code (la commande sur le Pi suffit).
 
+- **Réponses à la PR n° 115** (tâche 29, 09/11/2026, niveau 1, tranché par Claude) :
+  1. Pas de code pour REPRENDRE après une Pause : déjà protégé par le « Oui ».
+  2. `code_ecran.yaml` n'est pas dans la copie de secours (c'est un secret, comme `secrets.yaml`) : après une
+     restauration, on refait `vidange code-ecran` ; la check-list le rappelle.
