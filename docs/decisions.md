@@ -2476,3 +2476,9 @@ téléphone éteint) ne change rien à la sécurité des personnes.
 - **Pas fait / reste** : essai sur le vrai téléphone ; les vrais niveaux par module (seule la liste des messages du
   programme est remplie, le reste vaut « urgent ») ; le calcul conseillé ; les consommables dans le résumé ;
   une 2ᵉ personne qui reçoit le renfort ; un accusé « vu » depuis ntfy lui-même.
+- **Réponses à la PR n° 111** (tâche 27, 09/11/2026, niveau 1, tranché par Claude) :
+  1. Niveau par défaut d'une alarme sans niveau réglé : **urgent** (une alarme ne doit pas passer inaperçue).
+  2. Renfort de l'escalade : la 2ᵉ liste reste vide tant que Karulium ne l'a pas remplie dans le fichier de secrets
+     (une personne de confiance qui peut venir à l'atelier, avec ntfy installé). Rien à changer dans le code.
+  3. Telegram : prêt mais éteint ; Karulium l'allume en remplissant ses secrets s'il le veut. ntfy reste le canal
+     conseillé.
