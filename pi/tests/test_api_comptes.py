@@ -93,6 +93,7 @@ def test_le_niveau_de_chaque_famille_de_routes(b):
         ("POST", "/api/lot/bocaux"),
         ("POST", "/api/nettoyage/{ordre}"),
         ("POST", "/api/alarmes/{numero}/acquitter"),
+        ("POST", "/api/alarmes/{numero}/vue"),
     ]:
         assert niveaux[(methode, chemin)] is Niveau.PRODUIRE, chemin
     # Régler : mises à jour, pilotage à distance, journal des actions.
@@ -319,3 +320,18 @@ def test_la_check_list_dit_qu_il_n_y_a_aucun_compte(sans_compte):
 
 def test_client_connecte_sert_aux_autres_tests(b):
     assert client_connecte(b.app, CHEF).get("/api/etat").status_code == 200
+
+
+def test_j_ai_vu_demande_produire_et_est_note_au_journal_des_actions(b):
+    numero = b.registre.noter_alarme("essai", "bruit", "Regarder.")
+    assert b.client(nom=INVITE).post(f"/api/alarmes/{numero}/vue").status_code == 403
+    reponse = b.client(nom=AIDE).post(f"/api/alarmes/{numero}/vue")
+    assert reponse.status_code == 200 and reponse.json()["premiere_fois"] is True
+    ligne = b.registre.lire("SELECT * FROM alarmes WHERE id = ?", (numero,))[0]
+    assert AIDE in ligne["vue_par"] and ligne["acquittee_le"] is None
+    # L'alarme reste ouverte, avec sa marque « vue ».
+    ouvertes = b.client(nom=INVITE).get("/api/alarmes").json()
+    assert ouvertes[0]["vue_le"] is not None
+    actions = b.client(nom=CHEF).get("/api/actions").json()
+    assert (actions[0]["qui"], actions[0]["chemin"]) == (AIDE, f"/api/alarmes/{numero}/vue")
+    assert b.client(nom=AIDE).post("/api/alarmes/999/vue").status_code >= 400

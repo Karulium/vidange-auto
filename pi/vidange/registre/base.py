@@ -56,6 +56,7 @@ TOUTES_LES_TABLES = (
     "actions_distance",
     "prises_griffe",
     "inventaire_stockage",
+    "notifications_faites",
 )
 
 
@@ -459,6 +460,19 @@ class Registre:
             if curseur.rowcount != 1:
                 raise ErreurRegistre(f"alarme n° {alarme} inconnue ou déjà acquittée")
 
+    def noter_alarme_vue(self, alarme: int, qui: str) -> bool:
+        """Quelqu'un a vu l'alarme (bouton « J'ai vu ») : elle reste ouverte, mais l'escalade
+        des notifications s'arrête. Rend vrai si c'est la première fois."""
+        with self._ecriture() as cnx:
+            existe = cnx.execute("SELECT 1 FROM alarmes WHERE id = ?", (alarme,)).fetchone()
+            if existe is None:
+                raise ErreurRegistre(f"alarme n° {alarme} inconnue")
+            curseur = cnx.execute(
+                "UPDATE alarmes SET vue_le = ?, vue_par = ? WHERE id = ? AND vue_le IS NULL",
+                (self._quand(), qui, alarme),
+            )
+            return curseur.rowcount == 1
+
     def noter_reglage(
         self,
         qui: str,
@@ -536,7 +550,12 @@ class Registre:
     # ------------------------------------------------------------ file d'envoi
 
     def ajouter_envoi(
-        self, destination: str, sorte: str, objet: str, remplace: str | None = None
+        self,
+        destination: str,
+        sorte: str,
+        objet: str,
+        remplace: str | None = None,
+        contenu: str | None = None,
     ) -> int:
         """Met une chose dans la file d'envoi (voir vidange/envois). Si la même chose attend
         déjà, rien n'est ajouté : rend le numéro de l'envoi qui attend.
@@ -550,10 +569,15 @@ class Registre:
                     "AND objet LIKE ? AND objet != ?",
                     (destination, sorte, remplace, objet),
                 )
-            return self._ajouter_envoi(cnx, destination, sorte, objet)
+            return self._ajouter_envoi(cnx, destination, sorte, objet, contenu)
 
     def _ajouter_envoi(
-        self, cnx: sqlite3.Connection, destination: str, sorte: str, objet: str
+        self,
+        cnx: sqlite3.Connection,
+        destination: str,
+        sorte: str,
+        objet: str,
+        contenu: str | None = None,
     ) -> int:
         ligne = cnx.execute(
             "SELECT id FROM envois WHERE destination = ? AND sorte = ? AND objet = ? "
@@ -571,6 +595,7 @@ class Registre:
                 "sorte": sorte,
                 "objet": objet,
                 "cree_le": self._quand(),
+                "contenu": contenu,
             },
         )
 
@@ -595,6 +620,29 @@ class Registre:
             )
             if curseur.rowcount != 1:
                 raise ErreurRegistre(f"envoi n° {envoi} inconnu")
+
+    # ------------------------------------------------------------ notifications faites
+
+    def notification_faite(self, cle: str) -> str | None:
+        """L'heure où le notificateur a traité cette chose (« alarme:12 »...), ou None."""
+        lignes = self.lire("SELECT quand FROM notifications_faites WHERE cle = ?", (cle,))
+        return lignes[0]["quand"] if lignes else None
+
+    def noter_notification_faite(self, cle: str) -> bool:
+        """Note que cette chose est traitée. Rend faux si elle l'était déjà (pas de doublon)."""
+        with self._ecriture() as cnx:
+            curseur = cnx.execute(
+                "INSERT OR IGNORE INTO notifications_faites (cle, quand) VALUES (?, ?)",
+                (cle, self._quand()),
+            )
+            return curseur.rowcount == 1
+
+    def effacer_notifications_faites(self, avant: datetime) -> int:
+        """Oublie ce qui a été traité avant ce moment ; rend leur nombre."""
+        with self._ecriture() as cnx:
+            return cnx.execute(
+                "DELETE FROM notifications_faites WHERE quand < ?", (heure(avant),)
+            ).rowcount
 
     def effacer_envois(self, avant: datetime) -> int:
         """Efface les envois réussis avant ce moment ; rend leur nombre."""

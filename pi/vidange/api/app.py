@@ -567,6 +567,14 @@ def creer_app(
             (avant, avant, limiter(limite)),
         )
 
+    @app.post("/api/alarmes/{numero}/vue", dependencies=produire)
+    def alarme_vue(numero: int, requete: Request) -> dict[str, Any]:
+        """« J'ai vu » : l'alarme reste ouverte, mais les notifications ne la renvoient plus
+        (escalade, tâche 27). Noté dans le journal des actions (qui, quand) et dans le registre."""
+        premiere = registre.noter_alarme_vue(numero, _qui(requete))
+        journal.info("Alarme n° %d vue par la %s", numero, _qui(requete))
+        return {"vue": numero, "premiere_fois": premiere}
+
     @app.post("/api/alarmes/{numero}/acquitter", dependencies=produire)
     def acquitter(numero: int, requete: Request) -> dict[str, Any]:
         journal.info("Alarme n° %d acquittée par la %s", numero, _qui(requete))

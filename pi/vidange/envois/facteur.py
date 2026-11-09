@@ -3,7 +3,9 @@
 La file est la table « envois » du registre : elle survit aux coupures. Ce qui y entre :
 - chaque cycle fini (Registre.finir_cycle), pour le logiciel de culture ;
 - chaque copie quotidienne de la base, et le dossier des photos, pour la copie de secours
-  de la maison (si sa commande est réglée).
+  de la maison (si sa commande est réglée) ;
+- chaque message pour le téléphone (ntfy, Telegram : tâche 27, vidange/notifications), un par canal
+  allumé : sans réseau ils attendent et partent plus tard, les plus vieux d'abord, sans doublon.
 
 Tous les « periode_s », le facteur prend, pour chaque destination, les envois en attente du
 plus vieux au plus récent. Un envoi qui rate (réseau coupé, serveur éteint) arrête la tournée
@@ -29,16 +31,23 @@ from vidange.envois.expediteurs import (
     ExpediteurCulture,
     ExpediteurSecours,
 )
+from vidange.envois.telephone import CANAUX, expediteurs_telephone
 from vidange.fiabilite.constats import Constat
+from vidange.fichier_secrets import Secrets
 from vidange.journal import donner_journal
 from vidange.registre import DOSSIER_PHOTOS, Registre
 from vidange.registre.base import maintenant
-from vidange.reglages import EnvoiSecours, ReglagesEnvois
+from vidange.reglages import EnvoiSecours, ReglagesEnvois, ReglagesNotifications
 
 journal = donner_journal("envois")
 
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
-DESTINATIONS = {"culture": "logiciel de culture", "secours": "copie de secours (maison)"}
+DESTINATIONS = {
+    "culture": "logiciel de culture",
+    "secours": "copie de secours (maison)",
+    "ntfy": "notifications ntfy",
+    "telegram": "notifications Telegram",
+}
 
 
 @dataclass
@@ -93,6 +102,9 @@ class Facteur:
         self._horloge = horloge
         self._monotone = monotone
         self._tournees = {destination: _Tournee() for destination in expediteurs}
+        # Une tournée à la fois : le fil du facteur et le notificateur (qui veut faire partir un
+        # message tout de suite) ne doivent jamais envoyer deux fois la même ligne.
+        self._verrou = threading.Lock()
 
     def en_attente(self, destination: str) -> list[dict[str, Any]]:
         return self.registre.lire(
@@ -102,7 +114,10 @@ class Facteur:
 
     def tournee(self, arret: threading.Event | None = None) -> int:
         """Essaie d'envoyer ce qui attend ; rend le nombre d'envois réussis."""
-        arret = arret or threading.Event()
+        with self._verrou:
+            return self._tournee(arret or threading.Event())
+
+    def _tournee(self, arret: threading.Event) -> int:
         reussis = 0
         for destination, expediteur in self.expediteurs.items():
             tournee = self._tournees[destination]
@@ -198,7 +213,10 @@ class Facteur:
                 "renvoyer <n°> ».",
             )
         if self.expediteurs[destination] is None:
-            texte = f"pas encore réglé ({self.pas_regle.get(destination, 'pas réglé')})"
+            raison = self.pas_regle.get(destination, "pas réglé")
+            if destination in CANAUX:
+                return Constat(sujet, "ok", f"éteint ({raison}) ; ce n'est pas une erreur")
+            texte = f"pas encore réglé ({raison})"
             if attente:
                 texte += f" : {len(attente)} envoi(s) attendent dans la file"
             return Constat(sujet, "ok", texte)
@@ -222,9 +240,16 @@ class Facteur:
 
 
 def preparer_facteur(
-    registre: Registre, reglages: ReglagesEnvois, jeton_culture: str | None, donnees: Path
+    registre: Registre,
+    reglages: ReglagesEnvois,
+    jeton_culture: str | None,
+    donnees: Path,
+    notifications: ReglagesNotifications | None = None,
+    secrets: Secrets | None = None,
 ) -> Facteur:
-    """Le facteur et ses expéditeurs, d'après les réglages et le jeton du fichier de secrets."""
+    """Le facteur et ses expéditeurs, d'après les réglages et le jeton du fichier de secrets.
+    Avec `notifications`, les canaux du téléphone (ntfy, Telegram) sont ajoutés : allumés si leurs
+    secrets sont remplis, éteints sinon (la check-list le dit)."""
     expediteurs: dict[str, Expediteur | None] = {}
     pas_regle: dict[str, str] = {}
     culture = reglages.culture
@@ -240,6 +265,15 @@ def preparer_facteur(
     else:
         expediteurs["secours"] = None
         pas_regle["secours"] = "commande vide dans programme.yaml"
+    if notifications is not None:
+        canaux, pas_regle_canaux = expediteurs_telephone(
+            notifications, secrets or Secrets(), registre
+        )
+        expediteurs.update(canaux)
+        pas_regle.update(pas_regle_canaux)
     for destination, raison in pas_regle.items():
+        if destination in CANAUX:
+            journal.info("Notifications « %s » éteintes : %s.", DESTINATIONS[destination], raison)
+            continue
         journal.warning("Envoi « %s » pas encore réglé : %s.", DESTINATIONS[destination], raison)
     return Facteur(registre, reglages, expediteurs, pas_regle)

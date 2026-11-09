@@ -154,6 +154,69 @@ envois:
     # Envoyer aussi le dossier des photos chaque jour (avec rsync, seules les nouvelles partent).
     photos: true
 
+# Notifications sur le téléphone (tâche 27) : ntfy et, en option, Telegram. Elles INFORMENT, elles ne
+# protègent personne (la sécurité est câblée, jamais dans le logiciel). Les adresses et les sujets
+# sont dans le fichier de secrets (pi/secrets.exemple.yaml) ; sans eux, les canaux sont éteints.
+# Les messages passent par la file d'envoi (plus haut) : sans réseau ils attendent et partent plus
+# tard, les plus vieux d'abord. Essai pas à pas : pi/systeme/essai-notifications.md.
+notifications:
+  # Heures, délais et niveaux ci-dessous : des EXEMPLES, à régler à l'usage (puis exemple: false).
+  exemple: true
+  # Le notificateur regarde le registre toutes les (s).
+  periode_s: 10
+  # Il ne regarde que ce qui s'est passé dans les 2 derniers jours.
+  chercher_jours: 2
+  # Ce qu'il a déjà annoncé est oublié après 60 jours.
+  garder_traites_jours: 60
+  # Un message qui part plus de 30 min après avoir été préparé (réseau coupé) est marqué « en retard ».
+  en_retard_apres_min: 30
+  delai_reponse_s: 10
+  # Niveau d'une alarme ou d'un message qui n'est pas dans la liste « niveaux » : urgent (mieux vaut
+  # un message de trop pour une alarme inconnue).
+  niveau_defaut: urgent
+  # Niveau de chaque sorte : « urgent » (part même la nuit, escalade), « normal » (part le jour),
+  # « info » (discret, part le jour). Une alarme se nomme « module » ou « module.etape » (le plus
+  # précis gagne) : exemple « spray: normal » ou « nettoyage.purge: info ».
+  # Les messages du programme : fin_fut, nettoyage_a_faire, entretien_a_faire, calcul_conseille, resume_soir.
+  niveaux:
+    fin_fut: info
+    nettoyage_a_faire: normal
+    entretien_a_faire: normal
+    calcul_conseille: info
+    resume_soir: info
+  # Priorité ntfy (1 discret ... 5 insistant) de chaque niveau ; « rappel » : alarme urgente renvoyée.
+  priorites_ntfy:
+    info: 2
+    normal: 3
+    urgent: 4
+    rappel: 5
+  # La nuit, seuls les messages urgents partent ; les autres partent à la fin des heures calmes.
+  heures_calmes:
+    debut: "21:00"
+    fin: "06:00"
+  # Alarme urgente que personne n'a « vue » (bouton « J'ai vu » de la page web) ni effacée :
+  # renvoyée au bout de 15 min en priorité haute, puis envoyée aussi à la 2ᵉ liste de destinataires
+  # (secrets : ntfy_sujets_renfort, telegram_chats_renfort) au bout de 45 min.
+  escalade:
+    rappel_apres_min: 15
+    renfort_apres_min: 45
+  # Résumé du soir : seaux faits, alarmes du jour, ce qui est à faire demain.
+  resume_soir:
+    actif: true
+    heure: "19:00"
+    retard_max_h: 3
+    alarmes_max: 5
+  # Comment le programme reconnaît la fin d'un fût et le nettoyage à faire (d'après le registre).
+  evenements:
+    module_fut: poste_fut
+    modules_nettoyage: [nettoyage]
+    nettoyage_apres_min: 60
+  # Où joindre la page web : donné dans chaque message (la page n'est joignable que par le Wi-Fi de
+  # l'atelier ou par Tailscale). EXEMPLES : à remplacer par les vraies adresses. Vide : omis.
+  lien_page: "http://vidange.local:8080/"
+  lien_tailscale: ""
+  telegram_adresse: https://api.telegram.org
+
 # Caméras (tâche 12) : vidéo en direct sur la page web, et clip des dernières secondes à chaque
 # alarme (dossier donnees/clips). Chaque caméra est une commande qui écrit sa vidéo en « MJPEG »
 # (images JPEG à la suite) ; le Pi la relance seule si elle s'arrête ou se fige.

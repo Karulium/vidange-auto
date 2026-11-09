@@ -115,6 +115,7 @@ from vidange.mode import ModeMachine
 from vidange.nettoyage import Nettoyage
 from vidange.nettoyage.capteurs import capteurs_du_materiel
 from vidange.nettoyage.capteurs import verifier_avec_liste as verifier_nettoyage
+from vidange.notifications import Notificateur
 from vidange.pesees.tour import TourPesees
 from vidange.pesees.verification import pesees_du_bus, verifier_avec_liste
 from vidange.poste_fut import PosteFut
@@ -762,6 +763,12 @@ def principal(
             "retirer leur « exemple: true » (pi/systeme/essai-entretien.md).",
             len(pieces_exemple),
         )
+    if reglages.programme.notifications.exemple:
+        journal.warning(
+            "programme.yaml → notifications : heures, délais et niveaux d'EXEMPLE (exemple: "
+            "true) : les régler à l'usage, puis passer « exemple » à false "
+            "(pi/systeme/essai-notifications.md)."
+        )
     exemples = entrees_sorties.exemples()
     if exemples:
         journal.warning(
@@ -800,7 +807,12 @@ def principal(
     envois = reglages.programme.envois
     jeton = secrets.jeton_culture
     facteur = preparer_facteur(
-        registre, envois, jeton.get_secret_value() if jeton else None, dossier_donnees
+        registre,
+        envois,
+        jeton.get_secret_value() if jeton else None,
+        dossier_donnees,
+        reglages.programme.notifications,
+        secrets,
     )
     sauvegarde = SauvegardeQuotidienne(
         registre,
@@ -825,6 +837,9 @@ def principal(
         dossier_donnees / NOM_ENTRETIEN,
     )
     entretien = Entretien(reglages.entretien, compteurs, registre)
+    # Notifications sur le téléphone (tâche 27) : elles lisent le registre et l'entretien, ne
+    # commandent rien ; sans réseau, tout attend dans la file d'envoi.
+    notificateur = Notificateur(registre, reglages.programme.notifications, facteur, entretien)
     for liaison in liaisons.values():
         liaison.ecouteur_rapport = compteurs.noter_rapport_liaison
         liaison.ecouteur_ligne = compteurs.noter_ligne
@@ -1059,6 +1074,7 @@ def principal(
         fils += [
             compteurs.demarrer(arret),
             entretien.demarrer(arret),
+            notificateur.demarrer(arret),
             sante.demarrer(arret),
             onduleur.demarrer(arret),
             gardien.demarrer(arret),

@@ -424,6 +424,12 @@ function afficherEtat(etat) {
       el("div", { classe: "doux" }, heure(a.quand)),
       el("div", {}, a.message),
       a.quoi_faire && el("div", { classe: "quoi" }, el("strong", {}, "Quoi faire : "), a.quoi_faire),
+      a.vue_le
+        ? el("div", { classe: "doux" }, "Vue par " + (a.vue_par || "?") + " à " + heure(a.vue_le) + ".")
+        : el("button", {
+            classe: "petit",
+            surclick: () => ordre("/api/alarmes/" + a.id + "/vue", "Alarme n° " + a.id + " vue."),
+          }, "J'ai vu"),
       el("button", {
         classe: "petit",
         surclick: () => {

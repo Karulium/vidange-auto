@@ -269,6 +269,59 @@ _VERSION_8 = (
     """,
 )
 
+# Version 9 (tâche 27) : notifications sur le téléphone.
+# - une alarme peut être « vue » (bouton « J'ai vu » de la page web) sans être acquittée ;
+# - la file d'envoi accepte des messages (destinations « ntfy » et « telegram », sorte « message »,
+#   texte et niveau dans « contenu », en JSON) : SQLite ne change pas un CHECK, la table est
+#   refaite ;
+# - « notifications_faites » : ce que le notificateur a déjà traité (envoyé, ou volontairement
+#   laissé de côté), pour ne jamais envoyer deux fois la même chose, même après un redémarrage.
+#   Ce qui existe déjà au moment de la montée est marqué comme traité (pas de rafale de vieux
+#   messages).
+_VERSION_9 = (
+    "ALTER TABLE alarmes ADD COLUMN vue_le TEXT",
+    "ALTER TABLE alarmes ADD COLUMN vue_par TEXT",
+    """
+    CREATE TABLE envois_neuf (
+        id INTEGER PRIMARY KEY,
+        cle TEXT NOT NULL UNIQUE,
+        -- culture : logiciel de culture (Django) ; secours : copie de secours de la maison ;
+        -- ntfy, telegram : messages pour le téléphone.
+        destination TEXT NOT NULL
+            CHECK (destination IN ('culture', 'secours', 'ntfy', 'telegram')),
+        -- cycle : objet = numéro du cycle ; fichier : objet = chemin relatif au dossier des
+        -- données ; message : objet = nom de ce qui est annoncé (« alarme:12 »...).
+        sorte TEXT NOT NULL CHECK (sorte IN ('cycle', 'fichier', 'message')),
+        objet TEXT NOT NULL,
+        cree_le TEXT NOT NULL,
+        statut TEXT NOT NULL DEFAULT 'attente' CHECK (statut IN ('attente', 'envoye', 'refuse')),
+        essais INTEGER NOT NULL DEFAULT 0,
+        dernier_essai TEXT,
+        derniere_erreur TEXT,
+        envoye_le TEXT,
+        -- Sorte « message » : titre, texte, niveau, groupe de destinataires... en JSON.
+        contenu TEXT
+    )
+    """,
+    "INSERT INTO envois_neuf (id, cle, destination, sorte, objet, cree_le, statut, essais, "
+    "dernier_essai, derniere_erreur, envoye_le) SELECT id, cle, destination, sorte, objet, "
+    "cree_le, statut, essais, dernier_essai, derniere_erreur, envoye_le FROM envois",
+    "DROP TABLE envois",
+    "ALTER TABLE envois_neuf RENAME TO envois",
+    "CREATE INDEX envois_statut ON envois (statut, destination)",
+    """
+    CREATE TABLE notifications_faites (
+        cle TEXT PRIMARY KEY,
+        quand TEXT NOT NULL
+    )
+    """,
+    "INSERT INTO notifications_faites (cle, quand) SELECT 'alarme:' || id, quand FROM alarmes",
+    "INSERT INTO notifications_faites (cle, quand) SELECT 'fut:' || id, fin FROM cycles "
+    "WHERE fin IS NOT NULL",
+    "INSERT INTO notifications_faites (cle, quand) SELECT 'nettoyage:' || id, fin FROM cycles "
+    "WHERE fin IS NOT NULL",
+)
+
 # Montée n° i (en partant de 1) : ce qui fait passer la base de la version i - 1 à la version i.
 MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_1,
@@ -279,6 +332,7 @@ MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_6,
     _VERSION_7,
     _VERSION_8,
+    _VERSION_9,
 )
 
 VERSION = len(MONTEES)
