@@ -2191,3 +2191,13 @@ Procédure d'essai : `pi/systeme/essai-derive.md`. Testé sur le vrai matériel 
   `entrees-sorties.yaml` (`sans_alarme`).
 - **Questions pour Karulium** (voir la PR) : 1 remise à zéro de l'ALM ; 2 câblage des ALM (macros) ; 3 ALM de la griffe ;
   4 approche du fin de course (`soft_limits`) ; 5 « tous les N seaux » reste à faire.
+- **Réponses à la PR n° 107** (tâche 24, 09/11/2026, niveau 1, tranché par Claude) :
+  1. Remise à zéro de l'ALM après un calage voulu : `$MD` puis `$ME` gardé en EXEMPLE ; question posée à
+     l'Implantation (ENA sur la sortie « disable » de FluidNC, ou coupure de l'alimentation du pilote).
+  2. Les 4 ALM du chariot du remplissage en OU sur une seule entrée : gardé (on sait qu'un pilote du chariot est en
+     alarme ; le « quoi faire » dit de regarder les voyants des 4 pilotes) ; confirmation demandée à l'Implantation.
+  3. Rotation et godet de la griffe sans entrée d'alarme : laissés en `sans_alarme` ; question posée à
+     l'Implantation (câblage de leurs ALM).
+  4. Contrôle d'origine : reste `actif: false` jusqu'à l'essai D.2 de `pi/systeme/essai-derive.md` ; si FluidNC
+     refuse de passer le fin de course, `soft_limits: false` sur cet axe seulement, puis activer.
+  5. Seul le début de lot est branché ; « tous les N seaux » sera ajouté si l'essai montre une dérive en cours de lot.
