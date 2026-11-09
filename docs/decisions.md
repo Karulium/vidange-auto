@@ -2532,3 +2532,7 @@ réglages avec garde-fous, carnet de bord) n'est pas faite.
   tournants) ; le rejeu n'est pas dans la copie de secours (gros, peu utile : il fait partie du carnet de la
   machine, pas de sa restauration) ; pas de rejeu des sorties (vannes, freins) ni des entrées, seulement des axes ;
   alarmes d'avant cette tâche : pas de rejeu (positions jamais gardées).
+- **Réponses à la PR n° 112** (tâche 28, 09/11/2026, niveau 1, tranché par Claude) :
+  1. Sens de rotation des axes tournants sur le dessin : un réglage `sens` par boîte sera ajouté après l'essai sur la
+     vraie machine (petite tâche, si le dessin tourne à l'envers).
+  2. Rejeu des sorties (vannes, freins) : pas pour l'instant ; on regarde d'abord si le rejeu des axes suffit.
