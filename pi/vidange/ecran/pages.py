@@ -146,6 +146,20 @@ NETTOYAGE = Page(
     ),
 )
 
+CODE = Page(
+    "code",
+    7,
+    (
+        _texte("t_titre", 30),
+        _texte("t_saisie", 12),
+        _texte("t_info", 80),
+        *(_bouton(f"b_{chiffre}", 4) for chiffre in range(10)),
+        _bouton("b_effacer", 10),
+        _bouton("b_retour", 10),
+    ),
+)
+
 PAGES: dict[str, Page] = {
-    page.nom: page for page in (ETAT, ALARME, COMPTEURS, MODE, CONFIRMER, POSTE_FUT, NETTOYAGE)
+    page.nom: page
+    for page in (ETAT, ALARME, COMPTEURS, MODE, CONFIRMER, POSTE_FUT, NETTOYAGE, CODE)
 }

@@ -8,7 +8,7 @@ Dans l'éditeur, on ne dessine donc que des cases vides avec le bon **nom**.
 Ce qui compte vraiment :
 
 1. le **nom** de chaque page et de chaque objet (exactement comme ici, en minuscules) ;
-2. l'**ordre** des pages (numéro 0 à 6) ;
+2. l'**ordre** des pages (numéro 0 à 7) ;
 3. le **code** de chaque bouton (deux lignes, plus bas) ;
 4. **txt_maxl** (nombre de caractères) au moins égal à celui du tableau.
 
@@ -300,6 +300,60 @@ prints "@b_store",0
 prints "@b_lumiere",0
 prints "@b_nuit",0
 prints "@b_outre",0
+prints "@b_retour",0
+```
+
+(chacun suivi de `printh FF FF FF`).
+
+## Page 7 : « code »
+
+**Page nouvelle (tâche 29) : à dessiner dans Nextion Editor, après la page 6.** Le clavier du code des
+fonctions sensibles (changer de mode, store, nuit UV-ozone, passer outre la purge). Le Pi la montre
+quand on touche une de ces fonctions ; on tape les chiffres du code (4 à 6, réglé dans `programme.yaml`).
+Quand le dernier chiffre est tapé, le Pi vérifie tout seul : il n'y a pas de bouton « OK ». Code juste :
+la page d'avant revient avec la suite (la question « Oui / Non », ou le geste). Code faux : `t_info` le dit.
+Sans appui pendant 15 s, retour à la page « etat ». Ce code évite les fausses manoeuvres ; il ne protège
+pas les personnes (arrêt d'urgence et portes sont câblés).
+
+| Nom | Sorte | x | y | Largeur | Hauteur | Police | txt_maxl |
+|---|---|---|---|---|---|---|---|
+| `t_titre` | Texte | 0 | 0 | 240 | 30 | 2 | 30 |
+| `t_saisie` | Texte | 240 | 0 | 240 | 30 | 2 | 12 |
+| `t_info` | Texte | 4 | 32 | 472 | 30 | 0 | 80 |
+| `b_0` | Bouton | 4 | 64 | 91 | 66 | 2 | 4 |
+| `b_1` | Bouton | 99 | 64 | 91 | 66 | 2 | 4 |
+| `b_2` | Bouton | 194 | 64 | 91 | 66 | 2 | 4 |
+| `b_3` | Bouton | 289 | 64 | 91 | 66 | 2 | 4 |
+| `b_4` | Bouton | 384 | 64 | 91 | 66 | 2 | 4 |
+| `b_5` | Bouton | 4 | 134 | 91 | 66 | 2 | 4 |
+| `b_6` | Bouton | 99 | 134 | 91 | 66 | 2 | 4 |
+| `b_7` | Bouton | 194 | 134 | 91 | 66 | 2 | 4 |
+| `b_8` | Bouton | 289 | 134 | 91 | 66 | 2 | 4 |
+| `b_9` | Bouton | 384 | 134 | 91 | 66 | 2 | 4 |
+| `b_effacer` | Bouton | 4 | 204 | 234 | 64 | 1 | 10 |
+| `b_retour` | Bouton | 242 | 204 | 234 | 64 | 2 | 10 |
+
+- `t_titre` : « CODE » (jaune). Texte centré.
+- `t_saisie` : un « * » par chiffre tapé, puis des « - » : « **-- » pour un code de 4 chiffres. Texte centré.
+- `t_info` : « Taper le code de l'écran. », ou « Code faux. Encore 2 essai(s). ».
+- `b_0` à `b_9` : le chiffre écrit sur le bouton (grands : on tape avec des gants).
+- `b_effacer` : « EFFACER » (enlève le dernier chiffre tapé).
+- `b_retour` : « RETOUR » (abandonne, retour à la page « etat »).
+
+Code des boutons :
+
+```
+prints "@b_0",0
+prints "@b_1",0
+prints "@b_2",0
+prints "@b_3",0
+prints "@b_4",0
+prints "@b_5",0
+prints "@b_6",0
+prints "@b_7",0
+prints "@b_8",0
+prints "@b_9",0
+prints "@b_effacer",0
 prints "@b_retour",0
 ```
 

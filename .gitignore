@@ -1,6 +1,7 @@
 # Secrets : jamais dans le dépôt (seul le modèle secrets.exemple.yaml y est).
 secrets.yaml
 comptes.yaml
+code_ecran.yaml
 
 # Python
 __pycache__/

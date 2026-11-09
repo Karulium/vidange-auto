@@ -71,6 +71,15 @@ Puis les autres : `... vidange compte ajouter NOM --role employe` (ou `visiteur`
 compte. Pas besoin de redémarrer : le programme relit le fichier `/etc/vidange/comptes.yaml`. Tant qu'il n'y a
 aucun compte, la page web est fermée et explique cette commande. Essai : `essai-comptes.md`.
 
+**Code de l'écran de l'armoire** (changer de mode, store, nuit UV-ozone, passer outre la purge) : 4 chiffres
+(`programme.yaml` → `ecran` → `code` → `longueur`), gardé haché dans `/etc/vidange/code_ecran.yaml`. Sans lui, ces
+fonctions sont refusées à l'écran (la machine, elle, tourne). Il évite les fausses manoeuvres ; il ne protège pas
+les personnes (arrêt d'urgence et portes sont câblés).
+```
+sudo -u vidange VIDANGE_SECRETS=/etc/vidange/secrets.yaml /opt/vidange-auto/pi/.venv/bin/vidange code-ecran
+```
+Essai : `essai-ecran.md`.
+
 ## 4. Vérifier les réglages
 
 ```

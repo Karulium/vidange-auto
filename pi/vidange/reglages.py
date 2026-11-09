@@ -5818,6 +5818,37 @@ class CouleursEcran(Modele):
     inactif: FondTexte
 
 
+# Les fonctions de l'écran qui PEUVENT demander un code (tâche 29). Le code les connaît par ces
+# noms ; programme.yaml → ecran → code → fonctions_sensibles dit lesquelles le demandent vraiment.
+FONCTIONS_ECRAN_SENSIBLES = ("changer_mode", "enceinte_store", "enceinte_nuit", "enceinte_outre")
+
+
+class ReglagesCodeEcran(Modele):
+    """Le code des fonctions sensibles de l'écran (tâche 29, fonction 50). Il évite les fausses
+    manoeuvres ; il ne protège pas les personnes (arrêt d'urgence et portes sont câblés)."""
+
+    # Nombre de chiffres du code (le code lui-même est dans code_ecran.yaml, hors Git).
+    longueur: int = Field(ge=4, le=6)
+    # Après « essais_max » codes faux de suite : plus d'essai pendant « attente_s ».
+    essais_max: int = Field(ge=1)
+    attente_s: float = Field(gt=0)
+    # Un code juste ouvre les fonctions sensibles pendant « valable_s », puis il faut le retaper.
+    valable_s: float = Field(gt=0)
+    fonctions_sensibles: list[str]
+
+    @model_validator(mode="after")
+    def _verifier_fonctions(self) -> "ReglagesCodeEcran":
+        for nom in self.fonctions_sensibles:
+            if nom not in FONCTIONS_ECRAN_SENSIBLES:
+                raise ValueError(
+                    f"fonction « {nom} » inconnue dans fonctions_sensibles ; "
+                    f"possibles : {', '.join(FONCTIONS_ECRAN_SENSIBLES)}"
+                )
+        if len(set(self.fonctions_sensibles)) != len(self.fonctions_sensibles):
+            raise ValueError("fonctions_sensibles : une fonction est écrite deux fois")
+        return self
+
+
 class ReglagesEcran(Modele):
     """Écran Nextion de la porte de l'armoire (tâche 9)."""
 
@@ -5835,6 +5866,7 @@ class ReglagesEcran(Modele):
     confirmation_s: float = Field(gt=0)
     # Durée d'affichage d'un message (« Aucun Go attendu »...).
     message_s: float = Field(gt=0)
+    code: ReglagesCodeEcran
     couleurs: CouleursEcran
 
     @model_validator(mode="after")

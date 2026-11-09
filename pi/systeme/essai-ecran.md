@@ -62,6 +62,55 @@ Testé sur le vrai matériel : **non** (seulement avec un faux écran, sur un PC
       envoyer le projet : le journal dit « objet inconnu sur la page « etat » : comparer la page avec
       nextion/pages.md ». Remettre le bon nom.
 
+## Code des fonctions sensibles (tâche 29)
+
+Ce code **évite les fausses manoeuvres**. Il **ne protège pas les personnes** : l'arrêt d'urgence, les portes
+et les fins de course de sécurité sont câblés en dur, le logiciel n'y est pour rien.
+
+**1. Ajouter la page « code » dans Nextion Editor** (nouvelle page, numéro **7**, après « nettoyage ») :
+tout est décrit dans `nextion/pages.md`, « Page 7 : « code » ». En résumé, il faut créer, avec exactement ces noms :
+- 3 textes : `t_titre`, `t_saisie`, `t_info` ;
+- 12 boutons : `b_0`, `b_1`, `b_2`, `b_3`, `b_4`, `b_5`, `b_6`, `b_7`, `b_8`, `b_9`, `b_effacer`, `b_retour` ;
+- dans « Touch Release Event » de chaque bouton, les deux lignes habituelles (`prints "@b_5",0` puis
+  `printh FF FF FF`, avec le nom du bouton) ;
+- les autres pages ne changent pas. Compiler, copier le `.tft` sur la carte micro-SD, mettre à jour l'écran.
+
+**2. Régler le code** (sur le Pi, avec le compte du programme ; la commande le demande deux fois, il ne
+s'affiche pas) :
+```
+sudo -u vidange VIDANGE_SECRETS=/etc/vidange/secrets.yaml /opt/vidange-auto/pi/.venv/bin/vidange code-ecran
+```
+
+**Essais** (la machine n'a pas besoin de bouger ; ne pas répondre OUI à une question si la machine n'est pas prête) :
+- [ ] **Sans code réglé** (avant l'étape 2, ou après `vidange code-ecran --retirer`) : MODE → LAVAGE :
+      l'écran reste sur la page du mode et dit « Code de l'écran pas réglé : lancer « vidange code-ecran »... ».
+      La check-list (page web ou journal) dit « code de l'écran : pas réglé » (attention, pas bloquant).
+- [ ] **Clavier** : après avoir réglé le code (et abandonné le module d'essai ou fini le lieu sûr), MODE → LAVAGE :
+      la page « CODE » arrive, avec `----` en haut. Chaque chiffre touché ajoute un `*`. EFFACER enlève le
+      dernier. Les chiffres se touchent facilement avec les gants.
+- [ ] **Code juste** : les 4 chiffres tapés, la page du mode revient avec la question « Passer en mode Lavage ? »
+      (pas de bouton OK à toucher). NON pour finir. Le journal dit « code juste pour « changer_mode » ».
+- [ ] **Code faux** : taper un mauvais code : « Code faux. Encore 2 essai(s). ». Taper 3 mauvais codes de suite :
+      retour à la page du mode avec « Trop de codes faux : attendre 60 s. ». Pendant ces 60 s, même le bon code
+      est refusé ; après, il passe.
+- [ ] **Le code reste valable un court moment** : taper le bon code, répondre NON, retoucher LAVAGE dans les
+      30 s : pas de nouveau code (la question vient tout de suite). Attendre plus de 30 s : le code est
+      redemandé.
+- [ ] **Sans toucher** : sur la page « CODE », ne rien toucher 15 s : retour à la page d'état. RETOUR : retour
+      tout de suite.
+- [ ] **Enceinte** : MODE → ENCEINTE : OUVRIR (ou FERMER), NUIT et PASSER OUTRE demandent le code (s'il n'est pas
+      déjà valable) ; LUMIÈRE n'en demande jamais.
+- [ ] **Ce qui ne demande jamais de code** : PAUSE, REPRENDRE (avec OUI), GO (avec OUI), COMPTEURS, RÉPARÉ, PRÊT du
+      poste du fût.
+- [ ] **Journal des actions** : après un changement de mode réussi, sur le téléphone ou le PC (compte `karulium`),
+      la page web, ou sur le Pi :
+      `tail -3 /opt/vidange-auto/pi/donnees/actions.jsonl` : une ligne `"qui": "écran"`, `"chemin":
+      "ecran/changer_mode"`, `"detail": "lavage"`. Jamais le code, jamais un nom de personne.
+- [ ] **Changer le code** : relancer `vidange code-ecran` avec un autre code, sans redémarrer : l'ancien code est
+      refusé, le nouveau passe.
+- [ ] **Sauvegarde** : le fichier `/etc/vidange/code_ecran.yaml` n'est pas dans la copie quotidienne (comme
+      `secrets.yaml`) : après la restauration d'un Pi neuf, refaire `vidange code-ecran`.
+
 ## En cas de problème
 
 Envoyer à Claude (dans la PR ou une nouvelle session) les lignes du journal :
