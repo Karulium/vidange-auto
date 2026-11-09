@@ -980,7 +980,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   supprimées) et « Réglages » (liste `modifiables.yaml`, bornes, vérifications du démarrage avant écriture,
   historique, retour) ; manifeste, icônes et service worker (coquille seulement). Choix et reste à faire :
   `docs/decisions.md`, « Page web, tâche 28 bis ». Essai : `pi/systeme/essai-page-web-2.md`.
-- [ ] 25 bis. Copie de secours des réglages propres au Pi (réponse 2 à la PR n° 113). — Sonnet.
+- [x] 25 bis. Copie de secours des réglages propres au Pi (réponse 2 à la PR n° 113). — Sonnet.
   Les fichiers de réglages suivis par Git que le Pi a changés (depuis la page, tâche 28 bis, ou à la main : les vrais
   chiffres de la machine) ne sont pas dans la copie quotidienne : une restauration (tâche 25) les perdrait.
   1. La copie quotidienne ajoute ces fichiers changés (liste donnée par Git, réglages seulement : `pi/reglages/`,

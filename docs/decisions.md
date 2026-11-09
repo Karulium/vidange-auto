@@ -2594,3 +2594,24 @@ Testé sur le vrai matériel : non.
      machine à l'installation) : la mise à jour les garde déjà (mise de côté puis remise), mais la copie de secours
      ne les contient pas, donc une restauration les perdrait. Il faut les ajouter à la copie quotidienne et les
      remettre à la restauration : tâche 25 bis, faite tout de suite après celle-ci.
+
+## Réglages du Pi dans la copie, tâche 25 bis (09/11/2026, niveau 1, tranché par Claude)
+
+Réponse 2 à la PR n° 113. Testé sur le vrai matériel : non. Procédure : `pi/systeme/essai-restauration.md`.
+
+- **Ce qui part** : l'archive quotidienne `fichiers-AAAA-MM-JJ.tar.gz` contient en plus, sous `reglages/`, le fichier
+  **entier** (pas une différence) de chaque réglage que le Pi a changé par rapport à Git. La liste vient de
+  `git status` (fichiers suivis seulement), limitée à `pi/reglages/`, `fluidnc/` et `docs/entrees-sorties.yaml`.
+  Un nom qui contient « secret » ou « comptes » est refusé, à l'écriture comme à la lecture : jamais de secret.
+  Si Git ne répond pas, la liste est vide et la copie du registre se fait quand même.
+- **Ce qui revient** : après le registre, les fichiers, les photos et le modèle de secrets, `vidange restaurer`
+  remet ces réglages **un par un** dans le dépôt (`--depot`, par défaut celui du programme), en lançant la
+  vérification des réglages (`vidange --verifier`). Un fichier qui ne passe plus avec le code du jour est remis
+  comme dans Git et gardé dans `donnees/reglages-mis-de-cote/` (chemin avec `__`), avec un message « à faire à la
+  main » ; les autres sont remis quand même. Le bilan liste ceux qui sont revenus.
+- **Cas particuliers** : fichier déjà changé sur le Pi neuf : gardé tel quel, sauf `--ecraser` ; fichier disparu de la
+  version du jour : mis de côté ; vérification déjà fausse sans les réglages de l'ancien Pi : on les remet quand
+  même et on le dit (rien à isoler).
+- **Pas fait** : une valeur de réglage n'est jamais fusionnée ligne à ligne avec la nouvelle version du fichier :
+  c'est tout ou rien par fichier, et Karulium recopie à la main ce qui est mis de côté. La mise à jour du Pi n'a pas
+  changé (elle garde déjà les changements locaux).

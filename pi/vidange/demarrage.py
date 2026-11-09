@@ -859,7 +859,9 @@ def principal(
         dossier_donnees / DOSSIER_SAUVEGARDES,
         reglages.programme.registre,
         apres_copie=mettre_en_file_secours(registre, envois.secours, dossier_donnees),
-        archiver_fichiers=lambda cible: archiver(dossier_donnees, chemin_comptes, cible),
+        archiver_fichiers=lambda cible: archiver(
+            dossier_donnees, chemin_comptes, cible, DOSSIER_PI.parent
+        ),
     )
     fils = [sauvegarde.demarrer(arret), facteur.demarrer(arret)]
     materiel, erreur_materiel = ouvrir_materiel(entrees_sorties, raccords.fabrique)

@@ -70,6 +70,7 @@ def lancer_restauration(
     lecteur.add_argument("--entrees-sorties", help="liste des entrées/sorties")
     lecteur.add_argument("--secrets", help="fichier de secrets (défaut : pi/secrets.yaml)")
     lecteur.add_argument("--comptes", help="fichier des comptes (défaut : à côté des secrets)")
+    lecteur.add_argument("--depot", help="dossier du dépôt Git (défaut : celui du programme)")
     lecteur.add_argument("--donnees", help="dossier des données (défaut : pi/donnees)")
     options = lecteur.parse_args(arguments)
 
@@ -87,6 +88,7 @@ def lancer_restauration(
             else chemin_secrets.with_name("comptes.yaml")
         ),
         secrets_exemple=DOSSIER_PI / "secrets.exemple.yaml",
+        depot=Path(options.depot) if options.depot else DOSSIER_PI.parent,
     )
     try:
         reglages = charger_reglages(dossier_reglages)
