@@ -141,7 +141,7 @@ from vidange.reglages import (
     ReglagesLot,
     ReglagesVision,
 )
-from vidange.remplissage.chariot import ALARMES_BARRES, BARRIERE, ChariotFluidnc, signaux_chariot
+from vidange.remplissage.chariot import ALARME_CARTE, BARRIERE, ChariotFluidnc, signaux_chariot
 from vidange.remplissage.module import Plan
 from vidange.remplissage.remplissage import Remplissage
 from vidange.spray.spray import PORTE as PORTE_SPRAY
@@ -389,6 +389,24 @@ class _Construction:
         return self.pesees.capteur(nom)
 
 
+def _construire_pilotes(
+    reglages: Reglages, liaisons: Mapping[str, Liaison], materiel: Materiel | None
+) -> Pilotes:
+    """Les alarmes des pilotes. Si la coupure du courant d'un pilote est active (2e essai de la
+    remise à zéro), sa sortie doit être dans docs/entrees-sorties.yaml."""
+    pilotes = reglages.machine.pilotes
+    assert pilotes is not None
+    coupure = pilotes.remise_a_zero.coupure
+    if coupure is not None and coupure.actif:
+        for signal in coupure.sorties.values():
+            if materiel is None or signal not in materiel.branchements:
+                raise ValueError(
+                    f"pilotes → remise_a_zero → coupure : la sortie « {signal} » n'est pas "
+                    "dans docs/entrees-sorties.yaml (ou la carte des relais est absente)"
+                )
+    return Pilotes(reglages.machine, reglages.fluidnc.cartes, liaisons, relais=materiel)
+
+
 def construire_cartes(
     reglages: Reglages,
     materiel: Materiel | None,
@@ -408,7 +426,10 @@ def construire_cartes(
     rotation de la tête et à l'arrêt des gestes."""
     cartes = CartesMachine(mode=mode, garde=garde)
     if reglages.machine.pilotes is not None:
-        cartes.pilotes = Pilotes(reglages.machine, reglages.fluidnc.cartes, liaisons)
+        try:
+            cartes.pilotes = _construire_pilotes(reglages, liaisons, materiel)
+        except ValueError as erreur:
+            journal.error("Alarmes des pilotes pas construites : %s", erreur)
     derive = reglages.machine.derive
     if derive is not None and derive.actif:
         try:
@@ -442,7 +463,7 @@ def construire_cartes(
     def chariot() -> None:
         if machine.remplissage is None:
             raise Absente("machine.yaml n'a pas de partie « remplissage »")
-        faire.signaux(PESEE_PLATEAU, BARRIERE, *ALARMES_BARRES.values())
+        faire.signaux(PESEE_PLATEAU, BARRIERE, ALARME_CARTE)
         liaison = faire.carte_fluidnc(CARTE_CHARIOT)
         balance = faire.balance(PESEE_PLATEAU)
         signaux = signaux_chariot(liaison, reglages.fluidnc.cartes[CARTE_CHARIOT])

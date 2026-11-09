@@ -97,7 +97,7 @@ def test_trop_d_entrees_sur_une_carte(entrees_sorties):
 def test_trop_de_sorties_sur_une_carte(entrees_sorties):
     remplacer(entrees_sorties, "sorties: 8", "sorties: 0")
     message = erreur_de(entrees_sorties)
-    assert "carte « relais_1 » : 1 sorties branchées pour 0 disponibles" in message
+    assert "carte « relais_1 » : 2 sorties branchées pour 0 disponibles" in message
 
 
 def test_24_volts_sans_isolement(entrees_sorties):
@@ -199,9 +199,11 @@ def test_le_voyant_buzzer_a_son_propre_relais_sur_un_gpio():
     assert liaison.type == "gpio"
     # Pas d'I2C : l'alarme marche même si le bus ou une carte à relais tombe en panne.
     assert liste.cartes["relais_buzzer"].sorties == 1
-    # relais_1 K1 est libre : seul le voyant du bouton « Prêt » reste sur la carte.
+    # relais_1 K1 est libre : le voyant du bouton « Prêt » (K2) et le reset du pilote de la rotation
+    # de la préhension (K3, réservé, tâche 24 bis) sont sur la carte.
     sur_relais_1 = [n for n, s in liste.signaux.items() if s.carte == "relais_1"]
-    assert sur_relais_1 == ["voyant_pret_fut"]
+    assert sur_relais_1 == ["voyant_pret_fut", "reset_pilote_rotation_prehension"]
+    assert liste.signaux["reset_pilote_rotation_prehension"].broche == ("K3",)
     assert liaison.broches["K1"] not in liste.gpio_reserves
 
 

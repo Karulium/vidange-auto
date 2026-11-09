@@ -27,17 +27,14 @@ cartes:
   portique:
     description: Axes du portique
     numero_serie_usb: "EXEMPLE-PORTIQUE"
-    # Alarmes des pilotes du pont (X1, X2), du chariot (Y) et du Z de la griffe : broches macro0 à
-    # macro3, sans macro (lettres 0 à 3). Frein du Z de la griffe : sortie digital0 (commandée =
+    # Alarme groupée des 6 pilotes de la carte (X1, X2, Y, Z, rotation A et godet B de la griffe) :
+    # broche macro0, sans macro (lettre 0). Frein du Z de la griffe : sortie digital0 (commandée =
     # desserré). Origines du godet et de la rotation de la griffe : fins de course des axes B et A
     # (lettres B et A). « A » est montré quand le fanion est LIBRE (A de 0 à +180°) : sa broche est
     # inversée dans fluidnc/portique.yaml, pour que « $HA » finisse toujours en tournant en +.
     # À VÉRIFIER à l'essai de la carte (pi/systeme/essai-portique.md).
     entrees:
-      alarme_pont_x1: "0"
-      alarme_pont_x2: "1"
-      alarme_chariot_y: "2"
-      alarme_griffe_z: "3"
+      alarme_carte1: "0"
       origine_godet_griffe: B
       origine_rotation_griffe: A
     sorties:
@@ -45,20 +42,12 @@ cartes:
   chariot:
     description: Axes du chariot de remplissage
     numero_serie_usb: "EXEMPLE-CHARIOT"
-    # Barrière lumineuse du chariot (broche macro0, lettre 0) et alarmes ALM des pilotes des 2
-    # barres : côté mur (broche macro1, lettre 1), côté allée (broche macro2, lettre 2), sans
-    # macro. À VÉRIFIER à l'essai de la carte (pi/systeme/essai-remplissage.md).
+    # Barrière lumineuse du chariot (broche macro0, lettre 0) et alarme groupée des 6 pilotes de la
+    # carte (avance, plateau Z et A, pousseur, 2 barres : broche macro1, lettre 1), sans macro.
+    # À VÉRIFIER à l'essai de la carte (pi/systeme/essai-remplissage.md).
     entrees:
       barriere_remplissage: "0"
-      alarme_barre_mur: "1"
-      alarme_barre_allee: "2"
-      # EXEMPLE : les 4 autres ALM (avance, plateau Z, plateau A, pousseur) en OU câblé sur la
-      # macro3 (il n'y a que 4 entrées macro) : le Pi dit « l'un des pilotes ... ».
-      # Question 2 de la PR de la tâche 24.
-      alarme_remplissage_y: "3"
-      alarme_plateau_z: "3"
-      alarme_plateau_a: "3"
-      alarme_pousseur: "3"
+      alarme_carte2: "1"
   mycelium_lavage:
     description: Axes du mycélium et du lavage
     numero_serie_usb: "EXEMPLE-MYCELIUM-LAVAGE"
@@ -72,8 +61,8 @@ cartes:
       verrou_plateau_engage: "0"
       inclinaison_bocal: "1"
       flotteur_lavage: "2"
-      # ALM du pilote de la manivelle (macro3, sans macro) : EXEMPLE.
-      alarme_manivelle: "3"
+      # ALM du seul pilote HBS86H de la carte, la manivelle (macro3, sans macro) : EXEMPLE.
+      alarme_carte3: "3"
     # Sorties de la carte n° 3 (« user_outputs » digital0 à 7 de fluidnc/mycelium_lavage.yaml).
     # Implantation, sorties-carte-3.md, 07/11/2026 (les numéros P ne changent pas) : P0 et P1 le
     # pont en H du demi-tour (JGY370), JAMAIS ENSEMBLE (le Pi refuse), P2 le relais de la pompe de
@@ -102,12 +91,9 @@ cartes:
       contact_tete: P
       # Capteur Hall de la rotation de la tête : fin de course de l'axe A.
       origine_rotation_tete: A
-      # Alarme du pilote de Z (macro0, sans macro) : à vérifier à l'essai du portique.
-      alarme_prehension_z: "0"
-      # ALM des pilotes de la rotation de la tête et des brosses du lavage (macro1 à 3) : EXEMPLES.
-      alarme_rotation_tete: "1"
-      alarme_noyau_lavage: "2"
-      alarme_couronne_lavage: "3"
+      # Alarme groupée des 4 pilotes de la carte (Z, rotation de la tête, noyau, couronne ; macro0,
+      # sans macro) : à vérifier à l'essai du portique.
+      alarme_carte4: "0"
     # Sorties « user_outputs » digital0 à 4 de fluidnc/prehension.yaml. P0 et P1 : les deux
     # électrovannes de la ventouse (Implantation, sorties-carte-4.md, 07/11/2026 : sorties
     # auxiliaires 24 V n° 1 et 2 de la carte, sur le 24 V coupé ; ces numéros ne changent pas) :

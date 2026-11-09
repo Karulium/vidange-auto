@@ -919,7 +919,7 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      question avec ta recommandation. Le simulateur (faux FluidNC) sait glisser d'un nombre de mm donné, pour les
      tests.
   Hors de la tâche : la lecture des positions par la vision, la montée en vitesse (30).
-- [ ] 24 bis. Alarmes des pilotes regroupées par carte (réponse de l'Implantation du 09/11,
+- [x] 24 bis. Alarmes des pilotes regroupées par carte (réponse de l'Implantation du 09/11,
   `implantation/logiciel/alarmes-pilotes.md`, recopiée dans decisions.md). — Sonnet.
   1. **Une seule entrée « alarme » par carte FluidNC** : les ALM de tous les pilotes de la carte sont regroupés
      (en série si la sortie ALM est ouverte en alarme, sécurité positive à préférer ; en parallèle sinon : à

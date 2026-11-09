@@ -619,14 +619,14 @@ def test_alarme_des_barres_pendant_le_centrage():
     remplissage.seau = SeauPlateau("seau_a", "S1", angle_anse=0.0)
     remplissage.lancer(remplissage.geste_centrer)
     banc.temps[0] += 0.5
-    # ALM d'une seule barre (chacune a son pilote) : le geste s'arrête, elle est nommée.
-    banc.chariot.alarmes_barres_actives = ["côté allée"]
+    # ALM groupée de la carte (6 pilotes) : le geste s'arrête ; on ne sait pas quel pilote.
+    banc.chariot.alarme_pilotes_active = True
     with pytest.raises(
-        ErreurEtape, match="alarme du pilote de la barre côté allée pendant .* \\(elle force\\)"
+        ErreurEtape, match="alarme d'un pilote de la carte du chariot pendant .* on ne sait pas"
     ) as erreur:
         banc.finir()
-    assert "force" in erreur.value.quoi_faire
-    assert banc.photos == ["alarme du pilote de la barre côté allée"]
+    assert "force" in erreur.value.quoi_faire and "voyants" in erreur.value.quoi_faire
+    assert banc.photos == ["alarme d'un pilote de la carte du chariot"]
     assert remplissage.libre()
 
 
@@ -1053,8 +1053,7 @@ def reglages_carte() -> Fluidnc:
                     "numero_serie_usb": "A2",
                     "entrees": {
                         "barriere_remplissage": "0",
-                        "alarme_barre_mur": "1",
-                        "alarme_barre_allee": "2",
+                        "alarme_carte2": "1",
                     },
                 },
             },
@@ -1090,7 +1089,7 @@ def test_chariot_sur_un_faux_fluidnc():
             0.135, 0.175, 0.0, pytest.approx(0.30), 0.0, pytest.approx(0.30)
         )
         assert chariot.barriere_coupee() is False
-        assert chariot.alarmes_barres() == []
+        assert chariot.alarme_pilotes() is False
         carte.entrees.add("0")
         attendre(lambda: chariot.barriere_coupee() is True)
         # Centrage en position : les 2 barres à 0,125 dans le même mouvement (côté mur −184 mm,
@@ -1104,11 +1103,9 @@ def test_chariot_sur_un_faux_fluidnc():
         assert "B-184" in jog and "X-181" in jog
         assert chariot.position().barre_allee == pytest.approx(0.125)
         assert not carte.sorties
-        # Alarme ALM du pilote de chaque barre, lue dans « Pn: ».
-        carte.entrees.add("2")
-        attendre(lambda: chariot.alarmes_barres() == ["côté allée"])
+        # Alarme ALM groupée des pilotes de la carte, lue dans « Pn: ».
         carte.entrees.add("1")
-        attendre(lambda: chariot.alarmes_barres() == ["côté mur", "côté allée"])
+        attendre(lambda: chariot.alarme_pilotes() is True)
         attendre(lambda: abs(chariot.peser() - 0.5) < 1e-6)
     finally:
         arret.set()

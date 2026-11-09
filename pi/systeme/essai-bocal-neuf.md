@@ -9,7 +9,7 @@ Le geste ne protège personne : l'appui, le M8, les pesées et le calage du mote
 L'arrêt d'urgence reste câblé comme d'habitude. Pendant que la tête descend ou tourne, gardez les mains **loin de la
 tête, des bocaux, des boîtes et du porte-bocal**.
 
-**Mise à jour (tâche 24) : le calage est maintenant l'ALM du pilote de la rotation (`alarme_rotation_tete`), plus l'erreur du codeur ; voir `essai-derive.md` pour le réglage du pilote et la remise à zéro de l'ALM. Le paragraphe qui suit est l'ancienne situation.**
+**Mise à jour (tâche 24) : le calage est maintenant l'ALM du pilote de la rotation (`alarme_carte4`, groupée avec celles des 3 autres pilotes de la carte n° 4, tâche 24 bis), plus l'erreur du codeur ; voir `essai-derive.md` pour le réglage du pilote et la remise à zéro de l'ALM. Le paragraphe qui suit est l'ancienne situation.**
 
 **Ce que cet essai ne peut pas faire tout de suite.** Le Pi ne sait pas encore lire l'erreur du codeur de la rotation
 de la tête (c'est elle qui dit « le moteur cale »). Tant que cette lecture n'est pas branchée, la commande

@@ -38,9 +38,11 @@ Dans les commandes ci-dessous, `vidange-fluidnc` et `vidange-portique` veulent d
    doit apparaître aussi (fil coupé = déclenché). Sinon : corriger `:low` dans `fluidnc/portique.yaml`.
    Faire de même pour le Z de la préhension (`vidange-fluidnc console prehension`, lettre Z).
 3. Alarmes des pilotes : débrancher le câble moteur d'un pilote (courant coupé !) puis le remettre sous
-   tension : son voyant d'alarme s'allume, et `vidange-portique etat` doit dire lequel (« moteur X1 du
-   pont », « moteur X2 du pont », « chariot Y », « Z de la griffe », « Z de la préhension »). Si le nom est
-   faux, échanger les lettres dans `pi/reglages/fluidnc.yaml` (cartes → portique → entrees).
+   tension : son voyant d'alarme s'allume, et `vidange-portique etat` dit « un pilote de la carte n° 1 »
+   (X1, X2, Y, Z, rotation et godet de la griffe : 6 pilotes sur UNE entrée, `alarme_carte1`) ou « n° 4 »
+   (Z de la préhension, rotation de la tête, noyau, couronne : `alarme_carte4`). Le Pi ne dit pas quel
+   pilote : c'est le voyant du pilote qui le montre (tâche 24 bis). Si la mauvaise carte est nommée,
+   corriger les lettres dans `pi/reglages/fluidnc.yaml` (cartes → portique → entrees).
 4. Détecteur de chocs : débrancher le câble de l'accéléromètre : la carte n° 1 doit passer en **alarme**
    (`?` → `Alarm`). Rebrancher, attendre l'autotest, `$X`.
 
@@ -130,7 +132,7 @@ Les 2 capteurs inductifs M12 (PNP NO, voyant sur le capteur) sont sur le multico
 
 - Les impulsions par tour réglées sur les pilotes (et donc les pas par mm), les places mesurées des fins de
   course (`mpos_mm`, aussi pour A et B de la griffe), les butées de Y, le seuil du détecteur de chocs, le
-  facteur d'accélération tête basse, et si l'alarme du pilote du godet est câblée (question de la PR).
+  facteur d'accélération tête basse, et le sens du câblage des alarmes (série ou parallèle, `essai-derive.md` partie B).
 - Les recopier dans `fluidnc/portique.yaml` et `pi/reglages/machine.yaml`, enlever « EXEMPLE » de ce qui est
   devenu vrai, et ouvrir une PR de correction (ou les donner à une session : « Lis CLAUDE.md, puis corrige la
   PR n° X selon mes remarques et les tests, rien d'autre. »).

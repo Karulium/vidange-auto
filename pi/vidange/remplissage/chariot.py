@@ -17,8 +17,9 @@ bougent ensemble, en ligne droite.
   `origine_allee_hw_m` (côté allée) : position de la carte en mm = (hw − origine) × 1000.
 - Centrage : en position (barres au contact du format + un petit jeu), à la vitesse lente
   « centrage ». Le pilote boucle fermée n'a pas de courant réduit (PUL, DIR, ENA, ALM) : si une
-  barre force trop, son pilote lève ALM (`alarme_barre_mur`, `alarme_barre_allee`), lue dans
-  l'état de la carte.
+  barre force trop, son pilote lève ALM ; les ALM des 6 pilotes de la carte sont regroupées sur
+  UNE entrée (`alarme_carte2`, tâche 24 bis), lue dans l'état de la carte : le Pi sait qu'un
+  pilote de la carte force, pas lequel.
 - Contact du plateau (`contact_kg`) : le plateau monte lentement ; dès que la balance a gagné
   tant de kg, le fil de la balance arrête le mouvement (0x85).
 La balance est lue `pesee → frequence_hz` fois par seconde : une pesée est la médiane des
@@ -48,8 +49,8 @@ journal = donner_journal("remplissage.chariot")
 
 # Noms des signaux (docs/entrees-sorties.yaml, fluidnc.yaml).
 BARRIERE = "barriere_remplissage"
-# Alarme ALM du pilote de chaque barre.
-ALARMES_BARRES = {"côté mur": "alarme_barre_mur", "côté allée": "alarme_barre_allee"}
+# Alarme ALM groupée des 6 pilotes de la carte (dont les 2 barres).
+ALARME_CARTE = "alarme_carte2"
 # Vitesse nommée d'un pas → les axes qu'elle ralentit.
 VITESSES_LENTES = {"centrage": ("barres", "barre_allee"), "contact": ("z",)}
 
@@ -110,9 +111,9 @@ class Chariot(Protocol):
         """Faisceau de la barrière lumineuse coupé ; None : pas lu."""
         ...
 
-    def alarmes_barres(self) -> list[str]:
-        """Les barres dont le pilote est en alarme ALM (elles forcent) : « côté mur », « côté
-        allée »."""
+    def alarme_pilotes(self) -> bool:
+        """Un pilote de la carte (une barre qui force, par exemple) est en alarme ALM ; on ne
+        sait pas lequel."""
         ...
 
     def pauser(self) -> None: ...
@@ -123,7 +124,7 @@ class Chariot(Protocol):
 
 
 def signaux_chariot(liaison: Liaison, carte: CarteFluidnc) -> SignauxFluidnc:
-    return SignauxFluidnc(liaison, carte, entrees=(BARRIERE, *ALARMES_BARRES.values()))
+    return SignauxFluidnc(liaison, carte, entrees=(BARRIERE, ALARME_CARTE))
 
 
 class ChariotFluidnc:
@@ -244,8 +245,8 @@ class ChariotFluidnc:
     def barriere_coupee(self) -> bool | None:
         return self.signaux.entree(BARRIERE)
 
-    def alarmes_barres(self) -> list[str]:
-        return [barre for barre, nom in ALARMES_BARRES.items() if self.signaux.entree(nom)]
+    def alarme_pilotes(self) -> bool:
+        return bool(self.signaux.entree(ALARME_CARTE))
 
     # ------------------------------------------------------------ mouvements
 

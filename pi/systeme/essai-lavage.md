@@ -92,8 +92,9 @@ Dans les commandes ci-dessous, `vidange-fluidnc` et `vidange-lavage` veulent dir
    doivent tourner dans le sens « en avant » de la fiche du module ; sinon, inverser le sens du pilote
    (câblage). Puis `$J=G91 A90 B360 F3600` : la tête et le noyau tournent **ensemble**. Ces commandes à la
    console n'ont pas de verrou : ne pas les refaire avec un seau.
-3. Les alarmes des pilotes du noyau et de la couronne (`alarme_noyau_lavage`, `alarme_couronne_lavage`)
-   doivent mettre la carte n° 4 en alarme (débrancher un moteur, pilote sous tension : alarme).
+3. Les alarmes des pilotes du noyau et de la couronne sont regroupées avec celles des 2 autres pilotes de
+   la carte n° 4 sur l'entrée `alarme_carte4` (tâche 24 bis) : débrancher un moteur, pilote sous tension :
+   la lettre de `alarme_carte4` apparaît dans `Pn:` (le Pi ne dit pas lequel : voyants des pilotes).
 
 ## Étape 4 : un seau lavé
 

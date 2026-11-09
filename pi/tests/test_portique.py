@@ -409,12 +409,14 @@ def test_garage_de_repos_et_photo(banc):
 
 def test_alarme_d_un_pilote_arrete_et_dit_lequel(banc):
     chef, portique, carte_1, _, _ = banc
-    carte_1.entrees.add("1")  # alarme du pilote de X2
-    attendre(lambda: portique.pilotes_en_alarme() == ["moteur X2 du pont"], DELAI)
+    # Alarme groupée de la carte n° 1 (un des 6 pilotes) : on ne sait pas lequel.
+    carte_1.entrees.add(portique.alarmes[ALARMES_PILOTES["alarme_carte1"]][1])
+    attendre(lambda: portique.pilotes_en_alarme() == [ALARMES_PILOTES["alarme_carte1"]], DELAI)
     etat = jouer(chef, module_portique(portique, "origine"))
     assert etat.statut == "alarme"
-    assert "alarme du pilote : moteur X2 du pont" in etat.alarme.message
+    assert "alarme du pilote : un pilote de la carte n° 1" in etat.alarme.message
     assert "pilote du portique est en alarme" in etat.alarme.quoi_faire
+    assert "voyants" in etat.alarme.quoi_faire
     # Rien n'a bougé : la prise d'origine n'est pas lancée.
     assert carte_1.prises_origine == []
 
@@ -433,8 +435,10 @@ def test_signaux_du_portique_dans_la_liste():
     from vidange.entrees_sorties import charger_entrees_sorties
 
     liste = charger_entrees_sorties(DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml")
-    for nom in (*ALARMES_PILOTES, *FREINS, "fdc_pont_x1", "fdc_pont_x2", "fdc_chariot_y"):
+    for nom in ("alarme_carte1", *FREINS, "fdc_pont_x1", "fdc_pont_x2", "fdc_chariot_y"):
         assert liste.signaux[nom].module == "portique", nom
+    assert set(ALARMES_PILOTES) == {"alarme_carte1", "alarme_carte4"}
+    assert liste.signaux["alarme_carte4"].carte == "fluidnc_prehension"
     # Fins de course NF ; « OK » du détecteur de chocs en 24 V sur la carte n° 1.
     assert liste.signaux["fdc_prehension_haut"].repos == "ferme"
     ok = liste.signaux["ok_chocs"]

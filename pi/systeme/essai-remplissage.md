@@ -64,10 +64,13 @@ descend sans `--micropore-rentre` : regarder la tête du micropore tout en arri�
    bout côté stockage ; mesurer, la palette doit être à ≈ +0,16 de l'axe du plateau. `$J=G90 C0 F3000`.
 5. Barrière lumineuse : `?`, puis couper le faisceau avec la main : la lettre `0` doit apparaître dans
    `Pn:` ; disparaître quand on retire la main.
-6. Alarmes ALM des pilotes des barres : débrancher le moteur de la barre côté mur, pilote sous tension :
-   la lettre `1` doit apparaître dans `Pn:` (et pas la `2`). Rebrancher (pilote hors tension), puis vérifier
-   qu'elle disparaît. Même chose avec le moteur de la barre côté allée : la lettre `2`. Faire de même pour
-   les autres pilotes : leur alarme doit être vue comme prévu au câblage.
+6. Alarmes ALM des 6 pilotes de la carte (avance, plateau Z et A, pousseur, 2 barres), regroupées sur UNE
+   entrée `alarme_carte2` (lettre `1`, tâche 24 bis) : débrancher le moteur de la barre côté mur, pilote
+   sous tension : la lettre `1` doit apparaître dans `Pn:`. Rebrancher (pilote hors tension), puis vérifier
+   qu'elle disparaît. Refaire avec chacun des 5 autres pilotes : c'est toujours la lettre `1`, et `vidange-
+   remplissage etat` dit « alarme des pilotes de la carte : OUI » sans dire lequel (voyants des pilotes).
+   Vérifier aussi le sens du câblage (voir `essai-derive.md`, partie B) : une alarme doit allumer la lettre
+   `1`, le repos ne doit pas l'allumer.
 7. Câbles des capteurs (bornier du boîtier, 31/10) : vérifier que le câble 1 porte 24 V, 0 V, avance,
    montée bas, barre mur, barre allée et les 2 fils du fin de course haut (vers l'arrêt), et le câble 2
    24 V, 0 V, Hall, pousseur, RS485 A et B, barrière, 1 fil libre (`docs/entrees-sorties.yaml`).
@@ -128,8 +131,8 @@ descend sans `--micropore-rentre` : regarder la tête du micropore tout en arri�
    contact du corps du seau sous le rebord (`formats → seau_a → centrage_hw_m` + `barres → jeu_centrage_m`),
    puis s'ouvrent : le plateau doit **descendre sous 0,48 avant** qu'elles passent au-delà de 0,235, puis
    remonter. Le seau doit être centré sans être écrasé. Régler `centrage_hw_m` (hw au contact) et le
-   petit jeu. Si une barre force trop, son pilote lève ALM : l'outil dit « alarme du pilote de la barre
-   côté mur » (ou côté allée) et s'arrête ; c'est le comportement voulu (réduire `centrage_hw_m` d'un cran trop serré, ou augmenter le
+   petit jeu. Si une barre force trop, son pilote lève ALM : l'outil dit « alarme d'un pilote de la carte du
+   chariot » (on ne sait pas lequel : regarder les voyants) et s'arrête ; c'est le comportement voulu (réduire `centrage_hw_m` d'un cran trop serré, ou augmenter le
    jeu).
 4. `vidange-remplissage --galet-range --manivelle-en-bas vidage seau_a` : le plateau descend, le chariot
    va au vidage (y 0,42), le plateau remonte : le bord du seau doit être à **0,78** (0,775 pour le 5 L).

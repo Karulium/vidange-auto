@@ -2306,32 +2306,37 @@ solveur:
   # Écart (s) entre l'heure prévue d'un passage dans une zone et l'heure vraie.
   ecart_max_s: 30
 
-# Alarmes ALM des pilotes boucle fermée (tâche 24). Le Pi ne lit jamais la position du codeur : le
-# pilote rattrape seul ses pas et lève ALM si l'erreur de suivi dépasse son réglage (fait SUR le
-# pilote, pas ici : voir pi/systeme/essai-derive.md). Un seul endroit pour toute la machine :
-#   alarmes      axe → ses entrées alarme_* (docs/entrees-sorties.yaml, lettre dans fluidnc.yaml) ;
+# Alarmes ALM des pilotes boucle fermée (tâches 24 et 24 bis). Le Pi ne lit jamais la position du
+# codeur : le pilote rattrape seul ses pas et lève ALM si l'erreur de suivi dépasse son réglage
+# (fait SUR le pilote, pas ici : voir pi/systeme/essai-derive.md). Un seul endroit pour toute la
+# machine :
+#   alarmes      axe → son entrée alarme_* (docs/entrees-sorties.yaml, lettre dans fluidnc.yaml).
+#                UNE entrée par carte FluidNC : tous les axes d'une carte donnent la même (les ALM
+#                de ses pilotes sont câblés ensemble). Le Pi sait qu'un pilote de la carte est en
+#                alarme, pas lequel (voyants des pilotes). Deux cartes ne partagent jamais une entrée ;
 #   sans_alarme  axe moteur sans ALM lue, avec la raison ;
-#   modules      module du chef → axes qu'il fait bouger : leur ALM arrête le module et alerte.
-# Vérifié au démarrage : un axe moteur oublié, une entrée alarme_* sans axe, un axe inconnu.
+#   modules      module du chef → axes qu'il fait bouger : l'ALM de leur carte arrête le module.
+# Vérifié au démarrage : un axe moteur oublié, une entrée alarme_* sans axe, un axe inconnu, une
+# entrée partagée par des axes de cartes différentes.
 pilotes:
   alarmes:
-    pont_x: [alarme_pont_x1, alarme_pont_x2]
-    chariot_y: [alarme_chariot_y]
-    griffe_z: [alarme_griffe_z]
-    prehension_z: [alarme_prehension_z]
-    prehension_a: [alarme_rotation_tete]
-    manivelle: [alarme_manivelle]
-    lavage_noyau: [alarme_noyau_lavage]
-    lavage_couronne: [alarme_couronne_lavage]
-    remplissage_y: [alarme_remplissage_y]
-    plateau_z: [alarme_plateau_z]
-    plateau_a: [alarme_plateau_a]
-    barres: [alarme_barre_mur]
-    barre_allee: [alarme_barre_allee]
-    pousseur: [alarme_pousseur]
+    pont_x: [alarme_carte1]
+    chariot_y: [alarme_carte1]
+    griffe_z: [alarme_carte1]
+    griffe_a: [alarme_carte1]
+    griffe_b: [alarme_carte1]
+    prehension_z: [alarme_carte4]
+    prehension_a: [alarme_carte4]
+    lavage_noyau: [alarme_carte4]
+    lavage_couronne: [alarme_carte4]
+    manivelle: [alarme_carte3]
+    remplissage_y: [alarme_carte2]
+    plateau_z: [alarme_carte2]
+    plateau_a: [alarme_carte2]
+    barres: [alarme_carte2]
+    barre_allee: [alarme_carte2]
+    pousseur: [alarme_carte2]
   sans_alarme:
-    griffe_a: "rotation de la griffe : pas d'ALM dans docs/entrees-sorties.yaml (question 3 de la PR de la tâche 24)"
-    griffe_b: "godet de la griffe : pas d'ALM dans docs/entrees-sorties.yaml (question 3 de la PR de la tâche 24)"
     mors: "TMC2209 (StallGuard sur l'entrée probe) : pas de pilote boucle fermée"
     exemple_x: "axe d'exemple"
     exemple_y: "axe d'exemple"
@@ -2341,19 +2346,36 @@ pilotes:
     portique_garage: [pont_x, chariot_y, griffe_z, prehension_z]
     portique_photo: [pont_x, chariot_y, griffe_z, prehension_z]
     lieu_sur: [pont_x, chariot_y, griffe_z, prehension_z]
-    griffe: [pont_x, chariot_y, griffe_z]
+    griffe: [pont_x, chariot_y, griffe_z, griffe_a, griffe_b]
     prehension: [pont_x, chariot_y, prehension_z, prehension_a]
     entonnoir: [pont_x, chariot_y, prehension_z, prehension_a]
     lavage: [prehension_z, prehension_a, lavage_noyau, lavage_couronne]
     mycelium: [manivelle]
     remplissage: [remplissage_y, plateau_z, plateau_a, barres, barre_allee, pousseur]
-  # Comment l'ALM retombe après un calage voulu (vissage du couvercle percé) : EXEMPLE, cela dépend
-  # du pilote (coupure puis remise de ENA, ou remise sous tension). Question 1 de la PR de la tâche 24.
+  # Comment l'ALM retombe après un calage voulu (vissage du couvercle percé, rotation de la tête).
+  # Pendant ce pas, l'ALM de la carte n° 4 est ATTENDUE : elle masque aussi les 3 autres pilotes de
+  # cette carte (Z, noyau, couronne), qu'on ne peut pas séparer. Au début du pas suivant :
+  #   1er essai : les lignes ci-dessous (ENA de chaque pilote est câblé sur la sortie « disable » de
+  #               sa carte : « $MD » puis « $ME ») ;
+  #   2e essai  : si l'ALM ne retombe pas, coupure de l'alimentation du seul pilote de rotation de la
+  #               tête (`coupure`), derrière `actif`. Beaucoup de pilotes du commerce n'effacent leur
+  #               alarme QU'EN COUPANT LEUR ALIMENTATION : à vérifier à réception.
+  # EXEMPLES, à régler à l'essai (pi/systeme/essai-derive.md). Jamais couper K1 de relais_1 (il
+  # couperait tous les moteurs).
   remise_a_zero:
     exemple: true
     lignes: ["$MD", "$ME"]
     attente_s: 0.3
     delai_max_s: 3
+    coupure:
+      # false tant que l'essai n'a pas montré que « $MD » puis « $ME » ne suffit pas.
+      actif: false
+      # Axe → sortie du Pi (docs/entrees-sorties.yaml, relais_1 K3) qui coupe SON pilote seul.
+      sorties:
+        prehension_a: reset_pilote_rotation_prehension
+      # Durée de la coupure (s), puis attente après la remise du courant avant de relire l'ALM (s).
+      duree_s: 2
+      attente_retour_s: 1
 
 # Contrôle d'origine contre la dérive (courroie ou pignon qui glisse, que le codeur ne voit pas).
 # EXEMPLE : un seul axe, désactivé (actif: false) tant que l'essai de pi/systeme/essai-derive.md n'est

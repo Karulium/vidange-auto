@@ -45,13 +45,11 @@ from vidange.reglages import Portique as ReglagesPortique
 
 journal = donner_journal("portique")
 
-# Les alarmes des 5 pilotes (docs/entrees-sorties.yaml, fluidnc.yaml → entrees), et ce qu'on dit.
+# Les alarmes groupées par carte (tâche 24 bis ; docs/entrees-sorties.yaml, fluidnc.yaml → entrees),
+# et ce qu'on dit : le Pi ne sait pas quel pilote de la carte est en alarme.
 ALARMES_PILOTES = {
-    "alarme_pont_x1": "moteur X1 du pont",
-    "alarme_pont_x2": "moteur X2 du pont",
-    "alarme_chariot_y": "chariot Y",
-    "alarme_griffe_z": "Z de la griffe",
-    "alarme_prehension_z": "Z de la préhension",
+    "alarme_carte1": "un pilote de la carte n° 1 (pont, chariot Y, griffe : regarder les voyants)",
+    "alarme_carte4": "un pilote de la carte n° 4 (Z de la préhension, tête : regarder les voyants)",
 }
 # Les freins des deux Z (fluidnc.yaml → sorties ; commandée = desserré).
 FREINS = {"frein_griffe_z": "Z de la griffe", "frein_prehension_z": "Z de la préhension"}
@@ -65,8 +63,9 @@ QUOI_FAIRE = (
 )
 QUOI_FAIRE_ORIGINE = ALARMES_FLUIDNC[9]
 QUOI_FAIRE_PILOTE = (
-    "Un pilote du portique est en alarme (moteur bloqué, effort trop grand ou câble) : regarder "
-    "ce qui bloque l'axe, sans desserrer le frein d'un Z. Dégager, couper puis remettre le "
+    "Un pilote du portique est en alarme (moteur bloqué, effort trop grand ou câble). Le Pi ne "
+    "sait pas lequel : regarder les voyants des pilotes de la carte, puis ce qui bloque l'axe "
+    "concerné, sans desserrer le frein d'un Z. Dégager, couper puis remettre le "
     "courant du pilote (son voyant d'alarme s'éteint), puis acquitter et donner le Go : la prise "
     "d'origine du portique est refaite."
 )

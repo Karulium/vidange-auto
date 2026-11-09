@@ -122,13 +122,13 @@ def test_carte_relais_en_gpio_direct(entrees_sorties):
     relais_par(
         entrees_sorties,
         "    liaison:\n      type: gpio\n      fichier: /dev/gpiochip0\n"
-        "      broches:\n        K1: GPIO13\n        K2: GPIO21\n",
+        "      broches:\n        K1: GPIO13\n        K2: GPIO21\n        K3: GPIO24\n",
     )
     faux, materiel = ouvrir(entrees_sorties)
     gpio = faux.gpios["/dev/gpiochip0"]
     # GPIO12 : le battement du Pi, sur la carte « pi » elle-même.
     # GPIO23 : le module relais du voyant-buzzer (niveau actif haut : bas au repos).
-    assert gpio.sorties == {"GPIO12": False, "GPIO21": False, "GPIO23": False}
+    assert gpio.sorties == {"GPIO12": False, "GPIO21": False, "GPIO23": False, "GPIO24": False}
     materiel.ecrire("voyant_pret_fut", True)
     assert gpio.niveau("GPIO21") is True
     assert faux.commande("voyant_pret_fut") is True
@@ -138,7 +138,7 @@ def test_carte_relais_par_un_mcp23017(entrees_sorties):
     relais_par(
         entrees_sorties,
         "    liaison:\n      type: i2c\n      signal: relais_1_bus\n"
-        "      broches:\n        K1: B3\n        K2: B4\n      niveau_actif: bas\n",
+        "      broches:\n        K1: B3\n        K2: B4\n        K3: B5\n      niveau_actif: bas\n",
     )
     remplacer(entrees_sorties, "appareil: pcf8574", "appareil: mcp23017")
     faux, materiel = ouvrir(entrees_sorties)
@@ -244,7 +244,7 @@ def test_puce_absente_au_demarrage(entrees_sorties):
     liste = charger_entrees_sorties(entrees_sorties)
     faux = FausseFabrique(liste)
     faux.bus["/dev/i2c-1"].appareils[0x20].debranche = True
-    attendu = "puce I2C 0x20 .* \\(signaux voyant_pret_fut\\)"
+    attendu = "puce I2C 0x20 .* \\(signaux voyant_pret_fut, reset_pilote_rotation_prehension\\)"
     with pytest.raises(ErreurMateriel, match=attendu):
         Materiel(liste, faux)
 
