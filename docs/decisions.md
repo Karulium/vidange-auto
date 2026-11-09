@@ -2263,3 +2263,9 @@ partout) : ce qui en dépend est « à vérifier à réception ». Procédure d'
   construit pas les alarmes des pilotes et le dit dans le journal. Jamais K1. Le relais est toujours remis, même en cas
   d'erreur.
 - **Hors de la tâche** : retrouver quel pilote est en alarme en comparant positions demandée et lue.
+- **Réponses à la PR n° 108** (tâche 24 bis, 09/11/2026, niveau 1, tranché par Claude) :
+  1. Pendant le pas `cale`, l'ALM de la carte 4 masque aussi le Z de la préhension, le noyau et la couronne : accepté.
+     Aucun de ces axes ne bouge pendant le vissage, et le pas suivant arrête la machine si l'alarme reste.
+  2. Éviter l'alarme au calage (seuil d'erreur du pilote ou courant limité pendant le vissage) est essayé en premier
+     (partie C.1 de `pi/systeme/essai-derive.md`). Si cela marche, une petite tâche fera finir le pas `cale` autrement
+     que par l'alarme ; elle sera écrite à réception du pilote, après l'essai.
