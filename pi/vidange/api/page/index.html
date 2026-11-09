@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vidange automatique</title>
+<!-- Appli installable (tâche 28 bis) : manifeste et icônes. L'installation et le service worker
+     demandent HTTPS : voir pi/systeme/essai-page-web-2.md. -->
+<link rel="manifest" href="/manifeste.webmanifest">
+<meta name="theme-color" content="#1f8a4c">
+<link rel="icon" href="/icones/icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icones/icone-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Vidange">
 <!--
   Page web locale de la machine (tâche 8). Une seule page, sans rien à télécharger d'Internet :
   elle marche aussi sans réseau extérieur. Elle demande le nom et le mot de passe du compte
@@ -81,6 +89,16 @@
   #cle input { width: 100%; margin-bottom: 8px; padding: 12px; font-size: 18px; border-radius: 8px; border: 1px solid var(--bord); }
   #erreur { color: var(--rouge); font-weight: 700; margin: 8px 0; }
   .bleu { background: var(--bleu); }
+  /* Graphiques des statistiques (SVG dessiné à la main, tâche 28 bis). */
+  .graphique { display: block; margin: 6px 0; max-height: 260px; }
+  .graphique .grille { stroke: var(--bord); stroke-width: 1; }
+  .graphique .axe-texte { fill: var(--doux); font-size: 11px; }
+  .legende { margin-right: 12px; white-space: nowrap; }
+  .pastille { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+  .note .barree { text-decoration: line-through; color: var(--doux); white-space: pre-wrap; }
+  .note div { white-space: pre-wrap; }
+  .champs textarea { width: 100%; font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--bord);
+    background: var(--fond); color: var(--texte); }
   .camera { width: 100%; display: block; border-radius: 8px; background: #000; min-height: 120px; }
   .choix { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
   .choix button.actif { background: var(--bleu); color: #fff; border-color: var(--bleu); }
@@ -119,6 +137,9 @@
       <button data-vue="video">Vidéo</button>
       <button data-vue="photos">Photos</button>
       <button data-vue="3d">Vue 3D</button>
+      <button data-vue="stats">Statistiques</button>
+      <button data-vue="carnet">Carnet</button>
+      <button data-vue="reglages" id="onglet-reglages">Réglages</button>
       <button data-vue="checklist">Check-list</button>
       <button data-vue="maintenance">Maintenance</button>
       <button data-vue="maj">Mises à jour</button>
@@ -222,6 +243,18 @@
 
     <section id="vue-3d">
       <div id="vue3d"></div>
+    </section>
+
+    <section id="vue-stats">
+      <div id="stats"></div>
+    </section>
+
+    <section id="vue-carnet">
+      <div id="carnet"></div>
+    </section>
+
+    <section id="vue-reglages">
+      <div id="reglages"></div>
     </section>
 
     <section id="vue-maintenance">
@@ -382,6 +415,23 @@ function montrer(nom) {
   if (nom === "maj") chargerMaj(); else clearTimeout(minuterieMaj);
   if (nom === "maintenance") chargerMaintenance();
   if (nom === "3d") ouvrir3d(); else fermer3d();
+  if (nom === "stats") ouvrirOnglet("stats", "ouvrirStatistiques");
+  if (nom === "carnet") ouvrirOnglet("carnet", "ouvrirCarnet");
+  if (nom === "reglages") ouvrirOnglet("reglages", "ouvrirReglages");
+}
+
+// ------------------------------------------------------------ statistiques, carnet, réglages (28 bis)
+
+let moduleOnglets = null;
+
+async function ouvrirOnglet(conteneur, fonction) {
+  // Le code de ces onglets n'est chargé qu'à la première ouverture.
+  try {
+    if (!moduleOnglets) moduleOnglets = await import("/statique/onglets.js");
+    await moduleOnglets[fonction]($(conteneur), { el, lire, api, dire, heure, Refus, droits: () => droits });
+  } catch (erreur) {
+    if (!(erreur instanceof Refus)) remplir(conteneur, el("p", { classe: "doux" }, "Impossible : " + erreur.message));
+  }
 }
 
 // ------------------------------------------------------------ vue 3D (tâche 28)
@@ -1334,9 +1384,17 @@ $("maj-envoyer").addEventListener("click", async () => {
 
 async function demarrer() {
   let moi = { connecte: false };
-  try { moi = await (await fetch("/api/moi", { credentials: "same-origin" })).json(); } catch (e) { /* hors ligne */ }
+  try { moi = await (await fetch("/api/moi", { credentials: "same-origin" })).json(); }
+  catch (e) {
+    // Pi injoignable (la page peut venir du cache de l'appli) : jamais un vieil état, on réessaie.
+    demanderCle("Le Pi ne répond pas. Nouvel essai dans quelques secondes…");
+    setTimeout(demarrer, 5000);
+    return;
+  }
   if (!moi.connecte) { demanderCle(""); return; }
   droits = moi.droits || [];
+  // L'onglet « Réglages » n'est montré qu'au rôle « régler » (karulium).
+  $("onglet-reglages").hidden = !droits.includes("régler");
   $("qui-suis-je").textContent = moi.nom + " (" + moi.role + ") ·";
   $("cle").hidden = true;
   $("appli").hidden = false;
@@ -1344,6 +1402,13 @@ async function demarrer() {
   rafraichir();
 }
 demarrer();
+
+// Appli installable (tâche 28 bis) : le service worker (la coquille de la page seulement, jamais
+// l'API) demande un contexte sûr : HTTPS, ou « localhost ». En http sur le Wi-Fi de l'atelier, la
+// page marche comme avant, sans service worker.
+if ("serviceWorker" in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => { /* tant pis : la page marche sans */ });
+}
 </script>
 </body>
 </html>

@@ -6183,6 +6183,27 @@ class ReglagesLot(Modele):
     suivi_periode_s: float = Field(gt=0, le=5)
 
 
+class ReglagesStatistiques(Modele):
+    """Statistiques de la page web (tâche 28 bis) : calculées d'après le registre seulement."""
+
+    # Combien de jours, de semaines et de mois sont montrés (le plus récent à la fin).
+    jours: int = Field(ge=1, le=366)
+    semaines: int = Field(ge=1, le=260)
+    mois: int = Field(ge=1, le=120)
+    # Un cycle resté ouvert (coupure, reprise en attente) compte en « marche » au plus ce nombre
+    # d'heures après son début : on ne sait pas s'il a vraiment tourné plus longtemps.
+    cycle_ouvert_max_h: float = Field(gt=0, le=720)
+
+
+class ReglagesCarnet(Modele):
+    """Carnet de bord de la page web (tâche 28 bis)."""
+
+    # Longueur permise d'une note (signes).
+    texte_max: int = Field(ge=1, le=100000)
+    # Nombre de notes rendues d'un coup (page suivante : « plus ancien »).
+    notes_par_page: int = Field(ge=1, le=1000)
+
+
 class Programme(Modele):
     """programme.yaml : réglages du programme lui-même (pas de la machine)."""
 
@@ -6198,6 +6219,8 @@ class Programme(Modele):
     distance: ReglagesDistance
     mises_a_jour: ReglagesMisesAJour
     lot: ReglagesLot
+    statistiques: ReglagesStatistiques
+    carnet: ReglagesCarnet
 
     @model_validator(mode="after")
     def _verifier_video(self) -> "Programme":
@@ -7953,6 +7976,138 @@ class ReglagesVue3d(Modele):
         return self
 
 
+# ---------------------------------------------------------------- modifiables.yaml
+
+# Ce que la page web a le droit de changer (tâche 28 bis) : SEULEMENT ces parties de ces fichiers.
+# Ce sont des noms, pas des chiffres de la machine. Tout le reste (machine.yaml, fluidnc.yaml,
+# accelerometre.yaml, pesees.yaml, vision.yaml, air.yaml, simulateur.yaml, vue3d.yaml, et dans
+# programme.yaml le chef, la distance, les lots, l'API, les mises à jour...) touche au mouvement, à
+# la machine ou à l'accès : jamais modifiable depuis la page. Ajouter une partie ici est un
+# changement du programme, à faire dans une PR, pas une ligne de réglage.
+SECTIONS_MODIFIABLES: dict[str, tuple[str, ...]] = {
+    "programme.yaml": ("notifications",),
+    "entretien.yaml": ("alerte", "pieces"),
+}
+
+_CHEMIN_MODIFIABLE = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$"
+_HEURE_COMPLETE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+class ReglageModifiable(Modele):
+    """Un réglage que la page web peut changer : où il est, ses bornes, son unité, son aide."""
+
+    libelle: str = Field(min_length=1)
+    fichier: str = Field(pattern=r"^[a-z0-9_]+\.yaml$")
+    # Chemin dans le fichier, noms séparés par des points (exemple : notifications.escalade.x).
+    chemin: str = Field(pattern=_CHEMIN_MODIFIABLE)
+    genre: Literal["nombre", "entier", "heure"]
+    # Bornes permises (comprises). Pour une heure : « HH:MM » entre guillemets.
+    min: float | str
+    max: float | str
+    unite: str = Field(min_length=1)
+    aide: str = Field(min_length=1)
+    # Vrai : le programme ne lit ce réglage qu'au démarrage ; il agit après le prochain redémarrage.
+    redemarrage: bool
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "ReglageModifiable":
+        if self.genre == "heure":
+            for nom in ("min", "max"):
+                valeur = getattr(self, nom)
+                if not isinstance(valeur, str) or not _HEURE_COMPLETE.match(valeur):
+                    raise ValueError(
+                        f'{nom} : « {valeur} » doit s\'écrire "HH:MM" (exemple : "19:00")'
+                    )
+        else:
+            for nom in ("min", "max"):
+                valeur = getattr(self, nom)
+                if isinstance(valeur, str) or isinstance(valeur, bool) or not math.isfinite(valeur):
+                    raise ValueError(f"{nom} : « {valeur} » doit être un nombre")
+        if self.min >= self.max:
+            raise ValueError(f"min ({self.min}) doit être plus petit que max ({self.max})")
+        return self
+
+
+class ReglagesModifiables(Modele):
+    """modifiables.yaml : la liste des réglages que la page web peut changer (tâche 28 bis)."""
+
+    exemple: bool = False
+    reglages: dict[Nom, ReglageModifiable] = Field(min_length=1)
+
+
+def valeur_au_chemin(donnees: Any, chemin: str) -> Any:
+    """La valeur à « a.b.c » dans des dictionnaires imbriqués ; None si le chemin n'existe pas."""
+    for nom in chemin.split("."):
+        if not isinstance(donnees, dict) or nom not in donnees:
+            return None
+        donnees = donnees[nom]
+    return donnees
+
+
+def valeur_dans_les_bornes(reglage: ReglageModifiable, valeur: Any) -> str | None:
+    """Pourquoi cette valeur ne va pas (genre faux, hors bornes), ou None si elle va."""
+    unite = reglage.unite
+    if reglage.genre == "heure":
+        if not isinstance(valeur, str) or not _HEURE_COMPLETE.match(valeur):
+            return "doit s'écrire HH:MM (exemple : 19:00)"
+    else:
+        if isinstance(valeur, bool) or not isinstance(valeur, int | float):
+            return "doit être un nombre"
+        if not math.isfinite(valeur):
+            return "doit être un nombre"
+        if reglage.genre == "entier" and valeur != int(valeur):
+            return "doit être un nombre entier"
+    if valeur < reglage.min or valeur > reglage.max:
+        return f"hors des bornes permises ({reglage.min} à {reglage.max} {unite})"
+    return None
+
+
+def _verifier_modifiables_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
+    """La liste des réglages modifiables ne vise que ce qui est permis, et que ce qui existe."""
+    liste = valeurs["modifiables"]
+    assert isinstance(liste, ReglagesModifiables)
+    par_fichier = {nom: cle for nom, (cle, _) in FICHIERS.items()}
+    erreurs = []
+    vus: dict[tuple[str, str], str] = {}
+    for nom, reglage in liste.reglages.items():
+        debut = f"modifiables.yaml, reglages → {nom}"
+        endroit = (reglage.fichier, reglage.chemin)
+        if endroit in vus:
+            erreurs.append(f"{debut} : même réglage que « {vus[endroit]} »")
+        vus[endroit] = nom
+        if reglage.fichier not in par_fichier:
+            erreurs.append(
+                f"{debut} → fichier : « {reglage.fichier} » inconnu "
+                f"(fichiers : {', '.join(par_fichier)})"
+            )
+            continue
+        permises = SECTIONS_MODIFIABLES.get(reglage.fichier, ())
+        section = reglage.chemin.split(".")[0]
+        if section not in permises:
+            ou = ", ".join(f"{f} → {s}" for f, parts in SECTIONS_MODIFIABLES.items() for s in parts)
+            erreurs.append(
+                f"{debut} : {reglage.fichier} → {reglage.chemin} touche au mouvement, à la machine "
+                f"ou à l'accès : la page web ne peut pas le changer (permis : {ou})"
+            )
+            continue
+        actuelle = valeur_au_chemin(
+            valeurs[par_fichier[reglage.fichier]].model_dump(), reglage.chemin
+        )
+        if actuelle is None or isinstance(actuelle, dict | list):
+            erreurs.append(
+                f"{debut} : {reglage.fichier} → {reglage.chemin} n'existe pas, ou n'est pas "
+                "une valeur simple (nombre ou heure)"
+            )
+            continue
+        pourquoi = valeur_dans_les_bornes(reglage, actuelle)
+        if pourquoi is not None:
+            erreurs.append(
+                f"{debut} : la valeur actuelle de {reglage.fichier} → {reglage.chemin} "
+                f"({actuelle}) {pourquoi}"
+            )
+    return erreurs
+
+
 # --------------------------------------------------------------- l'ensemble
 
 
@@ -7967,6 +8122,7 @@ class Reglages(Modele):
     air: ReglagesAir
     entretien: ReglagesEntretien
     vue3d: ReglagesVue3d
+    modifiables: ReglagesModifiables
 
 
 # Nom du fichier → (nom dans Reglages, modèle). Ajouter ici chaque nouveau fichier.
@@ -7981,6 +8137,7 @@ FICHIERS: dict[str, tuple[str, type[Modele]]] = {
     "air.yaml": ("air", ReglagesAir),
     "entretien.yaml": ("entretien", ReglagesEntretien),
     "vue3d.yaml": ("vue3d", ReglagesVue3d),
+    "modifiables.yaml": ("modifiables", ReglagesModifiables),
 }
 
 
@@ -8198,6 +8355,7 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
     erreurs += _verifier_micropore_entre_fichiers(valeurs)
     erreurs += _verifier_fermeture_entre_fichiers(valeurs)
     erreurs += _verifier_vue3d_entre_fichiers(valeurs)
+    erreurs += _verifier_modifiables_entre_fichiers(valeurs)
     if simulateur.depart is not None and simulateur.depart not in machine.positions:
         erreurs.append(
             f"simulateur.yaml, depart : position « {simulateur.depart} » absente de machine.yaml"

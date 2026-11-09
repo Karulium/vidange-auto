@@ -35,6 +35,11 @@ ROUTES_PUBLIQUES = {
     ("GET", "/api/moi"),
     ("POST", "/api/connexion"),
     ("POST", "/api/deconnexion"),
+    # L'appli installable (tâche 28 bis) : le navigateur les demande sans être connecté. Rien de
+    # secret : un manifeste, des icônes, le code du service worker (qui ne garde que la coquille).
+    ("GET", "/manifeste.webmanifest"),
+    ("GET", "/sw.js"),
+    ("GET", "/icones/{nom}"),
 }
 
 _MOTS = {Niveau.REGARDER: "regarder", Niveau.PRODUIRE: "produire", Niveau.REGLER: "régler"}

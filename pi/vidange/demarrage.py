@@ -112,6 +112,7 @@ from vidange.materiel.materiel import Fabrique
 from vidange.mises_a_jour import DOSSIER as DOSSIER_MISES_A_JOUR
 from vidange.mises_a_jour import CarteEsp32, MisesAJour, ProgrammePi, preparer_cartes
 from vidange.mode import ModeMachine
+from vidange.modifiables import Modifiables
 from vidange.nettoyage import Nettoyage
 from vidange.nettoyage.capteurs import capteurs_du_materiel
 from vidange.nettoyage.capteurs import verifier_avec_liste as verifier_nettoyage
@@ -132,6 +133,7 @@ from vidange.reglages import ErreurReglages, Reglages, charger_reglages
 from vidange.spray.spray import PORTE as PORTE_SPRAY
 from vidange.spray.spray import Spray
 from vidange.spray.spray import verifier_avec_liste as verifier_spray
+from vidange.statistiques import Statistiques
 from vidange.stockage.correction import Correction
 from vidange.vision.photo import Photographe
 from vidange.vue3d import EnregistreurRejeu, Vue3d
@@ -330,6 +332,32 @@ def preparer_api(
     actions = JournalActions(dossier_donnees / NOM_JOURNAL_ACTIONS)
     app = creer_app(services, reglages.programme.api, comptes, actions)
     return ServeurApi(app, reglages.programme.api, comptes)
+
+
+def erreurs_entre_reglages_et_liste(
+    reglages: Reglages, entrees_sorties: EntreesSorties
+) -> list[str]:
+    """Les vérifications qui croisent les réglages et la liste des entrées/sorties (pesées,
+    ventilateur, spray, entretien) : une liste d'erreurs en français, vide si tout va bien."""
+    erreurs = verifier_avec_liste(reglages.pesees, entrees_sorties)
+    if reglages.machine.nettoyage is not None:
+        erreurs += verifier_nettoyage(reglages.machine.nettoyage, entrees_sorties)
+    if reglages.machine.spray is not None:
+        erreurs += verifier_spray(reglages.machine.spray, entrees_sorties)
+    erreurs += verifier_entretien(reglages.entretien, entrees_sorties, reglages.fluidnc)
+    return erreurs
+
+
+def erreurs_de_reglages(dossier_reglages: Path, chemin_entrees_sorties: Path) -> list[str]:
+    """TOUTES les vérifications du démarrage sur un dossier de réglages (celui du programme, ou une
+    copie provisoire avec un réglage changé depuis la page web, tâche 28 bis) : une liste
+    d'erreurs en français, vide si le programme démarrerait."""
+    try:
+        reglages = charger_reglages(dossier_reglages)
+        entrees_sorties = charger_entrees_sorties(chemin_entrees_sorties)
+    except ErreurReglages as erreur:
+        return [str(erreur)]
+    return erreurs_entre_reglages_et_liste(reglages, entrees_sorties)
 
 
 def constats_ecran(liaison: LiaisonEcran | None) -> list[Constat]:
@@ -577,12 +605,7 @@ def principal(
     except ErreurReglages as erreur:
         journal.error("%s", erreur)
         return CODE_REGLAGES_FAUX
-    erreurs_pesees = verifier_avec_liste(reglages.pesees, entrees_sorties)
-    if reglages.machine.nettoyage is not None:
-        erreurs_pesees += verifier_nettoyage(reglages.machine.nettoyage, entrees_sorties)
-    if reglages.machine.spray is not None:
-        erreurs_pesees += verifier_spray(reglages.machine.spray, entrees_sorties)
-    erreurs_pesees += verifier_entretien(reglages.entretien, entrees_sorties, reglages.fluidnc)
+    erreurs_pesees = erreurs_entre_reglages_et_liste(reglages, entrees_sorties)
     if erreurs_pesees:
         journal.error(
             "Réglages qui ne vont pas ensemble (pesées, ventilateur, spray, entretien) :\n%s",
@@ -760,6 +783,11 @@ def principal(
             "vue3d.yaml contient des tailles de boîtes et des décalages de dessin d'EXEMPLE "
             "(exemple: true) : les comparer à la vraie machine (pi/systeme/essai-vue-3d.md), "
             "puis passer « exemple » à false."
+        )
+    if reglages.modifiables.exemple:
+        journal.warning(
+            "modifiables.yaml : les bornes des réglages que la page web peut changer sont des "
+            "EXEMPLES (exemple: true) : les ajuster à l'usage, puis passer « exemple » à false."
         )
     if reglages.air.exemple:
         journal.warning(
@@ -1145,6 +1173,16 @@ def principal(
                 "nuit UV-ozone": mode_nuit.constats,
             }
         )
+
+        def pourquoi_pas_de_changement() -> str:
+            """Réglages changés depuis la page : jamais pendant un geste, un lot, le pilotage à
+            distance ou une mise à jour (tâche 28 bis)."""
+            if mises_a_jour is not None and mises_a_jour.en_cours:
+                return "une mise à jour est en cours"
+            if pilote is not None and pilote.actif:
+                return "le pilotage à distance est en cours"
+            return refus_lancement(chef, None, "", "un geste ou un lot est en cours") or ""
+
         serveur = preparer_api(
             comptes,
             reglages,
@@ -1165,6 +1203,16 @@ def principal(
                 correction=correction,
                 vue3d=vue3d,
                 rejeux=rejeux,
+                statistiques=Statistiques(registre, reglages.programme.statistiques),
+                carnet=reglages.programme.carnet,
+                modifiables=Modifiables(
+                    reglages.modifiables,
+                    reglages,
+                    dossier_reglages,
+                    registre,
+                    lambda dossier: erreurs_de_reglages(dossier, chemin_entrees_sorties),
+                    pourquoi_pas_de_changement,
+                ),
             ),
             dossier_donnees,
         )

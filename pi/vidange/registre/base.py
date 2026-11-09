@@ -57,6 +57,7 @@ TOUTES_LES_TABLES = (
     "prises_griffe",
     "inventaire_stockage",
     "notifications_faites",
+    "carnet_de_bord",
 )
 
 
@@ -502,6 +503,117 @@ class Registre:
                     "raison": raison,
                 },
             )
+
+    # ------------------------------------------------------------ carnet de bord (tâche 28 bis)
+
+    def noter_carnet(
+        self,
+        auteur: str,
+        texte: str,
+        cycle: int | None = None,
+        seau: str | None = None,
+        alarme: int | None = None,
+        texte_max: int | None = None,
+    ) -> int:
+        """Une note libre du carnet de bord (rôle « produire »), rattachée si on veut à un cycle
+        (un lot), à un seau (son code) ou à une alarme. Rend son numéro. Une note ne se supprime
+        ni ne se corrige : on la barre (`barrer_note`)."""
+        texte = texte.strip()
+        if not texte:
+            raise ErreurRegistre("note vide : écrire quelque chose")
+        if texte_max is not None and len(texte) > texte_max:
+            raise ErreurRegistre(f"note trop longue ({len(texte)} signes, au plus {texte_max})")
+        with self._ecriture() as cnx:
+            if (
+                cycle is not None
+                and not cnx.execute("SELECT 1 FROM cycles WHERE id = ?", (cycle,)).fetchone()
+            ):
+                raise ErreurRegistre(f"cycle n° {cycle} inconnu")
+            if (
+                alarme is not None
+                and not cnx.execute("SELECT 1 FROM alarmes WHERE id = ?", (alarme,)).fetchone()
+            ):
+                raise ErreurRegistre(f"alarme n° {alarme} inconnue")
+            seau_id = None
+            if seau is not None and seau.strip():
+                ligne = cnx.execute(
+                    "SELECT id FROM seaux WHERE code = ?", (seau.strip(),)
+                ).fetchone()
+                if ligne is None:
+                    raise ErreurRegistre(f"seau « {seau.strip()} » inconnu du registre")
+                seau_id = ligne[0]
+            return self._inserer(
+                cnx,
+                "carnet_de_bord",
+                {
+                    "quand": self._quand(),
+                    "auteur": auteur,
+                    "texte": texte,
+                    "cycle_id": cycle,
+                    "seau_id": seau_id,
+                    "alarme_id": alarme,
+                },
+            )
+
+    def barrer_note(self, note: int, qui: str, raison: str) -> None:
+        """Barre une note (elle reste lisible, avec qui l'a barrée, quand et pourquoi)."""
+        raison = raison.strip()
+        if not raison:
+            raise ErreurRegistre("dire pourquoi la note est barrée")
+        with self._ecriture() as cnx:
+            ligne = cnx.execute(
+                "SELECT barre_le FROM carnet_de_bord WHERE id = ?", (note,)
+            ).fetchone()
+            if ligne is None:
+                raise ErreurRegistre(f"note n° {note} inconnue")
+            if ligne[0] is not None:
+                raise ErreurRegistre(f"note n° {note} déjà barrée")
+            cnx.execute(
+                "UPDATE carnet_de_bord SET barre_le = ?, barre_par = ?, barre_raison = ? "
+                "WHERE id = ?",
+                (self._quand(), qui, raison, note),
+            )
+
+    def lire_carnet(
+        self,
+        recherche: str | None = None,
+        cycle: int | None = None,
+        seau: str | None = None,
+        alarme: int | None = None,
+        avec_barrees: bool = True,
+        limite: int = 50,
+        avant: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Les notes, de la plus récente à la plus ancienne. `recherche` : un morceau de texte,
+        ou le nom de l'auteur (sans tenir compte des majuscules)."""
+        motif = None
+        if recherche and recherche.strip():
+            echappe = recherche.strip().replace("\\", "\\\\").replace("%", "\\%")
+            motif = "%" + echappe.replace("_", "\\_") + "%"
+        return self.lire(
+            "SELECT n.id, n.quand, n.auteur, n.texte, n.cycle_id, s.code AS seau, "
+            "n.alarme_id, n.barre_le, n.barre_par, n.barre_raison "
+            "FROM carnet_de_bord n LEFT JOIN seaux s ON s.id = n.seau_id "
+            "WHERE (? IS NULL OR n.texte LIKE ? ESCAPE '\\' OR n.auteur LIKE ? ESCAPE '\\') "
+            "AND (? IS NULL OR n.cycle_id = ?) AND (? IS NULL OR s.code = ?) "
+            "AND (? IS NULL OR n.alarme_id = ?) AND (? OR n.barre_le IS NULL) "
+            "AND (? IS NULL OR n.id < ?) ORDER BY n.id DESC LIMIT ?",
+            (
+                motif,
+                motif,
+                motif,
+                cycle,
+                cycle,
+                seau,
+                seau,
+                alarme,
+                alarme,
+                1 if avec_barrees else 0,
+                avant,
+                avant,
+                limite,
+            ),
+        )
 
     def noter_action_distance(self, qui: str, action: str, detail: str | None = None) -> int:
         """Une action du pilotage à distance (activer, mouvement, arrêt...) : qui, quand, quoi."""
