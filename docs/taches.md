@@ -953,7 +953,11 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   EXEMPLES), alerte « bientôt » / « à faire » (check-list et journal, jamais bloquante), onglet « Maintenance » de la
   page web avec le bouton « Fait ». La santé de l'informatique (45) existait déjà (`fiabilite/sante.py`, tâche 7).
   Choix et reste à faire : `docs/decisions.md`, « Entretien, tâche 26 ». Essai : `pi/systeme/essai-entretien.md`.
-- [ ] 27. Notifications sur le téléphone (ntfy), résumé du soir, escalade (60 à 63). — Sonnet.
+- [x] 27. Notifications sur le téléphone (ntfy), résumé du soir, escalade (60 à 63). — Sonnet.
+  Fait : ntfy et Telegram (option) par la file d'envoi existante (sans réseau : les messages attendent), niveau par
+  sorte d'alarme dans `programme.yaml`, heures calmes, fin de fût, nettoyage à faire, pièces d'usure « à faire »,
+  résumé du soir, escalade (rappel puis 2ᵉ liste) et bouton « J'ai vu » sur la page. Choix et reste à faire :
+  `docs/decisions.md`, « Notifications, tâche 27 ». Essai : `pi/systeme/essai-notifications.md`.
 - [ ] 28. Page web : vue 3D en direct et rejeu d'incident (54, 55), statistiques (57), appli installable (59),
   réglages avec garde-fous (56), carnet de bord (86). — Sonnet.
 - [ ] 29. Écran : code pour les fonctions sensibles (50). — Sonnet.

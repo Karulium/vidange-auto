@@ -2424,3 +2424,55 @@ maintenance, 44 pièces d'usure). Réglages : `pi/reglages/entretien.yaml`. Code
      zéro efface la trace de l'usure. À ouvrir à l'employé plus tard si Karulium le demande (une ligne à changer).
   2. Les vraies durées de vie des pièces seront remplies pièce par pièce dans `pi/reglages/entretien.yaml` au fil
      des essais et des fiches des fournisseurs ; d'ici là, toutes les limites restent des EXEMPLES.
+
+
+## Notifications, tâche 27 (09/11/2026, niveau 1, tranché par Claude)
+
+Ces messages **informent, ils ne protègent pas** : la sécurité est câblée. Un message qui n'arrive pas (réseau,
+téléphone éteint) ne change rien à la sécurité des personnes.
+
+- **Canaux** : ntfy (POST JSON vers la racine du serveur : accents sans souci, priorité, lien au toucher) et Telegram
+  (option, `sendMessage` du bot). Seulement la bibliothèque standard (urllib). Secrets (`pi/secrets.exemple.yaml`,
+  modèle vide) : `ntfy_serveur`, `ntfy_sujet` (au moins 16 caractères, refusé sinon), `ntfy_jeton` (serveur protégé),
+  `ntfy_sujets_renfort`, `telegram_jeton_bot`, `telegram_chat`, `telegram_chats_renfort`. Secret vide : canal
+  éteint, la check-list le dit (« éteint ; ce n'est pas une erreur »). Un canal éteint ne reçoit rien dans la file ;
+  si aucun canal n'est allumé, les alarmes sont notées « traitées » sans rien envoyer (les notifications parlent du
+  présent : pas de rafale de vieux messages le jour où on les règle). L'adresse de l'API Telegram n'est pas un
+  secret (`telegram_adresse` dans `programme.yaml`, change seulement pour les essais).
+- **File d'envoi** : destinations `ntfy` et `telegram` (un message = une ligne par canal, donc pas de doublon si un
+  canal tombe et pas l'autre), sorte `message`, texte et niveau en JSON dans la nouvelle colonne `contenu`.
+  Registre en **version 9** : la table `envois` est refaite (SQLite ne change pas un CHECK), copie de la base
+  avant la montée comme d'habitude ; colonnes `vue_le`, `vue_par` sur `alarmes` ; table `notifications_faites`
+  (clé « alarme:12 », « fut:3 »... : ce qui a déjà été annoncé, y compris après un redémarrage ; ce qui existe à
+  la montée est marqué traité). Le facteur est protégé par un verrou : le notificateur fait partir un message tout
+  de suite sans risque de double envoi. Les plus vieux partent d'abord ; un message préparé depuis plus de
+  `en_retard_apres_min` (30, EXEMPLE) part avec « (en retard) » et l'heure où il a été préparé. Une coupure pendant
+  l'envoi vers un serveur peut, très rarement, donner un doublon (ntfy et Telegram ne reconnaissent pas une clé).
+- **Quoi envoyer** : le notificateur (`pi/vidange/notifications/`) lit le **registre**, il ne s'accroche à aucun
+  module : toute alarme notée (chef, spray, nettoyage...) est annoncée avec module, étape, heure, message et
+  « quoi faire ». Niveau (`urgent` / `normal` / `info`) dans `programme.yaml` → `notifications.niveaux`, par
+  « module.etape » puis « module », sinon `niveau_defaut` (**urgent** : une alarme inconnue ne doit pas passer
+  inaperçue). Messages du programme : `fin_fut`, `nettoyage_a_faire`, `entretien_a_faire`, `calcul_conseille`,
+  `resume_soir`. Fin de fût = cycle fini du module `poste_fut` (`evenements.module_fut`) ; nettoyage à faire = rien
+  de commencé dans les modules `evenements.modules_nettoyage` `nettoyage_apres_min` (60, EXEMPLE) après la fin du
+  fût ; pièce d'usure « à faire » (pas « bientôt » : celui-ci est seulement dans le résumé), annoncée de nouveau
+  après un « Fait ». **Calcul conseillé** : ce message n'existe pas encore dans le code ; seul son niveau est
+  réglé et `Notificateur.annoncer("calcul_conseille", ...)` est prêt.
+- **Heures calmes** (21:00 à 06:00, EXEMPLE) : seuls les urgents partent. Les autres restent « pas encore traités »
+  dans le registre et partent à la fin (sauf alarme effacée entre-temps). Priorités ntfy par niveau :
+  info 2, normal 3, urgent 4, rappel 5 (EXEMPLES).
+- **Résumé du soir** (19:00, EXEMPLE) : seaux remplis (et nombre de cycles), fûts vidés, alarmes du jour (les
+  5 dernières citées, EXEMPLE), à faire demain (pièces d'usure « à faire » et « bientôt »). Une fois par jour,
+  et jusqu'à 3 h après l'heure si le Pi était éteint. Une heure dans les heures calmes est refusée au démarrage.
+  « Lots » : le registre ne connaît pas la notion de lot, le résumé dit « en N cycle(s) ».
+  Les consommables (flacons, cartouches, bidon) ne sont pas dans le résumé : pas de total fiable dans le code.
+- **Escalade** : une alarme urgente ni « vue » ni effacée, `rappel_apres_min` (15, EXEMPLE) après le 1er message :
+  renvoyée en priorité 5 ; après `renfort_apres_min` (45) : envoyée aussi aux 2ᵉ listes des secrets, si elles
+  sont remplies (sinon rien, noté au journal). Un rappel ou renfort en attente (réseau coupé) ne part pas si
+  l'alarme a été vue ou effacée entre-temps. « Vue » = bouton « J'ai vu » (`POST /api/alarmes/{n}/vue`, rôle
+  « produire », noté dans le journal des actions et dans l'alarme ; l'alarme reste ouverte) ou alarme acquittée.
+  Pas de bouton dans la notification (page joignable seulement par le Wi-Fi de l'atelier ou Tailscale) : le
+  message donne `lien_page` et `lien_tailscale` (adresses d'exemple à remplacer).
+- **Pas fait / reste** : essai sur le vrai téléphone ; les vrais niveaux par module (seule la liste des messages du
+  programme est remplie, le reste vaut « urgent ») ; le calcul conseillé ; les consommables dans le résumé ;
+  une 2ᵉ personne qui reçoit le renfort ; un accusé « vu » depuis ntfy lui-même.

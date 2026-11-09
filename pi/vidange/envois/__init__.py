@@ -7,12 +7,15 @@ La machine ne dépend jamais du réseau : ce qui doit partir attend dans le regi
 from vidange.envois.cycle import FORMAT, donnees_cycle
 from vidange.envois.expediteurs import EchecEnvoi, ExpediteurCulture, ExpediteurSecours
 from vidange.envois.facteur import Facteur, mettre_en_file_secours, preparer_facteur
+from vidange.envois.telephone import ExpediteurNtfy, ExpediteurTelegram
 
 __all__ = [
     "FORMAT",
     "EchecEnvoi",
     "ExpediteurCulture",
+    "ExpediteurNtfy",
     "ExpediteurSecours",
+    "ExpediteurTelegram",
     "Facteur",
     "donnees_cycle",
     "mettre_en_file_secours",

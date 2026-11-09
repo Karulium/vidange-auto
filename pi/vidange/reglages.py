@@ -5915,6 +5915,147 @@ class ReglagesEnvois(Modele):
         return self
 
 
+# ------------------------------------------------ notifications (tâche 27)
+
+NiveauNotification = Literal["urgent", "normal", "info"]
+# « module » ou « module.etape » : la sorte d'une alarme ; ou le nom d'un message du programme
+# (fin_fut, nettoyage_a_faire, entretien_a_faire, calcul_conseille).
+SorteNotification = Annotated[
+    str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)?$")
+]
+_HEURE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def minutes_du_jour(texte: str) -> int:
+    """« 21:30 » → 1290 (minutes depuis minuit)."""
+    heures, minutes = texte.split(":")
+    return int(heures) * 60 + int(minutes)
+
+
+class HeuresCalmes(Modele):
+    """La nuit, seuls les messages « urgent » partent ; les autres attendent la fin."""
+
+    # « HH:MM » ; le début peut être après la fin (de 21:00 à 06:00 : la nuit). Début = fin : pas de
+    # heures calmes.
+    debut: str
+    fin: str
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "HeuresCalmes":
+        for nom, valeur in (("debut", self.debut), ("fin", self.fin)):
+            if not _HEURE.match(valeur):
+                raise ValueError(f"{nom} : « {valeur} » doit s'écrire HH:MM (exemple : 21:30)")
+        return self
+
+
+class PrioritesNtfy(Modele):
+    """Priorité ntfy de chaque niveau, de 1 (très discret) à 5 (insistant). « rappel » : message
+    renvoyé quand une alarme urgente n'est pas vue."""
+
+    info: int = Field(ge=1, le=5)
+    normal: int = Field(ge=1, le=5)
+    urgent: int = Field(ge=1, le=5)
+    rappel: int = Field(ge=1, le=5)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "PrioritesNtfy":
+        if not self.info <= self.normal <= self.urgent <= self.rappel:
+            raise ValueError("priorites_ntfy : doit aller de info à rappel sans redescendre")
+        return self
+
+
+class EscaladeNotifications(Modele):
+    """Une alarme urgente pas « vue » (bouton « J'ai vu », ou alarme effacée) est renvoyée, puis
+    envoyée aussi à la 2ᵉ liste de destinataires (si elle est dans les secrets)."""
+
+    # Minutes après le 1er message, avant le renvoi en priorité haute.
+    rappel_apres_min: float = Field(gt=0)
+    # Minutes après le 1er message, avant l'envoi à la 2ᵉ liste.
+    renfort_apres_min: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "EscaladeNotifications":
+        if self.renfort_apres_min <= self.rappel_apres_min:
+            raise ValueError("renfort_apres_min doit être plus long que rappel_apres_min")
+        return self
+
+
+class ResumeSoir(Modele):
+    """Message du soir : seaux faits, alarmes du jour, ce qui est à faire demain."""
+
+    # Vrai : résumé envoyé chaque jour à « heure ».
+    actif: bool
+    heure: str
+    # Si le Pi n'était pas là à l'heure, le résumé part quand même jusqu'à ce nombre d'heures après.
+    retard_max_h: float = Field(gt=0, le=12)
+    # Nombre maximum d'alarmes citées une à une (les autres sont comptées).
+    alarmes_max: int = Field(ge=1, le=20)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "ResumeSoir":
+        if not _HEURE.match(self.heure):
+            raise ValueError(f"heure : « {self.heure} » doit s'écrire HH:MM (exemple : 19:00)")
+        return self
+
+
+class EvenementsNotifications(Modele):
+    """Comment le programme reconnaît la fin d'un fût et le nettoyage à faire (registre)."""
+
+    # Un cycle de ce module, fini normalement, veut dire « fût vidé ».
+    module_fut: Nom
+    # Nettoyage à faire : si, ce nombre de minutes après le fût vidé, aucun cycle d'un de ces
+    # modules n'a commencé, un message le rappelle.
+    modules_nettoyage: list[Nom] = Field(min_length=1)
+    nettoyage_apres_min: float = Field(gt=0)
+
+
+class ReglagesNotifications(Modele):
+    """Notifications sur le téléphone (tâche 27) : elles INFORMENT, elles ne protègent pas."""
+
+    # Vrai tant que les heures, délais et niveaux sont des exemples : le programme le signale.
+    exemple: bool = False
+    # Le notificateur regarde le registre tous les (s).
+    periode_s: float = Field(gt=0, le=600)
+    # Il ne regarde que les alarmes et cycles des derniers jours.
+    chercher_jours: float = Field(gt=0)
+    # Ce qu'il a déjà traité est oublié après ce nombre de jours.
+    garder_traites_jours: int = Field(ge=1)
+    # Un message qui part plus de (min) après avoir été préparé (réseau coupé) : « en retard ».
+    en_retard_apres_min: float = Field(gt=0)
+    # Sans réponse du serveur après ce temps (s), l'essai est raté.
+    delai_reponse_s: float = Field(gt=0, le=10)
+    # Niveau d'une sorte qui n'est pas dans « niveaux ».
+    niveau_defaut: NiveauNotification
+    niveaux: dict[SorteNotification, NiveauNotification]
+    priorites_ntfy: PrioritesNtfy
+    heures_calmes: HeuresCalmes
+    escalade: EscaladeNotifications
+    resume_soir: ResumeSoir
+    evenements: EvenementsNotifications
+    # Où joindre la page web (Wi-Fi de l'atelier, Tailscale) : donné dans les messages. Vide : omis.
+    lien_page: str = ""
+    lien_tailscale: str = ""
+    # Adresse de l'API Telegram (change seulement pour les essais).
+    telegram_adresse: str
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "ReglagesNotifications":
+        for nom in ("lien_page", "lien_tailscale", "telegram_adresse"):
+            valeur = getattr(self, nom)
+            if valeur and not valeur.startswith(("http://", "https://")):
+                raise ValueError(f"{nom} : « {valeur} » doit commencer par http:// ou https://")
+        calmes = self.heures_calmes
+        debut, fin = minutes_du_jour(calmes.debut), minutes_du_jour(calmes.fin)
+        resume = minutes_du_jour(self.resume_soir.heure)
+        dedans = debut <= resume < fin if debut < fin else resume >= debut or resume < fin
+        if self.resume_soir.actif and debut != fin and dedans:
+            raise ValueError(
+                f"resume_soir → heure ({self.resume_soir.heure}) tombe dans les heures calmes "
+                f"({calmes.debut} à {calmes.fin}) : le résumé ne partirait pas"
+            )
+        return self
+
+
 class Camera(Modele):
     """Une caméra : la commande qui écrit sa vidéo (images JPEG à la suite, « MJPEG »)."""
 
@@ -6052,6 +6193,7 @@ class Programme(Modele):
     api: ReglagesApi
     ecran: ReglagesEcran
     envois: ReglagesEnvois
+    notifications: ReglagesNotifications
     cameras: ReglagesCameras
     distance: ReglagesDistance
     mises_a_jour: ReglagesMisesAJour

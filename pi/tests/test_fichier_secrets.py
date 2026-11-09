@@ -14,7 +14,7 @@ from .conftest import DOSSIER_PI
 def test_le_modele_du_depot_ne_contient_aucun_secret():
     contenu = yaml.safe_load((DOSSIER_PI / "secrets.exemple.yaml").read_text(encoding="utf-8"))
     assert contenu, "le modèle doit lister les secrets attendus"
-    assert all(valeur in ("", None) for valeur in contenu.values())
+    assert all(valeur in ("", None, []) for valeur in contenu.values())
     # Et chaque nom du modèle est connu du programme.
     assert set(contenu) <= set(Secrets.model_fields)
 

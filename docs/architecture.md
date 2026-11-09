@@ -38,7 +38,8 @@ Chaque morceau peut planter sans faire tomber les autres.
 7. **Simulateur** : le même chef d'orchestre tourne contre une machine imaginaire (faux FluidNC, faux capteurs, durées réglables). C'est la base du jumeau numérique et des tests.
 8. **Fiabilité** : chien de garde (systemd relance un programme figé ; les cartes sont surveillées par leur liaison), check-list de démarrage, reprise après coupure (carnet, retour en lieu sûr, Go), arrêt propre sur onduleur, bilan de chaque alarme, santé du Pi.
 9. **Entretien** : compteurs d'usure par axe et par sortie (lus sur les rapports des cartes, écrits par groupes), pièces d'usure et calendrier (`pi/reglages/entretien.yaml`), alerte « bientôt / à faire » (check-list et journal, jamais bloquante), page « Maintenance ».
-10. **Mises à jour**, machine à l'arrêt : cartes ESP32 par leur câble USB (copie de toute leur mémoire avant, vérification après, retour en arrière), programme du Pi depuis les versions acceptées sur `main`.
+10. **Notifications** : ntfy (et Telegram, en option) sur le téléphone : alarmes avec leur « quoi faire », fin de fût, nettoyage à faire, pièces d'usure, résumé du soir, escalade si une alarme urgente n'est pas vue. Elles passent par la file d'envoi (sans réseau, elles attendent) et **informent seulement : la sécurité n'est jamais là**.
+11. **Mises à jour**, machine à l'arrêt : cartes ESP32 par leur câble USB (copie de toute leur mémoire avant, vérification après, retour en arrière), programme du Pi depuis les versions acceptées sur `main`.
 
 ## Les fichiers de réglages
 
