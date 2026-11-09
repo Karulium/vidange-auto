@@ -4,10 +4,9 @@ du bras, réglages."""
 import json
 
 import pytest
-from fastapi.testclient import TestClient
 
 from vidange import entete_spray
-from vidange.api.app import Services, creer_app
+from vidange.api.app import Services
 from vidange.chef import Chef
 from vidange.demarrage import constats_spray, preparer_spray
 from vidange.entrees_sorties import charger_entrees_sorties
@@ -23,7 +22,7 @@ from vidange.spray.outil import main as outil
 from vidange.spray.spray import QUOI_FAIRE_BRAS
 
 from .conftest import DOSSIER_PI
-from .test_api import CLE, LOCAL, reglages_api
+from .test_api import LOCAL, client_connecte, creer_app_de_test
 from .test_chef import Horloge, nouveau_chef
 from .test_reglages import erreur_de, remplacer
 
@@ -658,11 +657,7 @@ def test_api_du_spray(tmp_path):
     services = Services(
         nouveau_chef(Horloge()), banc.registre, lambda *_: None, list, spray=banc.spray
     )
-    client = TestClient(
-        creer_app(services, reglages_api(), CLE),
-        client=LOCAL,
-        headers={"Authorization": f"Bearer {CLE}"},
-    )
+    client = client_connecte(creer_app_de_test(services), adresse=LOCAL)
     banc.pret()
     banc.spray.a_confirmer.add(2)
     etat = client.get("/api/spray").json()

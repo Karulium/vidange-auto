@@ -943,7 +943,10 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      ou courant limité pendant le vissage).
   Hors de la tâche : retrouver quel pilote est en alarme en comparant positions demandée et lue.
 
-- [ ] 25. Comptes (58) et restauration d'un Pi neuf depuis la sauvegarde (79). — Sonnet.
+- [x] 25. Comptes (58) et restauration d'un Pi neuf depuis la sauvegarde (79). — Sonnet.
+  Fait : comptes de la page web (3 rôles, `vidange compte`, journal des actions), archive quotidienne des fichiers
+  hors Git, `restaurer.sh` et `vidange restaurer`. Choix et reste à faire : `docs/decisions.md`, « Comptes et
+  restauration, tâche 25 ». Essais : `pi/systeme/essai-comptes.md`, `pi/systeme/essai-restauration.md`.
 - [ ] 26. Entretien : compteurs par axe, calendrier, pièces d'usure, page maintenance (40 à 44). — Sonnet.
 - [ ] 27. Notifications sur le téléphone (ntfy), résumé du soir, escalade (60 à 63). — Sonnet.
 - [ ] 28. Page web : vue 3D en direct et rejeu d'incident (54, 55), statistiques (57), appli installable (59),

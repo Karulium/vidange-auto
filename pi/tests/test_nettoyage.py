@@ -4,9 +4,8 @@ import logging
 from datetime import datetime, timedelta
 
 import pytest
-from fastapi.testclient import TestClient
 
-from vidange.api.app import Services, creer_app
+from vidange.api.app import Services
 from vidange.chef import Etape, Module
 from vidange.demarrage import cycle_tourne, preparer_nettoyage
 from vidange.entrees_sorties import charger_entrees_sorties
@@ -37,7 +36,7 @@ from vidange.simulateur import ErreurSimulation, Simulateur
 from vidange.simulateur.outil import SCENARIOS, main
 
 from .conftest import DOSSIER_PI
-from .test_api import CLE, LOCAL, reglages_api
+from .test_api import LOCAL, client_connecte, creer_app_de_test
 from .test_chef import Horloge, nouveau_chef
 from .test_reglages import erreur_de, remplacer
 
@@ -798,8 +797,7 @@ def client_api(b, nettoyage):
     services = Services(
         nouveau_chef(Horloge()), b.registre, lambda *_: None, list, nettoyage=nettoyage
     )
-    app = creer_app(services, reglages_api(), CLE)
-    return TestClient(app, client=LOCAL, headers={"Authorization": f"Bearer {CLE}"})
+    return client_connecte(creer_app_de_test(services), adresse=LOCAL)
 
 
 def test_api_du_nettoyage(b):

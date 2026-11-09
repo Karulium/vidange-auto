@@ -3,12 +3,17 @@ distance ; et la page web.
 
     services = Services(chef, registre, acquitter=bilans.acquitter, checklist=checklist.verifier,
                         cameras=cameras, pilote=pilote)
-    app = creer_app(services, reglages.programme.api, cle)
+    app = creer_app(services, reglages.programme.api, comptes, actions)
 
-Toutes les adresses « /api/... » demandent la clé (en-tête « Authorization: Bearer <clé> »).
-La page web (« / ») se charge sans clé : elle demande la clé une fois, la garde dans le
-téléphone, et l'envoie à chaque appel. Une adresse hors des réseaux autorisés (réseau local,
-Tailscale : voir programme.yaml) est refusée d'office, même avec la bonne clé.
+Comptes (tâche 25) : chaque personne a un nom et un mot de passe (vidange/comptes), un rôle
+(karulium, employe, visiteur), et se connecte une fois (POST /api/connexion) : un cookie signé
+suit. CHAQUE route de l'API déclare le niveau minimum qu'elle demande : regarder (visiteur et
+plus), produire (employé et plus : Go, lots, boutons de production), régler (karulium :
+mises à jour, pilotage à distance, journal des actions). Une route sans niveau empêche le
+démarrage (`verifier_roles_declares`). Les actions « produire » et « régler » sont notées au journal
+des actions (qui, quand, quoi). Sans aucun compte, tout est refusé sauf la page qui explique comment
+créer le premier. Une adresse hors des réseaux autorisés (réseau local, Tailscale : voir
+programme.yaml) est refusée d'office, même avec le bon mot de passe.
 
 Les ordres (Go, Pause, Reprise, acquittement) passent par le chef d'orchestre, comme ceux de
 l'écran de l'armoire : l'API ne commande jamais un axe elle-même. Chaque ordre est noté au
@@ -23,7 +28,6 @@ Les lots (tâche 45 quater) : « Lot de seaux » (format, nombre, variété) et 
 de l'armoire, devant la machine. L'API n'a pas de Go pour un lot.
 """
 
-import hmac
 import ipaddress
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
@@ -37,8 +41,17 @@ from pydantic import BaseModel
 
 from vidange import __version__
 from vidange.air import Air
+from vidange.api.acces import (
+    COOKIE,
+    Exige,
+    JournalActions,
+    LimiteConnexions,
+    mot_du_niveau,
+    verifier_roles_declares,
+)
 from vidange.cameras import Cameras, ErreurCamera
 from vidange.chef import Chef, ErreurChef
+from vidange.comptes import Comptes, Niveau
 from vidange.distance import ErreurDistance, PiloteDistance
 from vidange.fiabilite.constats import Constat, pire
 from vidange.journal import donner_journal
@@ -56,6 +69,7 @@ if TYPE_CHECKING:
 journal = donner_journal("api")
 
 PAGE = Path(__file__).resolve().parent / "page" / "index.html"
+PAGE_AUCUN_COMPTE = Path(__file__).resolve().parent / "page" / "aucun-compte.html"
 
 
 @dataclass
@@ -125,6 +139,13 @@ class CorrectionStockage(BaseModel):
     nombre: int = 0
 
 
+class Connexion(BaseModel):
+    """Le formulaire de connexion de la page."""
+
+    nom: str
+    mot_de_passe: str
+
+
 class ChoixCopie(BaseModel):
     """La copie de la mémoire à remettre (None : la plus récente)."""
 
@@ -145,20 +166,26 @@ def _adresse(requete: Request) -> ipaddress.IPv4Address | ipaddress.IPv6Address 
 
 
 def _qui(requete: Request) -> str:
-    return f"page web ({requete.client.host if requete.client else 'adresse inconnue'})"
+    """Pour le journal et le registre : la personne connectée et d'où elle vient."""
+    adresse = requete.client.host if requete.client else "adresse inconnue"
+    compte = getattr(requete.state, "compte", None)
+    if compte is None:
+        return f"page web ({adresse})"
+    return f"page web ({compte.nom}, {adresse})"
 
 
-def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
-    """L'application web. `cle` : la clé du fichier de secrets (jamais vide)."""
-    if not cle:
-        raise ValueError("l'API ne démarre pas sans clé")
+def creer_app(
+    services: Services, reglages: ReglagesApi, comptes: Comptes, actions: JournalActions
+) -> FastAPI:
+    """L'application web. `comptes` : le fichier des comptes (qui peut être vide : la page
+    explique alors comment créer le premier compte). `actions` : le journal « qui a fait quoi »."""
     # Pas de pages de documentation automatiques : elles montreraient l'API sans clé.
     app = FastAPI(title="Vidange automatique", docs_url=None, redoc_url=None, openapi_url=None)
     chef, registre = services.chef, services.registre
     cameras, pilote = services.cameras, services.pilote
     mises_a_jour = services.mises_a_jour
     reseaux = list(reglages.reseaux_autorises)
-    cle_attendue = cle.encode()
+    limite = LimiteConnexions(reglages.connexions_ratees_max, reglages.blocage_s)
 
     def limiter(limite: int | None) -> int:
         return min(limite or reglages.lignes_max, reglages.lignes_max)
@@ -176,13 +203,6 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             )
         return await suite(requete)
 
-    def verifier_cle(requete: Request) -> None:
-        entete = requete.headers.get("authorization", "")
-        sorte, _, donnee = entete.partition(" ")
-        if sorte.lower() != "bearer" or not hmac.compare_digest(donnee.encode(), cle_attendue):
-            journal.warning("Clé de l'API absente ou fausse (%s)", _qui(requete))
-            raise HTTPException(401, "clé de l'API absente ou fausse")
-
     @app.exception_handler(ErreurChef)
     @app.exception_handler(ErreurRegistre)
     @app.exception_handler(ErreurDistance)
@@ -193,17 +213,85 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         # Un ordre impossible maintenant (pas de Go attendu, alarme déjà acquittée...).
         return JSONResponse({"detail": str(erreur)}, status_code=409)
 
-    protege = [Depends(verifier_cle)]
+    regarder = [Depends(Exige(Niveau.REGARDER, comptes, actions))]
+    produire = [Depends(Exige(Niveau.PRODUIRE, comptes, actions))]
+    regler = [Depends(Exige(Niveau.REGLER, comptes, actions))]
+    # Le pilotage à distance envoie « je tiens le bouton » plusieurs fois par seconde : le
+    # journal du pilote (vidange/distance) le note déjà : pas la peine de noyer celui des actions.
+    regler_sans_trace = [Depends(Exige(Niveau.REGLER, comptes, actions, journaliser=False))]
 
     # ------------------------------------------------------------ la page web
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     def page() -> HTMLResponse:
-        return HTMLResponse(PAGE.read_text(encoding="utf-8"))
+        # Sans aucun compte : seulement l'explication du premier compte.
+        fichier = PAGE_AUCUN_COMPTE if comptes.vide else PAGE
+        return HTMLResponse(fichier.read_text(encoding="utf-8"))
+
+    # ------------------------------------------------------------ connexion (tâche 25)
+
+    @app.post("/api/connexion")
+    def connexion(choix: Connexion, requete: Request) -> JSONResponse:
+        adresse = requete.client.host if requete.client else "adresse inconnue"
+        if comptes.vide:
+            raise HTTPException(503, "aucun compte : en créer un sur le Pi (« vidange compte »)")
+        attente = limite.attente_s(adresse)
+        if attente > 0:
+            journal.warning("Connexion refusée : trop d'essais ratés depuis %s", adresse)
+            raise HTTPException(
+                429, f"trop d'essais ratés : réessayer dans {int(attente) + 1} secondes"
+            )
+        compte = comptes.verifier(choix.nom, choix.mot_de_passe)
+        if compte is None:
+            limite.rater(adresse)
+            journal.warning("Connexion ratée pour « %s » depuis %s", choix.nom[:32], adresse)
+            raise HTTPException(401, "nom ou mot de passe faux")
+        limite.reussir(adresse)
+        duree = reglages.session_h * 3600
+        reponse = JSONResponse({"nom": compte.nom, "role": compte.role.nom})
+        reponse.set_cookie(
+            COOKIE,
+            comptes.creer_session(compte, duree),
+            max_age=int(duree),
+            httponly=True,
+            # « strict » : un autre site ouvert dans le navigateur ne peut pas envoyer d'ordre
+            # avec ce cookie.
+            samesite="strict",
+        )
+        journal.info("Connexion de %s (%s) depuis %s", compte.nom, compte.role.nom, adresse)
+        actions.noter(qui=compte.nom, role=compte.role.nom, adresse=adresse, niveau="connexion")
+        return reponse
+
+    @app.post("/api/deconnexion")
+    def deconnexion() -> JSONResponse:
+        reponse = JSONResponse({"connecte": False})
+        reponse.delete_cookie(COOKIE, httponly=True, samesite="strict")
+        return reponse
+
+    @app.get("/api/moi")
+    def moi(requete: Request) -> dict[str, Any]:
+        """Qui est connecté (la page s'en sert pour choisir quoi montrer)."""
+        if comptes.vide:
+            return {"aucun_compte": True, "connecte": False}
+        compte = comptes.lire_session(requete.cookies.get(COOKIE))
+        if compte is None:
+            return {"aucun_compte": False, "connecte": False}
+        return {
+            "aucun_compte": False,
+            "connecte": True,
+            "nom": compte.nom,
+            "role": compte.role.nom,
+            "droits": [mot_du_niveau(n) for n in Niveau if compte.role.permet(n)],
+        }
+
+    @app.get("/api/actions", dependencies=regler_sans_trace)
+    def actions_recentes() -> list[dict[str, Any]]:
+        """Qui a fait quoi : les dernières actions « produire » et « régler » (récentes d'abord)."""
+        return actions.dernieres(limiter(None))
 
     # ------------------------------------------------------------ état et check-list
 
-    @app.get("/api/etat", dependencies=protege)
+    @app.get("/api/etat", dependencies=regarder)
     def etat() -> dict[str, Any]:
         etat_chef = chef.etat()
         return {
@@ -226,7 +314,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             "lot": None if services.lancement is None else services.lancement.en_dict(),
         }
 
-    @app.get("/api/checklist", dependencies=protege)
+    @app.get("/api/checklist", dependencies=regarder)
     def checklist() -> dict[str, Any]:
         constats = list(services.checklist())
         return {
@@ -237,7 +325,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
 
     # ------------------------------------------------------------ ordres
 
-    @app.post("/api/pause", dependencies=protege)
+    @app.post("/api/pause", dependencies=produire)
     def pause(requete: Request) -> dict[str, Any]:
         journal.warning("Pause demandée par la %s", _qui(requete))
         chef.pause()
@@ -252,14 +340,14 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         if mises_a_jour is not None and mises_a_jour.en_cours:
             raise ErreurMiseAJour(f"{ordre} refusé : une mise à jour est en cours")
 
-    @app.post("/api/reprendre", dependencies=protege)
+    @app.post("/api/reprendre", dependencies=produire)
     def reprendre(requete: Request) -> dict[str, Any]:
         journal.info("Reprise demandée par la %s", _qui(requete))
         pas_pendant_le_pilotage("Reprise")
         chef.reprendre()
         return {"en_pause": False}
 
-    @app.post("/api/go/{module}", dependencies=protege)
+    @app.post("/api/go/{module}", dependencies=produire)
     def go(module: str, requete: Request) -> dict[str, Any]:
         journal.info("Go pour « %s » demandé par la %s", module, _qui(requete))
         pas_pendant_le_pilotage("Go")
@@ -273,11 +361,11 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             raise HTTPException(404, "pas de lancement de lot (programme principal pas prêt)")
         return services.lancement
 
-    @app.get("/api/lot", dependencies=protege)
+    @app.get("/api/lot", dependencies=regarder)
     def lot() -> dict[str, Any]:
         return le_lancement().en_dict()
 
-    @app.post("/api/lot/seaux", dependencies=protege)
+    @app.post("/api/lot/seaux", dependencies=produire)
     def lot_de_seaux(choix: LotDeSeaux, requete: Request) -> dict[str, Any]:
         """Propose le lot ; il part au Go de l'écran de l'armoire (refus : 409 et la raison)."""
         lancement = le_lancement()
@@ -293,7 +381,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         lancement.proposer_seaux(choix.format, choix.nombre, choix.variete, qui)
         return lancement.en_dict()
 
-    @app.post("/api/lot/bocaux", dependencies=protege)
+    @app.post("/api/lot/bocaux", dependencies=produire)
     def lot_de_bocaux(choix: LotDeBocaux, requete: Request) -> dict[str, Any]:
         lancement = le_lancement()
         qui = _qui(requete)
@@ -302,7 +390,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         lancement.proposer_bocaux(choix.nombre, qui)
         return lancement.en_dict()
 
-    @app.post("/api/lot/annuler", dependencies=protege)
+    @app.post("/api/lot/annuler", dependencies=produire)
     def lot_annuler(requete: Request) -> dict[str, Any]:
         lancement = le_lancement()
         lancement.annuler(_qui(requete))
@@ -315,11 +403,11 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             raise HTTPException(404, "pas de correction de l'inventaire (stockage pas prêt)")
         return services.correction
 
-    @app.get("/api/stockage", dependencies=protege)
+    @app.get("/api/stockage", dependencies=regarder)
     def stockage_inventaire() -> dict[str, Any]:
         return la_correction().inventaire()
 
-    @app.post("/api/stockage/correction", dependencies=protege)
+    @app.post("/api/stockage/correction", dependencies=produire)
     def stockage_proposer(choix: CorrectionStockage, requete: Request) -> dict[str, Any]:
         """Propose la correction (rien n'est écrit) ; refus : 409 et la raison."""
         correction = la_correction()
@@ -327,14 +415,14 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         correction.proposer(choix.place, choix.contenu, choix.nombre, _qui(requete))
         return correction.inventaire()
 
-    @app.post("/api/stockage/confirmer", dependencies=protege)
+    @app.post("/api/stockage/confirmer", dependencies=produire)
     def stockage_confirmer(requete: Request) -> dict[str, Any]:
         """Le Go de Karulium : la correction proposée est écrite et notée au journal."""
         correction = la_correction()
         correction.confirmer(_qui(requete))
         return correction.inventaire()
 
-    @app.post("/api/stockage/annuler", dependencies=protege)
+    @app.post("/api/stockage/annuler", dependencies=produire)
     def stockage_annuler(requete: Request) -> dict[str, Any]:
         correction = la_correction()
         correction.annuler(_qui(requete))
@@ -347,11 +435,11 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             raise HTTPException(404, "pas de poste du fût (machine.yaml → poste_fut)")
         return services.poste
 
-    @app.get("/api/poste-fut", dependencies=protege)
+    @app.get("/api/poste-fut", dependencies=regarder)
     def poste_fut() -> dict[str, Any]:
         return le_poste().etat().en_dict()
 
-    @app.post("/api/poste-fut/pret", dependencies=protege)
+    @app.post("/api/poste-fut/pret", dependencies=produire)
     def poste_fut_pret(requete: Request) -> dict[str, Any]:
         poste = le_poste()
         poste.appuyer_pret(_qui(requete))
@@ -364,11 +452,11 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             raise HTTPException(404, "pas de nettoyage (machine.yaml → nettoyage)")
         return services.nettoyage
 
-    @app.get("/api/nettoyage", dependencies=protege)
+    @app.get("/api/nettoyage", dependencies=regarder)
     def nettoyage_etat() -> dict[str, Any]:
         return le_nettoyage().etat().en_dict()
 
-    @app.post("/api/nettoyage/{ordre}", dependencies=protege)
+    @app.post("/api/nettoyage/{ordre}", dependencies=produire)
     def nettoyage_ordre(ordre: str, requete: Request) -> dict[str, Any]:
         """ouvrir, fermer, eclairage, eteindre, outre, nuit, nuit_maintenant, annuler_nuit."""
         nettoyage = le_nettoyage()
@@ -396,11 +484,11 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             raise HTTPException(404, "pas d'air comprimé (relais_compresseur absent de la liste)")
         return services.air
 
-    @app.get("/api/air", dependencies=protege)
+    @app.get("/api/air", dependencies=regarder)
     def air_etat() -> dict[str, Any]:
         return l_air().etat().en_dict()
 
-    @app.post("/api/air/bidon_vide", dependencies=protege)
+    @app.post("/api/air/bidon_vide", dependencies=produire)
     def air_bidon_vide(requete: Request) -> dict[str, Any]:
         """L'opérateur a vidé le bidon de purge : le rappel repart de zéro."""
         air = l_air()
@@ -414,11 +502,11 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             raise HTTPException(404, "pas de spray (machine.yaml → spray)")
         return services.spray
 
-    @app.get("/api/spray", dependencies=protege)
+    @app.get("/api/spray", dependencies=regarder)
     def spray_etat() -> dict[str, Any]:
         return le_spray().en_dict()
 
-    @app.post("/api/spray/{ordre}", dependencies=protege)
+    @app.post("/api/spray/{ordre}", dependencies=produire)
     def spray_ordre(ordre: str, requete: Request, emplacement: int | None = None) -> dict[str, Any]:
         """sans_spray (choix après une erreur), cartouche (?emplacement=N : nouvelle cartouche
         confirmée), alcool_rempli (plein du flacon d'alcool fait)."""
@@ -440,7 +528,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
 
     # ------------------------------------------------------------ alarmes
 
-    @app.get("/api/alarmes", dependencies=protege)
+    @app.get("/api/alarmes", dependencies=regarder)
     def alarmes(
         toutes: bool = False,
         limite: int | None = Query(default=None, ge=1),
@@ -454,7 +542,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             (avant, avant, limiter(limite)),
         )
 
-    @app.post("/api/alarmes/{numero}/acquitter", dependencies=protege)
+    @app.post("/api/alarmes/{numero}/acquitter", dependencies=produire)
     def acquitter(numero: int, requete: Request) -> dict[str, Any]:
         journal.info("Alarme n° %d acquittée par la %s", numero, _qui(requete))
         services.acquitter(numero, _qui(requete))
@@ -462,7 +550,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
 
     # ------------------------------------------------------------ historique
 
-    @app.get("/api/historique", dependencies=protege)
+    @app.get("/api/historique", dependencies=regarder)
     def historique(
         limite: int | None = Query(default=None, ge=1),
         avant: int | None = Query(default=None, ge=1),
@@ -476,7 +564,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             (avant, avant, limiter(limite)),
         )
 
-    @app.get("/api/historique/{cycle}", dependencies=protege)
+    @app.get("/api/historique/{cycle}", dependencies=regarder)
     def detail_cycle(cycle: int) -> dict[str, Any]:
         """Tout ce que le registre sait d'un cycle."""
         lignes = registre.lire(
@@ -542,7 +630,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             (cycle, cycle, seau, seau, avant, avant, limiter(limite)),
         )
 
-    @app.get("/api/photos", dependencies=protege)
+    @app.get("/api/photos", dependencies=regarder)
     def photos(
         cycle: int | None = None,
         seau: str | None = None,
@@ -552,7 +640,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         """Les dernières photos (d'un cycle, d'un seau), de la plus récente à la plus ancienne."""
         return lire_photos(cycle, seau, limite, avant)
 
-    @app.get("/api/photos/{numero}", dependencies=protege)
+    @app.get("/api/photos/{numero}", dependencies=regarder)
     def photo(numero: int) -> FileResponse:
         """Le fichier de la photo (il reste sur le SSD, la base ne garde que son chemin)."""
         try:
@@ -578,13 +666,13 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             headers={"Cache-Control": "no-store", **(entetes or {})},
         )
 
-    @app.get("/api/cameras", dependencies=protege)
+    @app.get("/api/cameras", dependencies=regarder)
     def liste_cameras() -> dict[str, Any]:
         if cameras is None:
             return {"cameras": [], "images_par_s": 0}
         return {"cameras": cameras.decrire(), "images_par_s": cameras.reglages.page_images_par_s}
 
-    @app.get("/api/cameras/{nom}/image", dependencies=protege)
+    @app.get("/api/cameras/{nom}/image", dependencies=regarder)
     def image_camera(nom: str) -> Response:
         """La dernière image ; son numéro est dans l'en-tête « X-Image » (pilotage à distance)."""
         try:
@@ -595,14 +683,14 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             raise HTTPException(503, f"caméra « {nom} » : pas encore d'image")
         return jpeg(image.donnees, {"X-Image": str(image.numero)})
 
-    @app.get("/api/clips", dependencies=protege)
+    @app.get("/api/clips", dependencies=regarder)
     def clips(
         limite: int | None = Query(default=None, ge=1), avant: str | None = None
     ) -> list[dict[str, Any]]:
         """Les clips des alarmes, du plus récent au plus ancien."""
         return les_cameras().lister_clips(limiter(limite), avant)
 
-    @app.get("/api/clips/{clip}/{camera}", dependencies=protege)
+    @app.get("/api/clips/{clip}/{camera}", dependencies=regarder)
     def index_clip(clip: str, camera: str) -> dict[str, Any]:
         try:
             index = les_cameras().index_du_clip(clip, camera)
@@ -610,7 +698,7 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             raise HTTPException(404, str(erreur)) from None
         return {"clip": clip, "camera": camera, "heures": [heure for *_, heure in index]}
 
-    @app.get("/api/clips/{clip}/{camera}/{rang}", dependencies=protege)
+    @app.get("/api/clips/{clip}/{camera}/{rang}", dependencies=regarder)
     def image_clip(clip: str, camera: str, rang: int) -> Response:
         try:
             return jpeg(les_cameras().image_du_clip(clip, camera, rang))
@@ -624,32 +712,32 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             raise HTTPException(404, "pas de pilotage à distance sur ce programme")
         return pilote
 
-    @app.get("/api/distance", dependencies=protege)
+    @app.get("/api/distance", dependencies=regarder)
     def distance() -> dict[str, Any]:
         return le_pilote().etat()
 
-    @app.post("/api/distance/activer", dependencies=protege)
+    @app.post("/api/distance/activer", dependencies=regler)
     def activer(requete: Request) -> dict[str, Any]:
         pas_pendant_la_mise_a_jour("Pilotage à distance")
         le_pilote().activer(_qui(requete))
         return le_pilote().etat()
 
-    @app.post("/api/distance/quitter", dependencies=protege)
+    @app.post("/api/distance/quitter", dependencies=regler)
     def quitter(requete: Request) -> dict[str, Any]:
         le_pilote().quitter(_qui(requete))
         return le_pilote().etat()
 
-    @app.post("/api/distance/tenir", dependencies=protege)
+    @app.post("/api/distance/tenir", dependencies=regler_sans_trace)
     def tenir(ordre: Tenir, requete: Request) -> dict[str, Any]:
         le_pilote().tenir(_qui(requete), ordre.axe, ordre.sens, ordre.camera, ordre.image)
         return le_pilote().etat()
 
-    @app.post("/api/distance/lacher", dependencies=protege)
+    @app.post("/api/distance/lacher", dependencies=regler_sans_trace)
     def lacher(requete: Request) -> dict[str, Any]:
         le_pilote().lacher(_qui(requete))
         return le_pilote().etat()
 
-    @app.get("/api/distance/journal", dependencies=protege)
+    @app.get("/api/distance/journal", dependencies=regarder)
     def journal_distance(
         limite: int | None = Query(default=None, ge=1),
         avant: int | None = Query(default=None, ge=1),
@@ -667,11 +755,11 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
             raise HTTPException(404, "pas de mises à jour sur ce programme")
         return mises_a_jour
 
-    @app.get("/api/mises-a-jour", dependencies=protege)
+    @app.get("/api/mises-a-jour", dependencies=regarder)
     def etat_mises_a_jour() -> dict[str, Any]:
         return les_mises_a_jour().etat()
 
-    @app.post("/api/mises-a-jour/programmes", dependencies=protege)
+    @app.post("/api/mises-a-jour/programmes", dependencies=regler)
     async def recevoir_programme(nom: str, requete: Request) -> dict[str, Any]:
         """Un fichier de programme (.bin) envoyé tel quel dans le corps de la requête."""
         maj = les_mises_a_jour()
@@ -683,44 +771,46 @@ def creer_app(services: Services, reglages: ReglagesApi, cle: str) -> FastAPI:
         journal.info("Programme « %s » envoyé par la %s", nom, _qui(requete))
         return maj.recevoir_programme(nom, contenu)
 
-    @app.post("/api/mises-a-jour/cartes/{carte}/programme", dependencies=protege)
+    @app.post("/api/mises-a-jour/cartes/{carte}/programme", dependencies=regler)
     def programme_carte(carte: str, choix: ChoixProgramme, requete: Request) -> dict[str, Any]:
         les_mises_a_jour().ecrire_programme(carte, choix.fichier, _qui(requete))
         return les_mises_a_jour().etat()
 
-    @app.post("/api/mises-a-jour/cartes/{carte}/reglages", dependencies=protege)
+    @app.post("/api/mises-a-jour/cartes/{carte}/reglages", dependencies=regler)
     def reglages_carte(carte: str, requete: Request) -> dict[str, Any]:
         les_mises_a_jour().envoyer_reglages(carte, _qui(requete))
         return les_mises_a_jour().etat()
 
-    @app.post("/api/mises-a-jour/cartes/{carte}/revenir", dependencies=protege)
+    @app.post("/api/mises-a-jour/cartes/{carte}/revenir", dependencies=regler)
     def revenir_carte(carte: str, choix: ChoixCopie, requete: Request) -> dict[str, Any]:
         les_mises_a_jour().revenir_carte(carte, choix.copie, _qui(requete))
         return les_mises_a_jour().etat()
 
-    @app.post("/api/mises-a-jour/accelerometre/programme", dependencies=protege)
+    @app.post("/api/mises-a-jour/accelerometre/programme", dependencies=regler)
     def programme_accelerometre(choix: ChoixProgramme, requete: Request) -> dict[str, Any]:
         les_mises_a_jour().ecrire_accelerometre(choix.fichier, _qui(requete))
         return les_mises_a_jour().etat()
 
-    @app.post("/api/mises-a-jour/accelerometre/revenir", dependencies=protege)
+    @app.post("/api/mises-a-jour/accelerometre/revenir", dependencies=regler)
     def revenir_accelerometre(choix: ChoixCopie, requete: Request) -> dict[str, Any]:
         les_mises_a_jour().revenir_accelerometre(choix.copie, _qui(requete))
         return les_mises_a_jour().etat()
 
-    @app.post("/api/mises-a-jour/pi/chercher", dependencies=protege)
+    @app.post("/api/mises-a-jour/pi/chercher", dependencies=regler)
     def chercher_pi(requete: Request) -> dict[str, Any]:
         les_mises_a_jour().chercher_pi(_qui(requete))
         return les_mises_a_jour().etat()
 
-    @app.post("/api/mises-a-jour/pi/installer", dependencies=protege)
+    @app.post("/api/mises-a-jour/pi/installer", dependencies=regler)
     def installer_pi(requete: Request) -> dict[str, Any]:
         les_mises_a_jour().installer_pi(_qui(requete))
         return les_mises_a_jour().etat()
 
-    @app.post("/api/mises-a-jour/pi/revenir", dependencies=protege)
+    @app.post("/api/mises-a-jour/pi/revenir", dependencies=regler)
     def revenir_pi(requete: Request) -> dict[str, Any]:
         les_mises_a_jour().revenir_pi(_qui(requete))
         return les_mises_a_jour().etat()
 
+    # Une route sans niveau de droit déclaré empêche le démarrage.
+    verifier_roles_declares(app)
     return app

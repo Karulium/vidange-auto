@@ -9,7 +9,7 @@ Peut tourner pendant que le programme principal tourne (la base accepte un lecte
 import argparse
 import sys
 
-from vidange.demarrage import DOSSIER_PI, _chemin
+from vidange.demarrage import DOSSIER_PI, _chemin, chemin_des_comptes
 from vidange.envois import mettre_en_file_secours
 from vidange.journal import configurer_journal
 from vidange.registre import (
@@ -18,6 +18,7 @@ from vidange.registre import (
     SauvegardeQuotidienne,
     ouvrir_registre,
 )
+from vidange.registre.fichiers_hors_git import archiver
 from vidange.reglages import ErreurReglages, charger_reglages
 
 
@@ -45,6 +46,7 @@ def main(arguments: list[str] | None = None) -> int:
             apres_copie=mettre_en_file_secours(
                 registre, reglages.programme.envois.secours, donnees
             ),
+            archiver_fichiers=lambda cible: archiver(donnees, chemin_des_comptes(), cible),
         )
         if options.ordre == "sauvegarder":
             print(f"Copie faite : {sauvegarde.sauvegarder()}")

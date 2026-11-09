@@ -1,0 +1,17 @@
+# MODÈLE VIDE du fichier des comptes de la page web. NE RIEN ÉCRIRE ICI : ce fichier est dans Git.
+#
+# Le vrai fichier s'appelle « comptes.yaml » (Git l'ignore), à côté de secrets.yaml (sur le Pi :
+# /etc/vidange/comptes.yaml). On NE LE REMPLIT PAS À LA MAIN : la commande
+#   sudo -u vidange /opt/vidange-auto/pi/.venv/bin/vidange compte ajouter NOM --role karulium
+# le fabrique (mots de passe hachés, jamais lisibles) et en fabrique la clé des connexions.
+# Rôles : karulium (tous les droits), employe (regarder et produire), visiteur (regarder seulement).
+#
+# Modèle d'un fichier fabriqué (les valeurs ci-dessous sont fausses) :
+#
+# cle_session: "une-longue-suite-de-lettres-au-hasard"
+# comptes:
+#   moi:
+#     role: karulium
+#     mot_de_passe: "scrypt$16384$8$1$<32 caractères>$<64 caractères>"
+cle_session: ""
+comptes: {}

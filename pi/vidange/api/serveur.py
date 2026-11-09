@@ -14,6 +14,7 @@ import time
 import uvicorn
 from fastapi import FastAPI
 
+from vidange.comptes import Comptes
 from vidange.fiabilite.constats import Constat
 from vidange.journal import donner_journal
 from vidange.reglages import ReglagesApi
@@ -21,15 +22,16 @@ from vidange.reglages import ReglagesApi
 journal = donner_journal("api")
 
 SUJET = "API et page web"
-QUOI_FAIRE_CLE = (
-    "Mettre une clé dans « cle_api » du fichier de secrets (voir pi/systeme/installation.md), "
-    "puis redémarrer le programme."
+QUOI_FAIRE_COMPTE = (
+    "Créer le premier compte : « sudo -u vidange /opt/vidange-auto/pi/.venv/bin/vidange compte "
+    "ajouter NOM --role karulium » (voir pi/systeme/installation.md). Pas besoin de redémarrer."
 )
 
 
 class ServeurApi:
-    def __init__(self, app: FastAPI, reglages: ReglagesApi) -> None:
+    def __init__(self, app: FastAPI, reglages: ReglagesApi, comptes: Comptes | None = None) -> None:
         self.reglages = reglages
+        self.comptes = comptes
         config = uvicorn.Config(
             app,
             host=reglages.adresse,
@@ -78,8 +80,7 @@ class ServeurApi:
 def constats_api(serveur: ServeurApi | None) -> list[Constat]:
     """Pour la check-list. Sans API, la machine peut tourner : jamais bloquant."""
     if serveur is None:
-        texte = "pas de clé : l'API n'est pas démarrée"
-        return [Constat(SUJET, "attention", texte, QUOI_FAIRE_CLE)]
+        return [Constat(SUJET, "attention", "l'API n'est pas démarrée")]
     if not serveur.en_route:
         return [
             Constat(
@@ -87,6 +88,15 @@ def constats_api(serveur: ServeurApi | None) -> list[Constat]:
                 "attention",
                 f"l'API ne répond pas (port {serveur.reglages.port})",
                 "Lire le journal (port déjà pris par un autre programme ?), puis redémarrer.",
+            )
+        ]
+    if serveur.comptes is not None and serveur.comptes.vide:
+        return [
+            Constat(
+                SUJET,
+                "attention",
+                f"à l'écoute (port {serveur.reglages.port}) mais aucun compte : la page est fermée",
+                QUOI_FAIRE_COMPTE,
             )
         ]
     return [Constat(SUJET, "ok", f"à l'écoute sur le port {serveur.reglages.port}")]

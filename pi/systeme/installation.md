@@ -46,20 +46,30 @@ sudo -u vidange .venv/bin/pip install -e .
 
 ## 3. Mettre le fichier de secrets
 
-D'abord, fabriquer une clé pour l'API et la page web (une suite de lettres au hasard) :
-```
-python3 -c 'import secrets; print(secrets.token_urlsafe(24))'
-```
-La recopier dans `cle_api` ci-dessous, et la garder dans un endroit sûr (gestionnaire de mots de passe) :
-c'est elle qu'on tape une fois dans la page web de chaque téléphone ou PC.
-
 ```
 sudo mkdir -p /etc/vidange
+sudo chown vidange:vidange /etc/vidange      # le compte vidange y écrira aussi les comptes de la page web
 sudo cp /opt/vidange-auto/pi/secrets.exemple.yaml /etc/vidange/secrets.yaml
 sudo nano /etc/vidange/secrets.yaml          # remplir les valeurs, Ctrl+O pour enregistrer, Ctrl+X pour sortir
 sudo chown vidange:vidange /etc/vidange/secrets.yaml
 sudo chmod 600 /etc/vidange/secrets.yaml     # lisible seulement par le compte vidange
 ```
+Garder les secrets (jetons) dans le gestionnaire de mots de passe : la copie de secours ne les contient
+**pas** (voir l'étape 12).
+
+### Les comptes de la page web
+
+Chaque personne a un nom et un mot de passe, et un rôle : `karulium` (tous les droits), `employe` (regarder et
+produire : Go, lots, boutons de production, mais pas les réglages ni les mises à jour), `visiteur` (regarder
+seulement). Créer d'abord le compte de Karulium (la commande demande le mot de passe, il ne s'affiche pas ;
+au moins 10 caractères) :
+```
+sudo -u vidange VIDANGE_SECRETS=/etc/vidange/secrets.yaml /opt/vidange-auto/pi/.venv/bin/vidange compte ajouter moi --role karulium
+```
+Puis les autres : `... vidange compte ajouter NOM --role employe` (ou `visiteur`). `compte liste` montre les comptes,
+`compte changer NOM --mot-de-passe` (ou `--role ROLE`) change l'un ou l'autre, `compte supprimer NOM` retire un
+compte. Pas besoin de redémarrer : le programme relit le fichier `/etc/vidange/comptes.yaml`. Tant qu'il n'y a
+aucun compte, la page web est fermée et explique cette commande. Essai : `essai-comptes.md`.
 
 ## 4. Vérifier les réglages
 
@@ -120,9 +130,10 @@ La page web est servie par le programme lui-même, sur le port réglé dans `pro
   tailscale ip -4              # l'adresse Tailscale du Pi (100.x.y.z)
   ```
   Sur le téléphone (avec l'appli Tailscale allumée) : `http://<adresse Tailscale du Pi>:8080`.
-- La page demande la clé (`cle_api`) la première fois, puis la garde dans le téléphone.
+- La page demande le nom et le mot de passe d'un compte (voir « Les comptes de la page web », étape 3).
 - Seuls le réseau local et Tailscale sont acceptés (`reseaux_autorises` dans `programme.yaml`) ; toute autre
-  adresse est refusée, même avec la clé.
+  adresse est refusée, même connecté. Sur le Wi-Fi de l'atelier, le mot de passe voyage en clair (http) ;
+  par Tailscale, tout est chiffré.
 
 ## 9. Envois vers l'extérieur : copie de secours à la maison, logiciel de culture
 
@@ -165,6 +176,8 @@ Les commandes sont dans `programme.yaml` (`cameras` → `liste`). Essai pas à p
 Essai des capteurs et des relais : voir `essai-entrees-sorties.md`.
 Essai de la fiabilité (programme figé, coupure de courant, onduleur...) : voir `essai-fiabilite.md`.
 Essai de la page web (téléphone, Tailscale) : voir `essai-page-web.md`.
+Essai des comptes de la page web (rôles, journal des actions) : voir `essai-comptes.md`.
+Essai de la restauration d'un Pi neuf depuis la copie de secours : voir `essai-restauration.md`.
 Essai de l'écran de l'armoire (câblage, UART n° 2 du Pi 5) : voir `essai-ecran.md`.
 Essai de la file d'envoi (copie à la maison, coupure du réseau) : voir `essai-envois.md`.
 Essai des caméras et du pilotage à distance (voyant-buzzer, homme mort) : voir `essai-distance.md`.
@@ -191,3 +204,15 @@ Essai pas à pas et secours : voir `essai-mises-a-jour.md`.
 
 À la main (programme arrêté), la même chose existe en ligne de commande : `vidange-maj` (voir son aide :
 `/opt/vidange-auto/pi/.venv/bin/vidange-maj --help`).
+
+## 12. Remettre un Pi neuf en état (carte SD abîmée, Pi remplacé)
+
+Une seule commande, en moins d'une heure : `sudo bash /opt/vidange-auto/pi/systeme/restaurer.sh --depuis vidange@maison:sauvegardes-vidange/`.
+Elle refait les étapes 1 à 7 ci-dessus, va chercher la copie de secours à la maison, remet le registre, les
+fichiers appris, les comptes de la page web et les photos, vérifie les réglages, lance le service et dit en
+français ce qui reste à faire à la main (secrets, Tailscale). Les **réglages** (`pi/reglages`, `fluidnc/`,
+`docs/entrees-sorties.yaml`) reviennent avec le logiciel (Git), pas avec la copie de secours.
+
+La copie de secours contient : le registre (une copie par jour), l'archive des petits fichiers hors Git et des
+comptes (`fichiers-AAAA-MM-JJ.tar.gz`) et les photos. Elle ne contient **jamais** le fichier de secrets.
+Pas à pas, avec l'essai sur un Pi de rechange : `essai-restauration.md`.

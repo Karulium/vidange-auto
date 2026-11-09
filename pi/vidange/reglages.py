@@ -5690,6 +5690,10 @@ class ReglagesRegistre(Modele):
     copies_gardees: int = Field(ge=1)
     # Tous les combien (minutes) on regarde s'il faut faire la copie du jour.
     periode_verification_min: float = Field(gt=0, le=60)
+    # Fichiers du dossier des données qui font partie de la copie de secours mais qu'une
+    # restauration sur un Pi neuf NE remet PAS (état d'un cycle en cours, version installée) :
+    # un Pi neuf ne reprend pas le cycle d'une autre machine (tâche 25).
+    restauration_ignore: list[str] = Field(default_factory=list)
 
 
 class ReglagesSante(Modele):
@@ -5783,6 +5787,11 @@ class ReglagesApi(Modele):
     rafraichir_s: float = Field(gt=0, le=60)
     # Nombre de lignes rendues au plus d'un coup (historique, alarmes, photos).
     lignes_max: int = Field(ge=1, le=10000)
+    # Comptes (tâche 25) : une connexion vaut ce nombre d'heures, puis il faut se reconnecter.
+    session_h: float = Field(gt=0, le=720)
+    # Après ce nombre de mots de passe ratés depuis une même adresse, elle est bloquée `blocage_s`.
+    connexions_ratees_max: int = Field(ge=1, le=100)
+    blocage_s: float = Field(gt=0, le=86400)
 
 
 # Une couleur « #RRGGBB » (rouge, vert, bleu en hexadécimal), comme dans un logiciel de dessin.
