@@ -49,8 +49,8 @@ la machine, un faux dans les essais ; le poste dit « pas lancé : raison ») :
 - griffe : ses réglages sont encore en EXEMPLE (machine.yaml → griffe, versement_bocal) ;
 - mycélium : le geste du bocal neuf de semence est écrit (vidange.bocal_neuf, tâche 19 quater),
   mais il lui manque deux sources que la machine n'a pas encore : la lecture du QR du bocal par la
-  caméra de la tête de la griffe, et l'erreur du codeur de la rotation de la tête (calage du
-  moteur) ;
+  caméra de la tête de la griffe, et l'alarme du pilote de la rotation de la tête (calage du
+  moteur, tâche 24) ;
 - QR du flanc et micropore : la vision (vidange.vision.inspection, tâche 40 ter) attend ses
   réglages vrais (vision.yaml → inspection) et la caméra ;
 - stockage : il faut le signal de la boucle du tiroir et des panneaux, et (vraie machine) la
@@ -77,6 +77,7 @@ from vidange.couvercle.couvercle import Couvercle
 from vidange.cycle.griffe_du_lot import GriffeDuSeau, brancher_pont
 from vidange.cycle.mode_bocaux import LotBocaux, PiecesEntonnoir, PiecesLavageBocaux
 from vidange.cycle.mode_seaux import Lot, PiecesRemplissage
+from vidange.derive import ControleDerive
 from vidange.entonnoir.entonnoir import Entonnoir, VisionEntonnoir
 from vidange.entonnoir.etat import NOM_FICHIER as NOM_ENTONNOIR
 from vidange.entrees_sorties import EntreesSorties
@@ -111,6 +112,7 @@ from vidange.nettoyage.nettoyage import (
     Nettoyage,
 )
 from vidange.pesees.tour import CapteurPesee, TourPesees
+from vidange.pilotes import Pilotes
 from vidange.porte_bocal.porte_bocal import (
     ENTREES as ENTREES_PORTE_BOCAL,
 )
@@ -163,15 +165,15 @@ CARTES_PAS_CONSTRUITES = (
 CARTE_SPRAY = "carte du spray pas ouverte (signal absent de docs/entrees-sorties.yaml ?)"
 BOCAL_NEUF = (
     "bocal de semence neuf (vidange.bocal_neuf) : il manque la lecture du QR du bocal par la "
-    "caméra de la tête de la griffe et l'erreur du codeur de la rotation de la tête (calage du "
-    "moteur), pas encore branchées"
+    "caméra de la tête de la griffe et l'alarme du pilote de la rotation de la tête (calage du "
+    "moteur), pas encore lue"
 )
 QR_DU_BOCAL = (
     "bocal de semence neuf (vidange.bocal_neuf) : lecture du QR du bocal par la caméra de la tête "
     "de la griffe pas encore branchée"
 )
 CODEUR = (
-    "bocal de semence neuf (vidange.bocal_neuf) : erreur du codeur de la rotation de la tête "
+    "bocal de semence neuf (vidange.bocal_neuf) : alarme du pilote de la rotation de la tête "
     "(calage du moteur) pas encore lue"
 )
 GRIFFE_DU_LOT = (
@@ -261,6 +263,10 @@ class CartesMachine:
     lavage: Lavage | None = None
     bras_griffe: BrasFluidnc | None = None
     absentes: dict[str, str] = field(default_factory=dict)
+    # Les alarmes ALM des pilotes (None : machine.yaml n'a pas « pilotes »).
+    pilotes: Pilotes | None = None
+    # Le contrôle d'origine contre la dérive (None : pas de contrôle actif).
+    derive: ControleDerive | None = None
     # Pour la griffe des lots : le mode de la machine et les angles gardés (rotation de sa tête).
     mode: Callable[[], str] = lambda: "production"
     garde: AnglesGardes | None = None
@@ -282,6 +288,8 @@ class CartesMachine:
                 constats.append(Constat(f"{SUJET}, {nom}", "ok", "construite"))
             else:
                 constats.append(Constat(f"{SUJET}, {nom}", "attention", raison, QUOI_FAIRE_CARTE))
+        if self.derive is not None:
+            constats += self.derive.constats()
         return constats
 
 
@@ -392,14 +400,21 @@ def construire_cartes(
     mode: Callable[[], str],
     donnees: Path | None = None,
     garde: AnglesGardes | None = None,
-    erreur_codeur: Callable[[], float | None] | None = None,
 ) -> CartesMachine:
     """Construit les pièces du chariot et de la tête qui sont là ; jamais d'exception (une pièce
     absente est notée avec sa raison, dans le journal aussi). `presence` : presence_fluidnc ;
     `mode` : ModeMachine.actuel (Lavage) ; `garde` : les angles gardés (rotation de la tête) ;
-    `erreur_codeur` : l'erreur du codeur de la rotation de la tête (°), pour le calage du moteur
-    (None : pas encore lue sur la machine ; un faux dans les essais)."""
+    Les alarmes ALM des pilotes (`cartes.pilotes`, tâche 24) servent au calage du moteur de la
+    rotation de la tête et à l'arrêt des gestes."""
     cartes = CartesMachine(mode=mode, garde=garde)
+    if reglages.machine.pilotes is not None:
+        cartes.pilotes = Pilotes(reglages.machine, reglages.fluidnc.cartes, liaisons)
+    derive = reglages.machine.derive
+    if derive is not None and derive.actif:
+        try:
+            cartes.derive = ControleDerive(reglages.machine, liaisons)
+        except ValueError as erreur:
+            journal.warning("Contrôle d'origine contre la dérive pas construit : %s", erreur)
     if materiel is None:
         for piece in NOMS_DES_PIECES:
             cartes.absentes[piece] = CARTES_PAS_CONSTRUITES
@@ -518,7 +533,7 @@ def construire_cartes(
         vide = CapteurVide(machine.prehension.vide, lambda: materiel.mesurer(VIDE))
         signaux = signaux_prehension(liaison, reglages.fluidnc.cartes[CARTE_TETE])
         cartes.tete = TeteFluidnc(
-            machine, pont, liaison, signaux, force, vide, erreur_codeur=erreur_codeur
+            machine, pont, liaison, signaux, force, vide, pilotes=cartes.pilotes
         )
         # Sans l'agitateur ni le porte-bocal (pièces absentes), la manivelle est inconnue : la
         # tête ne va jamais dans la zone du porte-bocal (vidange.prehension).

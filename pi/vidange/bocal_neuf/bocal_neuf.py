@@ -121,7 +121,7 @@ QUOI_FAIRE_VIDE = (
     "donner le Go."
 )
 QUOI_FAIRE_CODEUR = (
-    "La tête ne lit pas l'erreur du codeur de sa rotation (source pas encore branchée) : sans "
+    "La tête ne lit pas l'alarme du pilote de sa rotation (pilotes de machine.yaml) : sans "
     "elle, le dévissage et le vissage ne peuvent pas voir le calage du moteur. Rien n'a bougé. "
     "Voir la PR de la tâche 19 quater (question 1)."
 )
@@ -285,7 +285,7 @@ class BocalNeuf:
         peut = getattr(p.tete, "peut_detecter_le_calage", None)
         if peut is not None and not peut():
             raise ErreurEtape(
-                "bocal neuf : l'erreur du codeur de la rotation de la tête n'est pas lue, le "
+                "bocal neuf : l'alarme du pilote de la rotation de la tête n'est pas lue, le "
                 "calage du moteur ne peut pas être vu : pas de mouvement",
                 QUOI_FAIRE_CODEUR,
             )

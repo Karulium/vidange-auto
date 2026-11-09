@@ -12,11 +12,11 @@ import pytest
 from vidange.chef import Chef
 from vidange.cycle import ModeBocaux, ModeSeaux
 from vidange.cycle.machine import (
-    BOCAL_NEUF,
     BOCAUX_SALES,
     CARTES_PAS_CONSTRUITES,
     NOMS_DES_PIECES,
     PHOTO_DU_PLAFOND,
+    QR_DU_BOCAL,
     PiecesMachine,
     construire_cartes,
     presence_fluidnc,
@@ -144,8 +144,9 @@ def test_tout_present_les_cartes_sont_construites_et_les_postes_prets(banc, regl
     pieces = banc.pieces(cartes)
     for poste in POSTES_DU_CHARIOT:
         assert pieces.manque(poste) is None, poste
-    # Le Mycélium a ses pièces ; il lui manque le QR du bocal et le codeur de la rotation.
-    assert pieces.manque("mycelium") == BOCAL_NEUF
+    # Le Mycélium a ses pièces ; il lui manque le QR du bocal (l'alarme du pilote de la
+    # rotation est lue depuis la tâche 24).
+    assert pieces.manque("mycelium") == QR_DU_BOCAL
     # Il ne reste que ce qui n'est pas écrit (photo du plafond).
     assert pieces.manque("entonnoir") == PHOTO_DU_PLAFOND
     assert pieces.manque("lavage_bocaux") == BOCAUX_SALES

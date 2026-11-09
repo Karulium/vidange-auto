@@ -3622,9 +3622,11 @@ class VissageBocalNeuf(Modele):
 
 
 class CaleBocalNeuf(Modele):
-    """Le moteur de la rotation cale quand l'erreur de son codeur dépasse err_deg pendant
-    duree_s. Le couple de serrage C_vis (≈ 1,5 N·m au mât) se règle À LA MAIN sur le pilote, au
-    premier essai : le logiciel ne le commande pas."""
+    """Le moteur de la rotation cale quand l'erreur de suivi de son pilote dépasse err_deg pendant
+    duree_s : le pilote lève alors son ALM (alarme_rotation_tete), que le Pi lit (tâche 24). Ces
+    deux valeurs se règlent SUR LE PILOTE (procédure d'essai) : le code ne les lit pas.
+    Le couple de serrage C_vis (≈ 1,5 N·m au mât) se règle À LA MAIN sur le pilote, au premier
+    essai : le logiciel ne le commande pas."""
 
     err_deg: float = Field(gt=0)
     duree_s: float = Field(ge=0)
@@ -3695,6 +3697,91 @@ class Solveur(Modele):
         return self
 
 
+class RemiseAZeroPilote(Modele):
+    """Comment l'alarme ALM d'un pilote se remet à zéro après un calage voulu (vissage). EXEMPLE
+    tant que `exemple` est vrai : cela dépend du modèle de pilote (docs/decisions.md, tâche 24)."""
+
+    exemple: bool = False
+    # Lignes envoyées dans l'ordre à la carte FluidNC de l'axe (par exemple couper puis remettre
+    # l'enable du pilote), puis on attend que l'alarme retombe.
+    lignes: list[str] = Field(min_length=1)
+    # Attente après chaque ligne (s).
+    attente_s: float = Field(ge=0)
+    # Temps permis pour que l'alarme retombe (s) ; sinon : à faire à la main sur le pilote.
+    delai_max_s: float = Field(gt=0)
+
+
+class Pilotes(Modele):
+    """Les alarmes ALM des pilotes boucle fermée : un seul endroit pour toute la machine.
+
+    Le Pi ne lit jamais la position du codeur : le pilote rattrape seul ses pas, et lève ALM
+    quand l'erreur de suivi dépasse son réglage (fait sur le pilote). Chaque ALM arrive dans
+    « Pn: » de la carte de l'axe (fluidnc.yaml → entrees). Elle protège la MACHINE, jamais les
+    personnes."""
+
+    # Axe → ses signaux d'alarme (docs/entrees-sorties.yaml). Un axe à deux moteurs en a deux.
+    alarmes: dict[Nom, list[Nom]] = Field(default_factory=dict)
+    # Axes moteur qui n'ont pas d'ALM lue, avec la raison.
+    sans_alarme: dict[Nom, str] = Field(default_factory=dict)
+    # Module du chef → axes qu'il fait bouger : son ALM arrête le module et alerte.
+    modules: dict[Nom, list[Nom]] = Field(default_factory=dict)
+    remise_a_zero: RemiseAZeroPilote
+
+
+class ControleOrigine(Modele):
+    """Un axe contrôlé par son fin de course d'origine (tâche 24, point 3). Distances et vitesses
+    dans l'unité de l'axe (m ou °)."""
+
+    # Position où FluidNC croit le fin de course, sans dérive (mesurée une fois à la mise en
+    # service).
+    position_capteur: float
+    # +1 ou -1 : sens du mouvement vers le fin de course.
+    sens: Literal[-1, 1]
+    # Distance avant le capteur d'où part l'approche lente : plus grande que `seuil_arret`, pour
+    # voir une dérive dans les deux sens.
+    distance_depart: float = Field(gt=0)
+    # Vitesse de l'approche lente (unité/s) : l'erreur de mesure vaut vitesse × periode_etat_s.
+    vitesse: float = Field(gt=0)
+    # Écart au-delà duquel on alerte (journal et page), puis on arrête proprement.
+    seuil_alerte: float = Field(gt=0)
+    seuil_arret: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _verifier_seuils(self) -> "ControleOrigine":
+        if self.seuil_alerte >= self.seuil_arret:
+            raise ValueError(
+                f"seuil_alerte ({self.seuil_alerte:g}) doit être plus petit que "
+                f"seuil_arret ({self.seuil_arret:g})"
+            )
+        if self.distance_depart <= self.seuil_arret:
+            raise ValueError(
+                f"distance_depart ({self.distance_depart:g}) doit dépasser seuil_arret "
+                f"({self.seuil_arret:g})"
+            )
+        return self
+
+
+class Derive(Modele):
+    """Dérive après le moteur (courroie ou pignon qui glisse, que le codeur ne voit pas).
+
+    Contrôle d'origine d'un axe à des moments réglés : l'axe approche lentement son fin de
+    course d'origine ; l'écart entre la position où FluidNC le croit et celle où le capteur
+    s'allume est la dérive. Au-delà de `seuil_alerte` : alerte au journal et sur la page ;
+    au-delà de `seuil_arret` : arrêt propre. `actif: false` tant que la méthode n'est pas
+    essayée sur la vraie machine (elle suppose que FluidNC laisse l'axe passer à la main son
+    fin de course d'origine, `soft_limits` compris : à vérifier à l'essai)."""
+
+    exemple: bool = False
+    actif: bool = False
+    # Moment (EXEMPLE) : au début de chaque lot.
+    debut_de_lot: bool = True
+    # Après la mesure : prise d'origine de l'axe seul (« $H<lettre> ») pour remettre à jour.
+    recaler: bool = False
+    # Délai maximal (nom dans durees) de chaque étape de mesure.
+    delai: Nom
+    axes: dict[Nom, ControleOrigine] = Field(min_length=1)
+
+
 class Machine(Modele):
     """machine.yaml : axes, positions nommées, zones réservées."""
 
@@ -3759,6 +3846,10 @@ class Machine(Modele):
     bocal_neuf: BocalNeuf | None = None
     # Solveur d'ordonnancement (None : jamais de programme, ordre normal du chef).
     solveur: Solveur | None = None
+    # Alarmes ALM des pilotes boucle fermée (None : pas surveillées, réglages d'essai).
+    pilotes: Pilotes | None = None
+    # Contrôle d'origine contre la dérive (None : pas de contrôle). Demande les pilotes.
+    derive: Derive | None = None
 
     @model_validator(mode="after")
     def _verifier_positions_et_zones(self) -> "Machine":
@@ -3837,6 +3928,7 @@ class Machine(Modele):
         erreurs += self._verifier_entonnoir()
         erreurs += self._verifier_couvercle()
         erreurs += self._verifier_bocal_neuf()
+        erreurs += self._verifier_pilotes()
         if self.camera_dosage is not None and (self.prehension is None or self.mycelium is None):
             erreurs.append(
                 "camera_dosage : il faut aussi les parties « prehension » et « mycelium »"
@@ -3848,6 +3940,62 @@ class Machine(Modele):
         if erreurs:
             raise ValueError("\n".join(erreurs))
         return self
+
+    def _verifier_pilotes(self) -> list[str]:
+        """Pilotes (ALM) et contrôle d'origine : axes connus, chaque axe moteur traité."""
+        erreurs: list[str] = []
+        pilotes = self.pilotes
+        if self.derive is not None:
+            for nom in self.derive.axes:
+                axe = self.axes.get(nom)
+                if axe is None or axe.carte is None:
+                    erreurs.append(f"derive → axes → {nom} : axe inconnu ou sans carte FluidNC")
+            if self.derive.delai not in self.durees:
+                erreurs.append(f"derive : délai « {self.derive.delai} » absent de durees")
+            if pilotes is None:
+                erreurs.append("derive : il faut aussi la partie « pilotes »")
+        if pilotes is None:
+            return erreurs
+        for quoi, noms in (
+            ("alarmes", pilotes.alarmes),
+            ("sans_alarme", pilotes.sans_alarme),
+            *((f"modules → {m}", axes) for m, axes in pilotes.modules.items()),
+        ):
+            for nom in noms:
+                if nom not in self.axes:
+                    erreurs.append(f"pilotes → {quoi} : axe inconnu « {nom} »")
+        vus: dict[str, str] = {}
+        for axe, signaux in pilotes.alarmes.items():
+            if axe in pilotes.sans_alarme:
+                erreurs.append(
+                    f"pilotes : l'axe « {axe} » est à la fois dans alarmes et sans_alarme"
+                )
+            if not signaux:
+                erreurs.append(f"pilotes → alarmes → {axe} : aucun signal")
+            for signal in signaux:
+                if not signal.startswith("alarme_"):
+                    erreurs.append(
+                        f"pilotes → alarmes → {axe} : « {signal} » doit s'appeler alarme_..."
+                    )
+                autre = vus.setdefault(signal, axe)
+                if autre != axe:
+                    erreurs.append(
+                        f"pilotes : « {signal} » est donné aux axes « {autre} » et « {axe} »"
+                    )
+        surveilles = {axe for axes in pilotes.modules.values() for axe in axes}
+        for nom, axe in self.axes.items():
+            if axe.carte is None:
+                continue
+            if nom not in pilotes.alarmes and nom not in pilotes.sans_alarme:
+                erreurs.append(
+                    f"pilotes : l'axe moteur « {nom} » n'a ni entrée d'alarme (alarmes) ni raison "
+                    "de s'en passer (sans_alarme)"
+                )
+            if nom in pilotes.alarmes and nom not in surveilles:
+                erreurs.append(
+                    f"pilotes : l'alarme de l'axe « {nom} » n'est surveillée par aucun module"
+                )
+        return erreurs
 
     def _verifier_portique(self) -> list[str]:
         """Axes du portique, chariot et mâts, plaques Z, vitesses, places, plénum."""
@@ -5929,7 +6077,8 @@ class CarteFluidnc(Modele):
             vus: dict[object, str] = {}
             for nom, valeur in valeurs.items():
                 autre = vus.setdefault(valeur, nom)
-                if autre != nom:
+                # Des alarmes de pilotes peuvent être câblées en OU sur une même entrée.
+                if autre != nom and not (nom.startswith("alarme_") and autre.startswith("alarme_")):
                     erreurs.append(f"{quoi} : « {autre} » et « {nom} » ont la même ({valeur})")
         if erreurs:
             raise ValueError("\n".join(erreurs))
@@ -7520,6 +7669,7 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
         for numero, geste in enumerate(machine.lieu_sur, start=1)
         if geste.prise_origine is not None and geste.prise_origine not in fluidnc.cartes
     ]
+    erreurs += _verifier_pilotes_entre_fichiers(machine, fluidnc)
     programme = valeurs["programme"]
     assert isinstance(programme, Programme)
     avance, periode_etat = programme.distance.avance_s, fluidnc.liaison.periode_etat_s
@@ -7676,6 +7826,33 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
         erreurs.append(
             f"simulateur.yaml, depart : position « {simulateur.depart} » absente de machine.yaml"
         )
+    return erreurs
+
+
+def _verifier_pilotes_entre_fichiers(machine: Machine, fluidnc: Fluidnc) -> list[str]:
+    """Chaque alarme d'axe est une entrée de la carte de l'axe ; aucune alarme_* sans axe."""
+    pilotes = machine.pilotes
+    if pilotes is None:
+        return []
+    erreurs = []
+    donnees: set[str] = set()
+    for axe, signaux in pilotes.alarmes.items():
+        carte_axe = machine.axes[axe].carte
+        carte = fluidnc.cartes.get(carte_axe or "")
+        for signal in signaux:
+            donnees.add(signal)
+            if carte is not None and signal not in carte.entrees:
+                erreurs.append(
+                    f"fluidnc.yaml, cartes → {carte_axe} → entrees : il manque « {signal} » "
+                    f"(alarme du pilote de l'axe « {axe} »)"
+                )
+    for nom_carte, carte in fluidnc.cartes.items():
+        erreurs += [
+            f"fluidnc.yaml, cartes → {nom_carte} → entrees → {signal} : aucun axe de machine.yaml "
+            "(pilotes → alarmes) ne l'utilise"
+            for signal in carte.entrees
+            if signal.startswith("alarme_") and signal not in donnees
+        ]
     return erreurs
 
 

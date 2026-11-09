@@ -309,6 +309,8 @@ durees:
   # déplacement (garage, place de photo). EXEMPLES.
   portique_origine_max: 180
   portique_deplacement_max: 60
+  # Contrôle d'origine contre la dérive : une étape (aller au départ, approche lente). EXEMPLE.
+  derive_etape_max: 120
   # Mycélium : un geste de l'agitateur, un trajet du chariot de remplissage demandé par le
   # mycélium, une agitation (casse du bloc et dosage). EXEMPLES.
   mycelium_geste_max: 300
@@ -2303,6 +2305,74 @@ solveur:
   pas_s: 0.1
   # Écart (s) entre l'heure prévue d'un passage dans une zone et l'heure vraie.
   ecart_max_s: 30
+
+# Alarmes ALM des pilotes boucle fermée (tâche 24). Le Pi ne lit jamais la position du codeur : le
+# pilote rattrape seul ses pas et lève ALM si l'erreur de suivi dépasse son réglage (fait SUR le
+# pilote, pas ici : voir pi/systeme/essai-derive.md). Un seul endroit pour toute la machine :
+#   alarmes      axe → ses entrées alarme_* (docs/entrees-sorties.yaml, lettre dans fluidnc.yaml) ;
+#   sans_alarme  axe moteur sans ALM lue, avec la raison ;
+#   modules      module du chef → axes qu'il fait bouger : leur ALM arrête le module et alerte.
+# Vérifié au démarrage : un axe moteur oublié, une entrée alarme_* sans axe, un axe inconnu.
+pilotes:
+  alarmes:
+    pont_x: [alarme_pont_x1, alarme_pont_x2]
+    chariot_y: [alarme_chariot_y]
+    griffe_z: [alarme_griffe_z]
+    prehension_z: [alarme_prehension_z]
+    prehension_a: [alarme_rotation_tete]
+    manivelle: [alarme_manivelle]
+    lavage_noyau: [alarme_noyau_lavage]
+    lavage_couronne: [alarme_couronne_lavage]
+    remplissage_y: [alarme_remplissage_y]
+    plateau_z: [alarme_plateau_z]
+    plateau_a: [alarme_plateau_a]
+    barres: [alarme_barre_mur]
+    barre_allee: [alarme_barre_allee]
+    pousseur: [alarme_pousseur]
+  sans_alarme:
+    griffe_a: "rotation de la griffe : pas d'ALM dans docs/entrees-sorties.yaml (question 3 de la PR de la tâche 24)"
+    griffe_b: "godet de la griffe : pas d'ALM dans docs/entrees-sorties.yaml (question 3 de la PR de la tâche 24)"
+    mors: "TMC2209 (StallGuard sur l'entrée probe) : pas de pilote boucle fermée"
+    exemple_x: "axe d'exemple"
+    exemple_y: "axe d'exemple"
+    exemple_z: "axe d'exemple"
+  modules:
+    portique_origine: [pont_x, chariot_y, griffe_z, prehension_z]
+    portique_garage: [pont_x, chariot_y, griffe_z, prehension_z]
+    portique_photo: [pont_x, chariot_y, griffe_z, prehension_z]
+    lieu_sur: [pont_x, chariot_y, griffe_z, prehension_z]
+    griffe: [pont_x, chariot_y, griffe_z]
+    prehension: [pont_x, chariot_y, prehension_z, prehension_a]
+    entonnoir: [pont_x, chariot_y, prehension_z, prehension_a]
+    lavage: [prehension_z, prehension_a, lavage_noyau, lavage_couronne]
+    mycelium: [manivelle]
+    remplissage: [remplissage_y, plateau_z, plateau_a, barres, barre_allee, pousseur]
+  # Comment l'ALM retombe après un calage voulu (vissage du couvercle percé) : EXEMPLE, cela dépend
+  # du pilote (coupure puis remise de ENA, ou remise sous tension). Question 1 de la PR de la tâche 24.
+  remise_a_zero:
+    exemple: true
+    lignes: ["$MD", "$ME"]
+    attente_s: 0.3
+    delai_max_s: 3
+
+# Contrôle d'origine contre la dérive (courroie ou pignon qui glisse, que le codeur ne voit pas).
+# EXEMPLE : un seul axe, désactivé (actif: false) tant que l'essai de pi/systeme/essai-derive.md n'est
+# pas fait : la méthode suppose que FluidNC laisse l'axe passer son fin de course d'origine à la
+# main (soft_limits compris). Distances en m, vitesses en m/s.
+derive:
+  exemple: true
+  actif: false
+  debut_de_lot: true
+  recaler: false
+  delai: derive_etape_max
+  axes:
+    chariot_y:
+      position_capteur: 0.037
+      sens: -1
+      distance_depart: 0.02
+      vitesse: 0.002
+      seuil_alerte: 0.002
+      seuil_arret: 0.005
 
 # Retour en lieu sûr : après un arrêt en plein cycle (coupure de courant, onduleur, plantage),
 # et à chaque mise en route. Les gestes sont faits dans l'ordre, après le Go de Karulium :

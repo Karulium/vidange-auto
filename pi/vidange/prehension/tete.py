@@ -22,9 +22,10 @@ déplacement manuel que la rotation de la tête (`brosses`), pendant `duree_s`.
     choc_duree_s → arrêt de Z et du pont ;
   * appui (`appui_arret_n`, `appui_max_n`) : l'appui atteint la consigne → arrêt ; dépasse le
     maximum (vissage au-delà de 150 N) → arrêt et alerte ;
-  * calage (`cale`, vissage du couvercle percé sur le bocal neuf, tâche 19 quater) : l'erreur du
-    codeur de la rotation dépasse `bocal_neuf → cale → err_deg` pendant `duree_s` → arrêt (le
-    couvercle est serré). Sans lecture de cette erreur (`erreur_codeur`), un pas `cale` est refusé.
+  * calage (`cale`, vissage du couvercle percé sur le bocal neuf, tâche 19 quater) : le pilote de
+    la rotation lève son ALM (son erreur de suivi dépasse le réglage fait SUR le pilote, tâche
+    24) → arrêt (le couvercle est serré). Le Pi remet l'ALM à zéro (`Pilotes.remettre_a_zero`)
+    avant le pas suivant. Sans `pilotes`, un pas `cale` est refusé.
 Pesée ou vide muets pendant un pas qui les surveille : arrêt aussi.
 
 La force est tarée tête en l'air (`tarer`) : lecture = poids porté − poussée.
@@ -53,6 +54,7 @@ from vidange.fiabilite.constats import lancer_boucle
 from vidange.fluidnc import Commande, Liaison
 from vidange.griffe.bras import MM_PAR_M, TOLERANCE_ARRIVEE, CapteurForce
 from vidange.journal import donner_journal
+from vidange.pilotes import Pilotes
 from vidange.porte_bocal.signaux import DeuxSortiesExclusives, Signaux, SignauxFluidnc
 from vidange.prehension.regles import Pose
 from vidange.quoi_faire import pour_carte
@@ -270,15 +272,14 @@ class TeteFluidnc:
         force: CapteurForce,
         vide: CapteurVide,
         horloge: Callable[[], float] = time.monotonic,
-        erreur_codeur: Callable[[], float | None] | None = None,
+        pilotes: Pilotes | None = None,
     ) -> None:
-        """`erreur_codeur` : l'erreur de position du codeur de la rotation (°), pour détecter le
-        calage du moteur (vissage du couvercle percé). Sans elle, un pas `cale` est refusé."""
+        """`pilotes` : les alarmes ALM des pilotes, pour détecter le calage du moteur de la
+        rotation (vissage du couvercle percé). Sans elles, un pas `cale` est refusé."""
         assert machine.prehension is not None
         self.reglages = machine.prehension
         self.cale = None if machine.bocal_neuf is None else machine.bocal_neuf.cale
-        self._erreur_codeur = erreur_codeur
-        self._cale_depuis: float | None = None
+        self._pilotes = pilotes
         self.portique = portique
         self.liaison_tete = prehension
         self.signaux = signaux
@@ -374,7 +375,7 @@ class TeteFluidnc:
             pas = self._pas
             if pas is None or self._arret is not None or not self._en_mouvement():
                 return
-            if pas.cale and self._cale_vue(maintenant):
+            if pas.cale and self._cale_vue():
                 self._arreter_sur("cale", f"moteur de la rotation calé pendant « {pas.texte} »")
                 return
             lecture = brute - self._tare
@@ -409,20 +410,18 @@ class TeteFluidnc:
         return self._fin_mouvement is None
 
     def peut_detecter_le_calage(self) -> bool:
-        """La tête lit l'erreur du codeur de la rotation (sinon : pas de vissage au calage)."""
-        return self._erreur_codeur is not None and self.cale is not None
+        """La tête lit l'ALM du pilote de la rotation (sinon : pas de vissage au calage)."""
+        return (
+            self._pilotes is not None
+            and self.cale is not None
+            and self._noms["a"] in self._pilotes.reglages.alarmes
+        )
 
-    def _cale_vue(self, maintenant: float) -> bool:
-        """L'erreur du codeur dépasse err_deg depuis duree_s (vrai : le moteur cale)."""
-        if self._erreur_codeur is None or self.cale is None:
+    def _cale_vue(self) -> bool:
+        """Le pilote de la rotation a levé son ALM (vrai : le moteur cale)."""
+        if self._pilotes is None or self.cale is None:
             return False
-        erreur = self._erreur_codeur()
-        if erreur is None or abs(erreur) <= self.cale.err_deg:
-            self._cale_depuis = None
-            return False
-        if self._cale_depuis is None:
-            self._cale_depuis = maintenant
-        return maintenant - self._cale_depuis >= self.cale.duree_s
+        return bool(self._pilotes.axes_en_alarme([self._noms["a"]]))
 
     def _surveille_force(self) -> bool:
         pas = self._pas
@@ -558,10 +557,16 @@ class TeteFluidnc:
             )
         if pas.cale and not self.peut_detecter_le_calage():
             raise ErreurEtape(
-                f"préhension, « {pas.texte} » : l'erreur du codeur de la rotation n'est pas lue, "
+                f"préhension, « {pas.texte} » : l'alarme du pilote de la rotation n'est pas lue, "
                 "le calage du moteur ne peut pas être vu : pas de mouvement"
             )
-        self._cale_depuis = None
+        if self._pilotes is not None:
+            axe = self._noms["a"]
+            if axe in self._pilotes.attendues:
+                # Le dernier vissage a calé : l'ALM voulue est remise à zéro avant de bouger.
+                self._pilotes.remettre_a_zero(axe)
+            if pas.cale:
+                self._pilotes.attendre(axe)
         if pas.vide_perte_kpa is not None and self.vide.valeur() is None:
             raise ErreurEtape("capteur de vide sans lecture : pas de levée", QUOI_FAIRE_VIDE)
         vitesses = self._vitesses(pas)

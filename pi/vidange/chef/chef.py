@@ -208,6 +208,9 @@ class Chef:
         self.conditions_generales: list[Condition] = []
         # Qui peut refuser tout Go : refus() → raison, ou None (rapide : appelé par etat()).
         self._empechements_go: list[Callable[[], str | None]] = []
+        # Alarmes ALM des pilotes (vidange.pilotes) : nom du module → (message, quoi faire) si un
+        # pilote d'un axe de ce module est en alarme, sinon None. Rapide.
+        self.surveillance_pilotes: Callable[[str], tuple[str, str] | None] | None = None
 
     # ------------------------------------------------------------ marche / arrêt
 
@@ -607,6 +610,11 @@ class Chef:
                 if etape.action is not None:
                     etape.action()
                 self._changer_phase(d, "fin")
+            if self.surveillance_pilotes is not None:
+                probleme = self.surveillance_pilotes(d.nom)
+                if probleme is not None:
+                    self._alarme(d, probleme[0], probleme[1])
+                    return
             for surveillance in d.module.surveillances:
                 if not surveillance.test():
                     self._alarme(

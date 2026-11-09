@@ -132,7 +132,14 @@ class Portique:
         self._horloge = horloge
         manquent = []
         self.alarmes: dict[str, tuple[str, str]] = {}
-        for nom, quoi in ALARMES_PILOTES.items():
+        # Les signaux d'alarme : ceux des axes du portique dans machine.yaml → pilotes (un seul
+        # endroit, tâche 24) ; sans cette partie (réglages d'essai), la liste d'ici.
+        signaux = list(ALARMES_PILOTES)
+        if machine.pilotes is not None:
+            axes_portique = machine.pilotes.modules.get("portique_origine", [])
+            signaux = [s for axe in axes_portique for s in machine.pilotes.alarmes.get(axe, [])]
+        for nom in signaux:
+            quoi = ALARMES_PILOTES.get(nom, nom)
             ou = _carte_du_signal(cartes, nom, sortie=False)
             if ou is None:
                 manquent.append(f"entrees → {nom}")
