@@ -2747,3 +2747,15 @@ Réponses aux « Questions pour Karulium » de la PR 117 :
    s'applique jamais aux « N premiers seaux » d'un autre lot, pour ne pas mélanger les essais.
 5. **Un seul plan accepté à la fois, accepté seulement sur la page web** (rôle « régler ») : oui. Le Go à
    l'écran de l'armoire reste obligatoire pour lancer le lot.
+
+## Mode guidé et manuel, tâche 32 (10/11/2026, niveau 1, tranché par Claude)
+
+Réponses aux « Questions pour Karulium » de la PR de la tâche 32 :
+
+1. **L'employé coche « Fait » dans la Maintenance** : non pour l'instant ; l'entretien reste au rôle « régler ».
+2. **Travaux guidés** : les 3 travaux d'exemple restent (`exemple: true`). Karulium les relira sur la vraie
+   machine et donnera, quand il le voudra, 3 ou 4 travaux de l'employé dans l'ordre où il les fait (32 bis).
+3. **Un guide qui fait bouger la machine** : plus tard (32 bis), seulement après le gel des modules, avec un
+   « Go » de l'employé à chaque geste et `refus_manuel()`. La sécurité reste câblée.
+4. **PDF du manuel** : non, `docs/manuel.md` s'imprime tel quel.
+5. **Travail oublié effacé après `oubli_min`** (120 min d'exemple) : oui, réglable.

@@ -998,7 +998,10 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
      partagent un bocal et dont la somme des doses dépasse le bocal.
   2. Petit outil du PC de bureau qui prépare un plan « diversifié » dans les bornes (répartir les valeurs sur les
      seaux d'un lot, garder des témoins), en fichier à charger sur le Pi. Rien sur le Pi ne change.
-- [ ] 32. Mode guidé pour un employé et manuel tenu à jour (84, 85). — Sonnet.
+- [x] 32. Mode guidé pour un employé et manuel tenu à jour (84, 85). — Sonnet. Fait : travaux guidés pas à pas écrits dans `pi/reglages/guide.yaml` (3 exemples, `exemple: true`, vérifiés au démarrage : signaux, longueurs pour l'écran), un seul travail à la fois partagé par la page web (onglet « Aide », droits de l'employé : « produire ») et l'écran (page « guide » n° 8, bouton AIDE de la page « mode » : à dessiner dans `nextion/pages.md`) ; le guide ne commande aucun axe, lit des entrées seulement pour informer, note la fin au carnet de bord ; manuel fabriqué d'après les réglages et les « quoi faire » (`vidange manuel`, `docs/manuel.md`, un test refuse un manuel périmé, `GET /api/manuel`). Procédure : `pi/systeme/essai-guide.md`. Testé sur le vrai matériel : non.
+- [ ] 32 bis. Mode guidé, suite (après les réponses de Karulium à la PR de la tâche 32). — Sonnet.
+  1. Étapes qui font bouger la machine (gestes guidés), seulement après le « Go » de l'employé et avec `refus_manuel()` (décidé à la tâche 37 bis, `docs/decisions.md`) ; à ne faire qu'une fois les gestes des modules figés.
+  2. Travaux relus sur la vraie machine par Karulium (remplacer les exemples de `guide.yaml`).
 - [ ] 33. Assistant en français, écoute des bruits, résumé de la semaine (71, 73, 74). — plus tard.
 
 ## Partie 4 : les autres modules, au fil des gels

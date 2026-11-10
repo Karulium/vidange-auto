@@ -29,6 +29,11 @@ Karulium dit Go devant la machine. S'il ne peut pas partir, l'écran dit pourquo
 Objet encore tenu à la ventouse au redémarrage (tâche 45 nonies) : le bandeau dit « OBJET ENCORE
 TENU », la ligne d'information dit quoi faire, le bouton GO est éteint et un appui dit pourquoi.
 
+Mode guidé (tâche 32) : page « guide », depuis la page du mode (AIDE) : un travail expliqué pas
+à pas (« Étape 2 sur 5 » et une phrase), PRÉCÉDENT, FAIT, ARRÊTER. Le même travail est suivi sur
+la page web ; s'il y est commencé, la page vient seule (depuis la page d'état). Pas de code : on
+est devant la machine, et le guide ne commande aucun axe (la sécurité est câblée).
+
 Nettoyage (tâche 38) : page « nettoyage », depuis la page du mode (ENCEINTE) : état du store et de
 ses verrous, purge, nuit UV-ozone, ozone dedans et dehors ; OUVRIR (libère les verrous) ou FERMER,
 LUMIÈRE, NUIT (à l'heure réglée, puis MAINTENANT), PASSER OUTRE (la purge). Le Pi ne commande pas
@@ -52,6 +57,7 @@ from vidange.ecran.pages import (
     COMPTEURS,
     CONFIRMER,
     ETAT,
+    GUIDE,
     MODE,
     NETTOYAGE,
     POSTE_FUT,
@@ -59,6 +65,7 @@ from vidange.ecran.pages import (
 )
 from vidange.ecran.protocole import Appui, couleur_565, preparer_texte
 from vidange.fiabilite.constats import lancer_boucle
+from vidange.guide import ErreurGuide, Guide
 from vidange.journal import donner_journal
 from vidange.mode import MODES, ErreurMode, ModeMachine
 from vidange.nettoyage import ErreurNettoyage, EtatNettoyage, Nettoyage
@@ -214,6 +221,7 @@ class Ecran:
         code: CodeEcran | None = None,
         actions: Any = None,
         estimation: Any = None,
+        guide: Guide | None = None,
     ) -> None:
         """`estimation` : l'estimation de fin du lot qui tourne (tâche 30), dite sur la page d'état.
         `mode_seaux` : quand aucun cycle ne tourne, la page d'état dit si un lot de seaux peut
@@ -223,7 +231,8 @@ class Ecran:
         `lancement` : le lot proposé par la page web, lancé par GO (tâche 45 quater).
         `code` : le code des fonctions sensibles (tâche 29) ; sans lui (essais seulement), rien
         n'est protégé. Le programme principal le donne toujours. `actions` : le journal des
-        actions (`JournalActions`), où chaque fonction sensible faite est notée."""
+        actions (`JournalActions`), où chaque fonction sensible faite est notée.
+        `guide` : le mode guidé (tâche 32), partagé avec la page web."""
         self.reglages = reglages
         self.liaison = liaison
         self.chef = chef
@@ -240,6 +249,10 @@ class Ecran:
         self.code = code
         self.actions = actions
         self.estimation = estimation
+        self.guide = guide
+        # Travail guidé proposé à l'écran (position dans la liste), et si un travail était en route.
+        self._choix_guide = 0
+        self._guide_actif = False
         # Fonction sensible en attente du code : (nom, ce qu'il faut faire quand le code est bon,
         # page où revenir) ; et les chiffres déjà tapés.
         self._attente_code: tuple[str, Callable[[], None], Page] | None = None
@@ -284,11 +297,13 @@ class Ecran:
                     ErreurMode,
                     ErreurPoste,
                     ErreurNettoyage,
+                    ErreurGuide,
                 ) as erreur:
                     journal.warning("Écran : %s", erreur)
                     self._dire(str(erreur))
         alarmes = self.registre.alarmes_ouvertes()
         self._suivre_poste()
+        self._suivre_guide()
         self._suivre_alarmes(alarmes)
         self._revenir_seul()
         self.liaison.afficher(self._page, self.composer(alarmes))
@@ -339,6 +354,19 @@ class Ecran:
                 self._dire("Poste du fût prêt.")
             self._aller(ETAT)
 
+    def _suivre_guide(self) -> None:
+        """Un travail guidé commencé ailleurs (page web) : la page « guide » vient, depuis la page
+        d'état seulement (jamais par-dessus une alarme ou le poste du fût)."""
+        if self.guide is None:
+            return
+        actif = self.guide.etat().actif
+        if actif and not self._guide_actif and self._page is ETAT:
+            self._aller(GUIDE)
+        elif not actif and self._guide_actif and self._page is GUIDE:
+            self._dire("Le travail guidé est fini ou arrêté.")
+            self._aller(ETAT)
+        self._guide_actif = actif
+
     def _revenir_seul(self) -> None:
         """Retour à la page d'état sans appui (jamais depuis la page d'alarme)."""
         attente = self._horloge() - self._depuis
@@ -346,7 +374,8 @@ class Ecran:
             journal.info("Écran : question ou code sans réponse, abandonnés")
             self._aller(ETAT)
         elif (
-            self._page in (COMPTEURS, MODE, NETTOYAGE) and attente > self.reglages.retour_accueil_s
+            self._page in (COMPTEURS, MODE, NETTOYAGE, GUIDE)
+            and attente > self.reglages.retour_accueil_s
         ):
             self._aller(ETAT)
 
@@ -365,11 +394,21 @@ class Ecran:
             return
         journal.info("Écran : bouton « %s » (page « %s »)", bouton, page.nom)
         if bouton == "b_retour":
+            if page is GUIDE and self.guide is not None:
+                # ARRÊTER : le travail guidé est abandonné (RETOUR, s'il n'y en a pas).
+                self.guide.arreter(QUI)
             self._aller(ETAT)
         elif page is ETAT:
             self._appui_etat(bouton)
         elif page is ALARME:
             self._appui_alarme(bouton)
+        elif page is MODE and bouton == "b_aide":
+            if self.guide is None:
+                self._dire("Pas de mode guidé (guide.yaml).")
+            else:
+                self._aller(GUIDE)
+        elif page is GUIDE and self.guide is not None:
+            self._appui_guide(bouton, self.guide)
         elif page is MODE and bouton == "b_enceinte":
             if self.nettoyage is None:
                 self._dire("Pas de nettoyage (machine.yaml → nettoyage).")
@@ -446,6 +485,25 @@ class Ecran:
         elif bouton == "b_repare":
             journal.info("Alarme n° %d acquittée à l'écran de l'armoire", self._alarme)
             self.acquitter(self._alarme, QUI)
+
+    def _appui_guide(self, bouton: str, guide: Guide) -> None:
+        etat = guide.etat()
+        if not etat.actif:
+            travaux = guide.liste()
+            if bouton == "b_gauche":
+                self._choix_guide = (self._choix_guide - 1) % len(travaux)
+            elif bouton == "b_droite":
+                self._choix_guide = (self._choix_guide + 1) % len(travaux)
+            elif bouton == "b_ok":
+                guide.demarrer(travaux[self._choix_guide % len(travaux)]["travail"], QUI)
+            return
+        if bouton == "b_gauche":
+            guide.precedent(QUI)
+        elif bouton == "b_ok" and etat.termine:
+            guide.arreter(QUI)
+            self._aller(ETAT)
+        elif bouton == "b_ok":
+            guide.fait(QUI)
 
     def _appui_nettoyage(self, bouton: str, nettoyage: Nettoyage) -> None:
         etat = nettoyage.etat()
@@ -626,6 +684,8 @@ class Ecran:
             self._composer_poste(page)
         elif self._page is NETTOYAGE:
             self._composer_nettoyage(page)
+        elif self._page is GUIDE:
+            self._composer_guide(page)
         elif self._page is CODE:
             self._composer_code(page)
         else:
@@ -794,6 +854,7 @@ class Ecran:
             choisi = mode == self.mode.actuel
             page.mettre(f"b_{mode}", libelle.upper(), "mode" if choisi else "bouton")
         page.mettre("b_enceinte", "ENCEINTE", "bouton" if self.nettoyage is not None else "inactif")
+        page.mettre("b_aide", "AIDE", "bouton" if self.guide is not None else "inactif")
         page.mettre("b_retour", "RETOUR", "bouton")
 
     def _composer_poste(self, page: _Composition) -> None:
@@ -809,6 +870,47 @@ class Ecran:
         possible = poste.etat == EN_PLACE and not poste.manque
         page.mettre("b_pret", "PRÊT", "marche" if possible else "inactif")
         page.mettre("b_retour", "RETOUR", "bouton")
+
+    def _composer_guide(self, page: _Composition) -> None:
+        page.mettre("t_info", self._message_actuel())
+        page.mettre("b_droite", "", "inactif")
+        if self.guide is None:
+            return
+        etat = self.guide.etat()
+        if not etat.actif:
+            travaux = self.guide.liste()
+            place = self._choix_guide % len(travaux)
+            choix = travaux[place]
+            page.mettre("t_titre", "AIDE : CHOISIR", "mode")
+            page.mettre("t_etape", f"{place + 1} sur {len(travaux)}")
+            page.mettre("t_texte", f"{choix['titre']}. {choix['quand']}")
+            page.mettre("t_machine", f"{choix['etapes']} étapes. Le guide ne bouge aucun axe.")
+            page.mettre("b_gauche", "PRÉCÉDENT", "bouton")
+            page.mettre("b_droite", "SUIVANT", "bouton")
+            page.mettre("b_ok", "COMMENCER", "go")
+            page.mettre("b_retour", "RETOUR", "bouton")
+            return
+        page.mettre("t_titre", etat.titre.upper(), "marche" if etat.termine else "mode")
+        if etat.termine:
+            page.mettre("t_etape", f"Les {etat.total} étapes sont faites")
+        else:
+            page.mettre("t_etape", f"Étape {etat.numero} sur {etat.total}")
+        page.mettre("t_texte", etat.texte)
+        page.mettre("t_machine", self._texte_machine_guide(etat))
+        revenir = etat.numero > 1 or etat.termine
+        page.mettre("b_gauche", "PRÉCÉDENT", "bouton" if revenir else "inactif")
+        page.mettre("b_ok", "FERMER" if etat.termine else "FAIT", "go")
+        page.mettre("b_retour", "ARRÊTER", "bouton")
+
+    @staticmethod
+    def _texte_machine_guide(etat: Any) -> str:
+        if etat.signal is None:
+            return ""
+        if etat.vu is None:
+            return "La machine voit : ? (elle ne sait pas)"
+        if etat.machine_d_accord:
+            return "La machine voit : oui, étape faite"
+        return "La machine voit : non, étape pas faite"
 
     def _composer_nettoyage(self, page: _Composition) -> None:
         if self.nettoyage is None:

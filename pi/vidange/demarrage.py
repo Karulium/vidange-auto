@@ -109,6 +109,8 @@ from vidange.fiabilite.onduleur import SIGNAL as SIGNAL_ONDULEUR
 from vidange.fichier_secrets import charger_secrets
 from vidange.fluidnc import Liaison
 from vidange.fluidnc.ports import Port
+from vidange.guide import Guide, sections
+from vidange.guide import verifier_avec_liste as verifier_guide
 from vidange.journal import NOM_FICHIER, configurer_journal, donner_journal
 from vidange.materiel import Materiel
 from vidange.materiel.materiel import Fabrique
@@ -211,13 +213,14 @@ def _chemin(option: str | None, variable: str, defaut: Path) -> Path:
 
 
 FICHIER_MONTEE = "montee_vitesse.json"
-COMMANDES_A_PART = ("compte", "code-ecran", "restaurer", "simuler", "vitesse", "plan")
+COMMANDES_A_PART = ("compte", "code-ecran", "restaurer", "simuler", "vitesse", "plan", "manuel")
 
 
 def lancer_commande_a_part(commande: str, arguments: list[str]) -> int:
     """« vidange compte ... » (comptes de la page web), « vidange restaurer ... » (Pi neuf),
     « vidange simuler --essayer ... » (essai d'un réglage), « vidange vitesse » (tâche 30) et
-    « vidange plan ... » (plans d'essais, tâche 31)."""
+    « vidange plan ... » (plans d'essais, tâche 31) et « vidange manuel » (manuel d'utilisation,
+    tâche 32)."""
     if commande == "compte":
         from vidange.comptes.outil import lancer_compte
 
@@ -250,6 +253,14 @@ def lancer_commande_a_part(commande: str, arguments: list[str]) -> int:
             _chemin(
                 None, "VIDANGE_ENTREES_SORTIES", DOSSIER_PI.parent / "docs" / "entrees-sorties.yaml"
             ),
+        )
+    if commande == "manuel":
+        from vidange.guide.outil import lancer_manuel
+
+        return lancer_manuel(
+            arguments,
+            _chemin(None, "VIDANGE_REGLAGES", DOSSIER_PI / "reglages"),
+            DOSSIER_PI.parent / "docs" / "manuel.md",
         )
     if commande == "vitesse":
         from vidange.vitesse.outil import lancer_vitesse
@@ -393,13 +404,14 @@ def erreurs_entre_reglages_et_liste(
     reglages: Reglages, entrees_sorties: EntreesSorties
 ) -> list[str]:
     """Les vérifications qui croisent les réglages et la liste des entrées/sorties (pesées,
-    ventilateur, spray, entretien) : une liste d'erreurs en français, vide si tout va bien."""
+    ventilateur, spray, entretien, guide) : liste d'erreurs en français, vide si tout va bien."""
     erreurs = verifier_avec_liste(reglages.pesees, entrees_sorties)
     if reglages.machine.nettoyage is not None:
         erreurs += verifier_nettoyage(reglages.machine.nettoyage, entrees_sorties)
     if reglages.machine.spray is not None:
         erreurs += verifier_spray(reglages.machine.spray, entrees_sorties)
     erreurs += verifier_entretien(reglages.entretien, entrees_sorties, reglages.fluidnc)
+    erreurs += verifier_guide(reglages.guide, entrees_sorties)
     return erreurs
 
 
@@ -854,6 +866,13 @@ def principal(
             "essais.yaml : les bornes des plans d'essais sont des EXEMPLES (exemple: true) : "
             "Karulium les fixe, puis passer « exemple » à false (pi/systeme/essai-plan-essais.md)."
         )
+    travaux_exemple = [n for n, t in reglages.guide.travaux.items() if t.exemple]
+    if reglages.guide.exemple or travaux_exemple:
+        journal.warning(
+            "guide.yaml : travaux guidés d'EXEMPLE (%d) : à relire sur la machine et à corriger, "
+            "puis retirer leur « exemple: true » (pi/systeme/essai-guide.md).",
+            len(travaux_exemple),
+        )
     if reglages.air.exemple:
         journal.warning(
             "air.yaml contient des valeurs d'EXEMPLE (exemple: true) : attente de mise en "
@@ -1156,6 +1175,14 @@ def principal(
     )
     mode_bocaux = ModeBocaux(reglages, pieces_bocaux, chef, mode_actuel=lambda: mode.actuel)
     mode_nuit = ModeNuit(reglages, pieces_bocaux, nettoyage)
+
+    # Mode guidé (tâche 32) : lit les entrées citées par les étapes, informe seulement.
+    def lire_signal_guide(nom: str) -> bool | None:
+        if materiel is None or erreur_materiel is not None:
+            return None
+        return materiel.lire(nom)
+
+    guide = Guide(reglages.guide, lire_signal_guide, registre)
     # Lancer un lot (tâche 45 quater) : la page web propose, Go à l'écran de l'armoire. Les
     # boucles de fond des pièces partent avec le lot et s'arrêtent à sa fin ou sur alarme.
     fond = FondDuLot(cartes, reglages.programme.lot, chef)
@@ -1318,6 +1345,8 @@ def principal(
                 air=air,
                 entretien=entretien,
                 lancement=lancement,
+                guide=guide,
+                manuel=lambda: [s.en_dict() for s in sections(reglages)],
                 estimation=estimation,
                 montee=montee,
                 essai=EssaiEnFond(
@@ -1359,6 +1388,7 @@ def principal(
                 mode_nuit=mode_nuit,
                 lancement=lancement,
                 estimation=estimation,
+                guide=guide,
                 code=code_ecran,
                 actions=journal_des_actions(dossier_donnees),
             )
