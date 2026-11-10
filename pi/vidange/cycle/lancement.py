@@ -298,7 +298,7 @@ class Lancement:
             "proposition": None if proposition is None else proposition.en_dict(),
             # Le plan d'essais qui partira avec le lot proposé (tâche 31), et le plan accepté qui
             # attend son lot (pour la page).
-            "plan_essais": None if plan is None else {"numero": plan[0], "nom": plan[1].nom},
+            "plan_essais": None if plan is None or self.plans is None else self.plans.apercu(*plan),
             "plan_accepte": None
             if accepte is None
             else {"numero": accepte[0], "nom": accepte[1].nom, "lot": accepte[1].texte_lot()},

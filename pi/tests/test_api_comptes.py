@@ -95,6 +95,7 @@ def test_le_niveau_de_chaque_famille_de_routes(b):
         "/api/reglages-modifiables/historique",
         "/api/vitesse",
         "/api/essai",
+        "/api/plans-essais",
     }
     assert all(
         n is Niveau.REGARDER
@@ -129,6 +130,12 @@ def test_le_niveau_de_chaque_famille_de_routes(b):
         ("POST", "/api/vitesse/annuler"),
         ("GET", "/api/essai"),
         ("POST", "/api/essai"),
+        # Plans d'essais (tâche 31) : les lire, les charger, les accepter, c'est régler.
+        ("GET", "/api/plans-essais"),
+        ("POST", "/api/plans-essais"),
+        ("POST", "/api/plans-essais/{numero}/accepter"),
+        ("POST", "/api/plans-essais/{numero}/retirer"),
+        ("POST", "/api/plans-essais/{numero}/essayer"),
     ]:
         assert niveaux[(methode, chemin)] is Niveau.REGLER, chemin
 

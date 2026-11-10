@@ -156,7 +156,10 @@ class PlanEssais:
 
 
 def _titre(nom: str, essais: "ReglagesEssais") -> str:
-    variable = essais.variables[nom]
+    variable = essais.variables.get(nom)
+    if variable is None:
+        # Variable retirée d'essais.yaml depuis l'arrivée du plan.
+        return nom
     return f"{variable.libelle} ({variable.unite})" if variable.unite else variable.libelle
 
 

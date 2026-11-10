@@ -635,6 +635,31 @@ function afficherNettoyage(n) {
           : null)));
 }
 
+// Plan d'essais accepté qui partira avec le lot proposé (tâche 31) : son tableau seau par seau,
+// lu AVANT le Go à l'écran. « normal » : le réglage de machine.yaml.
+function valeurPlan(v) {
+  if (v === null || v === undefined) return "—";
+  if (v === true) return "oui";
+  if (v === false) return "non";
+  return String(v).replace(".", ",");
+}
+
+function planDuLot(plan) {
+  return el("div", { classe: "plan-du-lot" },
+    el("div", {}, el("strong", {}, "Avec plan d'essais n° " + plan.numero + " « " + plan.nom + " »"),
+      " (de " + plan.auteur + ") : chaque seau prend ses valeurs ci-dessous."),
+    plan.remarque && el("div", { classe: "doux" }, plan.remarque),
+    // Tableau toujours ouvert : la carte est refaite à chaque lecture de l'état.
+    el("table", {},
+      el("tr", {}, el("th", {}, "Seau"), ...plan.variables.map((v) => el("th", {}, v.libelle + (v.unite ? " (" + v.unite + ")" : "")))),
+      ...plan.tableau.map((ligne) => el("tr", {}, el("td", {}, ligne.numero),
+        ...plan.variables.map((v) => {
+          const c = ligne.valeurs[v.nom];
+          return el("td", { classe: c.normal ? "doux" : "" }, valeurPlan(c.valeur) + (c.normal ? " (normal)" : ""));
+        })))),
+    el("div", { classe: "doux" }, "Pour ne pas l'appliquer : le retirer dans l'onglet « Réglages » avant le Go."));
+}
+
 // Lancer un lot (tâche 45 quater) : la page PROPOSE, le Go se donne à l'écran de l'armoire.
 function afficherLot(lot, estimation) {
   $("lot").hidden = !lot;
@@ -643,7 +668,7 @@ function afficherLot(lot, estimation) {
   remplir("lot-etat",
     p && el("div", { classe: "carte " + (lot.refus_go ? "alarme" : "attention") },
       el("strong", {}, "Lot de " + p.texte + " proposé"),
-      lot.plan_essais && el("div", {}, "Avec plan d'essais : " + lot.plan_essais.nom + " (n° " + lot.plan_essais.numero + ")."),
+      lot.plan_essais && planDuLot(lot.plan_essais),
       el("div", {}, lot.refus_go
         ? "Il ne peut pas partir : " + lot.refus_go + "."
         : "Donner le Go sur l'écran de l'armoire (bouton GO, puis Oui), devant la machine."),

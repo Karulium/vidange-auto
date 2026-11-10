@@ -44,8 +44,11 @@ variables:
     genre: nombre
     unite: g
     # Normal : machine.yaml → griffe → formats → <format> → mycelium_kg (150 g pour seau_a).
+    # Max : un bocal doit suffire pour ses seaux (max × couches × seaux_par_bocal, ici
+    # 200 × 4 × 1 = 800 g, sous les 0,9 kg du bocal du simulateur ; vrai contenu d'un bocal à
+    # peser, question n° 2 de la PR de la tâche 31). Sinon : alarme « poids qui ne monte plus ».
     min: 60
-    max: 250
+    max: 200
     formats:
       # Petit seau de 5 L (normal : 100 g).
       seau_b: {min: 40, max: 160}

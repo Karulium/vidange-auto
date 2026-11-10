@@ -200,19 +200,39 @@ class PlansEssais:
             "accepte": _qui_quand(ligne, "accepte"),
             "lance": _qui_quand(ligne, "lance"),
             "retire": _qui_quand(ligne, "retire"),
-            "variables": [
-                {
-                    "nom": nom,
-                    "libelle": self.essais.variables[nom].libelle,
-                    "unite": self.essais.variables[nom].unite,
-                }
-                for nom in plan.variables
-            ],
+            "variables": self._colonnes(plan),
             "tableau": plan.tableau(self.machine),
             "appliques": appliques,
             "seaux_faits": len({a["numero"] for a in appliques}),
             "texte": plan.en_texte(self.machine, self.essais),
         }
+
+    def apercu(self, numero: int, plan: PlanEssais) -> dict[str, Any]:
+        """Le plan en bref, pour la carte du lot proposé (onglet « État », avant le Go) : son
+        tableau seau par seau."""
+        return {
+            "numero": numero,
+            "nom": plan.nom,
+            "auteur": plan.auteur,
+            "remarque": plan.remarque,
+            "lot": plan.texte_lot(),
+            "variables": self._colonnes(plan),
+            "tableau": plan.tableau(self.machine),
+        }
+
+    def _colonnes(self, plan: PlanEssais) -> list[dict[str, Any]]:
+        # Une variable retirée d'essais.yaml depuis (vieux plan) : son nom seul.
+        colonnes = []
+        for nom in plan.variables:
+            variable = self.essais.variables.get(nom)
+            colonnes.append(
+                {
+                    "nom": nom,
+                    "libelle": nom if variable is None else variable.libelle,
+                    "unite": "" if variable is None else variable.unite,
+                }
+            )
+        return colonnes
 
     def liste(self, tous: bool = False) -> list[dict[str, Any]]:
         """Les plans, le plus récent d'abord (sans `tous` : pas les retirés)."""
