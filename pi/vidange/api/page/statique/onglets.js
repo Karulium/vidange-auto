@@ -201,6 +201,7 @@ export async function ouvrirReglages(conteneur, outils) {
       + "voir la procédure, « sudo systemctl restart vidange »)."),
     ...cartes,
     ...(await blocVitesseEtEssai(outils, recharger)),
+    ...(await blocPlansEssais(outils, recharger)),
     el("h2", {}, "Historique des changements"),
     historique.length === 0 ? el("p", { classe: "doux" }, "Aucun changement fait depuis la page.")
       : el("table", {}, el("tr", {}, el("th", {}, "N°"), el("th", {}, "Quand"), el("th", {}, "Qui"),
@@ -263,6 +264,94 @@ async function blocVitesseEtEssai(outils, recharger) {
         sortie));
   }
   return blocs;
+}
+
+// Plans d'essais (tâche 31) : un plan chargé n'est qu'une proposition ; Karulium l'accepte ici après
+// avoir vu son tableau seau par seau ; il part avec le prochain lot qu'il vise (montré au Go).
+function valeurEssai(v) {
+  if (v === null || v === undefined) return "—";
+  if (v === true) return "oui";
+  if (v === false) return "non";
+  return String(v).replace(".", ",");
+}
+
+async function blocPlansEssais(outils, recharger) {
+  const { el, lire, api, dire, heure, Refus } = outils;
+  let etat = null;
+  try { etat = await lire("/api/plans-essais"); } catch (erreur) { return []; /* pas de plans sur ce programme */ }
+
+  async function ordre(chemin, corps, texteOk, question) {
+    if (question && !confirm(question)) return;
+    try {
+      const options = { method: "POST" };
+      if (corps !== undefined) { options.headers = { "Content-Type": "application/json" }; options.body = JSON.stringify(corps); }
+      await api(chemin, options);
+      dire(texteOk, "vert");
+    } catch (erreur) { if (!(erreur instanceof Refus)) dire("Refusé : " + erreur.message, "rouge"); }
+    recharger();
+  }
+
+  const zone = el("textarea", { rows: "6", placeholder: "nom: ...\nauteur: ...\nlot: {variete: pleurote_grise, format: seau_a, seaux: 6}\nseaux:\n  1: {mycelium_g: 100}" });
+  const fichier = el("input", { type: "file", accept: ".yaml,.yml,.json,.txt", surchange: async () => {
+    if (fichier.files.length) zone.value = await fichier.files[0].text();
+  } });
+  const variables = etat.variables.map((v) => el("li", {}, v.libelle + " (" + v.nom + ") : "
+    + (v.genre === "oui_non" ? "oui ou non" : "de " + valeurEssai(v.min) + " à " + valeurEssai(v.max) + " " + v.unite
+      + Object.entries(v.formats).map(([f, b]) => " ; " + f + " : " + valeurEssai(b.min) + " à " + valeurEssai(b.max)).join(""))
+    + ". " + v.aide));
+
+  const tableau = (plan) => el("table", {},
+    el("tr", {}, el("th", {}, "Seau"), ...plan.variables.map((v) => el("th", {}, v.libelle + (v.unite ? " (" + v.unite + ")" : "")))),
+    ...plan.tableau.map((ligne) => el("tr", {}, el("td", {}, ligne.numero),
+      ...plan.variables.map((v) => {
+        const c = ligne.valeurs[v.nom];
+        return el("td", { classe: c.normal ? "doux" : "" }, valeurEssai(c.valeur) + (c.normal ? " (normal)" : ""));
+      }))));
+
+  const appliques = (plan) => el("table", {},
+    el("tr", {}, el("th", {}, "Seau"), el("th", {}, "Variable"), el("th", {}, "Voulu"), el("th", {}, "Mesuré"), el("th", {}, "Remarque")),
+    ...plan.appliques.map((a) => el("tr", {}, el("td", {}, a.numero + (a.seau ? " (" + a.seau + ")" : "")),
+      el("td", {}, a.variable + (a.couche ? ", couche " + a.couche : "")), el("td", {}, valeurEssai(a.voulu)),
+      el("td", {}, a.mesure === null ? "—" : valeurEssai(a.mesure) + " " + (a.unite || "")), el("td", {}, a.remarque || ""))));
+
+  const carte = (plan) => el("div", { classe: "carte" + (plan.etat === "accepte" ? " attention" : ""), "data-plan": plan.numero },
+    el("strong", {}, "n° " + plan.numero + " « " + plan.nom + " »"),
+    el("div", { classe: "doux" }, "De " + plan.auteur + ", chargé le " + heure(plan.charge.quand) + " par " + plan.charge.qui
+      + ". Lot visé : " + plan.lot + ". État : " + plan.etat_texte + "."),
+    plan.remarque && el("div", { classe: "doux" }, plan.remarque),
+    plan.accepte && el("div", { classe: "doux" }, "Accepté le " + heure(plan.accepte.quand) + " par " + plan.accepte.qui + "."),
+    plan.lance && el("div", { classe: "doux" }, "Lancé avec le lot le " + heure(plan.lance.quand) + " (" + plan.seaux_faits
+      + " seau(x) sur " + plan.seaux + " notés)."),
+    tableau(plan),
+    plan.appliques.length ? el("details", {}, el("summary", {}, "Valeurs vraiment appliquées"), appliques(plan)) : null,
+    el("div", {},
+      plan.etat === "propose" && el("button", { classe: "petit vert", surclick: () => ordre("/api/plans-essais/" + plan.numero + "/accepter",
+        undefined, "Plan accepté : il partira avec le prochain lot de " + plan.lot + ".",
+        "Accepter le plan « " + plan.nom + " » ? Il partira avec le prochain lot de " + plan.lot
+        + " (le Go à l'écran le dira), seau par seau comme dans le tableau.") }, "Accepter"),
+      " ",
+      (plan.etat === "propose" || plan.etat === "accepte") && el("button", { classe: "petit", surclick: () =>
+        ordre("/api/plans-essais/" + plan.numero + "/retirer", undefined, "Plan retiré.", "Retirer le plan « " + plan.nom + " » ?") }, "Retirer"),
+      " ",
+      plan.etat !== "retire" && el("button", { classe: "petit", surclick: () =>
+        ordre("/api/plans-essais/" + plan.numero + "/essayer", undefined,
+          "Essai lancé : le résultat s'affiche dans « Essai d'un réglage dans le simulateur ».") }, "Essayer au simulateur")));
+
+  return [
+    el("h2", {}, "Plans d'essais"),
+    el("div", { classe: "carte" },
+      el("div", { classe: "doux" }, "Un plan fait varier, seau par seau d'un lot, seulement ce qui est permis ci-dessous (pi/reglages/essais.yaml). "
+        + "Chargé, il n'est qu'une proposition : l'accepter après avoir lu son tableau ; il part avec le prochain lot qu'il vise "
+        + "(même variété, format et nombre de seaux), après le Go à l'écran. Un seul plan accepté à la fois."),
+      etat.exemple && el("div", { classe: "doux" }, "Les bornes sont des exemples, à fixer."),
+      el("ul", {}, ...variables),
+      zone, fichier,
+      el("button", { classe: "petit", surclick: () => {
+        if (!zone.value.trim()) { dire("Coller un plan ou choisir un fichier.", "rouge"); return; }
+        ordre("/api/plans-essais", { texte: zone.value }, "Plan chargé (proposition) : le lire, puis l'accepter.");
+      } }, "Charger le plan")),
+    ...(etat.plans.length ? etat.plans.map(carte) : [el("p", { classe: "doux" }, "Aucun plan d'essais.")]),
+  ];
 }
 
 // ------------------------------------------------------------ carnet de bord

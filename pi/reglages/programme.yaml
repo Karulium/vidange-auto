@@ -156,6 +156,9 @@ envois:
     # Adresse de l'app « machine », exemple : http://192.168.1.20:8000/machine/api/cycles/
     # Vide : l'app n'existe pas encore, les cycles attendent dans la file.
     adresse: ""
+    # Adresse qui reçoit les plans d'essais appliqués (tâche 31, format dans docs/django.md),
+    # exemple : http://192.168.1.20:8000/machine/api/essais/ ; obligatoire si « adresse » est donnée.
+    adresse_essais: ""
     machine: vidange-1
     fuseau_horaire: America/Guadeloupe
     delai_reponse_s: 10

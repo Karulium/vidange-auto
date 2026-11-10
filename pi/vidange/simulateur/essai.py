@@ -20,7 +20,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -28,6 +28,9 @@ from vidange.chef import ErreurChef
 from vidange.reglages import FICHIERS, ErreurReglages, Reglages, lire_yaml
 from vidange.simulateur.planning import duree_lisible
 from vidange.simulateur.simulateur import ErreurSimulation
+
+if TYPE_CHECKING:
+    from vidange.essais.plan import PlanEssais
 
 
 class ErreurEssai(Exception):
@@ -53,6 +56,8 @@ class ResultatLot:
     temps_total_s: float = 0.0
     alertes: list[str] = field(default_factory=list)
     refus: str = ""
+    # Le mycélium versé, seau par seau (g par couche), pour voir un plan d'essais appliqué.
+    doses: dict[str, list[float]] = field(default_factory=dict)
 
     def en_dict(self) -> dict[str, Any]:
         return {
@@ -60,6 +65,7 @@ class ResultatLot:
             "temps_total_s": round(self.temps_total_s, 1),
             "alertes": self.alertes,
             "refus": self.refus,
+            "doses": self.doses,
         }
 
 
@@ -68,16 +74,27 @@ class Comparaison:
     changements: list[Changement]
     normal: ResultatLot
     essai: ResultatLot
+    # Essai d'un plan d'essais (tâche 31) : son tableau seau par seau, à la place des réglages.
+    plan: str | None = None
 
     @property
     def sans_probleme(self) -> bool:
         return self.essai.fini and not self.essai.alertes and not self.essai.refus
 
     def en_texte(self) -> str:
+        if self.plan is None:
+            debut = [
+                "Essai d'un réglage dans le simulateur (rien n'est écrit dans les vrais fichiers)",
+                "Réglage(s) essayé(s) :",
+                *[f"  {changement.en_texte()}" for changement in self.changements],
+            ]
+        else:
+            debut = [
+                "Essai d'un plan d'essais dans le simulateur (rien n'est appliqué ni écrit)",
+                self.plan,
+            ]
         lignes = [
-            "Essai d'un réglage dans le simulateur (rien n'est écrit dans les vrais fichiers)",
-            "Réglage(s) essayé(s) :",
-            *[f"  {changement.en_texte()}" for changement in self.changements],
+            *debut,
             "",
             _ligne("", "Lot normal", "Lot avec l'essai", "Écart"),
             _ligne("Durée totale", _duree(self.normal), _duree(self.essai), self._ecart()),
@@ -86,18 +103,24 @@ class Comparaison:
         ]
         for nom, resultat in (("normal", self.normal), ("essai", self.essai)):
             lignes += [f"  Alerte du lot {nom} : {alerte}" for alerte in resultat.alertes]
+        if self.plan is not None and self.essai.doses:
+            lignes.append("Mycélium versé dans le lot avec le plan (g par couche) :")
+            lignes += [
+                f"  {seau} : {', '.join(f'{g:g}' for g in doses)}"
+                for seau, doses in self.essai.doses.items()
+            ]
         lignes.append("")
+        quoi = "ce réglage" if self.plan is None else "ce plan"
         if self.sans_probleme:
-            lignes.append(
-                "Verdict : le lot simulé va au bout avec ce réglage, sans alerte ni refus."
-            )
+            lignes.append(f"Verdict : le lot simulé va au bout avec {quoi}, sans alerte ni refus.")
         else:
             lignes.append(
-                "Verdict : ce réglage donne une alerte, un refus ou un lot qui ne finit pas."
+                f"Verdict : {quoi} donne une alerte, un refus ou un lot qui ne finit pas."
             )
+        procedure = "essai-vitesse-estimation.md" if self.plan is None else "essai-plan-essais.md"
         lignes.append(
             "Ce n'est qu'une simulation (réglages du simulateur) : essayer d'abord à vide sur la "
-            "machine (pi/systeme/essai-vitesse-estimation.md)."
+            f"machine (pi/systeme/{procedure})."
         )
         return "\n".join(lignes)
 
@@ -118,6 +141,7 @@ class Comparaison:
             "normal": self.normal.en_dict(),
             "essai": self.essai.en_dict(),
             "sans_probleme": self.sans_probleme,
+            "plan": self.plan,
             "texte": self.en_texte(),
         }
 
@@ -216,18 +240,22 @@ def copie_provisoire(dossier: Path, demandes: list[str], destination: Path) -> l
 # ------------------------------------------------------------ le lot simulé
 
 
-def jouer_le_lot(reglages: Reglages, liste: Any) -> ResultatLot:
-    """Le lot de seaux simulé (même code que la machine) : durée, alertes, refus du chef."""
+def jouer_le_lot(reglages: Reglages, liste: Any, plan: "PlanEssais | None" = None) -> ResultatLot:
+    """Le lot de seaux simulé (même code que la machine) : durée, alertes, refus du chef.
+    `plan` : un plan d'essais appliqué aux seaux du lot (tâche 31)."""
     from vidange.cycle.simulation import jouer_cycle
     from vidange.simulateur.simulateur import Simulateur
 
     resultat = ResultatLot()
     try:
         with Simulateur(reglages, liste, "cycle") as simulateur:
-            _, planning, problemes = jouer_cycle(simulateur)
+            mode, planning, problemes = jouer_cycle(simulateur, plan=plan)
     except (ErreurSimulation, ErreurChef) as erreur:
         resultat.refus = str(erreur)
         return resultat
+    if mode.en_cours is not None:
+        for dose in mode.en_cours.pieces.mycelium.doses:
+            resultat.doses.setdefault(dose.seau, []).append(round(dose.kg * 1000, 1))
     resultat.temps_total_s = planning.temps_total
     resultat.fini = planning.fini
     if planning.probleme:
@@ -266,6 +294,54 @@ def essayer(
     return Comparaison(changements, normal, essai)
 
 
+def essayer_plan(
+    dossier_reglages: Path,
+    chemin_entrees_sorties: Path,
+    texte: str,
+    jouer: Callable[..., ResultatLot] | None = None,
+) -> Comparaison:
+    """Un plan d'essais rejoué au simulateur avant d'être accepté (tâche 31) : le lot du plan
+    (sa variété et son nombre de seaux, le format du simulateur) joué normal, puis avec le plan.
+    ErreurEssai si le plan est refusé ou ne se joue pas au simulateur."""
+    from vidange.demarrage import erreurs_de_reglages
+    from vidange.entrees_sorties import charger_entrees_sorties
+    from vidange.essais.plan import ErreurPlan, lire_plan
+    from vidange.reglages import charger_reglages
+
+    reglages = charger_reglages(dossier_reglages)
+    try:
+        plan = lire_plan(texte, reglages.machine, reglages.essais)
+    except ErreurPlan as erreur:
+        raise ErreurEssai(str(erreur)) from None
+    cycle = reglages.simulateur.cycle
+    if cycle is None:
+        raise ErreurEssai("simulateur.yaml n'a pas de partie « cycle » (le lot simulé)")
+    if cycle.format != plan.format:
+        raise ErreurEssai(
+            f"le simulateur ne joue que des lots « {cycle.format} » (simulateur.yaml → cycle → "
+            f"format, avec ses piles) ; ce plan vise « {plan.format} »"
+        )
+    with tempfile.TemporaryDirectory(prefix="vidange-essai-plan-") as provisoire:
+        copie = Path(provisoire) / "reglages"
+        demandes = [
+            f"simulateur.yaml=cycle.seaux={plan.seaux}",
+            f"simulateur.yaml=cycle.variete={plan.variete}",
+        ]
+        copie_provisoire(dossier_reglages, demandes, copie)
+        erreurs = erreurs_de_reglages(copie, chemin_entrees_sorties)
+        if erreurs:
+            raise ErreurEssai(
+                f"le lot du plan ({plan.texte_lot()}) ne se joue pas au simulateur :\n"
+                + "\n".join(f"  - {erreur}" for erreur in erreurs)
+            )
+        liste = charger_entrees_sorties(chemin_entrees_sorties)
+        jouer = jouer or jouer_le_lot
+        sur_la_copie = charger_reglages(copie)
+        normal = jouer(sur_la_copie, liste)
+        essai = jouer(sur_la_copie, liste, plan)
+    return Comparaison([], normal, essai, plan=plan.en_texte(reglages.machine, reglages.essais))
+
+
 class EssaiEnFond:
     """Le bouton de la page web (rôle « régler ») : un seul essai à la fois, dans un fil à part ;
     la page demande ensuite où il en est. Refusé quand le programme ne veut pas (un lot tourne)."""
@@ -275,7 +351,7 @@ class EssaiEnFond:
         dossier_reglages: Path,
         chemin_entrees_sorties: Path,
         refus: Callable[[], str] = lambda: "",
-        jouer: Callable[[Reglages, Any], ResultatLot] | None = None,
+        jouer: Callable[..., ResultatLot] | None = None,
         en_fond: bool = True,
     ) -> None:
         self._dossier = dossier_reglages
@@ -304,18 +380,36 @@ class EssaiEnFond:
                 "demandes": list(demandes),
                 "qui": qui,
             }
+        return self._partir(lambda: essayer(self._dossier, self._liste, demandes, self._jouer))
+
+    def lancer_plan(self, texte: str, nom: str, qui: str) -> dict[str, Any]:
+        """Le bouton « Essayer au simulateur » d'un plan d'essais (tâche 31)."""
+        with self._verrou:
+            if self._etat["en_cours"]:
+                raise ErreurEssai("un essai est déjà en cours")
+            pourquoi = self._refus()
+            if pourquoi:
+                raise ErreurEssai(f"essai refusé : {pourquoi}")
+            self._etat = {
+                "en_cours": True,
+                "resultat": None,
+                "erreur": None,
+                "demandes": [f"plan d'essais « {nom} »"],
+                "qui": qui,
+            }
+        return self._partir(lambda: essayer_plan(self._dossier, self._liste, texte, self._jouer))
+
+    def _partir(self, faire: Callable[[], Comparaison]) -> dict[str, Any]:
         if self._en_fond:
-            threading.Thread(
-                target=self._faire, args=(demandes,), name="essai", daemon=True
-            ).start()
+            threading.Thread(target=self._faire, args=(faire,), name="essai", daemon=True).start()
         else:
-            self._faire(demandes)
+            self._faire(faire)
         return self.etat()
 
-    def _faire(self, demandes: list[str]) -> None:
+    def _faire(self, faire: Callable[[], Comparaison]) -> None:
         resultat, erreur = None, None
         try:
-            resultat = essayer(self._dossier, self._liste, demandes, self._jouer).en_dict()
+            resultat = faire().en_dict()
         except ErreurEssai as probleme:
             erreur = str(probleme)
         except Exception as probleme:

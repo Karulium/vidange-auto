@@ -28,6 +28,11 @@ Les seaux d'un lot lancé ici n'ont pas de nom d'avance : chacun prend le QR lu 
 Au Go, les boucles de fond des pièces (FondDuLot : balances, vide, battement des servos) partent
 juste avant le lot ; si elles ne peuvent pas partir, le lot n'est pas lancé.
 
+Plan d'essais (tâche 31) : si Karulium a accepté un plan qui vise ce lot (même format, variété et
+nombre de seaux), le Go le montre (« avec plan d'essais : nom ») et le lot part avec : chaque seau
+prend ses valeurs du plan. Le plan est cherché au moment où on le montre et au Go : un plan retiré
+entre-temps ne part pas.
+
 Rien de cela ne protège personne : la sécurité est câblée.
 """
 
@@ -48,6 +53,7 @@ from vidange.stockage import places
 
 if TYPE_CHECKING:
     from vidange.cycle.machine import FondDuLot
+    from vidange.essais import PlanEssais, PlansEssais
     from vidange.stockage.stockage import Stockage
 
 journal = donner_journal("lancement")
@@ -82,15 +88,18 @@ class Lancement:
         stockage: "Stockage | None" = None,
         fond: "FondDuLot | None" = None,
         horloge: Callable[[], float] = time.monotonic,
+        plans: "PlansEssais | None" = None,
     ) -> None:
         """`stockage` : le Stockage de la machine (bocaux vides d'un lot de bocaux). `fond` : les
-        boucles de fond des pièces (None : aucune, essais sans cartes)."""
+        boucles de fond des pièces (None : aucune, essais sans cartes). `plans` : les plans
+        d'essais (tâche 31 ; None : jamais de plan)."""
         self.reglages = reglages
         self.machine = machine
         self.mode_seaux = mode_seaux
         self.mode_bocaux = mode_bocaux
         self.stockage = stockage
         self.fond = fond
+        self.plans = plans
         self._horloge = horloge
         self._verrou = threading.Lock()
         self._proposition: LotPropose | None = None
@@ -182,6 +191,15 @@ class Lancement:
                 return None
             return proposition
 
+    def plan_du_lot(self, proposition: LotPropose | None = None) -> "tuple[int, PlanEssais] | None":
+        """Le plan d'essais accepté qui vise le lot proposé (tâche 31), ou None."""
+        proposition = proposition or self.proposition
+        if self.plans is None or proposition is None or not isinstance(proposition.lot, Lot):
+            return None
+        lot = proposition.lot
+        variete = lot.seaux[0].variete if lot.seaux else ""
+        return self.plans.pour_le_lot(lot.format, variete, len(lot.seaux))
+
     # ------------------------------------------------------------ Karulium dit Go à l'écran
 
     def refus_go(self) -> str | None:
@@ -210,27 +228,44 @@ class Lancement:
         if refus is not None:
             raise ErreurChef(refus)
         lot = proposition.lot
+        texte = proposition.texte
+        plan = self.plan_du_lot(proposition)
+        if plan is not None:
+            from vidange.essais import ErreurPlan, appliquer
+
+            assert isinstance(lot, Lot) and self.plans is not None
+            numero, plan_essais = plan
+            # Noté avant le départ (il ne peut plus être retiré), défait si le lot ne part pas.
+            try:
+                self.plans.lancer(numero, qui)
+            except ErreurPlan as erreur:
+                raise ErreurChef(f"lot pas lancé : {erreur}") from None
+            lot = appliquer(numero, plan_essais, lot, self.machine)
+            texte += f", avec plan d'essais : {plan_essais.nom}"
         noms = self._modules(lot)
-        if self.fond is not None:
-            self.fond.demarrer(noms)
         try:
-            if isinstance(lot, Lot):
-                assert self.mode_seaux is not None
-                lances = self.mode_seaux.lancer_lot(lot)
-            else:
-                assert self.mode_bocaux is not None
-                lances = self.mode_bocaux.lancer_lot(lot)
-        except Exception:
             if self.fond is not None:
-                self.fond.arreter()
+                self.fond.demarrer(noms)
+            try:
+                if isinstance(lot, Lot):
+                    assert self.mode_seaux is not None
+                    lances = self.mode_seaux.lancer_lot(lot)
+                else:
+                    assert self.mode_bocaux is not None
+                    lances = self.mode_bocaux.lancer_lot(lot)
+            except Exception:
+                if self.fond is not None:
+                    self.fond.arreter()
+                raise
+        except Exception:
+            if plan is not None and self.plans is not None:
+                self.plans.defaire_lancement(plan[0])
             raise
         with self._verrou:
             if self._proposition is proposition:
                 self._proposition = None
-        self.dernier = proposition.texte
-        journal.warning(
-            "Go de la %s : lot de %s lancé (%s)", qui, proposition.texte, ", ".join(lances)
-        )
+        self.dernier = texte
+        journal.warning("Go de la %s : lot de %s lancé (%s)", qui, texte, ", ".join(lances))
         return lances
 
     @staticmethod
@@ -249,14 +284,24 @@ class Lancement:
         if proposition is None:
             return None
         refus = self.refus_go()
+        plan = self.plan_du_lot(proposition)
+        avec = "" if plan is None else f"Avec plan d'essais : {plan[1].nom}. "
         if refus is None:
-            return f"Lot de {proposition.texte} : GO ?", "Toucher GO pour lancer le lot."
+            return f"Lot de {proposition.texte} : GO ?", avec + "Toucher GO pour lancer le lot."
         return f"Lot de {proposition.texte} : impossible", refus
 
     def en_dict(self) -> dict[str, object]:
         proposition = self.proposition
+        plan = self.plan_du_lot(proposition)
+        accepte = None if self.plans is None else self.plans.accepte()
         return {
             "proposition": None if proposition is None else proposition.en_dict(),
+            # Le plan d'essais qui partira avec le lot proposé (tâche 31), et le plan accepté qui
+            # attend son lot (pour la page).
+            "plan_essais": None if plan is None or self.plans is None else self.plans.apercu(*plan),
+            "plan_accepte": None
+            if accepte is None
+            else {"numero": accepte[0], "nom": accepte[1].nom, "lot": accepte[1].texte_lot()},
             "refus_go": None if proposition is None else self.refus_go(),
             "dernier": self.dernier,
             "fond": [] if self.fond is None else list(self.fond.actives),

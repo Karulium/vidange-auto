@@ -991,7 +991,13 @@ Avant chaque tâche, le projet recopie ici les gestes, positions et règles du m
   3. Tests sans Pi (faux dépôt Git, fausse copie) ; la procédure d'essai de la restauration est complétée.
 - [x] 29. Écran : code pour les fonctions sensibles (50). — Sonnet. Fait : code de 4 à 6 chiffres haché (scrypt), `vidange code-ecran`, page « code » de l'écran (à dessiner : `nextion/pages.md`), essais ratés limités, journal des actions. Testé sur le vrai matériel : non.
 - [x] 30. Estimation de fin qui apprend (7), montée en vitesse réglable (69), essai d'un réglage dans le simulateur (68). — Sonnet. Fait : estimation corrigée par les vraies durées du registre (par geste et par format), montée en vitesse par paliers sous plafonds (`actif: false`, annulable), `vidange simuler --essayer` et bouton de la page. Testé sur le vrai matériel : non.
-- [ ] 31. Plans d'expériences : application d'un plan d'essais accepté par Karulium, seau par seau (6, 76). — Opus.
+- [x] 31. Plans d'expériences : application d'un plan d'essais accepté par Karulium, seau par seau (6, 76). — Opus. Fait : variables permises et leurs bornes dans `pi/reglages/essais.yaml` (mycélium par couche, spray oui/non, dose de spray ; vérifiées au démarrage, `exemple: true`), fichier de plan vérifié (`vidange plan`), plan proposé puis accepté sur la page (rôle « régler »), montré avec le lot avant le Go, appliqué seau par seau, valeurs vraiment faites notées au registre et envoyées au logiciel de culture (`docs/django.md`), rejeu au simulateur. Procédure : `pi/systeme/essai-plan-essais.md`. Testé sur le vrai matériel : non.
+- [ ] 31 bis. Plans d'essais, suite (après la pesée d'un bocal plein et la réponse aux questions de la PR 117). — Sonnet.
+  1. Contenu d'un bocal de semence dans `machine.yaml` ; au démarrage, refuser des bornes de `essais.yaml` qu'un
+     bocal ne peut pas donner (max × couches × `seaux_par_bocal`) ; au chargement d'un plan, refuser deux seaux qui
+     partagent un bocal et dont la somme des doses dépasse le bocal.
+  2. Petit outil du PC de bureau qui prépare un plan « diversifié » dans les bornes (répartir les valeurs sur les
+     seaux d'un lot, garder des témoins), en fichier à charger sur le Pi. Rien sur le Pi ne change.
 - [ ] 32. Mode guidé pour un employé et manuel tenu à jour (84, 85). — Sonnet.
 - [ ] 33. Assistant en français, écoute des bruits, résumé de la semaine (71, 73, 74). — plus tard.
 

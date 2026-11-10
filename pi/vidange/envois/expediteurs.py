@@ -1,7 +1,8 @@
 """Les expéditeurs : ce qui envoie vraiment une ligne de la file vers sa destination.
 
-- ExpediteurCulture : un cycle, en JSON, vers l'app « machine » du logiciel de culture
-  (HTTP POST, jeton Django REST Framework). Format : docs/django.md.
+- ExpediteurCulture : un cycle (ou un plan d'essais appliqué, tâche 31), en JSON, vers l'app
+  « machine » du logiciel de culture (HTTP POST, jeton Django REST Framework). Format :
+  docs/django.md.
 - ExpediteurSecours : un fichier ou un dossier, vers la maison, par la commande réglée
   (rsync par Tailscale, par exemple).
 
@@ -50,6 +51,17 @@ class ExpediteurCulture:
         self._ouvreur = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def donnees(self, envoi: dict[str, Any]) -> dict[str, Any]:
+        if envoi["sorte"] == "essais":
+            # Un plan d'essais appliqué (tâche 31), vers sa propre adresse.
+            from vidange.essais.envoi import donnees_plan
+
+            return donnees_plan(
+                self.registre,
+                int(envoi["objet"]),
+                envoi["cle"],
+                self.reglages.machine,
+                self._fuseau,
+            )
         if envoi["sorte"] != "cycle":
             raise EchecEnvoi(
                 f"sorte « {envoi['sorte']} » inconnue du logiciel de culture", refuse=True
@@ -58,10 +70,15 @@ class ExpediteurCulture:
             self.registre, int(envoi["objet"]), envoi["cle"], self.reglages.machine, self._fuseau
         )
 
+    def adresse(self, envoi: dict[str, Any]) -> str:
+        if envoi["sorte"] == "essais":
+            return self.reglages.adresse_essais
+        return self.reglages.adresse
+
     def envoyer(self, envoi: dict[str, Any], arret: threading.Event) -> None:
         corps = json.dumps(self.donnees(envoi), ensure_ascii=False).encode("utf-8")
         requete = urllib.request.Request(
-            self.reglages.adresse,
+            self.adresse(envoi),
             data=corps,
             method="POST",
             headers={

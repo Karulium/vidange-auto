@@ -1,0 +1,81 @@
+# Plans d'essais (tâche 31, fonctions 6 et 76) : ce qu'un plan a le droit de faire varier d'un
+# seau à l'autre d'un lot, et dans quelles bornes.
+#
+# Un plan d'essais est préparé ailleurs (PC de bureau, à la main...), chargé sur le Pi
+# (« vidange plan charger fichier » ou la page web), accepté par Karulium sur la page web (rôle
+# « régler »), puis appliqué par le Pi SEUL au prochain lot qui correspond (même variété, même
+# format, même nombre de seaux), après le Go à l'écran. Procédure : pi/systeme/essai-plan-essais.md.
+#
+# SEULES les variables écrites ici peuvent varier, et seulement celles que le code sait appliquer
+# (vidange/essais/variables.py) : un nom inconnu, un genre ou un « lue_par » qui ne correspond pas
+# au code empêchent le programme de démarrer. JAMAIS ici : positions, courses, zones, vitesses,
+# durées des gestes, seuils, ni rien qui touche au mouvement ou à la sécurité (la sécurité est
+# câblée, jamais dans le logiciel).
+#
+# Pour chaque variable :
+#   libelle  ce que la page web affiche
+#   genre    « nombre » ou « oui_non » (doit être celui du code)
+#   unite    pour un nombre
+#   min, max bornes permises (comprises), fixées par Karulium ; « formats » : d'autres bornes pour
+#            un format de seau (les autres formats gardent min et max)
+#   lue_par  l'endroit du code qui lit la valeur (vérifié au démarrage : il doit être celui du code)
+#   aide     une phrase pour la page web
+#
+# Un seau non cité dans le plan, ou une variable non citée pour un seau, prend le réglage normal
+# (machine.yaml).
+#
+# Les bornes ci-dessous sont des EXEMPLES, à fixer par Karulium (question n° 1 de la PR de la
+# tâche 31), puis exemple: false.
+exemple: true
+
+# Un plan vise un lot d'au plus tant de seaux (la taille réelle d'un lot est ensuite contrôlée au
+# bouton « Lot de seaux », comme tout lot).
+seaux_max: 50
+# Plans chargés (proposés, pas encore acceptés ni retirés) gardés au plus : au-delà, un nouveau
+# plan est refusé (retirer les anciens depuis la page).
+proposes_max: 20
+# Longueur maximale du nom, de l'auteur et de la remarque d'un plan (caractères), et du fichier.
+texte_max: 200
+fichier_max_ko: 64
+
+variables:
+  mycelium_g:
+    libelle: Mycélium par couche
+    genre: nombre
+    unite: g
+    # Normal : machine.yaml → griffe → formats → <format> → mycelium_kg (150 g pour seau_a).
+    # Max : un bocal doit suffire pour ses seaux (max × couches × seaux_par_bocal, ici
+    # 200 × 4 × 1 = 800 g, sous les 0,9 kg du bocal du simulateur ; vrai contenu d'un bocal à
+    # peser, question n° 2 de la PR de la tâche 31). Sinon : alarme « poids qui ne monte plus ».
+    min: 60
+    max: 200
+    formats:
+      # Petit seau de 5 L (normal : 100 g).
+      seau_b: {min: 40, max: 160}
+    lue_par: vidange/mycelium/mycelium.py, Mycelium.geste_agiter
+    aide: >-
+      Mycélium versé sur CHAQUE couche de substrat du seau (la machine secoue le bocal jusqu'à ce
+      poids). Le poids vraiment versé est noté.
+
+  spray:
+    libelle: Spray sur le seau vide
+    genre: oui_non
+    lue_par: vidange/spray/spray.py, Spray.preparer
+    aide: >-
+      Non : ce seau ne reçoit pas de spray (noté « sans spray (plan d'essais) »), pour comparer avec
+      et sans.
+
+  spray_g:
+    libelle: Dose du spray
+    genre: nombre
+    unite: g
+    # Normal : machine.yaml → spray → dose → par_format_g (11 g pour seau_a).
+    # Max : la pompe doit la donner en moins de spray → dose → temps_max_pompage_s (15 s).
+    min: 3
+    max: 14
+    formats:
+      seau_b: {min: 2, max: 8}
+    lue_par: vidange/spray/spray.py, Spray.preparer
+    aide: >-
+      Dose de culture pulvérisée sur le seau vide (poids perdu par le flacon). Le poids vraiment
+      perdu est noté.

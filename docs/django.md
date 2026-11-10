@@ -238,3 +238,88 @@ Karulium pour une fuite ; rien n'est obligatoire.
   dans les tables de l'app « machine ».
 - Un seau ou un bocal inconnu du logiciel de culture → `400` avec le code en cause (le Pi met le cycle de côté,
   Karulium corrige, puis le renvoie).
+
+## Les plans d'essais appliqués (tâche 31, format n° 1)
+
+Un plan d'essais fait varier, seau par seau d'un lot, ce que Karulium permet dans `pi/reglages/essais.yaml`
+(aujourd'hui : le mycélium par couche, le spray oui ou non, la dose de spray). Il est préparé ailleurs (PC de
+bureau, à la main), chargé sur le Pi, **accepté par Karulium** sur la page web, puis appliqué par le Pi seul au
+lot qu'il vise, après le Go à l'écran. Le Pi note ce qu'il a **vraiment** fait sur chaque seau (le poids de
+mycélium vraiment versé, le spray vraiment perdu par le flacon) et l'envoie au logiciel de culture, qui pourra
+plus tard relier ces valeurs aux récoltes des blocs (les **résultats** des essais se lisent côté culture).
+
+Le code qui fabrique ces données est `pi/vidange/essais/envoi.py` ; un test vérifie que l'exemple ci-dessous a
+exactement les mêmes champs que ce que le Pi envoie.
+
+### Comment le Pi envoie
+
+- Même file d'envoi, mêmes en-têtes, même jeton et mêmes réponses attendues que pour les cycles (voir plus haut),
+  mais vers une **autre adresse** : `envois.culture.adresse_essais` de `pi/reglages/programme.yaml` (exemple
+  `http://192.168.1.20:8000/machine/api/essais/`). Elle est obligatoire dès que `adresse` est réglée.
+- **Le même plan part plusieurs fois, de plus en plus complet** : chaque valeur notée sur un seau remet le plan
+  dans la file (une seule fois s'il attend déjà). L'app doit reconnaître le plan par **`plan.cle`** (la même
+  toute la vie du plan) et **remplacer** ce qu'elle avait reçu avant. La `cle` du haut change à chaque envoi :
+  elle ne sert qu'à reconnaître un envoi reçu deux fois.
+- Le plan peut arriver **avant** le cycle du même lot (le cycle part à la fin du fût) : l'app ne doit pas
+  refuser un plan dont les seaux ne sont pas encore connus ; le lien se fait par le code du seau (`seaux[].seau`).
+
+### Les données
+
+```json
+{
+  "format": 1,
+  "cle": "2d7c9b1e-55a0-4f3e-8a61-0c4b7e9f1a22",
+  "machine": "vidange-1",
+  "plan": {
+    "cle": "9a3e6f10-7c2b-4d8e-b5a4-1f0e2c3d4b5a",
+    "numero": 3,
+    "nom": "Dose de mycélium et spray",
+    "auteur": "PC de bureau",
+    "remarque": "trois doses, un seau sans spray",
+    "etat": "lance",
+    "lot": {"variete": "pleurote_grise", "format": "seau_a", "seaux": 6},
+    "charge_le": "2026-11-09T18:00:00",
+    "charge_par": "commande « vidange plan » (karulium)",
+    "accepte_le": "2026-11-09T18:10:00",
+    "accepte_par": "karulium (page web)",
+    "lance_le": "2026-11-10T07:30:00",
+    "lance_par": "écran",
+    "prevu": {
+      "1": {"mycelium_g": 100.0},
+      "4": {"mycelium_g": 200.0, "spray": false}
+    }
+  },
+  "seaux": [
+    {
+      "numero": 1,
+      "seau": "S1293",
+      "valeurs": [
+        {"variable": "mycelium_g", "voulu": 100.0, "mesure": 98.5, "unite": "g", "couche": 1,
+         "quand": "2026-11-10T07:35:00", "remarque": "plan"},
+        {"variable": "spray", "voulu": true, "mesure": 1.0, "unite": null, "couche": null,
+         "quand": "2026-11-10T07:33:00", "remarque": "réglage normal ; dose faite"}
+      ]
+    }
+  ]
+}
+```
+
+Les champs :
+
+| Champ | Ce que c'est |
+|---|---|
+| `cle` | identifiant de cet envoi (change à chaque envoi du même plan) |
+| `plan.cle` | identifiant unique du plan (UUID), **la clé à garder** : le même plan revient, plus complet |
+| `plan.numero` | numéro du plan sur le Pi (pour en parler, pas comme clé) |
+| `plan.nom`, `plan.auteur`, `plan.remarque` | ce qu'a écrit celui qui a préparé le plan (`remarque` peut être `null`) |
+| `plan.etat` | `lance` (parti avec son lot) ; `propose`, `accepte` ou `retire` ne sont jamais envoyés en pratique |
+| `plan.lot` | le lot visé : `variete` de la semence, `format` du seau (nom dans `machine.yaml`), nombre de `seaux` |
+| `plan.charge_le` / `_par`, `accepte_le` / `_par`, `lance_le` / `_par` | qui a chargé, accepté (Karulium) et lancé le plan (le Go), et quand |
+| `plan.prevu` | le plan tel qu'il a été accepté : n° du seau dans le lot (texte, `"1"` = le premier rempli) → variable → valeur. Un seau ou une variable absents prennent le réglage normal |
+| `seaux[]` | chaque seau du lot déjà fait, dans l'ordre : `numero` (dans le lot), `seau` (code du QR, ou `null` s'il n'a pas été lu) |
+| `seaux[].valeurs[]` | ce qui a vraiment été fait : `variable` (`mycelium_g`, `spray`, `spray_g`), `voulu` (la valeur du plan, ou la normale pour un seau témoin), `mesure` (ce que la machine a pesé : grammes de mycélium versés sur la couche, grammes perdus par le flacon du spray, ou pour `spray` : `1` reçu, `0` pas reçu ; `null` si pas mesuré), `unite`, `couche` (pour le mycélium : une ligne par couche), `quand`, `remarque` (`plan` ou `réglage normal`, puis ce que dit le module) |
+
+Ce que l'app « machine » pourra en faire (proposition, rien n'est obligatoire) : une table des plans (par
+`plan.cle`) et une table des valeurs par bloc (le bloc créé pour le `seau`), pour comparer ensuite les
+récoltes et les contaminations des seaux d'un même plan. Un seau marqué `defaut` dans le cycle (bocal vide...)
+ne doit pas compter dans la comparaison.

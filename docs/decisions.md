@@ -2731,3 +2731,19 @@ Karulium veut qu'elles montent aussi ; appliquer un palier sans redémarrer (au 
   2. Plafonds de vitesse : `actif` reste faux tant que chaque plafond n'est pas fixé d'après l'essai à vide de la
      vraie machine (procédure `pi/systeme/essai-vitesse-estimation.md`).
   3. « Un cycle » = un seau rangé : gardé.
+
+## Plans d'essais seau par seau, tâche 31 (10/11/2026, niveau 1, tranché par Claude)
+
+Réponses aux « Questions pour Karulium » de la PR 117 :
+
+1. **Limites d'exemple** (mycélium 60-200 g par couche, seau B 40-160 ; spray 3-14 g, seau B 2-8) : gardées
+   telles quelles pour commencer, `essais.yaml` reste `exemple: true` jusqu'aux premiers essais réels.
+2. **Poids de mycélium d'un bocal plein** : c'est une mesure, pas un choix. Karulium pèsera 3 bocaux pleins ;
+   le plus petit poids ira dans les réglages avec la tâche 31 bis. D'ici là, les limites d'exemple restent
+   sous ce qu'un bocal du simulateur contient.
+3. **Autres choses à faire varier** : non pour l'instant, seulement le mycélium et le spray. Une autre variable
+   (température, temps) s'ajoutera plus tard par une petite PR, quand Karulium en aura besoin.
+4. **Un plan vise exactement un lot** (même variété, même format, même nombre de seaux) : oui. Un plan ne
+   s'applique jamais aux « N premiers seaux » d'un autre lot, pour ne pas mélanger les essais.
+5. **Un seul plan accepté à la fois, accepté seulement sur la page web** (rôle « régler ») : oui. Le Go à
+   l'écran de l'armoire reste obligatoire pour lancer le lot.

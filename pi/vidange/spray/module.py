@@ -33,7 +33,15 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from vidange.chef import Condition, Etape, Module
-from vidange.spray.spray import GESTE, QUOI_FAIRE, QUOI_FAIRE_BRAS, QUOI_FAIRE_CARTE, Spray
+from vidange.spray.spray import (
+    GESTE,
+    QUOI_FAIRE,
+    QUOI_FAIRE_BRAS,
+    QUOI_FAIRE_CARTE,
+    ConsigneSpray,
+    ResultatSpray,
+    Spray,
+)
 
 BRAS = "spray_bras_max"
 DOSE = "spray_dose_max"
@@ -97,18 +105,24 @@ def module_spray(
     zone_libre: Callable[[], bool] = lambda: False,
     micropore_escamote: Callable[[], bool | None] = lambda: None,
     nom: str = "spray",
+    consigne: Callable[[], ConsigneSpray | None] = lambda: None,
+    apres_noter: Callable[[ResultatSpray | None], object] = lambda resultat: None,
 ) -> Module:
     """Un seau. `seau_au_poste()` : (code du seau, format) quand le seau est au poste, QR lu
     (sinon None). `zone_libre` : aucune partie de la griffe, de la préhension ou de ce qu'elles
     tiennent dans la zone du bras (vidange.spray.zone) ; `micropore_escamote` : case vide du
-    module voisin (valeurs prudentes par défaut : le bras ne sort pas)."""
+    module voisin (valeurs prudentes par défaut : le bras ne sort pas). `consigne()` : ce que
+    demande le plan d'essais pour ce seau (tâche 31), et `apres_noter` reçoit ce qui a été fait."""
     choisi: dict[str, tuple[str | None, str]] = {}
 
     def preparer() -> None:
         seau = seau_au_poste()
         assert seau is not None
         choisi["seau"] = seau
-        spray.preparer(*seau)
+        spray.preparer(*seau, consigne=consigne())
+
+    def noter() -> None:
+        apres_noter(spray.noter())
 
     def apres_preparation() -> str | None:
         # « Sans spray » : directement au registre.
@@ -155,7 +169,7 @@ def module_spray(
                 delai_max=DOSE,
             ),
             ranger,
-            Etape("noter", QUOI_FAIRE, action=spray.noter),
+            Etape("noter", QUOI_FAIRE, action=noter),
         ),
         arreter=spray.arreter,
     )
@@ -167,10 +181,19 @@ def etapes_du_spray(
     zone_libre: Callable[[], bool],
     micropore_escamote: Callable[[], bool | None],
     prefixe: str = "spray_",
+    consigne: Callable[[], ConsigneSpray | None] = lambda: None,
+    apres_noter: Callable[[ResultatSpray | None], object] = lambda resultat: None,
 ) -> tuple[Etape, ...]:
     """Les étapes du module « spray », nommées `prefixe` + nom, pour les mettre dans un autre
     module (le remplissage du mode seaux : une fois par seau, seau vide au poste, tâche 45)."""
-    module = module_spray(spray, seau_au_poste, zone_libre, micropore_escamote)
+    module = module_spray(
+        spray,
+        seau_au_poste,
+        zone_libre,
+        micropore_escamote,
+        consigne=consigne,
+        apres_noter=apres_noter,
+    )
 
     def renommee(etape: Etape) -> Etape:
         ensuite = etape.ensuite

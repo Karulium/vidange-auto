@@ -124,6 +124,15 @@ class DoseSeau:
 
 
 @dataclass(frozen=True)
+class ConsigneSpray:
+    """Ce qu'un plan d'essais demande pour un seau (tâche 31) : une autre dose (`dose_g`), ou pas
+    de spray (`sans_spray` : la raison notée). Rien : la dose normale du format."""
+
+    dose_g: float | None = None
+    sans_spray: str | None = None
+
+
+@dataclass(frozen=True)
 class ResultatSpray:
     seau: str | None
     dose: DoseSeau | None
@@ -466,8 +475,11 @@ class Spray:
             self._sauver()
             self._dire(f"Cartouche de l'emplacement {emplacement} confirmée.")
 
-    def refus_dose(self, format: str) -> tuple[DoseSeau | None, str | None]:
-        """La dose de ce format, et pourquoi elle est impossible (ou None)."""
+    def refus_dose(
+        self, format: str, dose_g: float | None = None
+    ) -> tuple[DoseSeau | None, str | None]:
+        """La dose de ce format (ou `dose_g`, celle d'un plan d'essais), et pourquoi elle est
+        impossible (ou None)."""
         reglages = self.reglages
         if format not in reglages.dose.par_format_g:
             return None, f"format de seau inconnu du spray « {format} »"
@@ -476,7 +488,7 @@ class Spray:
             None,
             format,
             n,
-            reglages.dose.par_format_g[format],
+            reglages.dose.par_format_g[format] if dose_g is None else dose_g,
             reglages.dose.amorce_g if n in self.amorces else 0.0,
         )
         refus = self.refus_carte()
@@ -498,15 +510,23 @@ class Spray:
             return dose, f"cartouche {n} presque vide ({flacon.grammes:.0f} g) : la changer"
         return dose, None
 
-    def preparer(self, seau: str | None, format: str) -> DoseSeau | None:
+    def preparer(
+        self, seau: str | None, format: str, consigne: ConsigneSpray | None = None
+    ) -> DoseSeau | None:
         """Étape 1 : emplacement, dose, réserve du flacon ; agitateurs avant la dose. Lève
         ErreurSpray si la dose est impossible (l'écran propose « sans spray » ou d'attendre) ;
-        rend None si Karulium a choisi « sans spray » (le seau est noté ainsi)."""
+        rend None si Karulium a choisi « sans spray » (le seau est noté ainsi). `consigne` : ce
+        que demande un plan d'essais accepté (une autre dose, ou pas de spray)."""
         with self._verrou:
             self.resultat, self.dose, self._interruption = None, None, None
             self._agitation_depuis = None
+            if consigne is not None and consigne.sans_spray is not None:
+                self._sans_spray = False
+                self.resultat = ResultatSpray(seau, None, "sans_spray", raison=consigne.sans_spray)
+                return None
             self.lire()
-            dose, refus = self.refus_dose(format)
+            dose_g = None if consigne is None else consigne.dose_g
+            dose, refus = self.refus_dose(format, dose_g)
             if refus is None:
                 refus = self._permission(GESTE)
             if self._sans_spray:

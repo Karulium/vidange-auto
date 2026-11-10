@@ -381,6 +381,90 @@ _VERSION_11 = (
     "CREATE INDEX durees_gestes_geste ON durees_gestes (geste, format, id)",
 )
 
+# Version 12 (tâche 31) : les plans d'essais (proposés, acceptés, lancés, retirés) et, pour chaque
+# seau d'un lot lancé avec un plan, les valeurs vraiment appliquées. « contenu » : le plan lu et
+# vérifié (JSON) ; « texte » : le fichier tel qu'il est arrivé. Une ligne n'est jamais effacée.
+# La file d'envoi accepte la sorte « essais » (objet = n° du plan, vers le logiciel de culture) :
+# SQLite ne change pas un CHECK, la table est refaite (comme en version 9).
+_VERSION_12 = (
+    """
+    CREATE TABLE plans_essais (
+        id INTEGER PRIMARY KEY,
+        cle TEXT NOT NULL UNIQUE,
+        nom TEXT NOT NULL,
+        auteur TEXT NOT NULL,
+        format TEXT NOT NULL,
+        variete TEXT NOT NULL,
+        seaux INTEGER NOT NULL CHECK (seaux >= 1),
+        contenu TEXT NOT NULL,
+        texte TEXT NOT NULL,
+        etat TEXT NOT NULL CHECK (etat IN ('propose', 'accepte', 'lance', 'retire')),
+        charge_le TEXT NOT NULL,
+        charge_par TEXT NOT NULL,
+        accepte_le TEXT,
+        accepte_par TEXT,
+        lance_le TEXT,
+        lance_par TEXT,
+        retire_le TEXT,
+        retire_par TEXT
+    )
+    """,
+    "CREATE INDEX plans_essais_etat ON plans_essais (etat)",
+    """
+    CREATE TABLE essais_appliques (
+        id INTEGER PRIMARY KEY,
+        plan_id INTEGER NOT NULL REFERENCES plans_essais (id),
+        -- N° du seau dans le lot (1 = le premier rempli).
+        numero INTEGER NOT NULL CHECK (numero >= 1),
+        seau_id INTEGER REFERENCES seaux (id),
+        variable TEXT NOT NULL,
+        -- La valeur du plan (JSON : nombre, true, false).
+        voulu TEXT NOT NULL,
+        -- Ce qui a été mesuré (poids vraiment versé...), si la machine le mesure.
+        mesure REAL,
+        unite TEXT,
+        couche INTEGER,
+        remarque TEXT,
+        quand TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX essais_appliques_plan ON essais_appliques (plan_id, numero)",
+    """
+    CREATE TRIGGER essais_appliques_pas_de_suppression BEFORE DELETE ON essais_appliques
+    BEGIN
+        SELECT RAISE(ABORT, 'une valeur appliquée d''un plan d''essais ne se supprime pas');
+    END
+    """,
+    """
+    CREATE TABLE envois_neuf (
+        id INTEGER PRIMARY KEY,
+        cle TEXT NOT NULL UNIQUE,
+        -- culture : logiciel de culture (Django) ; secours : copie de secours de la maison ;
+        -- ntfy, telegram : messages pour le téléphone.
+        destination TEXT NOT NULL
+            CHECK (destination IN ('culture', 'secours', 'ntfy', 'telegram')),
+        -- cycle : objet = numéro du cycle ; fichier : objet = chemin relatif au dossier des
+        -- données ; message : objet = nom de ce qui est annoncé (« alarme:12 »...) ; essais :
+        -- objet = n° du plan d'essais appliqué (tâche 31).
+        sorte TEXT NOT NULL CHECK (sorte IN ('cycle', 'fichier', 'message', 'essais')),
+        objet TEXT NOT NULL,
+        cree_le TEXT NOT NULL,
+        statut TEXT NOT NULL DEFAULT 'attente' CHECK (statut IN ('attente', 'envoye', 'refuse')),
+        essais INTEGER NOT NULL DEFAULT 0,
+        dernier_essai TEXT,
+        derniere_erreur TEXT,
+        envoye_le TEXT,
+        -- Sorte « message » : titre, texte, niveau, groupe de destinataires... en JSON.
+        contenu TEXT
+    )
+    """,
+    "INSERT INTO envois_neuf SELECT id, cle, destination, sorte, objet, cree_le, statut, essais, "
+    "dernier_essai, derniere_erreur, envoye_le, contenu FROM envois",
+    "DROP TABLE envois",
+    "ALTER TABLE envois_neuf RENAME TO envois",
+    "CREATE INDEX envois_statut ON envois (statut, destination)",
+)
+
 # Montée n° i (en partant de 1) : ce qui fait passer la base de la version i - 1 à la version i.
 MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_1,
@@ -394,6 +478,7 @@ MONTEES: tuple[tuple[str, ...], ...] = (
     _VERSION_9,
     _VERSION_10,
     _VERSION_11,
+    _VERSION_12,
 )
 
 VERSION = len(MONTEES)

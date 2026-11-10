@@ -5885,6 +5885,9 @@ class EnvoiCulture(Modele):
     # Adresse de l'app « machine » qui reçoit les cycles ; vide : pas encore prête, les cycles
     # attendent dans la file (rien n'est perdu).
     adresse: str = ""
+    # Adresse qui reçoit les plans d'essais appliqués (tâche 31) ; obligatoire si `adresse` l'est
+    # (sinon les plans attendraient devant les cycles dans la file).
+    adresse_essais: str = ""
     # Nom de cette machine, envoyé avec chaque cycle.
     machine: str = Field(min_length=1)
     # Le logiciel de culture compte en heure locale sans fuseau (USE_TZ = False) : les heures
@@ -5895,8 +5898,15 @@ class EnvoiCulture(Modele):
 
     @model_validator(mode="after")
     def _verifier(self) -> "EnvoiCulture":
-        if self.adresse and not self.adresse.startswith(("http://", "https://")):
-            raise ValueError(f"adresse « {self.adresse} » : doit commencer par http:// ou https://")
+        for nom in ("adresse", "adresse_essais"):
+            valeur = getattr(self, nom)
+            if valeur and not valeur.startswith(("http://", "https://")):
+                raise ValueError(f"{nom} « {valeur} » : doit commencer par http:// ou https://")
+        if self.adresse and not self.adresse_essais:
+            raise ValueError(
+                "adresse_essais vide alors qu'adresse est réglée : la donner aussi (plans "
+                "d'essais, exemple http://192.168.1.20:8000/machine/api/essais/)"
+            )
         try:
             ZoneInfo(self.fuseau_horaire)
         except (ZoneInfoNotFoundError, ValueError):
@@ -8218,6 +8228,123 @@ def _verifier_modifiables_entre_fichiers(valeurs: dict[str, Modele]) -> list[str
     return erreurs
 
 
+# ---------------------------------------------------------------- essais.yaml
+
+
+class BornesEssai(Modele):
+    min: float
+    max: float
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "BornesEssai":
+        if not (math.isfinite(self.min) and math.isfinite(self.max)):
+            raise ValueError("min et max doivent être des nombres")
+        if self.min <= 0:
+            raise ValueError(f"min ({self.min:g}) doit être plus grand que 0")
+        if self.min >= self.max:
+            raise ValueError(f"min ({self.min:g}) doit être plus petit que max ({self.max:g})")
+        return self
+
+
+class VariableEssai(Modele):
+    """Une variable qu'un plan d'essais peut faire varier (tâche 31), avec ses bornes."""
+
+    libelle: str = Field(min_length=1)
+    genre: Literal["nombre", "oui_non"]
+    unite: str = ""
+    min: float | None = None
+    max: float | None = None
+    # D'autres bornes pour certains formats de seau.
+    formats: dict[Nom, BornesEssai] = Field(default_factory=dict)
+    lue_par: str = Field(min_length=1)
+    aide: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _verifier(self) -> "VariableEssai":
+        if self.genre == "oui_non":
+            if self.min is not None or self.max is not None or self.formats or self.unite:
+                raise ValueError("une variable oui_non n'a ni unite, ni min, ni max, ni formats")
+            return self
+        if self.min is None or self.max is None or not self.unite:
+            raise ValueError("une variable « nombre » demande unite, min et max")
+        BornesEssai(min=self.min, max=self.max)
+        return self
+
+    def bornes(self, format: str) -> tuple[float, float]:
+        """Les bornes de ce format (celles de « formats », sinon min et max)."""
+        if format in self.formats:
+            bornes = self.formats[format]
+            return bornes.min, bornes.max
+        assert self.min is not None and self.max is not None
+        return self.min, self.max
+
+
+class ReglagesEssais(Modele):
+    """essais.yaml : ce qu'un plan d'essais peut faire varier d'un seau à l'autre (tâche 31)."""
+
+    exemple: bool = False
+    seaux_max: int = Field(ge=1, le=500)
+    proposes_max: int = Field(ge=1, le=200)
+    texte_max: int = Field(ge=20, le=2000)
+    fichier_max_ko: int = Field(ge=1, le=1024)
+    variables: dict[Nom, VariableEssai] = Field(min_length=1)
+
+
+def _verifier_essais_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
+    """Les variables d'essai sont celles que le code sait appliquer, sur une machine qui a leur
+    partie, et leurs bornes restent dans ce que la machine sait doser."""
+    from vidange.essais.variables import VARIABLES
+
+    essais, machine = valeurs["essais"], valeurs["machine"]
+    assert isinstance(essais, ReglagesEssais) and isinstance(machine, Machine)
+    griffe = machine.griffe
+    formats = {} if griffe is None else griffe.formats
+    erreurs = []
+    for nom, variable in essais.variables.items():
+        debut = f"essais.yaml, variables → {nom}"
+        code = VARIABLES.get(nom)
+        if code is None:
+            erreurs.append(
+                f"{debut} : variable inconnue du code ; un plan ne peut faire varier que "
+                f"{', '.join(VARIABLES)} (vidange/essais/variables.py). Jamais une position, une "
+                "zone, une vitesse ni un seuil."
+            )
+            continue
+        if variable.genre != code.genre:
+            erreurs.append(f"{debut} → genre : « {variable.genre} », le code dit « {code.genre} »")
+        if variable.lue_par != code.lue_par:
+            erreurs.append(
+                f"{debut} → lue_par : « {variable.lue_par} », le code dit « {code.lue_par} »"
+            )
+        if getattr(machine, code.partie, None) is None:
+            erreurs.append(f"{debut} : machine.yaml n'a pas de partie « {code.partie} »")
+            continue
+        erreurs += [
+            f"{debut} → formats → {format} : format absent de machine.yaml (griffe → formats)"
+            for format in variable.formats
+            if format not in formats
+        ]
+        if variable.genre != "nombre":
+            continue
+        for format in formats:
+            bas, haut = variable.bornes(format)
+            if nom == "mycelium_g" and machine.mycelium is not None:
+                arret_g = machine.mycelium.dose.arret_avant_kg * 1000
+                if bas <= arret_g:
+                    erreurs.append(
+                        f"{debut} : min pour {format} ({bas:g} g) doit dépasser mycelium → dose → "
+                        f"arret_avant_kg ({arret_g:g} g)"
+                    )
+            if nom == "spray_g" and machine.spray is not None:
+                flacons, dose = machine.spray.flacons, machine.spray.dose
+                if haut + dose.amorce_g >= flacons.contenu_max_g - flacons.reserve_g:
+                    erreurs.append(
+                        f"{debut} : max pour {format} ({haut:g} g) plus grand qu'un flacon plein "
+                        "(spray → flacons)"
+                    )
+    return erreurs
+
+
 # --------------------------------------------------------------- l'ensemble
 
 
@@ -8233,6 +8360,7 @@ class Reglages(Modele):
     entretien: ReglagesEntretien
     vue3d: ReglagesVue3d
     modifiables: ReglagesModifiables
+    essais: ReglagesEssais
 
 
 # Nom du fichier → (nom dans Reglages, modèle). Ajouter ici chaque nouveau fichier.
@@ -8248,6 +8376,7 @@ FICHIERS: dict[str, tuple[str, type[Modele]]] = {
     "entretien.yaml": ("entretien", ReglagesEntretien),
     "vue3d.yaml": ("vue3d", ReglagesVue3d),
     "modifiables.yaml": ("modifiables", ReglagesModifiables),
+    "essais.yaml": ("essais", ReglagesEssais),
 }
 
 
@@ -8527,6 +8656,7 @@ def _verifier_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
     erreurs += _verifier_fermeture_entre_fichiers(valeurs)
     erreurs += _verifier_vue3d_entre_fichiers(valeurs)
     erreurs += _verifier_modifiables_entre_fichiers(valeurs)
+    erreurs += _verifier_essais_entre_fichiers(valeurs)
     if simulateur.depart is not None and simulateur.depart not in machine.positions:
         erreurs.append(
             f"simulateur.yaml, depart : position « {simulateur.depart} » absente de machine.yaml"

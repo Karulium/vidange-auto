@@ -55,9 +55,11 @@ fermée (elle est aussi surveillée pendant les gestes). Quatre étapes de plus 
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from vidange.chef import Condition, ErreurEtape, Etape, Module
+from vidange.essais.plan import Application
+from vidange.essais.variables import MYCELIUM_G, SPRAY, SPRAY_G
 from vidange.mycelium.mycelium import Demande, Mycelium
 from vidange.prehension.prehension import QUOI_FAIRE as QUOI_FAIRE_PREHENSION
 from vidange.prehension.prehension import Prehension
@@ -67,7 +69,7 @@ from vidange.stockage.stockage import BANDE, QUOI_FAIRE_BANDE, QUOI_FAIRE_TIROIR
 
 if TYPE_CHECKING:
     from vidange.couvercle.couvercle import Couvercle
-    from vidange.spray.spray import Spray
+    from vidange.spray.spray import ResultatSpray, Spray
 
 GESTE = "remplissage_geste_max"
 GESTE_PREHENSION = "prehension_geste_max"
@@ -105,6 +107,10 @@ class SeauAFaire:
     # Sans file : le Stockage la choisit (Plan.magasin).
     file: str | None = None
     cycle: int | None = None
+    # Plan d'essais (tâche 31) : son n° au registre, et les valeurs de ce seau (vidange.essais :
+    # mycelium_g, spray, spray_g) ; None : réglages normaux.
+    plan_essais: int | None = None
+    essai: dict[str, Any] | None = None
 
 
 @dataclass
@@ -124,6 +130,8 @@ class Plan:
     # Appelé quand la préhension va prendre ce seau, et à chaque versement (simulateur).
     debut_seau: Callable[[SeauAFaire], object] = lambda seau: None
     versement: Callable[[SeauAFaire, int], object] = lambda seau, couche: None
+    # Une valeur d'un plan d'essais vraiment appliquée à un seau : (n° du plan, ce qui a été fait).
+    noter_essai: Callable[[int, "Application"], object] = lambda plan, application: None
     numero: int = 0
     couche: int = 1
     faits: list[str] = field(default_factory=list)
@@ -387,13 +395,42 @@ def module_remplissage(
             dernier_lu[0] = sur_le_plateau.code
         return plan.seau.seau or dernier_lu[0]
 
+    def essai(nom: str) -> Any:
+        """La valeur du plan d'essais pour le seau en cours (None : réglage normal)."""
+        return None if plan.seau.essai is None else plan.seau.essai.get(nom)
+
+    def noter_essai(variable: str, voulu: Any, **detail: Any) -> None:
+        seau = plan.seau
+        if seau.plan_essais is None or voulu is None:
+            return
+        application = Application(
+            plan.numero + 1, code_du_seau() or None, variable, voulu, **detail
+        )
+        plan.noter_essai(seau.plan_essais, application)
+
     def doser() -> None:
         seau = plan.seau
+        voulu_g = essai(MYCELIUM_G)
         mycelium.demander(
-            Demande(code_du_seau(), seau.format, plan.couche, seau.variete, seau.cycle)
+            Demande(
+                code_du_seau(),
+                seau.format,
+                plan.couche,
+                seau.variete,
+                seau.cycle,
+                mycelium_kg=None if voulu_g is None else voulu_g / 1000,
+            )
         )
 
     def apres_dose() -> str:
+        voulu_g = essai(MYCELIUM_G)
+        if voulu_g is not None:
+            # Le poids vraiment versé sur cette couche (pesé par la balance du chariot).
+            dose = mycelium.doses[-1] if mycelium.doses else None
+            verse = None
+            if dose is not None and dose.couche == plan.couche:
+                verse = round(dose.kg * 1000, 1)
+            noter_essai(MYCELIUM_G, voulu_g, mesure=verse, unite="g", couche=plan.couche)
         if plan.couche < remplissage.format(plan.seau.format).couches:
             plan.couche += 1
             return "revenir_au_vidage"
@@ -490,6 +527,7 @@ def module_remplissage(
         )
         if spray is not None:
             from vidange.spray.module import etapes_du_spray
+            from vidange.spray.spray import ConsigneSpray
 
             def seau_au_poste() -> tuple[str | None, str] | None:
                 seau = remplissage.seau
@@ -497,11 +535,37 @@ def module_remplissage(
                     return None
                 return seau.code, seau.format
 
+            def consigne() -> ConsigneSpray | None:
+                if plan.seau.essai is None:
+                    return None
+                if essai(SPRAY) is False:
+                    return ConsigneSpray(sans_spray="plan d'essais")
+                return ConsigneSpray(dose_g=essai(SPRAY_G))
+
+            def noter_le_spray(resultat: "ResultatSpray | None") -> None:
+                if resultat is None or plan.seau.essai is None:
+                    return
+                if essai(SPRAY) is not None:
+                    # Mesure : 1 si le seau a reçu du spray, 0 sinon (« sans spray »).
+                    fait = 0.0 if resultat.issue == "sans_spray" else 1.0
+                    noter_essai(SPRAY, essai(SPRAY), mesure=fait, remarque=resultat.texte)
+                if essai(SPRAY_G) is not None and resultat.dose is not None:
+                    perdue = resultat.perdue_g - min(resultat.dose.amorce_g, resultat.perdue_g)
+                    noter_essai(
+                        SPRAY_G,
+                        essai(SPRAY_G),
+                        mesure=round(max(perdue, 0.0), 1),
+                        unite="g",
+                        remarque=resultat.texte,
+                    )
+
             au_poste += etapes_du_spray(
                 spray,
                 seau_au_poste,
                 zone_bras_spray,
                 lambda: remplissage.contexte().micropore_escamote,
+                consigne=consigne,
+                apres_noter=noter_le_spray,
             )
         if remplissage.micropore_branche:
             au_poste += (
