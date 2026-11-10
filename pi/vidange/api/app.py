@@ -57,6 +57,7 @@ from vidange.distance import ErreurDistance, PiloteDistance
 from vidange.entretien import Entretien, ErreurEntretien
 from vidange.essais.plan import ErreurPlan
 from vidange.fiabilite.constats import Constat, pire
+from vidange.guide import ErreurGuide, Guide
 from vidange.journal import donner_journal
 from vidange.mises_a_jour import ErreurMiseAJour, MisesAJour
 from vidange.modifiables import ErreurModifiable, Modifiables
@@ -137,6 +138,10 @@ class Services:
     correction: "Correction | None" = None
     # Plans d'essais : chargés, acceptés par Karulium, appliqués au lot visé (tâche 31).
     plans: "PlansEssais | None" = None
+    # Mode guidé pour un employé et manuel tenu à jour (tâche 32) : le guide, et le manuel
+    # (une fonction qui rend ses sections, d'après les réglages ; None : pas de manuel).
+    guide: Guide | None = None
+    manuel: Callable[[], list[dict[str, Any]]] | None = None
     # Vue 3D en direct et rejeu d'incident (None : pas de vue 3D).
     vue3d: Vue3d | None = None
     rejeux: EnregistreurRejeu | None = None
@@ -297,6 +302,7 @@ def creer_app(
     @app.exception_handler(ErreurNettoyage)
     @app.exception_handler(ErreurEntretien)
     @app.exception_handler(ErreurPlan)
+    @app.exception_handler(ErreurGuide)
     async def refus(_: Request, erreur: Exception) -> JSONResponse:
         # Un ordre impossible maintenant (pas de Go attendu, alarme déjà acquittée...).
         return JSONResponse({"detail": str(erreur)}, status_code=409)
@@ -844,6 +850,51 @@ def creer_app(
             raise HTTPException(404, f"ordre inconnu « {ordre} » ({', '.join(ordres)})")
         ordres[ordre]()
         return nettoyage.etat().en_dict()
+
+    # ------------------------------------------------------------ mode guidé et manuel (tâche 32)
+
+    def le_guide() -> Guide:
+        if services.guide is None:
+            raise HTTPException(404, "pas de mode guidé (guide.yaml)")
+        return services.guide
+
+    @app.get("/api/guide", dependencies=regarder)
+    def guide_etat() -> dict[str, Any]:
+        """Les travaux qu'on peut commencer, et le travail guidé en cours (partagé avec l'écran)."""
+        guide = le_guide()
+        return {
+            "travaux": guide.liste(),
+            "etat": guide.etat().en_dict(),
+            "exemple": guide.reglages.exemple,
+        }
+
+    # Suivre un travail guidé est un geste « produire » : l'employé le peut, le visiteur non.
+    @app.post("/api/guide/{travail}/commencer", dependencies=produire)
+    def guide_commencer(travail: str, requete: Request) -> dict[str, Any]:
+        guide = le_guide()
+        if travail not in guide.reglages.travaux:
+            raise HTTPException(404, f"travail guidé « {travail} » inconnu (guide.yaml)")
+        return guide.demarrer(travail, _qui(requete)).en_dict()
+
+    @app.post("/api/guide/fait", dependencies=produire)
+    def guide_fait(requete: Request) -> dict[str, Any]:
+        """L'étape est faite : la suivante (un désaccord avec la machine est noté)."""
+        return le_guide().fait(_qui(requete)).en_dict()
+
+    @app.post("/api/guide/precedent", dependencies=produire)
+    def guide_precedent(requete: Request) -> dict[str, Any]:
+        return le_guide().precedent(_qui(requete)).en_dict()
+
+    @app.post("/api/guide/arreter", dependencies=produire)
+    def guide_arreter(requete: Request) -> dict[str, Any]:
+        return le_guide().arreter(_qui(requete)).en_dict()
+
+    @app.get("/api/manuel", dependencies=regarder)
+    def manuel() -> dict[str, Any]:
+        """Le manuel d'utilisation, fabriqué d'après les réglages et les « quoi faire » du Pi."""
+        if services.manuel is None:
+            raise HTTPException(404, "pas de manuel sur ce programme")
+        return {"sections": services.manuel()}
 
     # ------------------------------------------------------------ air
 

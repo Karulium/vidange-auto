@@ -433,3 +433,82 @@ export async function ouvrirCarnet(conteneur, outils, avant = null, notes = []) 
     toutes.length === 0 ? el("p", { classe: "doux" }, "Aucune note.") : el("div", {}, ...toutes.map(carte)),
     suite);
 }
+
+// ------------------------------------------------------------ aide : mode guidé et manuel (tâche 32)
+
+let minuterieAide = null;
+
+// Le texte du manuel est du Markdown très simple (**gras**, `code`, listes) : on le montre sans HTML,
+// avec seulement le gras et le code (jamais de HTML venu du Pi).
+function ligneManuel(el, texte) {
+  const morceaux = [];
+  for (const part of texte.split(/(\*\*[^*]+\*\*|`[^`]+`)/)) {
+    if (part.startsWith("**") && part.endsWith("**")) morceaux.push(el("strong", {}, part.slice(2, -2)));
+    else if (part.startsWith("`") && part.endsWith("`")) morceaux.push(el("code", {}, part.slice(1, -1)));
+    else if (part) morceaux.push(part);
+  }
+  return morceaux;
+}
+
+export async function ouvrirAide(conteneur, outils) {
+  const { el, lire, api, dire, Refus } = outils;
+  clearTimeout(minuterieAide);
+  const peutProduire = outils.droits().includes("produire");
+  const recharger = () => ouvrirAide(conteneur, outils).catch(() => {});
+  const ordre = async (chemin) => {
+    try {
+      await api(chemin, { method: "POST" });
+    } catch (erreur) { if (!(erreur instanceof Refus)) dire("Refusé : " + erreur.message, "rouge"); }
+    recharger();
+  };
+
+  let guide = null;
+  try { guide = await lire("/api/guide"); } catch (erreur) { if (erreur instanceof Refus) throw erreur; }
+  const manuel = await lire("/api/manuel").catch((erreur) => { if (erreur instanceof Refus) throw erreur; return null; });
+  const etat = guide && guide.etat;
+
+  let haut;
+  if (!guide) {
+    haut = el("p", { classe: "doux" }, "Pas de mode guidé sur ce programme.");
+  } else if (etat.actif) {
+    haut = el("div", { classe: "carte", "data-guide": "en-cours" },
+      el("strong", {}, etat.titre),
+      el("div", { classe: "doux" }, etat.termine
+        ? "Les " + etat.total + " étapes sont faites (commencé par " + etat.qui + ")."
+        : "Étape " + etat.numero + " sur " + etat.total + " · commencé par " + etat.qui),
+      el("p", { classe: "etape-guide" }, etat.texte),
+      etat.signal && el("div", { classe: etat.machine_d_accord === false ? "doux rouge" : "doux" },
+        etat.vu === null ? "La machine voit : ? (elle ne sait pas)"
+          : etat.machine_d_accord ? "La machine voit : oui, étape faite" : "La machine voit : non, étape pas faite"),
+      ...etat.messages.map((m) => el("div", { classe: "doux" }, m)),
+      peutProduire ? el("div", { classe: "champs" },
+        !etat.termine && el("button", { type: "button", surclick: () => ordre("/api/guide/fait") }, "Fait"),
+        el("button", { classe: "petit", type: "button", disabled: etat.numero <= 1 && !etat.termine ? "" : null,
+          surclick: () => ordre("/api/guide/precedent") }, "Étape précédente"),
+        el("button", { classe: "petit", type: "button", surclick: () => ordre("/api/guide/arreter") },
+          etat.termine ? "Fermer" : "Arrêter ce travail"))
+        : el("div", { classe: "doux" }, "Il faut le rôle « produire » (employé) pour suivre un travail."),
+      el("div", { classe: "doux" }, "Le guide ne fait bouger aucun axe et ne protège personne : la sécurité est câblée."));
+    // Un travail en route peut avancer depuis l'écran de l'armoire : on rafraîchit.
+    minuterieAide = setTimeout(() => {
+      if (conteneur.closest("section")?.classList.contains("actif")) recharger();
+    }, 3000);
+  } else {
+    haut = el("div", {},
+      guide.exemple && el("p", { classe: "doux" }, "Les travaux ci-dessous sont des exemples à relire sur la machine (guide.yaml)."),
+      ...guide.travaux.map((t) => el("div", { classe: "carte", "data-travail": t.travail },
+        el("strong", {}, t.titre), el("div", { classe: "doux" }, t.quand + " · " + t.etapes + " étapes"),
+        peutProduire && el("button", { classe: "petit", type: "button",
+          surclick: () => ordre("/api/guide/" + encodeURIComponent(t.travail) + "/commencer") }, "Commencer"))));
+  }
+
+  const sections = manuel ? manuel.sections : [];
+  const corps = sections.map((s) => el("details", { "data-section": s.cle },
+    el("summary", {}, s.titre),
+    ...s.lignes.map((l) => el("p", {}, ...ligneManuel(el, l.replace(/^- /, "• "))))));
+  conteneur.replaceChildren(
+    el("h2", {}, "Mode guidé"), haut,
+    el("h2", {}, "Manuel d'utilisation"),
+    el("p", { classe: "doux" }, "Fabriqué d'après les réglages et les textes du programme : il est toujours à jour."),
+    ...(corps.length ? corps : [el("p", { classe: "doux" }, "Pas de manuel.")]));
+}

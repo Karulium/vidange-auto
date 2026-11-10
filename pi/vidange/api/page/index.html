@@ -139,6 +139,7 @@
       <button data-vue="3d">Vue 3D</button>
       <button data-vue="stats">Statistiques</button>
       <button data-vue="carnet">Carnet</button>
+      <button data-vue="aide">Aide</button>
       <button data-vue="reglages" id="onglet-reglages">Réglages</button>
       <button data-vue="checklist">Check-list</button>
       <button data-vue="maintenance">Maintenance</button>
@@ -247,6 +248,10 @@
 
     <section id="vue-stats">
       <div id="stats"></div>
+    </section>
+
+    <section id="vue-aide">
+      <div id="aide"></div>
     </section>
 
     <section id="vue-carnet">
@@ -417,6 +422,7 @@ function montrer(nom) {
   if (nom === "3d") ouvrir3d(); else fermer3d();
   if (nom === "stats") ouvrirOnglet("stats", "ouvrirStatistiques");
   if (nom === "carnet") ouvrirOnglet("carnet", "ouvrirCarnet");
+  if (nom === "aide") ouvrirOnglet("aide", "ouvrirAide");
   if (nom === "reglages") ouvrirOnglet("reglages", "ouvrirReglages");
 }
 

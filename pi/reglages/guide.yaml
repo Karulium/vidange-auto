@@ -1,0 +1,69 @@
+# Mode guidé pour un employé (fonction 84, tâche 32) : des travaux que la machine explique pas à pas,
+# sur la page web (onglet « Aide ») et sur l'écran de l'armoire (page « guide », bouton AIDE de la
+# page « mode »). Le même fichier fabrique le manuel d'utilisation (« vidange manuel », fonction 85).
+#
+# ATTENTION : tous les travaux ci-dessous sont des EXEMPLES (« exemple: true »), écrits sans la
+# machine, d'après des gestes déjà écrits dans le programme (poste du fût, bidon de purge, reprise).
+# Karulium les relit sur la machine et les corrige ; il en ajoute d'autres ici, sans toucher au code.
+# Quand un travail est relu, retirer son « exemple: true ».
+#
+# Comment ça marche :
+#   - Une personne (employé ou Karulium ; le visiteur regarde seulement) choisit un travail ; la
+#     machine montre « Étape 2 sur 5 » et une phrase ; la personne fait le geste à la main, puis
+#     appuie sur « Fait ». Un seul travail à la fois, partagé par la page web et l'écran.
+#   - Le guide ne fait bouger AUCUN axe et ne protège personne : la sécurité est câblée (règle n° 1).
+#     Ne jamais écrire ici une étape qui demande de faire quelque chose de dangereux « parce que la
+#     machine surveille » : elle ne surveille rien pour la sécurité.
+#   - Option « signal » : le nom d'une ENTRÉE de docs/entrees-sorties.yaml (contact, pnp, npn).
+#     La machine dit alors « je vois l'étape faite : oui / non ». C'est une information : on peut
+#     dire « Fait » quand même, et le désaccord est noté au journal et au carnet de bord.
+#     « attendu: false » : l'étape est bien faite quand le signal est inactif.
+#   - À la fin, une note « travail terminé » (qui, quoi) est écrite au carnet de bord.
+#
+# Vérifié au démarrage : un signal inconnu ou qui n'est pas une entrée, un titre ou une phrase trop
+# longs pour l'écran, trop d'étapes : une erreur claire empêche de démarrer.
+
+exemple: true
+
+# Au plus ce nombre de signes (la page « guide » de l'écran est limitée : nextion/pages.md).
+titre_max: 30
+texte_max: 140
+etapes_max: 20
+# Un travail commencé et oublié s'efface seul au bout de ce temps (minutes).
+oubli_min: 120
+
+travaux:
+  changer_fut:
+    exemple: true
+    titre: "Mettre un fût au poste"
+    quand: "Quand le fût en cours est vide et qu'un nouveau fût attend à côté du poste."
+    etapes:
+      - texte: "Machine à l'arrêt et plateau du fût sorti. Poser le fût debout sur le plateau, entre les 4 cales."
+      - texte: "Enlever la soupape du couvercle (trou bouché)."
+      - texte: "Pousser le plateau contre les 2 butées d'angle du fond."
+        signal: plateau_fut_en_place
+        attendu: true
+      - texte: "Freiner les 2 roulettes."
+      - texte: "Rabattre le grand volet, lever le panneau long."
+        signal: reed_panneau_poste_fut
+        attendu: true
+      - texte: "Appuyer sur PRÊT (écran ou page web) quand tout est fait."
+
+  vider_bidon_purge:
+    exemple: true
+    titre: "Vider le bidon de purge"
+    quand: "Quand le rappel « vider le bidon de purge » apparaît (réglage rappel_bidon_jours de air.yaml)."
+    etapes:
+      - texte: "Machine à l'arrêt. Sortir le bidon de purge de l'air comprimé, posé au sol."
+      - texte: "Le vider à l'endroit prévu pour les liquides de l'atelier, puis le remettre en place."
+      - texte: "Prévenir Karulium que le bidon est vidé : le rappel doit repartir de zéro."
+
+  reprise_apres_coupure:
+    exemple: true
+    titre: "Reprendre après une coupure"
+    quand: "Quand l'écran dit que le programme a redémarré en plein cycle (coupure de courant ou plantage)."
+    etapes:
+      - texte: "Regarder la machine (seau en cours, axes) sans rien déplacer qui soit coincé."
+      - texte: "Enlever à la main l'objet tenu ou tombé (tête, seau) avant le Go."
+      - texte: "Lancer « lieu sûr » depuis l'écran (prise d'origine des axes)."
+      - texte: "Quand la check-list est verte, donner le Go pour reprendre."

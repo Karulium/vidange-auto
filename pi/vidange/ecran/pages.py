@@ -102,6 +102,7 @@ MODE = Page(
         _bouton("b_uv_ozone", 10),
         _bouton("b_mais", 10),
         _bouton("b_enceinte", 10),
+        _bouton("b_aide", 10),
         _bouton("b_retour", 10),
     ),
 )
@@ -159,7 +160,23 @@ CODE = Page(
     ),
 )
 
+GUIDE = Page(
+    "guide",
+    8,
+    (
+        _texte("t_titre", 30),
+        _texte("t_etape", 40),
+        _texte("t_texte", 140),
+        _texte("t_machine", 60),
+        _texte("t_info", 80),
+        _bouton("b_gauche", 12),
+        _bouton("b_droite", 12),
+        _bouton("b_ok", 12),
+        _bouton("b_retour", 12),
+    ),
+)
+
 PAGES: dict[str, Page] = {
     page.nom: page
-    for page in (ETAT, ALARME, COMPTEURS, MODE, CONFIRMER, POSTE_FUT, NETTOYAGE, CODE)
+    for page in (ETAT, ALARME, COMPTEURS, MODE, CONFIRMER, POSTE_FUT, NETTOYAGE, CODE, GUIDE)
 }

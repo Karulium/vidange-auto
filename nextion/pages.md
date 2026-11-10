@@ -169,7 +169,7 @@ prints "@b_retour",0
 
 Production, lavage, UV-ozone ou maïs. Le changement demande « Oui », et il est refusé pendant un
 cycle (et pendant une nuit UV-ozone pas finie). Revient seule à la page « etat » au bout d'une
-minute sans appui. `b_enceinte` mène à la page « nettoyage » (store, purge, nuit UV-ozone).
+minute sans appui. `b_enceinte` mène à la page « nettoyage » (store, purge, nuit UV-ozone), `b_aide` à la page « guide ».
 
 | Nom | Sorte | x | y | Largeur | Hauteur | Police | txt_maxl |
 |---|---|---|---|---|---|---|---|
@@ -179,13 +179,15 @@ minute sans appui. `b_enceinte` mène à la page « nettoyage » (store, purge, 
 | `b_lavage` | Bouton | 123 | 94 | 115 | 84 | 1 | 10 |
 | `b_uv_ozone` | Bouton | 242 | 94 | 115 | 84 | 1 | 10 |
 | `b_mais` | Bouton | 361 | 94 | 115 | 84 | 1 | 10 |
-| `b_enceinte` | Bouton | 4 | 182 | 234 | 86 | 1 | 10 |
+| `b_enceinte` | Bouton | 4 | 182 | 115 | 86 | 1 | 10 |
+| `b_aide` | Bouton | 123 | 182 | 115 | 86 | 1 | 10 |
 | `b_retour` | Bouton | 242 | 182 | 234 | 86 | 2 | 10 |
 
 - `t_titre` (bleu) : « MODE : PRODUCTION ».
 - `t_info` (2 lignes) : « Impossible : pas pendant un cycle (lieu_sur). »
 - Le bouton du mode actuel est en bleu.
 - `b_enceinte` : « ENCEINTE ».
+- `b_aide` : « AIDE » (tâche 32 : **bouton nouveau, à ajouter à la page 3**, et `b_enceinte` rétréci à 115 de large) : mène à la page « guide ».
 
 Code des boutons :
 
@@ -195,6 +197,7 @@ prints "@b_lavage",0
 prints "@b_uv_ozone",0
 prints "@b_mais",0
 prints "@b_enceinte",0
+prints "@b_aide",0
 prints "@b_retour",0
 ```
 
@@ -366,3 +369,47 @@ prints "@b_retour",0
 3. Allumer : l'écran se met à jour (barre de progression), puis l'éteindre, retirer la carte, rallumer.
 
 L'essai avec le Pi est dans `pi/systeme/essai-ecran.md`.
+
+## Page 8 : « guide »
+
+**Page nouvelle (tâche 32) : à dessiner dans Nextion Editor, après la page 7.** Le mode guidé pour un
+employé : la machine explique un travail pas à pas (« Étape 2 sur 5 » et une phrase). On y arrive par
+`b_aide` de la page « mode », ou toute seule si un travail guidé a été commencé sur la page web
+(elle ne s'impose jamais pendant une alarme : la page d'alarme passe avant). Sans appui pendant
+`retour_accueil_s`, retour à la page « etat » (le travail commencé reste en route : on le retrouve par
+AIDE). Elle sert à deux choses :
+
+- **Sans travail en route** : `t_titre` dit « AIDE : CHOISIR », `t_texte` le titre du travail proposé
+  et `t_etape` « 1 sur 3 » ; `b_gauche` (« PRÉCÉDENT ») et `b_droite` (« SUIVANT ») font défiler,
+  `b_ok` (« COMMENCER ») lance le travail.
+- **Travail en route** : `t_titre` son titre, `t_etape` « Étape 2 sur 5 », `t_texte` la phrase,
+  `t_machine` ce que la machine voit si l'étape cite un signal (« La machine voit : oui, étape
+  faite » ou « non » ou « ? »), `b_gauche` (« PRÉCÉDENT »), `b_ok` (« FAIT »), `b_droite` éteint
+  (texte vide, gris pâle) ; `b_retour` (« ARRÊTER ») abandonne le travail. Quand la dernière étape est
+  faite, `t_etape` dit « Les 5 étapes sont faites » et `b_ok` (« FERMER ») ferme le travail.
+
+Pas de code demandé : l'écran est devant la machine, comme pour la page « etat ». Le guide ne
+commande aucun axe, il ne protège personne (la sécurité est câblée).
+
+| Nom | Sorte | x | y | Largeur | Hauteur | Police | txt_maxl |
+|---|---|---|---|---|---|---|---|
+| `t_titre` | Texte | 0 | 0 | 480 | 44 | 2 | 30 |
+| `t_etape` | Texte | 4 | 46 | 472 | 22 | 0 | 40 |
+| `t_texte` | Texte | 4 | 70 | 472 | 72 | 1 | 140 |
+| `t_machine` | Texte | 4 | 144 | 472 | 22 | 0 | 60 |
+| `t_info` | Texte | 4 | 168 | 472 | 22 | 0 | 80 |
+| `b_gauche` | Bouton | 4 | 192 | 115 | 76 | 1 | 12 |
+| `b_droite` | Bouton | 123 | 192 | 115 | 76 | 1 | 12 |
+| `b_ok` | Bouton | 242 | 192 | 115 | 76 | 2 | 12 |
+| `b_retour` | Bouton | 361 | 192 | 115 | 76 | 2 | 12 |
+
+Code des boutons :
+
+```
+prints "@b_gauche",0
+prints "@b_droite",0
+prints "@b_ok",0
+prints "@b_retour",0
+```
+
+(chacun suivi de `printh FF FF FF`).

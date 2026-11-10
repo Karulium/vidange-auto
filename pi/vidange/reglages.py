@@ -8345,6 +8345,69 @@ def _verifier_essais_entre_fichiers(valeurs: dict[str, Modele]) -> list[str]:
     return erreurs
 
 
+# ---------------------------------------------------------------- guide.yaml
+
+
+class EtapeGuide(Modele):
+    """Une étape d'un travail guidé : un geste à faire à la main, avec une phrase."""
+
+    texte: str = Field(min_length=1)
+    # Option : un signal de entrees-sorties.yaml (entrée) que la machine regarde et montre
+    # (« la machine voit : oui / non »). Il informe seulement : la personne dit « Fait » quand
+    # même, et un désaccord est noté. La sécurité n'est jamais ici.
+    signal: Nom | None = None
+    # Valeur que le signal doit avoir quand l'étape est bien faite (vrai : actif).
+    attendu: bool = True
+
+
+class TravailGuide(Modele):
+    """Un travail que la machine explique pas à pas à une personne devant elle."""
+
+    # Vrai : les étapes sont un EXEMPLE écrit sans la machine (à relire sur place).
+    exemple: bool = False
+    titre: str = Field(min_length=1)
+    # Quand le faire, en clair (dit dans le manuel).
+    quand: str = Field(min_length=1)
+    etapes: list[EtapeGuide] = Field(min_length=1)
+
+
+class ReglagesGuide(Modele):
+    """guide.yaml : le mode guidé pour un employé et le manuel tenu à jour (tâche 32)."""
+
+    exemple: bool = False
+    # Au plus ce nombre de signes pour un titre, une étape (la page de l'écran les coupe sinon),
+    # et au plus ce nombre d'étapes par travail. Vérifiés contre la page « guide » de l'écran.
+    titre_max: int = Field(ge=10, le=200)
+    texte_max: int = Field(ge=20, le=400)
+    etapes_max: int = Field(ge=1, le=60)
+    # Une personne qui oublie de finir : le travail guidé s'efface seul après ce temps (min).
+    oubli_min: float = Field(gt=0)
+    travaux: dict[Nom, TravailGuide] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _verifier_longueurs(self) -> "ReglagesGuide":
+        erreurs = []
+        for nom, travail in self.travaux.items():
+            debut = f"guide.yaml, travaux → {nom}"
+            if len(travail.titre) > self.titre_max:
+                erreurs.append(
+                    f"{debut} → titre : {len(travail.titre)} signes, au plus {self.titre_max}"
+                )
+            if len(travail.etapes) > self.etapes_max:
+                erreurs.append(
+                    f"{debut} → etapes : {len(travail.etapes)} étapes, au plus {self.etapes_max}"
+                )
+            for numero, etape in enumerate(travail.etapes, start=1):
+                if len(etape.texte) > self.texte_max:
+                    erreurs.append(
+                        f"{debut} → étape {numero} : {len(etape.texte)} signes, "
+                        f"au plus {self.texte_max} (texte_max)"
+                    )
+        if erreurs:
+            raise ValueError("; ".join(erreurs))
+        return self
+
+
 # --------------------------------------------------------------- l'ensemble
 
 
@@ -8361,6 +8424,7 @@ class Reglages(Modele):
     vue3d: ReglagesVue3d
     modifiables: ReglagesModifiables
     essais: ReglagesEssais
+    guide: ReglagesGuide
 
 
 # Nom du fichier → (nom dans Reglages, modèle). Ajouter ici chaque nouveau fichier.
@@ -8377,6 +8441,7 @@ FICHIERS: dict[str, tuple[str, type[Modele]]] = {
     "vue3d.yaml": ("vue3d", ReglagesVue3d),
     "modifiables.yaml": ("modifiables", ReglagesModifiables),
     "essais.yaml": ("essais", ReglagesEssais),
+    "guide.yaml": ("guide", ReglagesGuide),
 }
 
 
