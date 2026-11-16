@@ -2759,3 +2759,22 @@ Réponses aux « Questions pour Karulium » de la PR de la tâche 32 :
    « Go » de l'employé à chaque geste et `refus_manuel()`. La sécurité reste câblée.
 4. **PDF du manuel** : non, `docs/manuel.md` s'imprime tel quel.
 5. **Travail oublié effacé après `oubli_min`** (120 min d'exemple) : oui, réglable.
+
+## Sécurité ozone câblée du Nettoyage (10/11/2026, Karulium, recopié du fil Nettoyage)
+
+Source : `nettoyage/logiciel/nettoyage-pour-logiciel.md` (intro, § 4, § 5 point 1), corrigé le 10/11.
+
+- On garde l'indicateur d'ozone de l'armoire `indic_ozone` (Implantation, 31/10) : ses contacts AL1 et AL2 sont
+  **en série** avec `relais_2` K1 `verrous_store`. La sécurité est câblée, le logiciel ne la porte pas.
+- **Pas** de détecteur 0-1 ppm en plus, et **pas d'entrée `ozone_securite_ok`** pour le Pi (la carte du 06/11 du
+  fil Nettoyage était une erreur). Les mentions de `ozone_securite_ok` plus haut dans ce fichier sont caduques :
+  rien à câbler ni à afficher pour elle.
+
+## App « machine » du logiciel de culture, tâche 44 (16/11/2026, niveau 1, tranché par Claude)
+
+Réponses aux questions de la PR 6 du dépôt `Karulium/Karulium` (étape 1 fusionnée) :
+1. Contenu du QR d'un seau (« 1293 » ou « S1293 ») : à regarder sur une étiquette réelle ; d'ici là l'app essaie
+   les deux, rien n'est bloqué.
+2. Seau « défaut » (bocal vide ou cassé) : pas de bloc créé pour lui à l'étape 2 ; il reste visible dans le cycle.
+3. Formats A-D et types de seaux de la culture : une petite table modifiable dans l'admin de l'app (étape 2).
+4. Fuite d'ozone : alerte Telegram comme les autres alertes du logiciel de culture (étape 2).

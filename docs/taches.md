@@ -1845,4 +1845,13 @@ passent **avant le solveur (tâche 23)**, qui a besoin des gestes de tous les mo
   - Vide (cases gardées réglables, EXEMPLE) : seuil du capteur de distance, tare « godet vide » (à mesurer à la mise
     en service et après chaque lavage : prévoir une étape de tare, pas un chiffre figé).
   Procédure d'essai sur le vrai matériel avec du maïs chaud ; « testé sur le vrai matériel : non ».
-- [ ] 44. App « machine » dans le logiciel de culture (avec l'accord de Karulium)
+- [x] 44. App « machine » dans le logiciel de culture (avec l'accord de Karulium). Fait (étape 1, dépôt
+  `Karulium/Karulium`, PR 6 fusionnée le 16/11) : app autonome `Machine/` qui reçoit les cycles et les plans
+  d'essais du Pi (`/machine/api/cycles/`, `/machine/api/essais/`, jeton, 201/200/400/401, même `cle` = remplacé),
+  les garde (JSON complet + colonnes), les montre sur `/machine/`, et relie chaque seau à son contenant par le QR
+  (lecture seule). Aucun `Blocs` ni `Lot_inoculation` créé.
+- [ ] 44 bis. App « machine », étape 2 (dépôt `Karulium/Karulium`, après la réponse sur le contenu du QR d'un seau :
+  « 1293 » ou « S1293 »). — Sonnet. Créer un `Blocs` par seau rempli et le `Lot_inoculation` du lot (une seule
+  espèce), pas de bloc pour un seau « défaut » ; lien avec le traitement thermique du fût ; correspondance des
+  formats A-D avec les types de seaux de la culture (petite table dans l'admin) ; alerte Telegram sur une fuite
+  d'ozone ; photos choisies.
